@@ -15,3 +15,12 @@ G1_BRAINCO_FINGER_PRIM_NAME_MARKERS: tuple[str, ...] = (
     "index",
     "middle",
 )
+
+# Mild open-arm posture using shoulder joints only. Shoulder yaw keeps the forearms in
+# the liked orientation; shoulder roll moves the arms away from the torso.
+G1_BRAINCO_OPEN_ARM_JOINT_POS: dict[str, float] = {
+    "left_shoulder_roll_joint": 0.25,
+    "right_shoulder_roll_joint": -0.25,
+    "left_shoulder_yaw_joint": 0.5,
+    "right_shoulder_yaw_joint": -0.5,
+}

@@ -2,17 +2,18 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
+import os
+import numpy as np
 from isaaclab_arena.assets.register import register_asset
 from isaaclab_arena.embodiments.g1.g1 import G1WBCJointEmbodiment
-
-import os
+from g1_brainco_extension.mdp.actions.wbc_action_cfg import G1BraincoWBCActionCfg
 
 @register_asset
 class G1BraincoCustomEmbodiment(G1WBCJointEmbodiment):
     """Custom G1 embodiment for Brainco tasks.
     
-    Inherits from G1WBCJointEmbodiment to ensure action, observation, and 
-    event configs are properly initialized for the G1 robot.
+    This class handles the mapping between the standard G1 Whole Body Controller 
+    and the dexterous Brainco hand model.
     """
     
     name = "g1_brainco_custom"
@@ -31,29 +32,33 @@ class G1BraincoCustomEmbodiment(G1WBCJointEmbodiment):
             lock_waist=lock_waist,
         )
         
-        # Try both casing variations for the robot
+        # Robust USD Path resolution
         path_variants = [
             "data/g1_with_brainco_hands.usd",
             "/workspaces/IsaacLab-Arena/data/g1_with_brainco_hands.usd",
             "/workspaces/isaaclab_arena/data/g1_with_brainco_hands.usd"
         ]
-        
-        usd_path = None
-        for p in path_variants:
-            if os.path.exists(p):
-                usd_path = p
-                print(f"[G1 Brainco Extension] Found robot at: {p}")
-                break
-        
-        if usd_path is None:
-            print(f"[G1 Brainco Extension] ERROR: Could not find g1_with_brainco_hands.usd in any of: {path_variants}")
-            usd_path = path_variants[0]
-
-        # Point to the custom USD using the resolved path
+        usd_path = next((p for p in path_variants if os.path.exists(p)), path_variants[0])
         self.scene_config.robot.spawn.usd_path = usd_path
 
-        # Override the hands actuator joint names to match Brainco convention
-        # The base G1_CFG uses ".*_hand_.*" which doesn't exist in the Brainco model.
-        self.scene_config.robot.actuators["hands"].joint_names_expr = [
-            ".*_(index|middle|pinky|ring|thumb)_.*"
-        ]
+        # --- STRUCTURAL WBC FIX ---
+        # Switch to the custom WBC action term that handles extra joints without crashing.
+        # This replaces the need for global monkey-patching.
+        self.action_config.g1_action = G1BraincoWBCActionCfg(
+            asset_name="robot", 
+            joint_names=[".*"]
+        )
+
+        # Override actuator joint expressions for Brainco naming convention
+        brainco_regex = ".*(index|middle|pinky|ring|thumb).*"
+        
+        for name, actuator in self.scene_config.robot.actuators.items():
+            if hasattr(actuator, "joint_names_expr"):
+                actuator.joint_names_expr = [
+                    brainco_regex if expr == ".*_hand_.*" else expr 
+                    for expr in actuator.joint_names_expr
+                ]
+
+        # Explicitly ensure the "hands" group is covered
+        if "hands" in self.scene_config.robot.actuators:
+             self.scene_config.robot.actuators["hands"].joint_names_expr = [brainco_regex]

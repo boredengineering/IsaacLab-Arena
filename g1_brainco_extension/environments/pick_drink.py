@@ -3,8 +3,24 @@
 
 from __future__ import annotations
 import argparse
+import os
+import numpy as np
 from typing import TYPE_CHECKING
 from isaaclab_arena_environments.example_environment_base import ExampleEnvironmentBase
+
+# ---------------------------------------------------------------------------
+# CONFIGURATION CONSTANTS
+# ---------------------------------------------------------------------------
+G1_BRAINCO_FINGER_FRICTION_MATERIAL_PATH = "/World/Materials/g1_brainco_high_friction_fingers"
+G1_BRAINCO_FINGER_STATIC_FRICTION = 6.0
+G1_BRAINCO_FINGER_DYNAMIC_FRICTION = 5.0
+G1_BRAINCO_FINGER_PRIM_NAME_MARKERS: tuple[str, ...] = ("hand", "thumb", "index", "middle")
+G1_BRAINCO_OPEN_ARM_JOINT_POS: dict[str, float] = {
+    "left_shoulder_roll_joint": 0.25, "right_shoulder_roll_joint": -0.25,
+    "left_shoulder_yaw_joint": 0.5, "right_shoulder_yaw_joint": -0.5,
+}
+
+# ---------------------------------------------------------------------------
 
 if TYPE_CHECKING:
     from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
@@ -12,83 +28,43 @@ if TYPE_CHECKING:
 from isaaclab_arena.assets.background import Background
 from isaaclab_arena.assets.register import register_asset
 
-import os
-
 @register_asset
 class OficinaCBAGrande(Background):
-    """Gaussian Splatting office background."""
     name = "oficina_cba_grande"
     def __init__(self):
-        # Try both casing variations to be extremely robust
         path_variants = [
             "data/Oficina_CBA_grande.usdz",
             "/workspaces/IsaacLab-Arena/data/Oficina_CBA_grande.usdz",
             "/workspaces/isaaclab_arena/data/Oficina_CBA_grande.usdz"
         ]
-        
-        usd_path = None
-        for p in path_variants:
-            if os.path.exists(p):
-                usd_path = p
-                print(f"[G1 Brainco Extension] Found background at: {p}")
-                break
-        
-        if usd_path is None:
-            print(f"[G1 Brainco Extension] ERROR: Could not find Oficina_CBA_grande.usdz in any of: {path_variants}")
-            # Fallback to the first one and let it fail with a clear error
-            usd_path = path_variants[0]
-
-        super().__init__(
-            name=self.name,
-            prim_path="{ENV_REGEX_NS}/Background",
-            usd_path=usd_path,
-            object_min_z=-0.2  # Threshold for object reset
-        )
+        usd_path = next((p for p in path_variants if os.path.exists(p)), path_variants[0])
+        super().__init__(name=self.name, prim_path="{ENV_REGEX_NS}/Background", usd_path=usd_path, object_min_z=-0.2)
 
 class G1BraincoPickDrinkEnvironment(ExampleEnvironmentBase):
-    """G1 with Brainco hands PickDrink environment extension."""
-
     name: str = "g1_brainco_pick_drink"
 
     def get_env(self, args_cli: argparse.Namespace) -> IsaacLabArenaEnvironment:
-        # INTERNAL IMPORTS to prevent startup crashes in the main CLI
         from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
         from isaaclab_arena.scene.scene import Scene
         from isaaclab_arena.tasks.pick_and_place_task import PickAndPlaceTask
         from isaaclab_arena.utils.pose import Pose
-        
-        # Import the custom embodiment to ensure it is registered via @register_asset
         import g1_brainco_extension.embodiments.g1_brainco  # noqa: F401
         
-        # Import custom configs
-        from g1_brainco_extension.mdp.robot_configs import (
-            G1_BRAINCO_FINGER_DYNAMIC_FRICTION,
-            G1_BRAINCO_FINGER_FRICTION_MATERIAL_PATH,
-            G1_BRAINCO_FINGER_PRIM_NAME_MARKERS,
-            G1_BRAINCO_FINGER_STATIC_FRICTION,
-        )
-
-        # 1. Setup Background and Table
-        # Note: Ensure these assets are available in your registry
+        # 1. Setup Assets
         background = self.asset_registry.get_asset_by_name("oficina_cba_grande")()
         table = self.asset_registry.get_asset_by_name("office_table")()
         table.set_initial_pose(Pose(position_xyz=(0.55, 0.0, 0.0)))
-
-        # 2. Setup Pick-up Object and Destination
         drink = self.asset_registry.get_asset_by_name(args_cli.object)()
         drink.set_initial_pose(Pose(position_xyz=(0.5, 0.0, 0.75)))
-
         destination = self.asset_registry.get_asset_by_name(args_cli.destination)()
         destination.set_initial_pose(Pose(position_xyz=(0.5, 0.3, 0.75)))
 
-        # 3. Setup Embodiment
-        # This will fetch the G1BraincoCustomEmbodiment registered in step 2
+        # 2. Setup Embodiment
         embodiment = self.asset_registry.get_asset_by_name(args_cli.embodiment)(
-            enable_cameras=args_cli.enable_cameras,
-            lock_waist=args_cli.lock_waist,
+            enable_cameras=args_cli.enable_cameras, lock_waist=args_cli.lock_waist,
         )
         
-        # Apply high friction to fingers
+        # Apply physics and posture settings (using local constants)
         embodiment.set_finger_contact_friction(
             material_path=G1_BRAINCO_FINGER_FRICTION_MATERIAL_PATH,
             static_friction=G1_BRAINCO_FINGER_STATIC_FRICTION,
@@ -96,21 +72,16 @@ class G1BraincoPickDrinkEnvironment(ExampleEnvironmentBase):
             prim_name_markers=G1_BRAINCO_FINGER_PRIM_NAME_MARKERS,
         )
         
-        # Start in front of table
         embodiment.set_initial_pose(Pose(position_xyz=(0.1, 0.05, 0.0)))
+        embodiment.set_joint_initial_pos(G1_BRAINCO_OPEN_ARM_JOINT_POS)
 
         scene = Scene(assets=[background, table, drink, destination])
         
         return IsaacLabArenaEnvironment(
-            name=self.name,
-            embodiment=embodiment,
-            scene=scene,
+            name=self.name, embodiment=embodiment, scene=scene,
             task=PickAndPlaceTask(
-                pick_up_object=drink,
-                destination_location=destination,
-                background_scene=background,
-                episode_length_s=8.0,
-                task_description=f"Pick up the {args_cli.object.replace('_', ' ')}.",
+                pick_up_object=drink, destination_location=destination, background_scene=background,
+                episode_length_s=8.0, task_description=f"Pick up the {args_cli.object.replace('_', ' ')}.",
             ),
             env_cfg_callback=lambda cfg: (setattr(cfg, 'num_rerenders_on_reset', 1), cfg)[1],
         )
@@ -120,9 +91,4 @@ class G1BraincoPickDrinkEnvironment(ExampleEnvironmentBase):
         parser.add_argument("--object", type=str, default="beer_bottle")
         parser.add_argument("--destination", type=str, default="blue_sorting_bin")
         parser.add_argument("--embodiment", type=str, default="g1_brainco_custom")
-        parser.add_argument(
-            "--lock_waist",
-            action=argparse.BooleanOptionalAction,
-            default=True,
-            help="Lock the waist joints for a stable static task.",
-        )
+        parser.add_argument("--lock_waist", action=argparse.BooleanOptionalAction, default=True)

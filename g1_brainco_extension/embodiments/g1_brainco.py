@@ -33,10 +33,11 @@ class G1BraincoCustomEmbodiment(G1WBCJointEmbodiment):
         )
         
         # Robust USD Path resolution
+        extension_path = os.path.dirname(os.path.dirname(__file__))
         path_variants = [
-            "data/g1_with_brainco_hands.usd",
-            "/workspaces/IsaacLab-Arena/data/g1_with_brainco_hands.usd",
-            "/workspaces/isaaclab_arena/data/g1_with_brainco_hands.usd"
+            os.path.join(extension_path, "data", "g1_with_brainco_hands.usd"),
+            "g1_brainco_extension/data/g1_with_brainco_hands.usd",
+            "/workspaces/IsaacLab-Arena/g1_brainco_extension/data/g1_with_brainco_hands.usd",
         ]
         usd_path = next((p for p in path_variants if os.path.exists(p)), path_variants[0])
         self.scene_config.robot.spawn.usd_path = usd_path

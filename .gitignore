@@ -91,4 +91,6 @@ core.*
 # Development and cache folders
 /__*
 
-data/
+# Data folder in g1_brainco_extension
+g1_brainco_extension/data/*
+!g1_brainco_extension/data/g1_with_brainco_hands.usd

@@ -32,10 +32,11 @@ from isaaclab_arena.assets.register import register_asset
 class OficinaCBAGrande(Background):
     name = "oficina_cba_grande"
     def __init__(self):
+        extension_path = os.path.dirname(os.path.dirname(__file__))
         path_variants = [
-            "data/Oficina_CBA_grande.usdz",
-            "/workspaces/IsaacLab-Arena/data/Oficina_CBA_grande.usdz",
-            "/workspaces/isaaclab_arena/data/Oficina_CBA_grande.usdz"
+            os.path.join(extension_path, "data", "Oficina_CBA_grande.usdz"),
+            "g1_brainco_extension/data/Oficina_CBA_grande.usdz",
+            "/workspaces/IsaacLab-Arena/g1_brainco_extension/data/Oficina_CBA_grande.usdz"
         ]
         usd_path = next((p for p in path_variants if os.path.exists(p)), path_variants[0])
         super().__init__(name=self.name, prim_path="{ENV_REGEX_NS}/Background", usd_path=usd_path, object_min_z=-0.2)
@@ -49,6 +50,7 @@ class G1BraincoPickDrinkEnvironment(ExampleEnvironmentBase):
         from isaaclab_arena.tasks.pick_and_place_task import PickAndPlaceTask
         from isaaclab_arena.utils.pose import Pose
         import g1_brainco_extension.embodiments.g1_brainco  # noqa: F401
+        import g1_brainco_extension.assets  # noqa: F401
         
         # 1. Setup Assets
         background = self.asset_registry.get_asset_by_name("oficina_cba_grande")()

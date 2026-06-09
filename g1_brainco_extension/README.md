@@ -16,6 +16,7 @@ This extension provides support for the Unitree G1 humanoid robot equipped with 
 
 ```text
 g1_brainco_extension/
+├── data/                  # Local assets (USDs, meshes)
 ├── embodiments/
 │   └── g1_brainco.py      # Custom robot model & asset registration
 ├── environments/
@@ -25,25 +26,38 @@ g1_brainco_extension/
 │   └── actions/
 │       ├── wbc_action.py  # Mapping logic Sim <-> WBC
 │       └── wbc_action_cfg.py
+├── assets.py              # Custom asset registration (CokeCan, etc.)
+└── README.md
 ```
 
 ### 1. Embodiments (`embodiments/`)
 The `G1BraincoCustomEmbodiment` extends the base G1 WBC embodiment. It specifically:
-- Points to the USD containing the Brainco hand models.
+- Points to the USD containing the Brainco hand models (located in `data/`).
 - Overrides the `hands` actuator group to use a regex that captures all finger joints (`index`, `middle`, `pinky`, `ring`, `thumb`).
 - Injects the `G1BraincoWBCActionCfg` to ensure the correct action term is used.
 
-### 2. MDP & Actions (`mdp/actions/`)
+### 2. Custom Assets (`assets.py`)
+This file handles the registration of custom objects into the Arena's `AssetRegistry`. By using the `@register_asset` decorator, objects like `CokeCan` and `RedSortingBin` become available globally to any environment that imports this module.
+
+```python
+@register_asset
+class CokeCan(LibraryObject):
+    name = "coke_can"
+    usd_path = os.path.join(EXTENSION_DATA_PATH, "coke_can.usd")
+```
+
+### 3. MDP & Actions (`mdp/actions/`)
 Standard G1 WBC policies expect exactly 43 joints. The Brainco hands add significantly more. `G1BraincoWBCAction`:
 - **Filters Observations**: Slices the simulation state to provide only the 43 joints the policy expects.
 - **Maps Targets**: Takes the policy's upper-body targets and maps them back to the correct simulation joint indices.
 - **Handles Extra Joints**: Allows the extra finger joints to be controlled or maintained without interfering with the base controller.
 
-### 3. Environments (`environments/`)
+### 4. Environments (`environments/`)
 The `G1BraincoPickDrinkEnvironment` is an `ExampleEnvironmentBase` implementation. It sets up the physical scene, including:
 - A large office background (`OficinaCBAGrande`).
 - An office table and task objects (e.g., beer bottle, sorting bin).
 - Specific finger friction settings (`static: 6.0, dynamic: 5.0`) to prevent objects from slipping during dexterous manipulation.
+- **Auto-Registration**: Imports `g1_brainco_extension.assets` automatically to ensure custom objects are available via CLI.
 
 ## Architecture Overview
 
@@ -96,7 +110,8 @@ python isaaclab_arena/evaluation/policy_runner.py \
 ```
 
 ### Customizing the Task
-The environment supports CLI arguments for objects and destinations:
+
+The environment supports CLI arguments for objects and destinations, including those defined in `assets.py`:
 
 ```bash
 python isaaclab_arena/evaluation/policy_runner.py \

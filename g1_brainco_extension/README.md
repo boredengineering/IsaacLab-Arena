@@ -120,7 +120,7 @@ python isaaclab_arena/evaluation/policy_runner.py \
     --num_steps 5000 \
     --external_environment_class_path g1_brainco_extension.environments.pick_drink:G1BraincoPickDrinkEnvironment \
     g1_brainco_pick_drink \
-    --object "coke_can" --destination "red_sorting_bin"
+    --object "tomato_soup_can_custom" --destination "red_container_custom"
 ```
 
 ### Parameters

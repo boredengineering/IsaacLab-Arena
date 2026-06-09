@@ -82,27 +82,34 @@ graph TD
 You can run the environment using the `policy_runner.py` script. Since this is an extension, you need to provide the class path to the environment.
 
 ### Example: Running with Zero Actions
+
 This is useful to verify the scene setup, robot spawn, and initial posture.
 
 ```bash
-/isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+python isaaclab_arena/evaluation/policy_runner.py \
+    --viz kit \
     --policy_type zero_action \
-    --external_environment_class_path "g1_brainco_extension.environments.pick_drink:G1BraincoPickDrinkEnvironment" \
-    g1_brainco_pick_drink
+    --num_steps 5000 \
+    --external_environment_class_path g1_brainco_extension.environments.pick_drink:G1BraincoPickDrinkEnvironment \
+    g1_brainco_pick_drink \
+    --object beer_bottle 
 ```
 
 ### Customizing the Task
 The environment supports CLI arguments for objects and destinations:
 
 ```bash
-/isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+python isaaclab_arena/evaluation/policy_runner.py \
+    --viz kit \
     --policy_type zero_action \
-    --external_environment_class_path "g1_brainco_extension.environments.pick_drink:G1BraincoPickDrinkEnvironment" \
+    --num_steps 5000 \
+    --external_environment_class_path g1_brainco_extension.environments.pick_drink:G1BraincoPickDrinkEnvironment \
     g1_brainco_pick_drink \
     --object "coke_can" --destination "red_sorting_bin"
 ```
 
 ### Parameters
+
 - `--object`: The name of the asset to pick up (must be in `AssetRegistry`).
 - `--destination`: The name of the asset where the object should be placed.
 - `--lock_waist`: (Boolean) Whether to lock the robot's waist joints.

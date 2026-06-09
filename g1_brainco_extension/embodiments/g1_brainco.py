@@ -3,11 +3,17 @@
 
 from __future__ import annotations
 from isaaclab_arena.assets.register import register_asset
-from isaaclab_arena.embodiments.g1.g1 import G1EmbodimentBase
+from isaaclab_arena.embodiments.g1.g1 import G1WBCJointEmbodiment
+
+import os
 
 @register_asset
-class G1BraincoCustomEmbodiment(G1EmbodimentBase):
-    """Custom G1 embodiment for Brainco tasks."""
+class G1BraincoCustomEmbodiment(G1WBCJointEmbodiment):
+    """Custom G1 embodiment for Brainco tasks.
+    
+    Inherits from G1WBCJointEmbodiment to ensure action, observation, and 
+    event configs are properly initialized for the G1 robot.
+    """
     
     name = "g1_brainco_custom"
 
@@ -22,14 +28,32 @@ class G1BraincoCustomEmbodiment(G1EmbodimentBase):
         super().__init__(
             enable_cameras=enable_cameras,
             initial_pose=initial_pose,
-            concatenate_observation_terms=concatenate_observation_terms,
-            arm_mode=arm_mode,
+            lock_waist=lock_waist,
         )
-        # Here you could override the USD path if needed:
-        # self.scene_config.robot.prim_path = "path/to/your/custom_g1.usd"
         
-        # Ensure the waist is locked if requested
-        if lock_waist:
-            # You can customize the joint locking here if the base class 
-            # doesn't handle it exactly as you want.
-            pass
+        # Try both casing variations for the robot
+        path_variants = [
+            "data/g1_with_brainco_hands.usd",
+            "/workspaces/IsaacLab-Arena/data/g1_with_brainco_hands.usd",
+            "/workspaces/isaaclab_arena/data/g1_with_brainco_hands.usd"
+        ]
+        
+        usd_path = None
+        for p in path_variants:
+            if os.path.exists(p):
+                usd_path = p
+                print(f"[G1 Brainco Extension] Found robot at: {p}")
+                break
+        
+        if usd_path is None:
+            print(f"[G1 Brainco Extension] ERROR: Could not find g1_with_brainco_hands.usd in any of: {path_variants}")
+            usd_path = path_variants[0]
+
+        # Point to the custom USD using the resolved path
+        self.scene_config.robot.spawn.usd_path = usd_path
+
+        # Override the hands actuator joint names to match Brainco convention
+        # The base G1_CFG uses ".*_hand_.*" which doesn't exist in the Brainco model.
+        self.scene_config.robot.actuators["hands"].joint_names_expr = [
+            ".*_(index|middle|pinky|ring|thumb)_.*"
+        ]

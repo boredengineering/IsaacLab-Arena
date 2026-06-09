@@ -9,6 +9,42 @@ from isaaclab_arena_environments.example_environment_base import ExampleEnvironm
 if TYPE_CHECKING:
     from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
 
+from isaaclab_arena.assets.background import Background
+from isaaclab_arena.assets.register import register_asset
+
+import os
+
+@register_asset
+class OficinaCBAGrande(Background):
+    """Gaussian Splatting office background."""
+    name = "oficina_cba_grande"
+    def __init__(self):
+        # Try both casing variations to be extremely robust
+        path_variants = [
+            "data/Oficina_CBA_grande.usdz",
+            "/workspaces/IsaacLab-Arena/data/Oficina_CBA_grande.usdz",
+            "/workspaces/isaaclab_arena/data/Oficina_CBA_grande.usdz"
+        ]
+        
+        usd_path = None
+        for p in path_variants:
+            if os.path.exists(p):
+                usd_path = p
+                print(f"[G1 Brainco Extension] Found background at: {p}")
+                break
+        
+        if usd_path is None:
+            print(f"[G1 Brainco Extension] ERROR: Could not find Oficina_CBA_grande.usdz in any of: {path_variants}")
+            # Fallback to the first one and let it fail with a clear error
+            usd_path = path_variants[0]
+
+        super().__init__(
+            name=self.name,
+            prim_path="{ENV_REGEX_NS}/Background",
+            usd_path=usd_path,
+            object_min_z=-0.2  # Threshold for object reset
+        )
+
 class G1BraincoPickDrinkEnvironment(ExampleEnvironmentBase):
     """G1 with Brainco hands PickDrink environment extension."""
 

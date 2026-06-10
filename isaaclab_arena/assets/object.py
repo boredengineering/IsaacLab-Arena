@@ -37,11 +37,18 @@ class Object(ObjectBase):
         # Pull out addons (and remove them from kwargs before passing to super)
         spawn_cfg_addon: dict[str, Any] = kwargs.pop("spawn_cfg_addon", {}) or {}
         asset_cfg_addon: dict[str, Any] = kwargs.pop("asset_cfg_addon", {}) or {}
-        if object_type is not ObjectType.SPAWNER:
-            assert usd_path is not None
+        self.spawner_cfg = kwargs.pop("spawner_cfg", None)
+
         # Detect object type if not provided
         if object_type is None:
-            object_type = detect_object_type(usd_path=usd_path)
+            if self.spawner_cfg is not None:
+                object_type = ObjectType.SPAWNER
+            else:
+                object_type = detect_object_type(usd_path=usd_path)
+
+        if object_type is not ObjectType.SPAWNER:
+            assert usd_path is not None
+
         super().__init__(name=name, prim_path=prim_path, object_type=object_type, **kwargs)
         self.usd_path = usd_path
         self.scale = scale

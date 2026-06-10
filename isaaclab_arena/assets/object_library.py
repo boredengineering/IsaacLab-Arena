@@ -172,14 +172,19 @@ class Microwave(LibraryObject, Openable):
     """A microwave oven."""
 
     # Only required when using Lightwheel SDK
-    from lightwheel_sdk.loader import object_loader
+    try:
+        from lightwheel_sdk.loader import object_loader
+
+        file_path, object_name, metadata = object_loader.acquire_by_registry(
+            registry_type="fixtures", file_name="Microwave039", file_type="USD"
+        )
+        usd_path = file_path
+    except Exception as e:
+        print(f"WARNING: Could not acquire Microwave from registry: {e}")
+        usd_path = None
 
     name = "microwave"
     tags = ["object", "openable"]
-    file_path, object_name, metadata = object_loader.acquire_by_registry(
-        registry_type="fixtures", file_name="Microwave039", file_type="USD"
-    )
-    usd_path = file_path
     object_type = ObjectType.ARTICULATION
 
     # Openable affordance parameters
@@ -205,14 +210,19 @@ class CoffeeMachine(LibraryObject, Pressable):
     """
 
     # Only required when using Lightwheel SDK
-    from lightwheel_sdk.loader import object_loader
+    try:
+        from lightwheel_sdk.loader import object_loader
+
+        file_path, object_name, metadata = object_loader.acquire_by_registry(
+            registry_type="fixtures", file_name="CoffeeMachine108", file_type="USD"
+        )
+        usd_path = file_path
+    except Exception as e:
+        print(f"WARNING: Could not acquire CoffeeMachine from registry: {e}")
+        usd_path = None
 
     name = "coffee_machine"
     tags = ["object", "pressable"]
-    file_path, object_name, metadata = object_loader.acquire_by_registry(
-        registry_type="fixtures", file_name="CoffeeMachine108", file_type="USD"
-    )
-    usd_path = file_path
     object_type = ObjectType.ARTICULATION
 
     # Openable affordance parameters
@@ -411,8 +421,9 @@ class GroundPlane(LibraryObject):
         initial_pose: Pose | None = None,
         spawner_cfg: sim_utils.GroundPlaneCfg = default_spawner_cfg,
     ):
-        self.spawner_cfg = spawner_cfg
-        super().__init__(instance_name=instance_name, prim_path=prim_path, initial_pose=initial_pose)
+        super().__init__(
+            instance_name=instance_name, prim_path=prim_path, initial_pose=initial_pose, spawner_cfg=spawner_cfg
+        )
 
 
 @register_asset
@@ -448,12 +459,12 @@ class Sphere(LibraryObject):
         scale: tuple[float, float, float] | None = None,
         spawner_cfg: sim_utils.SphereCfg = default_spawner_cfg,
     ):
-        self.spawner_cfg = spawner_cfg
         super().__init__(
             instance_name=instance_name,
             prim_path=prim_path,
             initial_pose=initial_pose,
             scale=scale,
+            spawner_cfg=spawner_cfg,
         )
 
     def _generate_spawner_cfg(self) -> RigidObjectCfg:
@@ -503,8 +514,12 @@ class DomeLight(LibraryObject):
         spawner_cfg: sim_utils.DomeLightCfg = default_spawner_cfg,
         hdr: "HDRImage | None" = None,  # noqa: F821
     ):
-        self.spawner_cfg = spawner_cfg
-        super().__init__(instance_name=instance_name, prim_path=prim_path, initial_pose=initial_pose)
+        super().__init__(
+            instance_name=instance_name,
+            prim_path=prim_path,
+            initial_pose=initial_pose,
+            spawner_cfg=spawner_cfg,
+        )
         if hdr is not None:
             self.add_hdr(hdr)
 
@@ -685,14 +700,19 @@ class Broccoli(LibraryObject):
     """
 
     # Only required when using Lightwheel SDK
-    from lightwheel_sdk.loader import object_loader
+    try:
+        from lightwheel_sdk.loader import object_loader
+
+        file_path, object_name, metadata = object_loader.acquire_by_registry(
+            registry_type="objects", registry_name=["broccoli"], file_type="USD"
+        )
+        usd_path = file_path
+    except Exception as e:
+        print(f"WARNING: Could not acquire Broccoli from registry: {e}")
+        usd_path = None
 
     name = "broccoli"
     tags = ["object", "vegetable", "graspable"]
-    file_path, object_name, metadata = object_loader.acquire_by_registry(
-        registry_type="objects", registry_name=["broccoli"], file_type="USD"
-    )
-    usd_path = file_path
     object_type = ObjectType.RIGID
 
     def __init__(
@@ -712,14 +732,19 @@ class SweetPotato(LibraryObject):
     """
 
     # Only required when using Lightwheel SDK
-    from lightwheel_sdk.loader import object_loader
+    try:
+        from lightwheel_sdk.loader import object_loader
+
+        file_path, object_name, metadata = object_loader.acquire_by_registry(
+            registry_type="objects", file_name="SweetPotato005", file_type="USD"
+        )
+        usd_path = file_path
+    except Exception as e:
+        print(f"WARNING: Could not acquire SweetPotato from registry: {e}")
+        usd_path = None
 
     name = "sweet_potato"
     tags = ["object", "vegetable", "graspable"]
-    file_path, object_name, metadata = object_loader.acquire_by_registry(
-        registry_type="objects", file_name="SweetPotato005", file_type="USD"
-    )
-    usd_path = file_path
     object_type = ObjectType.RIGID
     scale = (1.5, 1.5, 1.5)
 
@@ -740,14 +765,19 @@ class Jug(LibraryObject):
     """
 
     # Only required when using Lightwheel SDK
-    from lightwheel_sdk.loader import object_loader
+    try:
+        from lightwheel_sdk.loader import object_loader
+
+        file_path, object_name, metadata = object_loader.acquire_by_registry(
+            registry_type="objects", file_name="Jug005", file_type="USD"
+        )
+        usd_path = file_path
+    except Exception as e:
+        print(f"WARNING: Could not acquire Jug from registry: {e}")
+        usd_path = None
 
     name = "jug"
     tags = ["object", "graspable"]
-    file_path, object_name, metadata = object_loader.acquire_by_registry(
-        registry_type="objects", file_name="Jug005", file_type="USD"
-    )
-    usd_path = file_path
     object_type = ObjectType.RIGID
     scale = (2.0, 2.0, 2.0)
 
@@ -768,14 +798,19 @@ class BeerBottle(LibraryObject):
     """
 
     # Only required when using Lightwheel SDK
-    from lightwheel_sdk.loader import object_loader
+    try:
+        from lightwheel_sdk.loader import object_loader
+
+        file_path, object_name, metadata = object_loader.acquire_by_registry(
+            registry_type="objects", file_name="beer016", file_type="USD"
+        )
+        usd_path = file_path
+    except Exception as e:
+        print(f"WARNING: Could not acquire BeerBottle from registry: {e}")
+        usd_path = None
 
     name = "beer_bottle"
     tags = ["object", "graspable"]
-    file_path, object_name, metadata = object_loader.acquire_by_registry(
-        registry_type="objects", file_name="beer016", file_type="USD"
-    )
-    usd_path = file_path
     object_type = ObjectType.RIGID
     scale = (1.2, 1.2, 1.2)
 

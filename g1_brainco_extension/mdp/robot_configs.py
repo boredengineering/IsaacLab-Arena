@@ -16,11 +16,26 @@ G1_BRAINCO_FINGER_PRIM_NAME_MARKERS: tuple[str, ...] = (
     "middle",
 )
 
-# Mild open-arm posture using shoulder joints only. Shoulder yaw keeps the forearms in
-# the liked orientation; shoulder roll moves the arms away from the torso.
+# Mild open-arm posture using shoulder joints only.
 G1_BRAINCO_OPEN_ARM_JOINT_POS: dict[str, float] = {
     "left_shoulder_roll_joint": 0.25,
     "right_shoulder_roll_joint": -0.25,
     "left_shoulder_yaw_joint": 0.5,
     "right_shoulder_yaw_joint": -0.5,
 }
+
+# Scene Layout Constants (Env-local frame)
+TABLE_SURFACE_Z = 0.70  # Top of the office_table (based on 0.7 scale)
+TABLE_COLLISION_Z_OFFSET = 0.005 # Small airgap for PhysX
+
+# Robot Placement: 2 meters from the table
+# The table is at X=0.55. To be 2 meters away from it, robot should be at X = -1.45
+ROBOT_INITIAL_POSE_XYZ = (-1.45, 0.0, 0.0)
+
+# Drink Randomization Range (on the table)
+DRINK_SPAWN_X_RANGE = (0.45, 0.65)
+DRINK_SPAWN_Y_RANGE = (-0.15, 0.15)
+
+# Destination Randomization Range (on the table)
+DEST_SPAWN_X_RANGE = (0.45, 0.65)
+DEST_SPAWN_Y_RANGE = (0.2, 0.4)

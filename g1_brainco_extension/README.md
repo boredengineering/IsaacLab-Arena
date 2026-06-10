@@ -129,3 +129,34 @@ python isaaclab_arena/evaluation/policy_runner.py \
 - `--destination`: The name of the asset where the object should be placed.
 - `--lock_waist`: (Boolean) Whether to lock the robot's waist joints.
 - `--enable_cameras`: (Boolean) Enable/disable on-board cameras.
+
+## Scene Layout & Customization
+
+The environment is configured for a hierarchical task: the robot starts 2 meters away from the table, requiring navigation/approach before manipulation.
+
+### Scene Summary Table
+
+| Asset / Entity | Type | Position (X, Y, Z) | Variability |
+| :--- | :--- | :--- | :--- |
+| **G1 Humanoid** | Embodiment | `(-1.45, 0.0, 0.0)` | Fixed initial pose |
+| **Office Table** | Static Asset | `(0.55, 0.0, 0.0)` | Fixed (Surface at Z=0.745) |
+| **Collision Patch**| Invisible | `(0.55, 0.0, 0.735)` | Fixed (0.02m thick) |
+| **Drink Object** | `ObjectSet` | `X: [0.45, 0.65], Y: [-0.15, 0.15], Z: 0.75` | Random asset, XY pos, and Yaw |
+| **Destination** | `RigidObject`| `X: [0.45, 0.65], Y: [0.2, 0.4], Z: 0.75` | Random XY pos |
+
+### How to Modify the Scene
+
+#### 1. Adjusting Positions and Ranges
+Most spatial constants are defined in `g1_brainco_extension/mdp/robot_configs.py`. You can change:
+- `ROBOT_INITIAL_POSE_XYZ`: Move the robot closer or further (e.g., set to `(0.1, 0.05, 0.0)` for immediate manipulation).
+- `TABLE_SURFACE_Z`: Adjust if using a different table asset.
+- `DRINK_SPAWN_X_RANGE` / `Y_RANGE`: Expand or tighten the randomization area.
+
+#### 2. Adding New Randomized Objects
+To add more variety to the `drink_object_set`:
+1. Open `g1_brainco_extension/assets.py`.
+2. Define a new `LibraryObject` class with a Nucleus path.
+3. Add the new class instance to the `objects` list inside `DrinkObjectSet`.
+
+#### 3. Scene Integrity
+If objects are falling through your custom table mesh, adjust the `table_collision_patch` size and position in `environments/pick_drink.py` to provide a solid physics proxy.

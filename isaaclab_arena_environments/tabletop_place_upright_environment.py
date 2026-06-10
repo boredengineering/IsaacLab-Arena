@@ -84,6 +84,7 @@ class TableTopPlaceUprightEnvironment(ExampleEnvironmentBase):
         background.object_cfg.spawn.scale = (1.0, 1.0, 0.60)
 
         ground_plane = self.asset_registry.get_asset_by_name("ground_plane")()
+        ground_plane.set_initial_pose(Pose(position_xyz=(0.0, 0.0, 0.0)))
         light = self.asset_registry.get_asset_by_name("light")()
 
         scene = Scene(assets=[background, placeable_object, ground_plane, light])

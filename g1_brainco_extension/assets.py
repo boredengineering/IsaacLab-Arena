@@ -18,32 +18,78 @@ HOW TO BROWSE & ADD SIM-READY ASSETS:
 """
 
 import os
+import isaaclab.sim as sim_utils
 from isaaclab_arena.assets.register import register_asset
 from isaaclab_arena.assets.object_library import LibraryObject
+from isaaclab_arena.assets.object_set import RigidObjectSet
+from isaaclab_arena.assets.object_utils import RIGID_BODY_PROPS_MEDIUM_PRECISION
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 
-# Base path for local extension data (for assets stored within this folder)
+# Base path for local extension data
 EXTENSION_DATA_PATH = os.path.join(os.path.dirname(__file__), "data")
 
 @register_asset
 class TomatoSoupCan(LibraryObject):
-    """
-    Official YCB Tomato Soup Can.
-    Replaces 'coke_can' as a physically validated beverage-sized container.
-    """
+    """Official YCB Tomato Soup Can with physics."""
     name = "tomato_soup_can_custom"
-    tags = ["object"]
+    tags = ["object", "drink"]
     usd_path = f"{ISAAC_NUCLEUS_DIR}/Props/YCB/Axis_Aligned_Physics/005_tomato_soup_can.usd"
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.object_cfg.spawn.rigid_props = RIGID_BODY_PROPS_MEDIUM_PRECISION
+        self.object_cfg.spawn.mass_props = sim_utils.MassPropertiesCfg(mass=0.35)
+
+@register_asset
+class MustardBottle(LibraryObject):
+    """Official YCB Mustard Bottle with physics."""
+    name = "mustard_bottle_custom"
+    tags = ["object", "drink"]
+    usd_path = f"{ISAAC_NUCLEUS_DIR}/Props/YCB/Axis_Aligned_Physics/006_mustard_bottle.usd"
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.object_cfg.spawn.rigid_props = RIGID_BODY_PROPS_MEDIUM_PRECISION
+        self.object_cfg.spawn.mass_props = sim_utils.MassPropertiesCfg(mass=0.4)
+
+@register_asset
+class MasterChefCan(LibraryObject):
+    """Official YCB Master Chef Can with physics."""
+    name = "master_chef_can_custom"
+    tags = ["object", "drink"]
+    usd_path = f"{ISAAC_NUCLEUS_DIR}/Props/YCB/Axis_Aligned_Physics/002_master_chef_can.usd"
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.object_cfg.spawn.rigid_props = RIGID_BODY_PROPS_MEDIUM_PRECISION
+        self.object_cfg.spawn.mass_props = sim_utils.MassPropertiesCfg(mass=0.5)
+
+@register_asset
+class DrinkObjectSet(RigidObjectSet):
+    """A set of drink objects for randomization."""
+    name = "drink_object_set"
+    def __init__(self):
+        assets = [
+            TomatoSoupCan(),
+            MustardBottle(),
+            MasterChefCan(),
+        ]
+        super().__init__(name=self.name, objects=assets, random_choice=True)
 
 @register_asset
 class RedContainer(LibraryObject):
-    """
-    Official Isaac Sim Red Container.
-    Validated storage/destination asset.
-    """
+    """Official Isaac Sim Red Container with physics."""
     name = "red_container_custom"
     tags = ["destination"]
     usd_path = f"{ISAACLAB_NUCLEUS_DIR}/Arena/assets/object_library/isaac_container/container_h20_red.usd"
+    scale = (0.5, 0.5, 0.5)
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.object_cfg.spawn.rigid_props = RIGID_BODY_PROPS_MEDIUM_PRECISION
+        self.object_cfg.spawn.mass_props = sim_utils.MassPropertiesCfg(mass=1.0)
+
+
 
 # EXAMPLE: Adding an asset from the local 'data' folder
 # @register_asset

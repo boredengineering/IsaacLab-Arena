@@ -174,13 +174,19 @@ class GalileoG1StaticPickAndPlaceEnvironment(ExampleEnvironmentBase):
         # Reuse the locomanip background USD: it bakes in lighting and provides the same
         # shelf-in-front-of-robot geometry the locomanip env was tuned against.
         background = self.asset_registry.get_asset_by_name("galileo_locomanip")()
+        
+        # Add ground plane and light to the scene
+        ground_plane = self.asset_registry.get_asset_by_name("ground_plane")()
+        ground_plane.set_initial_pose(Pose(position_xyz=(0.0, 0.0, 0.0)))
+        light = self.asset_registry.get_asset_by_name("light")()
+
         # This is a local collision patch for this exact scene rather than a reusable
         # library asset. The imported shelf mesh has uneven/perforated collision in the
         # static task region, so small objects can fall through parts of the visible shelf.
         shelf_support = Object(
             name="static_pick_place_shelf_support",
             prim_path="{ENV_REGEX_NS}/static_pick_place_shelf_support",
-            object_type=ObjectType.BASE,
+            object_type=ObjectType.SPAWNER,
             spawner_cfg=sim_utils.CuboidCfg(
                 size=SHELF_SUPPORT_PATCH_SIZE,
                 collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005),
@@ -274,7 +280,7 @@ class GalileoG1StaticPickAndPlaceEnvironment(ExampleEnvironmentBase):
             env_cfg.num_rerenders_on_reset = 1
             return env_cfg
 
-        scene = Scene(assets=[background, shelf_support, pick_up_object, destination])
+        scene = Scene(assets=[background, ground_plane, light, shelf_support, pick_up_object, destination])
         return IsaacLabArenaEnvironment(
             name=self.name,
             embodiment=embodiment,

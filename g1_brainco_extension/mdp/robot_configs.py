@@ -30,7 +30,7 @@ TABLE_COLLISION_Z_OFFSET = 0.005 # Small airgap for PhysX
 
 # Robot Placement: 2 meters from the table
 # The table is at X=0.55. To be 2 meters away from it, robot should be at X = -1.45
-ROBOT_INITIAL_POSE_XYZ = (-1.45, 0.0, 0.0)
+ROBOT_INITIAL_POSE_XYZ = (-1.45, 0.0, 1.0)
 
 # Drink Randomization Range (on the table)
 DRINK_SPAWN_X_RANGE = (0.45, 0.65)

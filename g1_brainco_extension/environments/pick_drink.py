@@ -58,6 +58,7 @@ class G1BraincoPickDrinkEnvironment(ExampleEnvironmentBase):
 
         # 1. Setup Assets
         background = self.asset_registry.get_asset_by_name("oficina_cba_grande")()
+        background.set_initial_pose(Pose(position_xyz=(0.0, 0.0, 1.0)))
         ground_plane = self.asset_registry.get_asset_by_name("ground_plane")()
         ground_plane.set_initial_pose(Pose(position_xyz=(0.0, 0.0, 0.0)))
         

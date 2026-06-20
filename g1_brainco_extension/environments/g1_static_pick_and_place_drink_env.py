@@ -21,22 +21,19 @@ if TYPE_CHECKING:
 from isaaclab_arena.assets.background import Background
 from isaaclab_arena.assets.register import register_asset
 from isaaclab_arena.assets.object_library import LibraryObject
+import isaaclab.sim as sim_utils
+
 
 DEFAULT_TABLE_OBJECTS = [
     "cracker_box",
     "mustard_bottle",
-    "sugar_box",
-    "tomato_soup_can",
-    "mug",
-    "brown_box",
-    "dex_cube",
+    "beer_bottle",
 ]
 
-# Same resolution strategy as OficinaCBAGrande (these classes share its __file__).
 @register_asset
 class OficinaCBAGrande(Background):
     name = "oficina_cba_grande"
-    def __init__(self):
+    def __init__(self, **kwargs):
         extension_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         path_variants = [
             os.path.join(extension_path, "assets", "Oficina_CBA_grande.usdz"),
@@ -44,7 +41,7 @@ class OficinaCBAGrande(Background):
             "/workspaces/IsaacLab-Arena/g1_brainco_extension/assets/Oficina_CBA_grande.usdz"
         ]
         usd_path = next((p for p in path_variants if os.path.exists(p)), path_variants[0])
-        super().__init__(name=self.name, prim_path="{ENV_REGEX_NS}/Background", usd_path=usd_path, object_min_z=-0.2)
+        super().__init__(name=self.name, prim_path="{ENV_REGEX_NS}/Background", usd_path=usd_path, object_min_z=-0.2, **kwargs)
 
 class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
     """
@@ -57,7 +54,7 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
     def get_env(self, args_cli: argparse.Namespace) -> IsaacLabArenaEnvironment:
         from isaaclab_arena.assets.object_reference import ObjectReference
         from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
-        from isaaclab_arena.relations.relations import IsAnchor, On, AtPosition, NextTo, Side
+        from isaaclab_arena.relations.relations import IsAnchor, On, AtPosition, NextTo, Side, RandomAroundSolution, RotateAroundSolution
         from isaaclab_arena.scene.scene import Scene
         from isaaclab_arena.tasks.pick_and_place_task import PickAndPlaceTask
         from isaaclab_arena.utils.pose import Pose, PoseRange
@@ -102,46 +99,33 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
 
         object_names = getattr(args_cli, "objects", None) or DEFAULT_TABLE_OBJECTS
         placeable_assets = []
-        for name in object_names:
+        
+        drink_x_center = (DRINK_SPAWN_X_RANGE[0] + DRINK_SPAWN_X_RANGE[1]) / 2.0
+        drink_y_center = (DRINK_SPAWN_Y_RANGE[0] + DRINK_SPAWN_Y_RANGE[1]) / 2.0
+        drink_x_half = (DRINK_SPAWN_X_RANGE[1] - DRINK_SPAWN_X_RANGE[0]) / 2.0
+        drink_y_half = (DRINK_SPAWN_Y_RANGE[1] - DRINK_SPAWN_Y_RANGE[0]) / 2.0
+        
+        offsets = [(0.0, 0.0), (0.0, 0.1), (0.0, -0.1), (0.1, 0.0), (-0.1, 0.0)]
+        for i, name in enumerate(object_names):
             obj = self.asset_registry.get_asset_by_name(name)()
             obj.add_relation(On(tabletop_reference))
+            ox, oy = offsets[i % len(offsets)]
+            obj.add_relation(AtPosition(x=drink_x_center + ox, y=drink_y_center + oy))
+            obj.add_relation(RandomAroundSolution(x_half_m=drink_x_half, y_half_m=drink_y_half))
+            if getattr(args_cli, "spawn_horizontal", False):
+                obj.add_relation(RotateAroundSolution(roll_rad=np.pi/2))
             placeable_assets.append(obj)
 
-        # CLI: parser.add_argument("--num_redbull", type=int, default=3)
-        # redbulls = []
-        # for i in range(args_cli.num_redbull):
-        #     can = self.asset_registry.get_asset_by_name("redbull")(
-        #         instance_name=f"redbull_{i}",        # unique name -> unique prim path
-        #         scale=(1.1, 1.1, 1.1),               # optional per-instance scale
-        #     )
-        #     can.add_relation(On(tabletop_reference))  # solver places them, no overlap
-        #     redbulls.append(can)
-        # placeable_assets.extend(redbulls)
-
-        # Need to modify this
-        # Dynamic Drink Sampling
-        # drink = self.asset_registry.get_asset_by_name(args_cli.object)()
-        # drink.set_initial_pose(
-        #     PoseRange(
-        #         position_xyz_min=(DRINK_SPAWN_X_RANGE[0], DRINK_SPAWN_Y_RANGE[0], TABLE_SURFACE_Z + TABLE_COLLISION_Z_OFFSET),
-        #         position_xyz_max=(DRINK_SPAWN_X_RANGE[1], DRINK_SPAWN_Y_RANGE[1], TABLE_SURFACE_Z + TABLE_COLLISION_Z_OFFSET),
-        #         rpy_min=(0.0, 0.0, 0.0),
-        #         rpy_max=(0.0, 0.0, 2 * np.pi), # Random yaw
-        #     )
-        # )
-        # Need to modify this
-
         destination = self.asset_registry.get_asset_by_name(args_cli.destination)()
-        # destination.set_initial_pose(
-        #     PoseRange(
-        #         position_xyz_min=(DEST_SPAWN_X_RANGE[0], DEST_SPAWN_Y_RANGE[0], TABLE_SURFACE_Z + TABLE_COLLISION_Z_OFFSET),
-        #         position_xyz_max=(DEST_SPAWN_X_RANGE[1], DEST_SPAWN_Y_RANGE[1], TABLE_SURFACE_Z + TABLE_COLLISION_Z_OFFSET),
-        #         rpy_min=(0.0, 0.0, 0.0),
-        #         rpy_max=(0.0, 0.0, 0.0),
-        #     )
-        # )
         destination.add_relation(On(tabletop_reference))
-        destination.add_relation(AtPosition(x=0.5, y=0.0))
+        
+        dest_x_center = (DEST_SPAWN_X_RANGE[0] + DEST_SPAWN_X_RANGE[1]) / 2.0
+        dest_y_center = (DEST_SPAWN_Y_RANGE[0] + DEST_SPAWN_Y_RANGE[1]) / 2.0
+        dest_x_half = (DEST_SPAWN_X_RANGE[1] - DEST_SPAWN_X_RANGE[0]) / 2.0
+        dest_y_half = (DEST_SPAWN_Y_RANGE[1] - DEST_SPAWN_Y_RANGE[0]) / 2.0
+        
+        destination.add_relation(AtPosition(x=dest_x_center, y=dest_y_center))
+        destination.add_relation(RandomAroundSolution(x_half_m=dest_x_half, y_half_m=dest_y_half))
 
         # 2. Setup Embodiment
         embodiment = self.asset_registry.get_asset_by_name(args_cli.embodiment)(
@@ -155,10 +139,6 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
             dynamic_friction=G1_BRAINCO_FINGER_DYNAMIC_FRICTION,
             prim_name_markers=G1_BRAINCO_FINGER_PRIM_NAME_MARKERS,
         )
-        
-        # embodiment.set_initial_pose(Pose(position_xyz=ROBOT_INITIAL_POSE_XYZ))
-        # embodiment.add_relation(NextTo(tabletop_reference, side=Side.POSITIVE_X, distance_m=1))
-        # embodiment.set_joint_initial_pos(G1_BRAINCO_OPEN_ARM_JOINT_POS)
         
         # The solver can't place the embodiment, so compute the stance ourselves
         # from the table's world bounding box (mirrors NextTo's side semantics).
@@ -196,7 +176,6 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
                 table_background,
                 tabletop_reference,
                 *placeable_assets,
-                # drink,
                 destination,
                 light,
             ]
@@ -227,4 +206,5 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
         parser.add_argument("--lock_waist", action=argparse.BooleanOptionalAction, default=True)
         parser.add_argument("--enable_cameras", action=argparse.BooleanOptionalAction, default=False)
         parser.add_argument("--teleop_device", type=str, default=None, help="Teleoperation device")
+        parser.add_argument("--spawn_horizontal", action=argparse.BooleanOptionalAction, default=False, help="Spawn objects horizontally")
         # parser.add_argument("--num_redbull", type=int, default=3)

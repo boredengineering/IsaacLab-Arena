@@ -6,7 +6,7 @@ import os
 import numpy as np
 from isaaclab_arena.assets.register import register_asset
 from isaaclab_arena.embodiments.g1.g1 import G1WBCJointEmbodiment
-from g1_brainco_extension.mdp.actions.wbc_action_cfg import G1BraincoWBCActionCfg
+from g1_brainco_extension.embodiments.mdp.actions.wbc_action_cfg import G1BraincoWBCActionCfg
 
 @register_asset
 class G1BraincoCustomEmbodiment(G1WBCJointEmbodiment):
@@ -35,9 +35,9 @@ class G1BraincoCustomEmbodiment(G1WBCJointEmbodiment):
         # Robust USD Path resolution
         extension_path = os.path.dirname(os.path.dirname(__file__))
         path_variants = [
-            os.path.join(extension_path, "data", "g1_with_brainco_hands.usd"),
-            "g1_brainco_extension/data/g1_with_brainco_hands.usd",
-            "/workspaces/IsaacLab-Arena/g1_brainco_extension/data/g1_with_brainco_hands.usd",
+            os.path.join(extension_path, "assets", "g1_with_brainco_hands.usd"),
+            "g1_brainco_extension/assets/g1_with_brainco_hands.usd",
+            "/workspaces/IsaacLab-Arena/g1_brainco_extension/assets/g1_with_brainco_hands.usd",
         ]
         usd_path = next((p for p in path_variants if os.path.exists(p)), path_variants[0])
         self.scene_config.robot.spawn.usd_path = usd_path

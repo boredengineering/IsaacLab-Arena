@@ -1,0 +1,11 @@
+[[models]]
+model = "gemma-4-31b-it"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+name = "Gemma 4 (31B)"
+env_key = "GEMINI_API_KEY"
+
+[[models]]
+model = "gemma-4-26b-a4b-it"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+name = "Gemma 4 (26B MoE)"
+env_key = "GEMINI_API_KEY"

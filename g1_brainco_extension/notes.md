@@ -1,5 +1,52 @@
 # Notes and Ideas on features to implement
 
+The project certainly need a change since the Code Structure is flawed
+
+```text
+g1_brainco_extension/
+├── data/                  # Local assets (USDs, meshes)
+├── embodiments/
+│   └── g1_brainco.py      # Custom robot model & asset registration
+├── environments/
+│   └── pick_drink.py      # Task definition & background setup
+├── mdp/
+│   ├── robot_configs.py   # Robot-specific constants (friction, postures)
+│   └── actions/
+│       ├── wbc_action.py  # Mapping logic Sim <-> WBC
+│       └── wbc_action_cfg.py
+├── assets.py              # Custom asset registration (CokeCan, etc.)
+└── README.md
+```
+
+should change the folder structure to
+
+```{{text}}
+g1_brainco_extension/
+├── assets/                  # Local assets
+├── datasets/                # dataset for the robot
+├── embodiments/
+│   ├── mdp/
+│   │   ├── robot_configs.py   # Robot-specific constants (friction, postures)
+│   │   └── actions/
+│   │       ├── wbc_action.py  # Mapping logic Sim <-> WBC
+│   │       └── wbc_action_cfg.py
+│   └── g1_brainco.py        # Custom robot model & asset registration
+├── environments/
+│   └── pick_drink.py      # Task definition & background setup
+├── task/
+│   ├── g1_brainco_locomanip_pick_and_place_task.py
+│   └── g1_brainco_pick_and_place_task.py
+├── policy/
+│   ├── config/
+│   │   ├── g1_brainco_locomanip_gr00t_closedloop_config.yaml
+│   │   └── g1_brainco_static_gr00t_closedloop_config.yaml
+│   └── g1_brainco_gr00t_closedloop_policy.py
+├── assets.py              # Custom asset registration (CokeCan, etc.)
+└── README.md
+```
+
+## notes
+
 Using the ObjectReference from isaaclab_arena.assets.object_reference seems to be a way to get the table top as reference to spawn objects on top of it dynamically.
 
 ```python
@@ -138,3 +185,94 @@ class G1LocomanipPickPlaceMimicEnvCfg(MimicEnvCfg):
 ```
 
 In this class we are adding all the subclasses for the robot to break down the task into a MDP type of process with a well degine strategy and termination.
+
+## Reviewing g1_locomanip_pick_and_place_task.py
+
+✦ In the context of the Isaac Lab Arena project, the G1LocomanipPickAndPlaceTask represents a sophisticated intersection of locomotion and manipulation (hence "Locomanipulation").
+
+Scientifically and educationally, here is a breakdown of what this task is doing and why it is structured this way.
+
+1. The Scientific Core: Locomanipulation
+
+Locomanipulation is the ability of a robot to coordinate its movement (locomotion) with its handling of objects (manipulation). In the case of the Unitree G1 humanoid, this is a "Whole-Body Control" (WBC) challenge. 
+
+* Challenge: The robot must maintain balance (centroidal dynamics) while walking, turning, and reaching for a box on a shelf.
+* Approach: The task breaks down a long-horizon objective into discrete, manageable subtasks.
+
+2. Educational Breakdown of the Task Class
+
+The G1LocomanipPickAndPlaceTask (found in g1_locomanip_pick_and_place_task.py) acts as the objective manager. It defines the "What" independently of the "How":
+
+* Success Metrics: It uses a SuccessRateMetric. Educationally, this is the simplest way to measure performance: Did the box end up in the bin?
+* Termination Logic:
+    * Success: Defined by objects_in_proximity. It checks if the pick_up_object is within a specific 3D box around the destination_bin.
+    * Failure: Defined by object_dropped. If the object's height falls below a threshold (-0.6m), the episode ends. This teaches the agent that "losing the object" is a terminal failure.
+* Mimicry Configuration (MimicEnvCfg): This is the most "scientific" part of the code. It defines a state machine for Data Generation and Imitation Learning:
+    * Body Subtasks: navigate_to_table → navigate_turn_inplace → navigate_to_bin.
+    * Arm Subtasks: idle → grasp_and_idle.
+    * This structure allows researchers to train policies (like NVIDIA's GR00T) by showing it demonstrations of these individual "primitives."
+
+3. Integration in the Galileo Environment
+
+In galileo_g1_locomanip_pick_and_place_environment.py, this task is brought to life:
+
+* The Scene: A specific background called galileo_locomanip.
+* The Robot: The g1_wbc_pink embodiment, which uses a Whole-Body Controller.
+* Navigation Subgoals: The environment provides specific (x, y, θ) waypoints. For example:
+
+```python
+action_cfg.g1_action.navigation_subgoals = [
+    ([0.18, 0.18, 0.0], False),     # Move to shelf
+    ([0.18, 0.18, -1.78], True),    # Turn in place
+    ([-0.0955, -1.1070, -1.78], False), # Move to bin
+]
+```
+
+This shows that the "Task" provides the objective, while the "Environment" provides the specific roadmap for the G1 robot to follow.
+
+Summary Comparison
+┌────────────────────────────┬────────────────────────────────────────┬─────────────────────────────────┐
+│ Component                  │ Responsibility                         │ Educational takeaway            │
+├────────────────────────────┼────────────────────────────────────────┼─────────────────────────────────┤
+│ Task (G1Locomanip...)      │ Define Success/Failure, Subtask labels │ Objectives & Semantics          │
+│ Environment (GalileoG1...) │ Layout objects, Set waypoints          │ Scenarios & Spacial Constraints │
+│ Embodiment (g1_wbc_pink)   │ Move joints, Balance, Walk             │ Physics & Control               │
+└────────────────────────────┴────────────────────────────────────────┴─────────────────────────────────┘
+
+By separating these, Isaac Lab Arena allows you to swap the robot (e.g., use a GR1 instead of G1) or the scene (e.g., a kitchen instead of a shelf) without rewriting the logic of what "Pick and Place" actually means.
+
+Reflection: Scientifically, this architecture mirrors how we think about human behavior. We have a high-level goal (Task), we operate in a specific room (Scene), and we use our physical body (Embodiment) to execute the movements. The G1LocomanipPickAndPlaceTask is the "brain's" high-level plan for that specific 30-second interaction.
+
+## How to use Newton
+
+Attention !!!
+
+Only dexsuite_lift has Newton
+
+The environment does not contain a physics-specific callback. Physics backend selection is handled globally by the --presets CLI flag (e.g. --presets newton), which is applied by ArenaEnvBuilder after all environment-specific configuration.
+
+This is handled inside the arena_env_builder.py inside isaaclab_arena/environments/ 
+
+here is a segment of the code around line 270
+
+```python
+# Apply the environment configuration callback if it is set
+# This can be used to modify the simulation configuration, etc.
+if self.arena_env.env_cfg_callback is not None:
+    env_cfg = self.arena_env.env_cfg_callback(env_cfg)
+
+# Apply the --presets CLI flag (e.g. --presets newton).
+# This runs after the callback so the user's CLI choice is the final authority.
+presets = getattr(self.args, "presets", None)
+if presets is not None:
+    from isaaclab_arena.environments.isaaclab_arena_manager_based_env import ArenaPhysicsCfg
+
+    env_cfg.sim.physics = getattr(ArenaPhysicsCfg(), presets)
+
+    # Set replicate_physics for shared physics representations.
+    # For Newton, wihotut this flag, the simulation initialization
+    # takes a very long time for large number of parallel environments.
+    if presets == "newton":
+        env_cfg.scene.replicate_physics = True
+```
+

@@ -26,7 +26,7 @@ from isaaclab_arena.assets.object_utils import RIGID_BODY_PROPS_MEDIUM_PRECISION
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 
 # Base path for local extension data
-EXTENSION_DATA_PATH = os.path.join(os.path.dirname(__file__), "data")
+EXTENSION_DATA_PATH = os.path.join(os.path.dirname(__file__), "assets")
 
 @register_asset
 class TomatoSoupCan(LibraryObject):
@@ -92,8 +92,28 @@ class RedContainer(LibraryObject):
 
 
 # EXAMPLE: Adding an asset from the local 'data' folder
-# @register_asset
-# class MyCustomObject(LibraryObject):
-#     name = "my_object"
-#     tags = ["object"]
-#     usd_path = os.path.join(EXTENSION_DATA_PATH, "my_model.usd")
+@register_asset
+class RedBull(LibraryObject):
+    """Red Bull can with physics."""
+    name = "redbull"
+    tags = ["object", "drink"]
+    usd_path = os.path.join(EXTENSION_DATA_PATH, "redbull.usdz")
+    scale = (1.0, 1.0, 1.0)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.object_cfg.spawn.rigid_props = RIGID_BODY_PROPS_MEDIUM_PRECISION
+        self.object_cfg.spawn.mass_props = sim_utils.MassPropertiesCfg(mass=0.3)
+
+@register_asset
+class IceBucketMetal(LibraryObject):
+    """Metal ice bucket with physics."""
+    name = "ice_bucket_metal"
+    tags = ["object", "container"]
+    usd_path = os.path.join(EXTENSION_DATA_PATH, "ice_bucket_metal.usdz")
+    scale = (1.0, 1.0, 1.0)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.object_cfg.spawn.rigid_props = RIGID_BODY_PROPS_MEDIUM_PRECISION
+        self.object_cfg.spawn.mass_props = sim_utils.MassPropertiesCfg(mass=1.5)

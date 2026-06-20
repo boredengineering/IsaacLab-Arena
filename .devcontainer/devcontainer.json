@@ -1,7 +1,5 @@
 {
-  "name": "AI Playwright Sandbox (Gemini + Claude + Hermes)",
-  // Use the official Playwright image. It includes Node.js and all browser binaries —
-  // which Hermes also needs for its browser-control tools, so we're not duplicating work.
+  "name": "AI Playwright Sandbox (Antigravity + Claude + Hermes)",
   "image": "mcr.microsoft.com/playwright:v1.58.2-jammy",
   "features": {
     "ghcr.io/rocker-org/devcontainer-features/r-apt:latest": {
@@ -28,7 +26,6 @@
         "python.defaultInterpreterPath": "/usr/local/bin/python"
       },
       "extensions": [
-        "google.geminicode",
         "anthropic.claude-code",
         "REditorSupport.r",
         "ms-python.python",
@@ -37,29 +34,16 @@
       ]
     }
   },
-  // Forward API keys from the host. Set whichever you use in your host shell before
-  // opening the container. Hermes also reads keys from ~/.hermes/.env (see mount below).
   "remoteEnv": {
     "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}",
     "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}",
     "GEMINI_API_KEY": "${localEnv:GEMINI_API_KEY}",
-    "HERMES_HOME": "/root/.hermes",
-    // Reuse the Playwright image's preinstalled Chromium for Hermes browser tools
-    // instead of downloading another copy into ~/.hermes.
-    "AGENT_BROWSER_EXECUTABLE_PATH": "/ms-playwright/chromium-*/chrome-linux/chrome"
+    "HERMES_HOME": "/root/.hermes"
   },
-  // Persist auth/config across rebuilds so Hermes doesn't lose its memory, sessions,
-  // and learned skills every time the container is recreated. Same pattern as Claude Code.
   "mounts": [
     "source=claude-code-config-${devcontainerId},target=/root/.claude,type=volume",
-    "source=hermes-home-${devcontainerId},target=/root/.hermes,type=volume"
+    "source=hermes-home-${devcontainerId},target=/root/.hermes,type=volume",
+    "source=antigravity-config-${devcontainerId},target=/root/.gemini,type=volume"
   ],
-  // postCreateCommand installs Gemini CLI, Claude Code, and Hermes Agent.
-  // Hermes flags explained:
-  //   --skip-setup       : the wizard is interactive; we'll run `hermes setup` by hand later
-  //   --skip-browser     : the Playwright base image already has Chromium + system libs;
-  //                        AGENT_BROWSER_EXECUTABLE_PATH above points Hermes at it
-  //   HERMES_INSTALL_DIR : pin install location (root-on-Linux default is fine, but explicit
-  //                        makes rebuilds deterministic)
-  "postCreateCommand": "apt update && apt install -y libmagick++-dev ripgrep ffmpeg && npm install -g @google/gemini-cli @anthropic-ai/claude-code && echo 'Gemini CLI and Claude Code installed!' && Rscript -e 'install.packages(c(\"languageserver\", \"renv\"), repos=\"https://cloud.r-project.org\")' && if [ -f renv.lock ]; then Rscript -e 'renv::restore()'; fi && pip install jupyter ipykernel && curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --skip-browser && echo 'Hermes Agent installed. Run: hermes setup'"
+  "postCreateCommand": "apt update && apt install -y libmagick++-dev ripgrep ffmpeg && npm install -g @anthropic-ai/claude-code && curl -fsSL https://antigravity.google/cli/install.sh | bash && ln -s /root/.local/bin/agy /usr/local/bin/agy && echo \"export AGENT_BROWSER_EXECUTABLE_PATH=\$(find /ms-playwright -name chrome -type f | head -n 1)\" >> /root/.bashrc && echo 'Antigravity CLI (agy) and Claude Code installed!' && Rscript -e 'install.packages(c(\"languageserver\", \"renv\"), repos=\"https://cloud.r-project.org\")' && if [ -f renv.lock ]; then Rscript -e 'renv::restore()'; fi && pip install jupyter ipykernel && curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --skip-browser && echo 'Hermes Agent installed. Run: hermes setup'"
 }

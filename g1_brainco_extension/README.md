@@ -16,23 +16,24 @@ This extension provides support for the Unitree G1 humanoid robot equipped with 
 
 ```text
 g1_brainco_extension/
-├── data/                  # Local assets (USDs, meshes)
+├── assets/                  # Local assets (USDs, meshes)
+├── datasets/                # dataset for the robot
 ├── embodiments/
-│   └── g1_brainco.py      # Custom robot model & asset registration
+│   ├── mdp/
+│   │   ├── robot_configs.py   # Robot-specific constants (friction, postures)
+│   │   └── actions/
+│   │       ├── wbc_action.py  # Mapping logic Sim <-> WBC
+│   │       └── wbc_action_cfg.py
+│   └── g1_brainco.py        # Custom robot model & asset registration
 ├── environments/
-│   └── pick_drink.py      # Task definition & background setup
-├── mdp/
-│   ├── robot_configs.py   # Robot-specific constants (friction, postures)
-│   └── actions/
-│       ├── wbc_action.py  # Mapping logic Sim <-> WBC
-│       └── wbc_action_cfg.py
+│   └── g1_static_pick_and_place_drink_env.py      # Task definition & background setup
 ├── assets.py              # Custom asset registration (CokeCan, etc.)
 └── README.md
 ```
 
 ### 1. Embodiments (`embodiments/`)
 The `G1BraincoCustomEmbodiment` extends the base G1 WBC embodiment. It specifically:
-- Points to the USD containing the Brainco hand models (located in `data/`).
+- Points to the USD containing the Brainco hand models (located in `assets/`).
 - Overrides the `hands` actuator group to use a regex that captures all finger joints (`index`, `middle`, `pinky`, `ring`, `thumb`).
 - Injects the `G1BraincoWBCActionCfg` to ensure the correct action term is used.
 
@@ -53,7 +54,7 @@ Standard G1 WBC policies expect exactly 43 joints. The Brainco hands add signifi
 - **Handles Extra Joints**: Allows the extra finger joints to be controlled or maintained without interfering with the base controller.
 
 ### 4. Environments (`environments/`)
-The `G1BraincoPickDrinkEnvironment` is an `ExampleEnvironmentBase` implementation. It sets up the physical scene, including:
+The `G1StaticPickAndPlaceDrinkEnvironment` is an `ExampleEnvironmentBase` implementation. It sets up the physical scene, including:
 - A large office background (`OficinaCBAGrande`).
 - An office table and task objects (e.g., beer bottle, sorting bin).
 - Specific finger friction settings (`static: 6.0, dynamic: 5.0`) to prevent objects from slipping during dexterous manipulation.

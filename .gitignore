@@ -94,3 +94,13 @@ core.*
 # Data folder in g1_brainco_extension
 g1_brainco_extension/data/*
 !g1_brainco_extension/data/g1_with_brainco_hands.usd
+
+Lupan_chica.usdz
+Lupan_digital_twin.usdz
+Oficina_CBA_grande.usdz
+
+*.usdz
+*.usd
+*.pt
+*.hdf5
+*.deb

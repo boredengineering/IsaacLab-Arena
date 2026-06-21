@@ -25,8 +25,11 @@ import isaaclab.sim as sim_utils
 
 
 DEFAULT_TABLE_OBJECTS = [
-    "cracker_box",
-    "mustard_bottle",
+    "beer_bottle",
+    "beer_bottle",
+    "beer_bottle",
+    "beer_bottle",
+    "beer_bottle",
     "beer_bottle",
 ]
 
@@ -97,17 +100,25 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
         )
         tabletop_reference.add_relation(IsAnchor())
 
-        object_names = getattr(args_cli, "objects", None) or DEFAULT_TABLE_OBJECTS
+        object_names = [args_cli.object] * getattr(args_cli, "num_objects", 6)
         placeable_assets = []
         
-        drink_x_center = (DRINK_SPAWN_X_RANGE[0] + DRINK_SPAWN_X_RANGE[1]) / 2.0
-        drink_y_center = (DRINK_SPAWN_Y_RANGE[0] + DRINK_SPAWN_Y_RANGE[1]) / 2.0
-        drink_x_half = (DRINK_SPAWN_X_RANGE[1] - DRINK_SPAWN_X_RANGE[0]) / 2.0
-        drink_y_half = (DRINK_SPAWN_Y_RANGE[1] - DRINK_SPAWN_Y_RANGE[0]) / 2.0
+        # Calculate table bounds
+        _bbox = tabletop_reference.get_world_bounding_box()
+        _lo, _hi = _bbox.min_point, _bbox.max_point
+        _center = [(_lo[i] + _hi[i]) / 2.0 for i in range(3)]
         
-        offsets = [(0.0, 0.0), (0.0, 0.1), (0.0, -0.1), (0.1, 0.0), (-0.1, 0.0)]
+        min_x = _lo[0]
+        
+        # Bottles placement
+        drink_x_center = min_x + 0.15
+        drink_y_center = -0.20
+        drink_x_half = 0.05  # Ensures 10cm-20cm from border
+        drink_y_half = 0.02  # Reduced area
+        
+        offsets = [(x * 0.08, y * 0.08) for x in [-1, 0, 1] for y in [-1, 0, 1]]
         for i, name in enumerate(object_names):
-            obj = self.asset_registry.get_asset_by_name(name)()
+            obj = self.asset_registry.get_asset_by_name(name)(instance_name=f"{name}_{i}")
             obj.add_relation(On(tabletop_reference))
             ox, oy = offsets[i % len(offsets)]
             obj.add_relation(AtPosition(x=drink_x_center + ox, y=drink_y_center + oy))
@@ -119,10 +130,11 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
         destination = self.asset_registry.get_asset_by_name(args_cli.destination)()
         destination.add_relation(On(tabletop_reference))
         
-        dest_x_center = (DEST_SPAWN_X_RANGE[0] + DEST_SPAWN_X_RANGE[1]) / 2.0
-        dest_y_center = (DEST_SPAWN_Y_RANGE[0] + DEST_SPAWN_Y_RANGE[1]) / 2.0
-        dest_x_half = (DEST_SPAWN_X_RANGE[1] - DEST_SPAWN_X_RANGE[0]) / 2.0
-        dest_y_half = (DEST_SPAWN_Y_RANGE[1] - DEST_SPAWN_Y_RANGE[0]) / 2.0
+        # Destination placement (25 cm center-to-center gives ~10 cm physical gap)
+        dest_x_center = drink_x_center
+        dest_y_center = drink_y_center + 0.25
+        dest_x_half = 0.02  # Reduced area
+        dest_y_half = 0.02  # Reduced area
         
         destination.add_relation(AtPosition(x=dest_x_center, y=dest_y_center))
         destination.add_relation(RandomAroundSolution(x_half_m=dest_x_half, y_half_m=dest_y_half))
@@ -142,27 +154,36 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
         
         # The solver can't place the embodiment, so compute the stance ourselves
         # from the table's world bounding box (mirrors NextTo's side semantics).
-        _bbox = tabletop_reference.get_world_bounding_box()
-        _lo, _hi = _bbox.min_point, _bbox.max_point
-        _center = [(_lo[i] + _hi[i]) / 2.0 for i in range(3)]
         _side_cfg = {  # (axis index, outward sign, yaw facing the table)
             Side.POSITIVE_X: (0, +1.0, np.pi),
             Side.NEGATIVE_X: (0, -1.0, 0.0),
             Side.POSITIVE_Y: (1, +1.0, -np.pi / 2.0),
             Side.NEGATIVE_Y: (1, -1.0,  np.pi / 2.0),
         }
-        _robot_side = Side.NEGATIVE_Y   # stand on -X, FACE +X toward the table
-        _dist_from_center_m = 0.8      # base-to-object distance; objects sit near table centre
+        _robot_side = Side.NEGATIVE_X   # stand on -X, FACE +X toward the table
+        _dist_from_edge_m = 0.40      # base-to-table-edge distance
         _axis, _sign, _yaw = _side_cfg[_robot_side]
         _band = 1 - _axis
         _pos = [0.0, 0.0, ROBOT_INITIAL_POSE_XYZ[2]]
-        _pos[_axis] = _center[_axis] + _sign * _dist_from_center_m
+        
+        # Position relative to the bounding box edges to prevent spawning inside table
+        if _sign < 0:
+            _pos[_axis] = _lo[_axis] - _dist_from_edge_m
+        else:
+            _pos[_axis] = _hi[_axis] + _dist_from_edge_m
+            
         _pos[_band] = _center[_band]
         embodiment.set_initial_pose(Pose(
             position_xyz=tuple(_pos),
             rotation_xyzw=(0.0, 0.0, np.sin(_yaw / 2.0), np.cos(_yaw / 2.0)),
         ))
         embodiment.set_joint_initial_pos(G1_BRAINCO_OPEN_ARM_JOINT_POS)
+        
+        # Validate robot reach
+        import math
+        robot_x, robot_y = _pos[0], _pos[1]
+        dist_to_cluster = math.sqrt((drink_x_center - robot_x)**2 + (drink_y_center - robot_y)**2)
+        assert dist_to_cluster <= 0.65, f"Bottles are out of reach! Distance is {dist_to_cluster:.2f}m (max allowed 0.65m)"
         
         if args_cli.teleop_device is not None:
             teleop_device = self.device_registry.get_device_by_name(args_cli.teleop_device)()
@@ -200,11 +221,11 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> None:
-        parser.add_argument("--object", type=str, default="tomato_soup_can_custom")
+        parser.add_argument("--object", type=str, default="beer_bottle")
         parser.add_argument("--destination", type=str, default="red_container_custom")
         parser.add_argument("--embodiment", type=str, default="g1_brainco_custom")
         parser.add_argument("--lock_waist", action=argparse.BooleanOptionalAction, default=True)
         parser.add_argument("--enable_cameras", action=argparse.BooleanOptionalAction, default=False)
         parser.add_argument("--teleop_device", type=str, default=None, help="Teleoperation device")
         parser.add_argument("--spawn_horizontal", action=argparse.BooleanOptionalAction, default=False, help="Spawn objects horizontally")
-        # parser.add_argument("--num_redbull", type=int, default=3)
+        parser.add_argument("--num_objects", type=int, default=6, help="Number of objects to spawn")

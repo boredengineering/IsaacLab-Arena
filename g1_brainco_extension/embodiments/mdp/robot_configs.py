@@ -33,9 +33,9 @@ TABLE_COLLISION_Z_OFFSET = 0.005 # Small airgap for PhysX
 ROBOT_INITIAL_POSE_XYZ = (-1.45, 0.0, 0.75)
 
 # Drink Randomization Range (on the table)
-DRINK_SPAWN_X_RANGE = (0.45, 0.65)
-DRINK_SPAWN_Y_RANGE = (-0.15, 0.15)
+DRINK_SPAWN_X_RANGE = (0.5, 0.7)
+DRINK_SPAWN_Y_RANGE = (-0.1, 0.1)
 
 # Destination Randomization Range (on the table)
-DEST_SPAWN_X_RANGE = (0.45, 0.65)
+DEST_SPAWN_X_RANGE = (0.55, 0.65)
 DEST_SPAWN_Y_RANGE = (0.2, 0.4)

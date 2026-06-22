@@ -24,15 +24,6 @@ from isaaclab_arena.assets.object_library import LibraryObject
 import isaaclab.sim as sim_utils
 
 
-DEFAULT_TABLE_OBJECTS = [
-    "beer_bottle",
-    "beer_bottle",
-    "beer_bottle",
-    "beer_bottle",
-    "beer_bottle",
-    "beer_bottle",
-]
-
 @register_asset
 class OficinaCBAGrande(Background):
     name = "oficina_cba_grande"
@@ -70,13 +61,7 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
             G1_BRAINCO_FINGER_DYNAMIC_FRICTION,
             G1_BRAINCO_FINGER_PRIM_NAME_MARKERS,
             G1_BRAINCO_OPEN_ARM_JOINT_POS,
-            TABLE_SURFACE_Z,
-            TABLE_COLLISION_Z_OFFSET,
             ROBOT_INITIAL_POSE_XYZ,
-            DRINK_SPAWN_X_RANGE,
-            DRINK_SPAWN_Y_RANGE,
-            DEST_SPAWN_X_RANGE,
-            DEST_SPAWN_Y_RANGE,
         )
 
         enable_cameras = getattr(args_cli, "enable_cameras", False)
@@ -108,11 +93,43 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
         _lo, _hi = _bbox.min_point, _bbox.max_point
         _center = [(_lo[i] + _hi[i]) / 2.0 for i in range(3)]
         
-        min_x = _lo[0]
+        # 1. Setup Embodiment Side Configuration
+        # The solver can't place the embodiment, so compute the stance ourselves
+        # from the table's world bounding box (mirrors NextTo's side semantics).
+        _side_cfg = {  # (axis index, outward sign, yaw facing the table)
+            Side.POSITIVE_X: (0, +1.0, np.pi),
+            Side.NEGATIVE_X: (0, -1.0, 0.0),
+            Side.POSITIVE_Y: (1, +1.0, -np.pi / 2.0),
+            Side.NEGATIVE_Y: (1, -1.0,  np.pi / 2.0),
+        }
+        _robot_side = Side.POSITIVE_Y   # stand on -X, FACE +X toward the table
+        _axis, _sign, _yaw = _side_cfg[_robot_side]
+        _band = 1 - _axis
         
-        # Bottles placement
-        drink_x_center = min_x + 0.15
-        drink_y_center = -0.20
+        # Determine the robot-side table edge along the active axis
+        _u_edge = _lo[_axis] if _sign < 0 else _hi[_axis]
+        
+        # Determine object placement coordinates
+        # Offset from table edge (within 10cm - 20cm range)
+        _d_forward = 0.15
+        _u_obj = _u_edge - _sign * _d_forward
+        
+        # Workspace center along the band/lateral axis (shifted to align with robot target area)
+        _v_mid = _center[_band] - 0.10
+        
+        # Separation between source and destination (giving a 10cm gap)
+        _separation = 0.10
+        _v_src = _v_mid - _separation / 2.0
+        _v_dst = _v_mid + _separation / 2.0
+        
+        # Assign coordinates to the bottles and destination centers
+        drink_x_center = _u_obj if _axis == 0 else _v_src
+        drink_y_center = _v_src if _axis == 0 else _u_obj
+        
+        dest_x_center = _u_obj if _axis == 0 else _v_dst
+        dest_y_center = _v_dst if _axis == 0 else _u_obj
+        
+        # Bottles placement bounds
         drink_x_half = 0.05  # Ensures 10cm-20cm from border
         drink_y_half = 0.02  # Reduced area
         
@@ -130,9 +147,7 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
         destination = self.asset_registry.get_asset_by_name(args_cli.destination)()
         destination.add_relation(On(tabletop_reference))
         
-        # Destination placement (25 cm center-to-center gives ~10 cm physical gap)
-        dest_x_center = drink_x_center
-        dest_y_center = drink_y_center + 0.25
+        # Destination placement bounds
         dest_x_half = 0.02  # Reduced area
         dest_y_half = 0.02  # Reduced area
         
@@ -152,38 +167,40 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
             prim_name_markers=G1_BRAINCO_FINGER_PRIM_NAME_MARKERS,
         )
         
-        # The solver can't place the embodiment, so compute the stance ourselves
-        # from the table's world bounding box (mirrors NextTo's side semantics).
-        _side_cfg = {  # (axis index, outward sign, yaw facing the table)
-            Side.POSITIVE_X: (0, +1.0, np.pi),
-            Side.NEGATIVE_X: (0, -1.0, 0.0),
-            Side.POSITIVE_Y: (1, +1.0, -np.pi / 2.0),
-            Side.NEGATIVE_Y: (1, -1.0,  np.pi / 2.0),
-        }
-        _robot_side = Side.NEGATIVE_X   # stand on -X, FACE +X toward the table
-        _dist_from_edge_m = 0.40      # base-to-table-edge distance
-        _axis, _sign, _yaw = _side_cfg[_robot_side]
-        _band = 1 - _axis
-        _pos = [0.0, 0.0, ROBOT_INITIAL_POSE_XYZ[2]]
+        # Standoff Distance Solver: dynamically solve reach constraints
+        _r_max = 0.65       # max reach of humanoid arms
+        _d_min = 0.30       # minimum standoff distance to avoid table collisions
         
-        # Position relative to the bounding box edges to prevent spawning inside table
-        if _sign < 0:
-            _pos[_axis] = _lo[_axis] - _dist_from_edge_m
-        else:
-            _pos[_axis] = _hi[_axis] + _dist_from_edge_m
+        # Solve for the maximum standoff distance to keep both target zones within reach
+        import math
+        _d_reach_max = math.sqrt(_r_max**2 - (_separation / 2.0)**2) - _d_forward
+        
+        # Validate that a valid placement is mathematically possible
+        if _d_min > _d_reach_max:
+            raise ValueError(
+                f"Objects are placed too far apart ({_separation:.2f}m) or too deep ({_d_forward:.2f}m) "
+                f"for the robot's maximum arm reach of {_r_max:.2f}m!"
+            )
             
-        _pos[_band] = _center[_band]
+        # Select the optimal standoff distance (midpoint of valid range to maximize safety margin)
+        _dist_from_edge_m = (_d_min + _d_reach_max) / 2.0
+        
+        # Compute final base coordinate position relative to the table edge
+        _pos = [0.0, 0.0, ROBOT_INITIAL_POSE_XYZ[2]]
+        _pos[_axis] = _u_edge + _sign * _dist_from_edge_m
+        _pos[_band] = _v_mid
+        
         embodiment.set_initial_pose(Pose(
             position_xyz=tuple(_pos),
             rotation_xyzw=(0.0, 0.0, np.sin(_yaw / 2.0), np.cos(_yaw / 2.0)),
         ))
         embodiment.set_joint_initial_pos(G1_BRAINCO_OPEN_ARM_JOINT_POS)
         
-        # Validate robot reach
-        import math
-        robot_x, robot_y = _pos[0], _pos[1]
-        dist_to_cluster = math.sqrt((drink_x_center - robot_x)**2 + (drink_y_center - robot_y)**2)
-        assert dist_to_cluster <= 0.65, f"Bottles are out of reach! Distance is {dist_to_cluster:.2f}m (max allowed 0.65m)"
+        # Validate reachability for both targets
+        _dist_to_drink = math.sqrt((drink_x_center - _pos[0])**2 + (drink_y_center - _pos[1])**2)
+        _dist_to_dest = math.sqrt((dest_x_center - _pos[0])**2 + (dest_y_center - _pos[1])**2)
+        assert _dist_to_drink <= _r_max, f"Bottles are out of reach! Distance is {_dist_to_drink:.2f}m (max allowed {_r_max:.2f}m)"
+        assert _dist_to_dest <= _r_max, f"Destination is out of reach! Distance is {_dist_to_dest:.2f}m (max allowed {_r_max:.2f}m)"
         
         if args_cli.teleop_device is not None:
             teleop_device = self.device_registry.get_device_by_name(args_cli.teleop_device)()

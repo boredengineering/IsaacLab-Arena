@@ -63,6 +63,23 @@ class G1BraincoWBCAction(G1DecoupledWBCJointAction):
             wbc_action, self._asset.data, self.wbc_g1_joints_order, self.device
         )
 
+        # 7. Mimic coupling for extra dexterous joints (ring and pinky)
+        joint_names = self._asset.data.joint_names
+        for i, name in enumerate(joint_names):
+            if "ring" in name or "pinky" in name:
+                side_prefix = "left" if "left" in name else "right"
+                segment = None
+                for seg_char in ["0", "1", "2"]:
+                    if f"_{seg_char}_" in name:
+                        segment = seg_char
+                        break
+                if segment is not None:
+                    middle_name = f"{side_prefix}_hand_middle_{segment}_joint"
+                    if middle_name in joint_names:
+                        middle_idx = joint_names.index(middle_name)
+                        self._processed_actions[:, i] = self._processed_actions[:, middle_idx]
+
+
     def _brainco_convert_sim_to_wbc(self, sim_data, sim_names):
         """Maps sim joints to WBC joints, ignoring extra Brainco joints."""
         num_wbc_joints = len(self.wbc_g1_joints_order)

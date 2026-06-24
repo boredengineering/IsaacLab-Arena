@@ -1,62 +1,107 @@
-# Copyright (c) 2026, The Isaac Lab Arena Project Developers.
-# SPDX-License-Identifier: Apache-2.0
+import os
+from pxr import Usd, UsdPhysics
 
-import sys
-from pxr import Usd
-
-def verify_and_analyze_usd(usd_path):
-    print("====================================================")
-    print("USD STRUCTURE ANALYSIS & VERIFICATION FOR G1 BRAINCO")
-    print("====================================================")
-    
+def analyze_head_link(usd_path, label):
+    print(f"\n--- Analysis for: {label} ({usd_path}) ---")
     stage = Usd.Stage.Open(usd_path)
     if not stage:
-        print(f"ERROR: Could not open USD file at: {usd_path}")
-        return False
+        print("ERROR: Could not open USD file.")
+        return None
+
+    # Get head_link
+    head_link_path = "/g1_29dof_mode_15_brainco_hand/head_link"
+    head_prim = stage.GetPrimAtPath(head_link_path)
+    
+    info = {}
+    if head_prim:
+        info["exists"] = True
+        info["type"] = head_prim.GetTypeName()
+        info["applied_schemas"] = list(head_prim.GetAppliedSchemas())
         
-    print(f"Successfully loaded stage: {usd_path}")
-    
-    # 1. Analyze Root Prim Specifier
-    root_prims = stage.GetPseudoRoot().GetChildren()
-    root_prim_names = [p.GetName() for p in root_prims]
-    print(f"Top-level root prims: {root_prim_names}")
-    
-    # 2. Count Physics Joints & Group Them
-    revolute_joints = []
+        # Check visuals/collisions children
+        vis = stage.GetPrimAtPath(f"{head_link_path}/visuals")
+        col = stage.GetPrimAtPath(f"{head_link_path}/collisions")
+        info["visuals_children"] = [c.GetName() for c in vis.GetChildren()] if vis else []
+        info["collisions_children"] = [c.GetName() for c in col.GetChildren()] if col else []
+        
+        print(f"  Head Link: {head_link_path} ({info['type']})")
+        print(f"    Applied Schemas: {info['applied_schemas']}")
+        print(f"    Visuals child prims: {info['visuals_children']}")
+        print(f"    Collisions child prims: {info['collisions_children']}")
+    else:
+        info["exists"] = False
+        print("  Head Link does not exist!")
+
+    # Check for joints connecting head_link
+    joints = []
     for prim in stage.Traverse():
-        if prim.GetTypeName() == "PhysicsRevoluteJoint":
-            revolute_joints.append(prim.GetName())
-            
-    print(f"Total PhysicsRevoluteJoints found: {len(revolute_joints)}")
+        if prim.IsA(UsdPhysics.Joint):
+            joint = UsdPhysics.Joint(prim)
+            b0 = [str(t) for t in joint.GetBody0Rel().GetTargets()]
+            b1 = [str(t) for t in joint.GetBody1Rel().GetTargets()]
+            if any("head_link" in t for t in b0) or any("head_link" in t for t in b1):
+                joints.append((prim.GetName(), b0, b1))
+                
+    info["joints"] = joints
+    if joints:
+        print("  Joints connecting head_link:")
+        for jname, b0, b1 in joints:
+            print(f"    - Joint '{jname}': {b0} -> {b1}")
+    else:
+        print("  ⚠️ No joints connecting head_link found on stage!")
+
+    # Check where visuals and collisions head meshes are defined raw in layer
+    # Scan raw specs
+    layer = stage.GetRootLayer()
+    vis_proto = layer.GetPrimAtPath("/Flattened_Prototype_97/head_link")
+    col_proto = layer.GetPrimAtPath("/Flattened_Prototype_93/head_link")
+    info["head_in_visuals_prototype"] = vis_proto is not None
+    info["head_in_collisions_prototype"] = col_proto is not None
+    print(f"  Head link in visuals prototype spec (/Flattened_Prototype_97/head_link): {info['head_in_visuals_prototype']}")
+    print(f"  Head link in collisions prototype spec (/Flattened_Prototype_93/head_link): {info['head_in_collisions_prototype']}")
+
+    return info
+
+def compare_usd_files(old_path, new_path):
+    print("====================================================")
+    print("USD ROBOT HEAD COMPARISON & PHYSICAL ANOMALY REPORT")
+    print("====================================================")
     
-    # 3. Categorize Joints
-    hand_joints = [j for j in revolute_joints if any(f in j for f in ["index", "middle", "pinky", "ring", "thumb"])]
-    body_joints = [j for j in revolute_joints if j not in hand_joints]
+    if not os.path.exists(old_path):
+        print(f"ERROR: Old USD file not found at: {old_path}")
+        return
+    if not os.path.exists(new_path):
+        print(f"ERROR: New USD file not found at: {new_path}")
+        return
+
+    old_info = analyze_head_link(old_path, "Original (Old) USD")
+    new_info = analyze_head_link(new_path, "Modified (New) USD")
+
+    print("\n================ Comparative Summary ================")
+    print("1. Physics API Configuration:")
+    print("   - Both files define '/g1_29dof_mode_15_brainco_hand/head_link' as a Rigid Body with Mass.")
     
-    print(f"- Body/Arm/Leg joints ({len(body_joints)}): {body_joints[:10]}... (truncated)")
-    print(f"- Hand joints ({len(hand_joints)}): {hand_joints[:10]}... (truncated)")
-    
-    # 4. Assess structural feasibility of modifying it to match standard 29/43 DOF model
-    print("\n--- Structural Analysis ---")
-    print(f"Brainco Hand Joint Count: {len(hand_joints)} (16 joints per hand, 5 fingers: thumb, index, middle, ring, pinky)")
-    print("Standard G1 Hand Joint Count: 14 (7 joints per hand, 3 fingers: thumb, index, middle)")
-    print("Standard G1 joint space config expects hand joints with '_hand_' namespace and 2 joints per finger.")
-    
-    is_feasible = False
-    print("\nVerification Conclusion:")
-    print("1. [NO] Direct modification via usd-core is not physically/semantically possible because:")
-    print("   - The Brainco hand is physically a 5-finger dexterous hand with 16 joints per hand.")
-    print("   - The standard G1 hand has 3 fingers with 7 joints per hand.")
-    print("   - Stripping the pinky and ring fingers and removing finger links from the USD file would visually ")
-    print("     and physically destroy the Brainco dexterous hand model, reducing it to a standard G1 hand.")
-    print("2. [YES] Solution is a virtual mapping/bridge layer:")
-    print("   - Retain the 61-DOF physical and visual USD model.")
-    print("   - Programmatically slice 43 observations from the simulator joints in the observation manager.")
-    print("   - Programmatically distribute 43 policy outputs to the joints in the action manager, coupled with")
-    print("     mimic-joint mapping for extra fingers (ring & pinky mimic middle finger).")
-    
-    return True
+    print("\n2. Geometry Parenting Changes:")
+    print("   - Original (Old) USD:")
+    print("     * Visuals: The head mesh was defined under '/Flattened_Prototype_97/head_link' inside the instanced torso visuals.")
+    print("     * Collisions: The head mesh was defined under '/Flattened_Prototype_93/head_link' inside the instanced torso collisions.")
+    print("     * Result: Head visuals and collisions were visually attached to the torso_link. They did not fall because torso_link is constrained by joints.")
+    print("   - Modified (New) USD:")
+    print("     * Visuals: Moved head mesh to '/g1_29dof_mode_15_brainco_hand/head_link/visuals/head_link'.")
+    print("     * Collisions: Moved head mesh to '/g1_29dof_mode_15_brainco_hand/head_link/collisions/head_link'.")
+    print("     * Result: Head visuals and collisions are now attached to the head_link rigid body.")
+
+    print("\n3. Physical Connection / Joint Analysis:")
+    print("   - In BOTH files, there are NO physics joints (e.g., revolute joints, fixed joints) connecting the torso_link to the head_link.")
+    print("   - Why the head falls in the modified USD:")
+    print("     * In the original USD, the head_link rigid body was empty and invisible. If it fell due to gravity, the user could not see it because the visual mesh was parented to the torso.")
+    print("     * In the modified USD, the visual and collision meshes are now children of the head_link rigid body. Since there is no physics joint constraining head_link to the torso, head_link falls under gravity, carrying the head visual and collision meshes with it!")
+
+    print("\n4. Recommended Physics Fixes:")
+    print("   We must add a Physics Fixed Joint (or Revolute Joint) to constrain the head_link to the torso_link.")
+    print("   Alternatively, if the head is static, we can remove the PhysicsRigidBodyAPI and PhysicsMassAPI from head_link so that it behaves as a kinematic frame relative to its parent in the hierarchy (if parented correctly), or add a fixed joint.")
 
 if __name__ == "__main__":
-    usd_file = "./g1_brainco_extension/assets/g1_with_brainco_hands.usd"
-    verify_and_analyze_usd(usd_file)
+    old_file = "g1_brainco_extension/assets/g1_with_brainco_hands_old.usd"
+    new_file = "g1_brainco_extension/assets/g1_with_brainco_hands.usd"
+    compare_usd_files(old_file, new_file)

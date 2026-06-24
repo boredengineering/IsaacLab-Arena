@@ -22,6 +22,8 @@ class G1BraincoCustomEmbodiment(G1WBCJointEmbodiment):
         self,
         enable_cameras: bool = False,
         initial_pose = None,
+        camera_offset = None,
+        use_tiled_camera: bool = True,
         concatenate_observation_terms: bool = False,
         arm_mode = None,
         lock_waist: bool = True,
@@ -29,8 +31,29 @@ class G1BraincoCustomEmbodiment(G1WBCJointEmbodiment):
         super().__init__(
             enable_cameras=enable_cameras,
             initial_pose=initial_pose,
+            camera_offset=camera_offset,
+            use_tiled_camera=use_tiled_camera,
             lock_waist=lock_waist,
         )
+
+        from g1_brainco_extension.embodiments.mdp.robot_configs import (
+            G1_BRAINCO_FINGER_FRICTION_MATERIAL_PATH,
+            G1_BRAINCO_FINGER_STATIC_FRICTION,
+            G1_BRAINCO_FINGER_DYNAMIC_FRICTION,
+            G1_BRAINCO_FINGER_PRIM_NAME_MARKERS,
+            G1_BRAINCO_OPEN_ARM_JOINT_POS,
+        )
+
+        # Set robot finger contact friction
+        self.set_finger_contact_friction(
+            material_path=G1_BRAINCO_FINGER_FRICTION_MATERIAL_PATH,
+            static_friction=G1_BRAINCO_FINGER_STATIC_FRICTION,
+            dynamic_friction=G1_BRAINCO_FINGER_DYNAMIC_FRICTION,
+            prim_name_markers=G1_BRAINCO_FINGER_PRIM_NAME_MARKERS,
+        )
+
+        # Set joint initial positions
+        self.set_joint_initial_pos(G1_BRAINCO_OPEN_ARM_JOINT_POS)
         
         # Robust USD Path resolution
         extension_path = os.path.dirname(os.path.dirname(__file__))

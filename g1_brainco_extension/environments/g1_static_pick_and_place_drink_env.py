@@ -55,14 +55,7 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
 
         import g1_brainco_extension.embodiments.g1_brainco  # noqa: F401
         import g1_brainco_extension.assets  # noqa: F401
-        from g1_brainco_extension.embodiments.mdp.robot_configs import (
-            G1_BRAINCO_FINGER_FRICTION_MATERIAL_PATH,
-            G1_BRAINCO_FINGER_STATIC_FRICTION,
-            G1_BRAINCO_FINGER_DYNAMIC_FRICTION,
-            G1_BRAINCO_FINGER_PRIM_NAME_MARKERS,
-            G1_BRAINCO_OPEN_ARM_JOINT_POS,
-            ROBOT_INITIAL_POSE_XYZ,
-        )
+        from g1_brainco_extension.embodiments.mdp.robot_configs import ROBOT_INITIAL_POSE_XYZ
 
         enable_cameras = getattr(args_cli, "enable_cameras", False)
         
@@ -160,12 +153,7 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
             lock_waist=args_cli.lock_waist,
         )
         
-        embodiment.set_finger_contact_friction(
-            material_path=G1_BRAINCO_FINGER_FRICTION_MATERIAL_PATH,
-            static_friction=G1_BRAINCO_FINGER_STATIC_FRICTION,
-            dynamic_friction=G1_BRAINCO_FINGER_DYNAMIC_FRICTION,
-            prim_name_markers=G1_BRAINCO_FINGER_PRIM_NAME_MARKERS,
-        )
+
         
         # Standoff Distance Solver: dynamically solve reach constraints
         _r_max = 0.65       # max reach of humanoid arms
@@ -194,7 +182,7 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
             position_xyz=tuple(_pos),
             rotation_xyzw=(0.0, 0.0, np.sin(_yaw / 2.0), np.cos(_yaw / 2.0)),
         ))
-        embodiment.set_joint_initial_pos(G1_BRAINCO_OPEN_ARM_JOINT_POS)
+
         
         # Validate reachability for both targets
         _dist_to_drink = math.sqrt((drink_x_center - _pos[0])**2 + (drink_y_center - _pos[1])**2)
@@ -242,7 +230,7 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
         parser.add_argument("--destination", type=str, default="red_container_custom")
         parser.add_argument("--embodiment", type=str, default="g1_brainco_custom")
         parser.add_argument("--lock_waist", action=argparse.BooleanOptionalAction, default=True)
-        parser.add_argument("--enable_cameras", action=argparse.BooleanOptionalAction, default=False)
+        parser.add_argument("--enable_cameras", action=argparse.BooleanOptionalAction, default=True)
         parser.add_argument("--teleop_device", type=str, default=None, help="Teleoperation device")
         parser.add_argument("--spawn_horizontal", action=argparse.BooleanOptionalAction, default=False, help="Spawn objects horizontally")
         parser.add_argument("--num_objects", type=int, default=6, help="Number of objects to spawn")

@@ -10,3 +10,8 @@ from .g1.g1 import *
 from .galbot.galbot import *
 from .gr1t2.gr1t2 import *
 from .kuka_allegro.kuka_allegro import *
+
+try:
+    import g1_brainco_extension.embodiments.g1_brainco
+except ImportError:
+    pass

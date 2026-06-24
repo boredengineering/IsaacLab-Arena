@@ -149,3 +149,59 @@ python isaaclab_arena/evaluation/policy_runner.py \
     g1_static_pick_and_place_drink \
     --object beer_bottle
 ```
+
+---
+
+## 4. USD Stage Conversion Verification (usd-core Analysis)
+
+We programmatically verified the feasibility of modifying the custom USD asset `g1_with_brainco_hands.usd` to match the standard G1 embodiment `g1_29dof_with_hand_rev_1_0.usd` using Python `usd-core`.
+
+### Verification Findings
+1. **Physical Degrees of Freedom (DOF) Mismatch**:
+   - `g1_with_brainco_hands.usd` contains **61 joints** (29 body/arm joints + 32 hand joints). The hands are 5-finger dexterous Brainco hands with 16 joints per hand (metacarpal, proximal, distal, tip links).
+   - `g1_29dof_with_hand_rev_1_0.usd` contains **43 joints** in the joint space configuration (29 body/arm joints + 14 hand joints). The hands are 3-finger hands with 7 joints per hand (thumb, index, middle).
+2. **Feasibility of Direct USD Alteration**:
+   - Deleting the ring and pinky fingers and reducing joint counts of other fingers in the USD file is physically and visually destructive. It would reduce the dexterous 5-finger Brainco hands back to the standard 3-finger G1 hands, which defeats the purpose of the custom embodiment.
+   - Therefore, programmatically editing the USD structure to achieve a literal 43-DOF model is **not viable** if we want to retain the 5-finger dexterous hand.
+
+### Brainstormed Alternative Solutions (Added to Plan)
+To evaluate the 5-finger hand without modifying its USD geometry, we implement the following software mapping bridge:
+1. **MDP Action Mapper (`G1BraincoWBCAction`)**:
+   - The policy outputs standard 43 joint commands.
+   - The action term maps the 43 outputs to the 61-DOF physical robot joints.
+   - Specifically, index, middle, and thumb targets are distributed to the corresponding Brainco hand joints.
+   - Mimic coupling is applied to the extra fingers: the ring and pinky joints follow the targets of the middle finger joints in unison (`ring_0` matches `middle_0`, `ring_1` matches `middle_1`, etc.).
+2. **Observation Mapper**:
+   - The simulator provides observations from 61 joints.
+   - The custom observation manager filters/slices these to extract only the 43 standard joints required by the WBC/GR00T policies.
+3. **Actuator Mapping**:
+   - Actuator joint expressions in the scene config are overridden using regex matching `.*(index|middle|pinky|ring|thumb).*` instead of `.*_hand_.*` to ensure motor gains are properly configured for all 5 fingers.
+4. **Friction Overrides**:
+   - High-friction physics materials are dynamically bound to the contact markers of all 5 fingers (`left/right_index/middle/pinky/ring/thumb`).
+
+---
+
+## 5. Whole Body Control (WBC) Static Pick & Place Integration
+
+To evaluate the custom embodiment `g1_brainco_custom` inside the static pick-and-place drink environment with the downloaded GR00T policy:
+
+1. **Class Registration**:
+   - `@register_asset` registers `G1BraincoCustomEmbodiment` as `g1_brainco_custom` inside `g1_brainco_extension/embodiments/g1_brainco.py`.
+2. **Custom Embodiment Configuration**:
+   - Inherits from `G1WBCJointEmbodiment`, making it fully compatible with WBC-joint policies.
+   - Uses `g1_with_brainco_hands.usd` as the robot's USD source file.
+   - Replaces standard `G1DecoupledWBCJointActionCfg` with `G1BraincoWBCActionCfg`, routing target joint commands through the custom `G1BraincoWBCAction` term.
+   - Formats and overrides actuator limits and stiffness/damping gains for all Brainco hand joints.
+3. **Execution Command**:
+   To run the static drink pick-and-place task using the custom Brainco embodiment and the downloaded GR00T model:
+
+```bash
+python isaaclab_arena/evaluation/policy_runner.py \
+--policy_type isaaclab_arena_gr00t.policy.gr00t_closedloop_policy.Gr00tClosedloopPolicy \
+--policy_config_yaml_path g1_brainco_extension/policy/config/g1_brainco_static_gr00t_closedloop_config.yaml \
+--num_steps 1000 \
+--external_environment_class_path g1_brainco_extension.environments.g1_static_pick_and_place_drink_env:G1StaticPickAndPlaceDrinkEnvironment \
+g1_static_pick_and_place_drink \
+--object beer_bottle \
+--embodiment g1_brainco_custom
+```

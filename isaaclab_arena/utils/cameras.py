@@ -43,8 +43,9 @@ def make_camera_observation_cfg(
     for f in fields(camera_cfg):
         name = f.name
         cam = getattr(camera_cfg, name)
+        from isaaclab.sensors import CameraCfg, TiledCameraCfg
         # Skip non-camera fields
-        if not isinstance(cam, CameraCfg):
+        if not isinstance(cam, (CameraCfg, TiledCameraCfg)):
             continue
 
         # Get modalities from the camera cfg (fallback to rgb)

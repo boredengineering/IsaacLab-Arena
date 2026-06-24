@@ -1,5 +1,5 @@
 # Configuration for G1 Brainco with the G1-Loco-Manipulation model
-model_path: nvidia/GN1x-Tuned-Arena-G1-Loco-Manipulation
+model_path: models/checkpoint-20000
 language_instruction: "Pick up the bottle from the table and place it into the red bin."
 action_horizon: 50
 embodiment_tag: NEW_EMBODIMENT

@@ -133,31 +133,90 @@ python isaaclab_arena/evaluation/policy_runner.py \
 
 ## Scene Layout & Customization
 
-The environment is configured for a hierarchical task: the robot starts 2 meters away from the table, requiring navigation/approach before manipulation.
+The environment is configured as a static pick-and-place task where the G1 robot stands directly in front of the table.
 
-### Scene Summary Table
+### 📐 Environment Spatial Layout (Top-Down View)
 
-| Asset / Entity | Type | Position (X, Y, Z) | Variability |
-| :--- | :--- | :--- | :--- |
-| **G1 Humanoid** | Embodiment | `(-1.45, 0.0, 0.0)` | Fixed initial pose |
-| **Office Table** | Static Asset | `(0.55, 0.0, 0.0)` | Fixed (Surface at Z=0.745) |
-| **Collision Patch**| Invisible | `(0.55, 0.0, 0.735)` | Fixed (0.02m thick) |
-| **Drink Object** | `ObjectSet` | `X: [0.45, 0.65], Y: [-0.15, 0.15], Z: 0.75` | Random asset, XY pos, and Yaw |
-| **Destination** | `RigidObject`| `X: [0.45, 0.65], Y: [0.2, 0.4], Z: 0.75` | Random XY pos |
+```text
+                              ▲ +X (Forward)
+                              │
+                              │
+    +Y (Robot's Left) ◄───────┼───────► -Y (Robot's Right)
+                              │
+                              │
+   ===========================│===================================
+   ║                          │                                  ║
+   ║                       [TABLE TOP]                           ║
+   ║                          │                                  ║
+   ║                          │                                  ║
+   ║                          │                                  ║
+   ║                  ┌───────┴───────┐      ┌───────────────┐   ║
+   ║                  │    BOX 2      │      │    BOX 1      │   ║
+   ║                  │     DEST      │      │   BOTTLES     │   ║
+   ║                  │   (Basket)    │      │    (6x)       │   ║
+   ║                  │   Y = -0.05m  │      │   Y = -0.15m  │   ║
+   ║                  └───────┬───────┘      └───────┬───────┘   ║
+   ║                          │◄────────10cm────────►│           ║
+   ║                          │         gap          │           ║
+   ║         ┌────────────────┼──────────────────────┼───┐       ║
+   ║         │  Tighter Area  │                      │   │       ║
+   ║         └────────────────┼──────────────────────┼───┘       ║
+   ║                          │                      │           ║
+   ===========================╪======================╪============  ◄ X = 0.00m (Table Border)
+             ▲                │                      │
+             │                │                      │
+             │ 10cm - 20cm    │                      │
+             │ from border    │                      │
+             ▼                ▼                      ▼
+                              │
+                              │
+                      ┌───────┴──────────────────────┐
+                      │                              │
+                      │          ROBOT BASE          │
+                      │          X = -0.25m          │
+                      │          Y =  0.00m (Center) │
+                      │                              │
+                      └──────────────────────────────┘
+                              │
+                              │
+                              ▼ -X (Backward)
+```
 
-### How to Modify the Scene
+### 📏 Coordinate Details & Code Variable Mappings
+
+The table coordinates and spacing are calculated programmatically inside [g1_static_pick_and_place_drink_env.py](file:///workspaces/IsaacLab-Arena/g1_brainco_extension/environments/g1_static_pick_and_place_drink_env.py):
+
+1. **Table Border Edge (`X = 0.00m` / Active Axis)**:
+   * **Code Variable**: `_u_edge` (Calculated using the table's bounding box `_lo` or `_hi` along the active axis `_axis`).
+   * **Description**: Serves as the zero-plane reference for forward and backward standoff distance calculations.
+
+2. **Object Forward Distance (`10cm - 20cm` offset from border)**:
+   * **Code Variable**: `_d_forward = 0.15` (Set to 15 cm).
+   * **Description**: Position of the target boxes along the table depth. Calculated using `_u_obj = _u_edge - _sign * _d_forward`.
+
+3. **Workspace Center (`Y = -0.10m` offset)**:
+   * **Code Variable**: `_v_mid = _center[_band] - 0.10`
+   * **Description**: Centroid of the manipulation workspace along the lateral/band axis (`Y`-axis in this orientation), shifted to align with the robot's target arm workspace.
+
+4. **10 cm Gap (`_separation`)**:
+   * **Code Variable**: `_separation = 0.10`
+   * **Description**: The center-to-center lateral separation between the source (Bottles) and destination (Basket) regions.
+   * **Source Center (`Y = -0.15m`)**: `_v_src = _v_mid - _separation / 2.0` (maps to `drink_y_center`).
+   * **Destination Center (`Y = -0.05m`)**: `_v_dst = _v_mid + _separation / 2.0` (maps to `dest_y_center`).
+
+5. **Randomization Bounds (`RandomAroundSolution`)**:
+   * **Box 1 (Bottles)**: `drink_x_half = 0.05`, `drink_y_half = 0.02` (gives a tighter lateral distribution and standard 10cm-20cm range from the border).
+   * **Box 2 (Destination Basket)**: `dest_x_half = 0.02`, `dest_y_half = 0.02`.
+
+6. **Robot Base Position (`X = -0.25m` / `Y = 0.00m`)**:
+   * **Code Variable**: `_pos` (3D position vector for G1).
+   * **Description**: `_pos[_axis]` (the `X` translation) is solved dynamically using a standoff distance solver (`_dist_from_edge_m`) calculated between `_d_min = 0.30` and the maximum arm reach limit (`_r_max = 0.65`) to ensure kinematic feasibility. `_pos[_band]` (the `Y` translation) is centered at `_v_mid`.
 
 #### 1. Adjusting Positions and Ranges
-Most spatial constants are defined in `g1_brainco_extension/mdp/robot_configs.py`. You can change:
-- `ROBOT_INITIAL_POSE_XYZ`: Move the robot closer or further (e.g., set to `(0.1, 0.05, 0.0)` for immediate manipulation).
-- `TABLE_SURFACE_Z`: Adjust if using a different table asset.
-- `DRINK_SPAWN_X_RANGE` / `Y_RANGE`: Expand or tighten the randomization area.
+Most spatial constants are defined directly in [g1_static_pick_and_place_drink_env.py](file:///workspaces/IsaacLab-Arena/g1_brainco_extension/environments/g1_static_pick_and_place_drink_env.py). You can adjust `_separation`, `_d_forward`, or the randomization limits directly to create tighter or wider workspaces.
 
 #### 2. Adding New Randomized Objects
 To add more variety to the `drink_object_set`:
-1. Open `g1_brainco_extension/assets.py`.
+1. Open [assets.py](file:///workspaces/IsaacLab-Arena/g1_brainco_extension/assets.py).
 2. Define a new `LibraryObject` class with a Nucleus path.
 3. Add the new class instance to the `objects` list inside `DrinkObjectSet`.
-
-#### 3. Scene Integrity
-If objects are falling through your custom table mesh, adjust the `table_collision_patch` size and position in `environments/pick_drink.py` to provide a solid physics proxy.

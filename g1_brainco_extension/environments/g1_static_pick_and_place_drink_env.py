@@ -111,7 +111,7 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
         _v_mid = _center[_band] - 0.10
         
         # Separation between source and destination (giving a 10cm gap)
-        _separation = 0.10
+        _separation = 0.30
         _v_src = _v_mid - _separation / 2.0
         _v_dst = _v_mid + _separation / 2.0
         
@@ -212,7 +212,7 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
             embodiment=embodiment, 
             scene=scene,
             task=PickAndPlaceTask(
-                pick_up_object=placeable_assets[1], # pick_up_object=drink 
+                pick_up_object=placeable_assets[0], # pick_up_object=drink 
                 destination_location=destination, 
                 background_scene=background,
                 episode_length_s=8.0, 
@@ -233,4 +233,4 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
         parser.add_argument("--enable_cameras", action=argparse.BooleanOptionalAction, default=True)
         parser.add_argument("--teleop_device", type=str, default=None, help="Teleoperation device")
         parser.add_argument("--spawn_horizontal", action=argparse.BooleanOptionalAction, default=False, help="Spawn objects horizontally")
-        parser.add_argument("--num_objects", type=int, default=6, help="Number of objects to spawn")
+        parser.add_argument("--num_objects", type=int, default=4, help="Number of objects to spawn")

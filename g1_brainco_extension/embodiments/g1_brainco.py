@@ -70,7 +70,8 @@ class G1BraincoCustomEmbodiment(G1WBCJointEmbodiment):
         # This replaces the need for global monkey-patching.
         self.action_config.g1_action = G1BraincoWBCActionCfg(
             asset_name="robot", 
-            joint_names=[".*"]
+            joint_names=[".*"],
+            lock_waist=lock_waist,
         )
 
         # Override actuator joint expressions for Brainco naming convention

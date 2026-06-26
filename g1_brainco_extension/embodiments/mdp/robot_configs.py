@@ -14,6 +14,8 @@ G1_BRAINCO_FINGER_PRIM_NAME_MARKERS: tuple[str, ...] = (
     "thumb",
     "index",
     "middle",
+    "ring",
+    "pinky",
 )
 
 # Mild open-arm posture using shoulder joints only.

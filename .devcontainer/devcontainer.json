@@ -1,5 +1,5 @@
 {
-  "name": "AI Playwright Sandbox (Antigravity + Claude + Hermes)",
+  "name": "AI Playwright Sandbox (Antigravity + Claude + Hermes + HF CLI)",
   "image": "mcr.microsoft.com/playwright:v1.58.2-jammy",
   "features": {
     "ghcr.io/rocker-org/devcontainer-features/r-apt:latest": {
@@ -38,12 +38,13 @@
     "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}",
     "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}",
     "GEMINI_API_KEY": "${localEnv:GEMINI_API_KEY}",
-    "HERMES_HOME": "/root/.hermes"
+    "HERMES_HOME": "/root/.hermes",
+    "HF_TOKEN": "${localEnv:HF_TOKEN}"
   },
   "mounts": [
     "source=claude-code-config-${devcontainerId},target=/root/.claude,type=volume",
     "source=hermes-home-${devcontainerId},target=/root/.hermes,type=volume",
     "source=antigravity-config-${devcontainerId},target=/root/.gemini,type=volume"
   ],
-  "postCreateCommand": "apt update && apt install -y libmagick++-dev ripgrep ffmpeg && npm install -g @anthropic-ai/claude-code && curl -fsSL https://antigravity.google/cli/install.sh | bash && ln -s /root/.local/bin/agy /usr/local/bin/agy && echo \"export AGENT_BROWSER_EXECUTABLE_PATH=$(find /ms-playwright -name chrome -type f | head -n 1)\" >> /root/.bashrc && echo 'Antigravity CLI (agy) and Claude Code installed!' && Rscript -e 'install.packages(c(\"languageserver\", \"renv\"), repos=\"https://cloud.r-project.org\")' && if [ -f renv.lock ]; then Rscript -e 'renv::restore()'; fi && pip install jupyter ipykernel usd-core && curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --skip-browser && echo 'Hermes Agent installed. Run: hermes setup'"
+  "postCreateCommand": "apt update && apt install -y libmagick++-dev ripgrep ffmpeg && npm install -g @anthropic-ai/claude-code && curl -fsSL https://antigravity.google/cli/install.sh | bash && ln -s /root/.local/bin/agy /usr/local/bin/agy && curl -LsSf https://astral.sh/uv/install.sh | sh && ln -sf /root/.local/bin/uv /usr/local/bin/uv && ln -sf /root/.local/bin/uvx /usr/local/bin/uvx && echo \"export AGENT_BROWSER_EXECUTABLE_PATH=\$(find /ms-playwright -name chrome -type f | head -n 1)\" >> /root/.bashrc && echo 'Antigravity CLI (agy), Claude Code, and UV installed!' && Rscript -e 'install.packages(c(\"languageserver\", \"renv\"), repos=\"https://cloud.r-project.org\")' && if [ -f renv.lock ]; then Rscript -e 'renv::restore()'; fi && pip install jupyter ipykernel usd-core huggingface_hub && curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --skip-browser && echo 'Hermes Agent installed. Run: hermes setup'"
 }

@@ -11,3 +11,4 @@ from g1_brainco_extension.embodiments.mdp.actions.wbc_action import G1BraincoWBC
 class G1BraincoWBCActionCfg(G1DecoupledWBCJointActionCfg):
     """Configuration for G1 Brainco custom action term."""
     class_type: type = G1BraincoWBCAction
+    lock_waist: bool = True

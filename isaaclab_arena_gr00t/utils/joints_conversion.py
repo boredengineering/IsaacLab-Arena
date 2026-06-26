@@ -51,10 +51,14 @@ def _joint_name_to_policy_group(
                 return group
         return None
 
-    # Fallback: find the policy group that contains this joint name
+    # Fallback: find the policy group that contains this joint name or its aliases
     for group, names in policy_joints_config.items():
         if joint_name in names:
             return group
+        aliases = JOINT_ALIASES.get(joint_name, [])
+        for alias in aliases:
+            if alias in names:
+                return group
     return None
 
 

@@ -3,6 +3,10 @@
 
 from __future__ import annotations
 
+import os
+import yaml
+import warnings
+import importlib.util
 import numpy as np
 import torch
 import warp as wp
@@ -19,6 +23,80 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
     from isaaclab_arena_g1.g1_env.mdp.actions.g1_decoupled_wbc_joint_action_cfg import G1DecoupledWBCJointActionCfg
     from g1_brainco_extension.embodiments.mdp.actions.wbc_action_cfg import G1BraincoWBCActionCfg
+
+
+def is_running_in_container() -> bool:
+    """Helper to detect if we are running inside the Docker container."""
+    # Check standard container files/paths
+    if os.path.exists("/.dockerenv"):
+        return True
+    if os.path.exists("/isaac-sim"):
+        return True
+    if os.path.exists("/workspaces/isaaclab_arena"):
+        return True
+    
+    # Check cgroup for Docker/Containerd indicators
+    try:
+        if os.path.exists("/proc/self/cgroup"):
+            with open("/proc/self/cgroup", "r") as f:
+                content = f.read()
+                if any(ind in content for ind in ["docker", "containerd", "kubepods", "lxc"]):
+                    return True
+    except Exception:
+        pass
+        
+    return False
+
+
+def find_policy_joints_yaml() -> str | None:
+    """Resolves the path to the 43dof_joint_space.yaml file in a highly robust way."""
+    # 1. Try resolving via package search spec
+    try:
+        spec = importlib.util.find_spec("isaaclab_arena_gr00t")
+        if spec is not None and spec.submodule_search_locations:
+            gr00t_dir = spec.submodule_search_locations[0]
+            yaml_path = os.path.join(gr00t_dir, "embodiments/g1/43dof_joint_space.yaml")
+            if os.path.exists(yaml_path):
+                return yaml_path
+    except Exception:
+        pass
+
+    # 2. Try traversing upwards from the current file's directory
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(10):  # Look up to 10 parent levels
+        candidate = os.path.join(current_dir, "isaaclab_arena_gr00t/embodiments/g1/43dof_joint_space.yaml")
+        if os.path.exists(candidate):
+            return candidate
+        parent_dir = os.path.dirname(current_dir)
+        if parent_dir == current_dir:
+            break
+        current_dir = parent_dir
+
+    # 3. Try standard absolute paths in container/workspace environments
+    absolute_candidates = [
+        "/workspaces/isaaclab_arena/isaaclab_arena_gr00t/embodiments/g1/43dof_joint_space.yaml",
+        "/workspaces/IsaacLab-Arena/isaaclab_arena_gr00t/embodiments/g1/43dof_joint_space.yaml",
+    ]
+    for path in absolute_candidates:
+        if os.path.exists(path):
+            return path
+
+    return None
+
+
+def get_log_path() -> str:
+    """Resolves a robust path for wbc_debug.log in the extension root."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    ext_root = current_dir
+    for _ in range(10):
+        if os.path.basename(ext_root) == "g1_brainco_extension":
+            break
+        parent = os.path.dirname(ext_root)
+        if parent == ext_root:
+            break
+        ext_root = parent
+    return os.path.join(ext_root, "wbc_debug.log")
+
 
 class G1BraincoWBCAction(G1DecoupledWBCJointAction):
     """Custom action term for G1 with Brainco hands.
@@ -37,21 +115,40 @@ class G1BraincoWBCAction(G1DecoupledWBCJointAction):
             if name in self._asset.data.joint_names
         }
 
+        # Check and warn if we are not running inside the Docker container
+        in_container = is_running_in_container()
+        if not in_container:
+            warnings.warn(
+                "G1BraincoWBCAction: It appears that this script is not running inside the Docker container "
+                "('isaaclab_arena-latest'). Running outside the container may result in path resolution "
+                "issues or missing simulation dependencies. Please confirm your execution environment.",
+                UserWarning
+            )
+
         # Load 43dof policy action joint space config to map joint names to policy indices
-        import yaml
-        import os
-        possible_paths = [
-            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "isaaclab_arena_gr00t/embodiments/g1/43dof_joint_space.yaml"),
-            "/workspaces/IsaacLab-Arena/isaaclab_arena_gr00t/embodiments/g1/43dof_joint_space.yaml"
-        ]
-        policy_joints_yaml = next((p for p in possible_paths if os.path.exists(p)), possible_paths[0])
-        try:
-            with open(policy_joints_yaml, "r") as f:
-                yaml_data = yaml.safe_load(f)
-                self.policy_joints_order = yaml_data["joints"]
-        except Exception as e:
-            print(f"[WBC ACTION ERROR] Failed to load policy joints config from {policy_joints_yaml}: {e}")
-            self.policy_joints_order = {}
+        policy_joints_yaml = find_policy_joints_yaml()
+        self.load_error = None
+        self.policy_joints_order = {}
+
+        if policy_joints_yaml is not None:
+            try:
+                with open(policy_joints_yaml, "r") as f:
+                    yaml_data = yaml.safe_load(f)
+                    self.policy_joints_order = yaml_data["joints"]
+            except Exception as e:
+                self.load_error = f"Exception occurred while loading path {policy_joints_yaml}: {e}"
+        else:
+            self.load_error = "Could not locate 43dof_joint_space.yaml config file in the environment."
+
+        # Debug paths
+        self.debug_paths = {
+            "__file__": __file__,
+            "abspath(__file__)": os.path.abspath(__file__),
+            "policy_joints_yaml": policy_joints_yaml,
+            "policy_joints_order_size": len(self.policy_joints_order),
+            "load_error": self.load_error,
+            "running_in_container": in_container,
+        }
 
         if not cfg.lock_waist:
             from isaaclab_arena_g1.g1_whole_body_controller.wbc_policy.config.configs import AgileConfig, HomieV2Config
@@ -195,9 +292,8 @@ class G1BraincoWBCAction(G1DecoupledWBCJointAction):
                 self._processed_actions[:, target_idx] = self._processed_actions[:, source_idx]
 
         # File-based logging for WBC_DEBUG
-        import os
         if os.environ.get("WBC_DEBUG", "0") == "1":
-            log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "wbc_debug.log")
+            log_path = get_log_path()
             mode = "w" if not getattr(self, "_debug_file_initialized", False) else "a"
             try:
                 if not getattr(self, "_debug_file_initialized", False):
@@ -205,6 +301,13 @@ class G1BraincoWBCAction(G1DecoupledWBCJointAction):
                         f.write(f"Asset Joint Names: {self._asset.data.joint_names}\n\n")
                         f.write(f"WBC Joint Order: {list(self.wbc_g1_joints_order.keys())}\n\n")
                         f.write(f"Policy Joint Order: {list(self.policy_joints_order.keys())}\n\n")
+                        if hasattr(self, "load_error") and self.load_error is not None:
+                            f.write(f"LOAD ERROR: {self.load_error}\n\n")
+                        if hasattr(self, "debug_paths"):
+                            f.write(f"Debug Paths:\n")
+                            for k, v in self.debug_paths.items():
+                                f.write(f"  {k}: {v}\n")
+                            f.write("\n")
                 self._debug_file_initialized = True
                 
                 with open(log_path, "a") as f:

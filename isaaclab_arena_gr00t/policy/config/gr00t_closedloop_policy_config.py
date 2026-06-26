@@ -123,11 +123,12 @@ class Gr00tClosedloopPolicyConfig:
             "GR1",
             "NEW_EMBODIMENT",
             "OXE_DROID",
-        ], "embodiment_tag must be one of the following: " + ", ".join(["GR1", "NEW_EMBODIMENT", "OXE_DROID"])
+            "UNITREE_G1",
+        ], "embodiment_tag must be one of the following: " + ", ".join(["GR1", "NEW_EMBODIMENT", "OXE_DROID", "UNITREE_G1"])
         if self.task_mode_name == TaskMode.G1_LOCOMANIPULATION.value:
             assert (
-                self.embodiment_tag == "NEW_EMBODIMENT"
-            ), "embodiment_tag must be new_embodiment for G1 locomanipulation"
+                self.embodiment_tag in ["NEW_EMBODIMENT", "UNITREE_G1"]
+            ), "embodiment_tag must be NEW_EMBODIMENT or UNITREE_G1 for G1 locomanipulation"
         elif self.task_mode_name == TaskMode.GR1_TABLETOP_MANIPULATION.value:
             assert self.embodiment_tag == "GR1", "embodiment_tag must be GR1 for GR1 tabletop manipulation"
         elif self.task_mode_name == TaskMode.DROID_MANIPULATION.value:

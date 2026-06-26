@@ -37,6 +37,22 @@ class G1BraincoWBCAction(G1DecoupledWBCJointAction):
             if name in self._asset.data.joint_names
         }
 
+        # Load 43dof policy action joint space config to map joint names to policy indices
+        import yaml
+        import os
+        possible_paths = [
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "isaaclab_arena_gr00t/embodiments/g1/43dof_joint_space.yaml"),
+            "/workspaces/IsaacLab-Arena/isaaclab_arena_gr00t/embodiments/g1/43dof_joint_space.yaml"
+        ]
+        policy_joints_yaml = next((p for p in possible_paths if os.path.exists(p)), possible_paths[0])
+        try:
+            with open(policy_joints_yaml, "r") as f:
+                yaml_data = yaml.safe_load(f)
+                self.policy_joints_order = yaml_data["joints"]
+        except Exception as e:
+            print(f"[WBC ACTION ERROR] Failed to load policy joints config from {policy_joints_yaml}: {e}")
+            self.policy_joints_order = {}
+
         if not cfg.lock_waist:
             from isaaclab_arena_g1.g1_whole_body_controller.wbc_policy.config.configs import AgileConfig, HomieV2Config
             from isaaclab_arena_g1.g1_whole_body_controller.wbc_policy.utils.g1 import instantiate_g1_robot_model
@@ -71,9 +87,29 @@ class G1BraincoWBCAction(G1DecoupledWBCJointAction):
         wbc_obs = self._prepare_brainco_observations()
         
         # 4. Map target joints (use numpy for mapping logic)
-        # Note: actions_np[:, :43] is already in the policy/WBC joint order (43 DOFs)
+        # Note: actions contains the policy's raw actions. The first 43 DOFs are in policy order (43dof_joint_space.yaml).
         actions_np = actions.clone().cpu().numpy()
-        wbc_target_full_body_joints = actions_np[:, : self.num_joints]
+        policy_joint_data = actions_np[:, : self.num_joints]
+        
+        # Remap from policy/sim order (43dof_joint_space.yaml) to WBC order (loco_manip_g1_joints_order_43dof.yaml)
+        wbc_target_full_body_joints = np.zeros((self.num_envs, 43))
+        for joint_name, wbc_idx in self.wbc_g1_joints_order.items():
+            if joint_name in self.policy_joints_order:
+                policy_idx = self.policy_joints_order[joint_name]
+                wbc_target_full_body_joints[:, wbc_idx] = policy_joint_data[:, policy_idx]
+            else:
+                # Fallback to aliases
+                from isaaclab_arena_gr00t.utils.joints_conversion import JOINT_ALIASES
+                aliases = JOINT_ALIASES.get(joint_name, [])
+                mapped = False
+                for alias in aliases:
+                    if alias in self.policy_joints_order:
+                        policy_idx = self.policy_joints_order[alias]
+                        wbc_target_full_body_joints[:, wbc_idx] = policy_joint_data[:, policy_idx]
+                        mapped = True
+                        break
+                if not mapped:
+                    wbc_target_full_body_joints[:, wbc_idx] = 0.0
         
         wbc_target_upper_body_joints = wbc_target_full_body_joints[
             :, self.robot_model.get_joint_group_indices("upper_body")
@@ -108,14 +144,14 @@ class G1BraincoWBCAction(G1DecoupledWBCJointAction):
             "right_hand_thumb_2_joint": "right_thumb_distal_joint",
         }
 
-        wbc_q_torch = torch.from_numpy(wbc_action["q"]).to(self.device)
         joint_names = self._asset.data.joint_names
         
         for policy_name, sim_name in policy_to_sim_map.items():
-            if policy_name in self.wbc_g1_joints_order and sim_name in joint_names:
-                wbc_idx = self.wbc_g1_joints_order[policy_name]
+            if policy_name in self.policy_joints_order and sim_name in joint_names:
+                policy_idx = self.policy_joints_order[policy_name]
                 sim_idx = joint_names.index(sim_name)
-                self._processed_actions[:, sim_idx] = wbc_q_torch[:, wbc_idx]
+                # Fix: map direct from the policy actions, since WBC doesn't track fingers
+                self._processed_actions[:, sim_idx] = actions[:, policy_idx]
 
         # 8. Mimic coupling for extra dexterous joints (ring and pinky) and tips
         mimic_finger_map = {
@@ -158,18 +194,38 @@ class G1BraincoWBCAction(G1DecoupledWBCJointAction):
                 source_idx = joint_names.index(source_name)
                 self._processed_actions[:, target_idx] = self._processed_actions[:, source_idx]
 
-        # Debugging prints (controlled by WBC_DEBUG env var)
+        # File-based logging for WBC_DEBUG
         import os
         if os.environ.get("WBC_DEBUG", "0") == "1":
-            print(f"[WBC DEBUG] num_envs={self.num_envs}")
-            print(f"[WBC DEBUG] navigate_cmd={navigate_cmd.cpu().numpy()[0]}")
-            print(f"[WBC DEBUG] base_height_cmd={base_height_cmd.cpu().numpy()[0]}")
-            print(f"[WBC DEBUG] torso_orientation_rpy_cmd={torso_orientation_rpy_cmd.cpu().numpy()[0]}")
-            print(f"[WBC DEBUG] wbc_obs q (first 5)={wbc_obs['q'][0, :5]}")
-            print(f"[WBC DEBUG] wbc_action q (first 5)={wbc_action['q'][0, :5]}")
-            arm_indices = {name: joint_names.index(name) for name in ["left_shoulder_roll_joint", "right_shoulder_roll_joint", "left_elbow_joint", "right_elbow_joint"] if name in joint_names}
-            arm_targets = {name: self._processed_actions[0, idx].item() for name, idx in arm_indices.items()}
-            print(f"[WBC DEBUG] arm joint targets={arm_targets}")
+            log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "wbc_debug.log")
+            mode = "w" if not getattr(self, "_debug_file_initialized", False) else "a"
+            try:
+                if not getattr(self, "_debug_file_initialized", False):
+                    with open(log_path, "w") as f:
+                        f.write(f"Asset Joint Names: {self._asset.data.joint_names}\n\n")
+                        f.write(f"WBC Joint Order: {list(self.wbc_g1_joints_order.keys())}\n\n")
+                        f.write(f"Policy Joint Order: {list(self.policy_joints_order.keys())}\n\n")
+                self._debug_file_initialized = True
+                
+                with open(log_path, "a") as f:
+                    f.write(f"\n--- WBC DEBUG STEP ---\n")
+                    f.write(f"num_envs: {self.num_envs}\n")
+                    f.write(f"actions (first 10): {actions.cpu().numpy()[0, :10]}\n")
+                    left_arm_indices = [self.policy_joints_order[name] for name in ["left_shoulder_pitch_joint", "left_shoulder_roll_joint", "left_shoulder_yaw_joint", "left_elbow_joint", "left_wrist_roll_joint", "left_wrist_pitch_joint", "left_wrist_yaw_joint"] if name in self.policy_joints_order]
+                    right_arm_indices = [self.policy_joints_order[name] for name in ["right_shoulder_pitch_joint", "right_shoulder_roll_joint", "right_shoulder_yaw_joint", "right_elbow_joint", "right_wrist_roll_joint", "right_wrist_pitch_joint", "right_wrist_yaw_joint"] if name in self.policy_joints_order]
+                    f.write(f"actions (arm joints left targets): {actions.cpu().numpy()[0, left_arm_indices]}\n")
+                    f.write(f"actions (arm joints right targets): {actions.cpu().numpy()[0, right_arm_indices]}\n")
+                    f.write(f"navigate_cmd (vel_x, vel_y, yaw): {navigate_cmd.cpu().numpy()[0]}\n")
+                    f.write(f"base_height_cmd (height): {base_height_cmd.cpu().numpy()[0]}\n")
+                    f.write(f"torso_orientation_rpy_cmd: {torso_orientation_rpy_cmd.cpu().numpy()[0]}\n")
+                    f.write(f"wbc_obs q (first 5): {wbc_obs['q'][0, :5]}\n")
+                    f.write(f"wbc_action q (first 5): {wbc_action['q'][0, :5]}\n")
+                    arm_names_to_log = ["left_shoulder_pitch_joint", "left_shoulder_roll_joint", "left_shoulder_yaw_joint", "left_elbow_joint", "right_shoulder_pitch_joint", "right_shoulder_roll_joint", "right_shoulder_yaw_joint", "right_elbow_joint"]
+                    arm_indices = {name: joint_names.index(name) for name in arm_names_to_log if name in joint_names}
+                    arm_targets = {name: self._processed_actions[0, idx].item() for name, idx in arm_indices.items()}
+                    f.write(f"arm joint targets: {arm_targets}\n")
+            except Exception as e:
+                print(f"[WBC DEBUG ERROR] Failed to write to {log_path}: {e}")
 
 
     def _brainco_convert_sim_to_wbc(self, sim_data, sim_names):

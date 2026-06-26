@@ -91,6 +91,43 @@ def reorder_sim_joints_to_config_order_np(
     return reordered
 
 
+JOINT_ALIASES = {
+    # GR1 to G1 aliases (left hand)
+    "L_index_proximal_joint": ["left_hand_index_0_joint", "left_index_proximal_joint"],
+    "L_middle_proximal_joint": ["left_hand_middle_0_joint", "left_middle_proximal_joint"],
+    "L_pinky_proximal_joint": ["left_hand_middle_0_joint", "left_middle_proximal_joint"],
+    "L_ring_proximal_joint": ["left_hand_middle_0_joint", "left_middle_proximal_joint"],
+    "L_thumb_proximal_yaw_joint": ["left_hand_thumb_0_joint", "left_thumb_metacarpal_joint"],
+    "L_thumb_proximal_pitch_joint": ["left_hand_thumb_1_joint", "left_thumb_proximal_joint"],
+    "L_thumb_distal_joint": ["left_hand_thumb_2_joint", "left_thumb_distal_joint"],
+    
+    # GR1 to G1 aliases (right hand)
+    "R_index_proximal_joint": ["right_hand_index_0_joint", "right_index_proximal_joint"],
+    "R_middle_proximal_joint": ["right_hand_middle_0_joint", "right_middle_proximal_joint"],
+    "R_pinky_proximal_joint": ["right_hand_middle_0_joint", "right_middle_proximal_joint"],
+    "R_ring_proximal_joint": ["right_hand_middle_0_joint", "right_middle_proximal_joint"],
+    "R_thumb_proximal_yaw_joint": ["right_hand_thumb_0_joint", "right_thumb_metacarpal_joint"],
+    "R_thumb_proximal_pitch_joint": ["right_hand_thumb_1_joint", "right_thumb_proximal_joint"],
+    "R_thumb_distal_joint": ["right_hand_thumb_2_joint", "right_thumb_distal_joint"],
+
+    # G1 to GR1 aliases
+    "left_hand_index_0_joint": ["L_index_proximal_joint"],
+    "left_hand_index_1_joint": ["L_index_intermediate_joint", "L_index_proximal_joint"],
+    "left_hand_middle_0_joint": ["L_middle_proximal_joint"],
+    "left_hand_middle_1_joint": ["L_middle_intermediate_joint", "L_middle_proximal_joint"],
+    "left_hand_thumb_0_joint": ["L_thumb_proximal_yaw_joint"],
+    "left_hand_thumb_1_joint": ["L_thumb_proximal_pitch_joint"],
+    "left_hand_thumb_2_joint": ["L_thumb_distal_joint"],
+
+    "right_hand_index_0_joint": ["R_index_proximal_joint"],
+    "right_hand_index_1_joint": ["R_index_intermediate_joint", "R_index_proximal_joint"],
+    "right_hand_middle_0_joint": ["R_middle_proximal_joint"],
+    "right_hand_middle_1_joint": ["R_middle_intermediate_joint", "R_middle_proximal_joint"],
+    "right_hand_thumb_0_joint": ["R_thumb_proximal_yaw_joint"],
+    "right_hand_thumb_1_joint": ["R_thumb_proximal_pitch_joint"],
+    "right_hand_thumb_2_joint": ["R_thumb_distal_joint"],
+}
+
 def remap_sim_joints_to_policy_joints_from_np(
     joint_pos_sim_np: np.ndarray,
     state_joints_config: dict[str, int],
@@ -110,12 +147,24 @@ def remap_sim_joints_to_policy_joints_from_np(
     for group, joints_list in policy_joints_config.items():
         parts = []
         for joint_name in joints_list:
-            if joint_name not in state_joints_config:
-                raise ValueError(
-                    f"Joint {joint_name} not found in state_joints_config {list(state_joints_config.keys())}"
-                )
-            joint_index = state_joints_config[joint_name]
-            parts.append(joint_pos_sim_np[:, joint_index])
+            target_joint = None
+            if joint_name in state_joints_config:
+                target_joint = joint_name
+            else:
+                # Check aliases
+                aliases = JOINT_ALIASES.get(joint_name, [])
+                for alias in aliases:
+                    if alias in state_joints_config:
+                        target_joint = alias
+                        break
+            
+            if target_joint is not None:
+                joint_index = state_joints_config[target_joint]
+                parts.append(joint_pos_sim_np[:, joint_index])
+            else:
+                # Padding strategy: pad with zeros if joint not found
+                parts.append(np.zeros(joint_pos_sim_np.shape[0], dtype=joint_pos_sim_np.dtype))
+        
         data[group] = np.stack(parts, axis=1)
     return data
 
@@ -144,7 +193,7 @@ def remap_sim_joints_to_policy_joints(
 
 def remap_policy_joints_to_sim_joints_np(
     policy_joints: dict[str, np.ndarray],
-    policy_joints_config: dict[str, dict[str, int]],
+    policy_joints_config: dict[str, list[str]],
     sim_joints_config: dict[str, int],
     embodiment_tag: str,
 ) -> np.ndarray:
@@ -173,11 +222,23 @@ def remap_policy_joints_to_sim_joints_np(
     )
     for joint_name, joint_index in sim_joints_config.items():
         joint_group = _joint_name_to_policy_group(joint_name, embodiment_tag, policy_joints_config)
-        if joint_group is None:
+        if joint_group is None or joint_group not in policy_joints:
             continue
-        if joint_group in policy_joints and joint_name in policy_joints_config[joint_group]:
-            gr00t_index = policy_joints_config[joint_group].index(joint_name)
-            data[..., joint_index] = np.asarray(policy_joints[joint_group][..., gr00t_index], dtype=np.float64)
+        
+        target_index = None
+        group_joints = policy_joints_config[joint_group]
+        if joint_name in group_joints:
+            target_index = group_joints.index(joint_name)
+        else:
+            # Check aliases
+            aliases = JOINT_ALIASES.get(joint_name, [])
+            for alias in aliases:
+                if alias in group_joints:
+                    target_index = group_joints.index(alias)
+                    break
+        
+        if target_index is not None:
+            data[..., joint_index] = np.asarray(policy_joints[joint_group][..., target_index], dtype=np.float64)
     return data
 
 

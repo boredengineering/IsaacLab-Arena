@@ -36,6 +36,9 @@ class G1BraincoCustomEmbodiment(G1WBCJointEmbodiment):
             lock_waist=lock_waist,
         )
 
+        from isaaclab_arena.embodiments.g1.g1 import G1AgileSceneCfg
+        self.scene_config = G1AgileSceneCfg()
+
         from g1_brainco_extension.embodiments.mdp.robot_configs import (
             G1_BRAINCO_FINGER_FRICTION_MATERIAL_PATH,
             G1_BRAINCO_FINGER_STATIC_FRICTION,
@@ -72,6 +75,7 @@ class G1BraincoCustomEmbodiment(G1WBCJointEmbodiment):
             asset_name="robot", 
             joint_names=[".*"],
             lock_waist=lock_waist,
+            wbc_version="agile",
         )
 
         # Override actuator joint expressions for Brainco naming convention

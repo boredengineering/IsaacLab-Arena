@@ -166,6 +166,14 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase):
         return self.task_description
 
     def get_action(self, env: gym.Env, observation: dict[str, Any]) -> torch.Tensor:
+        if not hasattr(self, "_sim_joint_names"):
+            self._sim_joint_names = None
+            if hasattr(env.unwrapped, "scene"):
+                try:
+                    self._sim_joint_names = env.unwrapped.scene["robot"].data.joint_names
+                except KeyError:
+                    pass
+
         def fetch_chunk() -> torch.Tensor:
             return self._get_action_chunk(observation, self.policy_config.pov_cam_name_sim)
 
@@ -184,6 +192,46 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase):
         # 1. Reuse the same obs translation as local policy
         assert self.task_description is not None, "Task description is not set"
         rgb_list_np, joint_pos_sim_np = extract_obs_numpy_from_torch(nested_obs=observation, camera_names=camera_names)
+
+        # Custom joint remapping for embodiments with >43 DOFs (like g1_brainco_custom)
+        if joint_pos_sim_np.shape[1] > 43 and getattr(self, "_sim_joint_names", None) is not None:
+            import numpy as np
+            num_envs = joint_pos_sim_np.shape[0]
+            mapped_joint_pos = np.zeros((num_envs, 43), dtype=joint_pos_sim_np.dtype)
+            
+            sim_to_policy_map = {
+                # Left hand
+                "left_index_proximal_joint": "left_hand_index_0_joint",
+                "left_index_distal_joint": "left_hand_index_1_joint",
+                "left_middle_proximal_joint": "left_hand_middle_0_joint",
+                "left_middle_distal_joint": "left_hand_middle_1_joint",
+                "left_thumb_metacarpal_joint": "left_hand_thumb_0_joint",
+                "left_thumb_proximal_joint": "left_hand_thumb_1_joint",
+                "left_thumb_distal_joint": "left_hand_thumb_2_joint",
+                # Right hand
+                "right_index_proximal_joint": "right_hand_index_0_joint",
+                "right_index_distal_joint": "right_hand_index_1_joint",
+                "right_middle_proximal_joint": "right_hand_middle_0_joint",
+                "right_middle_distal_joint": "right_hand_middle_1_joint",
+                "right_thumb_metacarpal_joint": "right_hand_thumb_0_joint",
+                "right_thumb_proximal_joint": "right_hand_thumb_1_joint",
+                "right_thumb_distal_joint": "right_hand_thumb_2_joint",
+            }
+            
+            for joint_name, policy_idx in self.robot_state_joints_config.items():
+                sim_idx = None
+                if joint_name in self._sim_joint_names:
+                    sim_idx = self._sim_joint_names.index(joint_name)
+                else:
+                    for sim_name, pol_name in sim_to_policy_map.items():
+                        if pol_name == joint_name and sim_name in self._sim_joint_names:
+                            sim_idx = self._sim_joint_names.index(sim_name)
+                            break
+                if sim_idx is not None:
+                    mapped_joint_pos[:, policy_idx] = joint_pos_sim_np[:, sim_idx]
+            
+            joint_pos_sim_np = mapped_joint_pos
+
         policy_observations = build_gr00t_policy_observations(
             rgb_list_np=rgb_list_np,
             joint_pos_sim_np=joint_pos_sim_np,

@@ -37,6 +37,27 @@ class OficinaCBAGrande(Background):
         usd_path = next((p for p in path_variants if os.path.exists(p)), path_variants[0])
         super().__init__(name=self.name, prim_path="{ENV_REGEX_NS}/Background", usd_path=usd_path, object_min_z=-0.2, **kwargs)
 
+
+# Per-asset uniform scale matching the tuned pick-up / destination pair.
+_TUNED_SCALES: dict[str, tuple[float, float, float]] = {
+    "apple_01_objaverse_robolab": (0.009, 0.009, 0.009),
+    "clay_plates_hot3d_robolab": (0.5, 0.5, 0.5),
+}
+
+
+def _asset_scale(asset_name: str) -> tuple[float, float, float]:
+    """Return the tuned uniform scale for asset_name, or 1.0 with a warning."""
+    if asset_name in _TUNED_SCALES:
+        return _TUNED_SCALES[asset_name]
+    import warnings
+    warnings.warn(
+        "g1_static_pick_and_place_drink: no measured scale for "
+        f"'{asset_name}'; spawning at scale=(1.0, 1.0, 1.0). Verify visually.",
+        stacklevel=2,
+    )
+    return (1.0, 1.0, 1.0)
+
+
 class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
     """
     Pick and Place environment with G1 Brainco, an office table background, 
@@ -128,7 +149,10 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
         
         offsets = [(x * 0.08, y * 0.08) for x in [-1, 0, 1] for y in [-1, 0, 1]]
         for i, name in enumerate(object_names):
-            obj = self.asset_registry.get_asset_by_name(name)(instance_name=f"{name}_{i}")
+            obj = self.asset_registry.get_asset_by_name(name)(
+                instance_name=f"{name}_{i}",
+                scale=_asset_scale(name)
+            )
             obj.add_relation(On(tabletop_reference))
             ox, oy = offsets[i % len(offsets)]
             obj.add_relation(AtPosition(x=drink_x_center + ox, y=drink_y_center + oy))
@@ -137,7 +161,9 @@ class G1StaticPickAndPlaceDrinkEnvironment(ExampleEnvironmentBase):
                 obj.add_relation(RotateAroundSolution(roll_rad=np.pi/2))
             placeable_assets.append(obj)
 
-        destination = self.asset_registry.get_asset_by_name(args_cli.destination)()
+        destination = self.asset_registry.get_asset_by_name(args_cli.destination)(
+            scale=_asset_scale(args_cli.destination)
+        )
         destination.add_relation(On(tabletop_reference))
         
         # Destination placement bounds

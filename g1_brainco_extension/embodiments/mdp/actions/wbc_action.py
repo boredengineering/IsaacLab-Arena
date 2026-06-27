@@ -397,9 +397,20 @@ class G1BraincoWBCAction(G1DecoupledWBCJointAction):
         torso_ang_vel_w = torso_state[:, -3:]
         torso_ang_vel_b = math_utils.quat_apply_inverse(torso_quat_xyzw, torso_ang_vel_w).cpu().numpy()
 
+        projected_gravity_b = wp.to_torch(data.projected_gravity_b).cpu().numpy()
+        root_ang_vel_b = wp.to_torch(data.root_ang_vel_b).cpu().numpy()
+
         return {
-            "q": q, "dq": dq, "ddq": ddq, "q_default": q_default,
-            "floating_base_pose": base_pose_w, "floating_base_vel": base_vel_b,
-            "torso_quat": torso_quat_wxyz, "torso_ang_vel": torso_ang_vel_b,
-            "projected_gravity": wp.to_torch(data.projected_gravity_b).cpu().numpy(),
+            "q": q,
+            "dq": dq,
+            "default_q": q_default,
+            "ddq": ddq,
+            "tau_est": np.zeros_like(q),
+            "floating_base_pose": base_pose_w,
+            "floating_base_vel": base_vel_b,
+            "floating_base_acc": np.zeros((self.num_envs, 6)),
+            "projected_gravity_b": projected_gravity_b,
+            "root_ang_vel_b": root_ang_vel_b,
+            "torso_quat": torso_quat_wxyz,
+            "torso_ang_vel": torso_ang_vel_b,
         }

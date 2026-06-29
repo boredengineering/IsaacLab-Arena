@@ -94,34 +94,52 @@ graph TD
 
 ## How to Run
 
-You can run the environment using the `policy_runner.py` script. Since this is an extension, you need to provide the class path to the environment.
+You can run the environments using the `policy_runner.py` script. Since these are extension environments, you need to provide the fully-qualified class path.
 
-### Example: Running with Zero Actions
+### 1. Drink Pick & Place Task (Office Background)
 
-This is useful to verify the scene setup, robot spawn, and initial posture.
+This task uses the office background (`OficinaCBAGrande`) and a dynamic table standoff solver.
 
+#### Running with Zero Actions:
 ```bash
 python isaaclab_arena/evaluation/policy_runner.py \
     --viz kit \
     --policy_type zero_action \
     --num_steps 5000 \
-    --external_environment_class_path g1_brainco_extension.environments.pick_drink:G1BraincoPickDrinkEnvironment \
-    g1_brainco_pick_drink \
+    --external_environment_class_path g1_brainco_extension.environments.g1_static_pick_and_place_drink_env:G1StaticPickAndPlaceDrinkEnvironment \
+    g1_static_pick_and_place_drink \
     --object beer_bottle 
 ```
 
-### Customizing the Task
-
-The environment supports CLI arguments for objects and destinations, including those defined in `assets.py`:
-
+#### Customizing the Task:
 ```bash
 python isaaclab_arena/evaluation/policy_runner.py \
     --viz kit \
     --policy_type zero_action \
     --num_steps 5000 \
-    --external_environment_class_path g1_brainco_extension.environments.pick_drink:G1BraincoPickDrinkEnvironment \
-    g1_brainco_pick_drink \
+    --external_environment_class_path g1_brainco_extension.environments.g1_static_pick_and_place_drink_env:G1StaticPickAndPlaceDrinkEnvironment \
+    g1_static_pick_and_place_drink \
     --object "tomato_soup_can_custom" --destination "red_container_custom"
+```
+
+### 2. Original Warehouse Static Pick & Place Task (Warehouse Shelf + Apple)
+
+This task uses the warehouse shelf background (`galileo_locomanip`) and deterministic offsets to evaluate the robot under the model's training distribution.
+
+#### Running with the GR00T Closed-Loop Policy:
+```bash
+WBC_DEBUG=1 python isaaclab_arena/evaluation/policy_runner.py \
+  --viz kit \
+  --policy_type isaaclab_arena_gr00t.policy.gr00t_closedloop_policy.Gr00tClosedloopPolicy \
+  --policy_config_yaml_path g1_brainco_extension/policy/config/g1_brainco_static_gr00t_closedloop_config.yaml \
+  --num_steps 1000 \
+  --external_environment_class_path g1_brainco_extension.environments.g1_brainco_static_pick_and_place_env:G1BraincoStaticPickAndPlaceEnvironment \
+  g1_brainco_static_pick_and_place \
+  --object apple_01_objaverse_robolab \
+  --destination clay_plates_hot3d_robolab \
+  --embodiment g1_brainco_custom \
+  --enable_cameras \
+  --no-lock_waist
 ```
 
 ### Parameters

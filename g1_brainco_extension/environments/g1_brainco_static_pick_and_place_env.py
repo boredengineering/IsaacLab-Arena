@@ -160,10 +160,10 @@ class G1BraincoStaticPickAndPlaceEnvironment(ExampleEnvironmentBase):
         _separation = 0.21
 
         drink_x_center = _u_obj
-        drink_y_center = _v_work + _separation / 2.0  # 0.27
+        drink_y_center = _v_work - _separation / 2.0  # Now on the right side (0.06)
 
         dest_x_center = _u_obj
-        dest_y_center = _v_work - _separation / 2.0  # 0.06
+        dest_y_center = _v_work + _separation / 2.0  # Now on the left side (0.27)
 
         # 2. Place pick-up object and destination on the shelf top
         pick_up_object.add_relation(On(shelf_support))

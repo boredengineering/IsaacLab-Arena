@@ -150,6 +150,17 @@ class G1BraincoWBCAction(G1DecoupledWBCJointAction):
             "running_in_container": in_container,
         }
 
+        self.record_npz = os.environ.get("WBC_RECORD_NPZ", "0") == "1"
+        if self.record_npz:
+            self._record_buffer = {
+                "policy_raw_actions": [],
+                "sim_joint_pos": [],
+                "wbc_target_upper_body_joints": [],
+                "wbc_action_q": [],
+                "wbc_obs_q": []
+            }
+            self._record_step = 0
+
         if not cfg.lock_waist:
             from isaaclab_arena_g1.g1_whole_body_controller.wbc_policy.config.configs import AgileConfig, HomieV2Config
             from isaaclab_arena_g1.g1_whole_body_controller.wbc_policy.utils.g1 import instantiate_g1_robot_model
@@ -329,6 +340,36 @@ class G1BraincoWBCAction(G1DecoupledWBCJointAction):
                     f.write(f"arm joint targets: {arm_targets}\n")
             except Exception as e:
                 print(f"[WBC DEBUG ERROR] Failed to write to {log_path}: {e}")
+
+        # NPZ-based recording for thorough state-action debugging
+        if getattr(self, "record_npz", False):
+            try:
+                def _to_np(val):
+                    if hasattr(val, "detach"):
+                        return val.detach().cpu().numpy()
+                    elif hasattr(val, "numpy"):
+                        return val.numpy()
+                    return np.array(val)
+                
+                self._record_buffer["policy_raw_actions"].append(_to_np(actions))
+                self._record_buffer["wbc_target_upper_body_joints"].append(_to_np(wbc_target_upper_body_joints))
+                self._record_buffer["wbc_action_q"].append(_to_np(wbc_action['q']))
+                self._record_buffer["wbc_obs_q"].append(_to_np(wbc_obs['q']))
+                self._record_buffer["sim_joint_pos"].append(_to_np(self._asset.data.joint_pos))
+                self._record_step += 1
+                # Save periodically to ensure data is captured even if it crashes later
+                if self._record_step % 10 == 0 or self._record_step == 1:
+                    npz_path = get_log_path().replace(".log", ".npz")
+                    np.savez(
+                        npz_path, 
+                        policy_raw_actions=np.stack(self._record_buffer["policy_raw_actions"]),
+                        wbc_target_upper_body_joints=np.stack(self._record_buffer["wbc_target_upper_body_joints"]),
+                        wbc_action_q=np.stack(self._record_buffer["wbc_action_q"]),
+                        wbc_obs_q=np.stack(self._record_buffer["wbc_obs_q"]),
+                        sim_joint_pos=np.stack(self._record_buffer["sim_joint_pos"])
+                    )
+            except Exception as e:
+                print(f"[WBC RECORD ERROR]: {e}")
 
 
     def _brainco_convert_sim_to_wbc(self, sim_data, sim_names):

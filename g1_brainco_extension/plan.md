@@ -205,3 +205,5 @@ g1_static_pick_and_place_drink \
 --object beer_bottle \
 --embodiment g1_brainco_custom
 ```
+
+

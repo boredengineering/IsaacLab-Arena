@@ -178,6 +178,18 @@ class G1BraincoWBCAction(G1DecoupledWBCJointAction):
             self.robot_model = instantiate_g1_robot_model(waist_location=waist_location)
             self.wbc_policy = get_wbc_policy("g1", self.robot_model, wbc_config, self.num_envs)
 
+    def get_navigation_cmd_from_actions(self, actions: torch.Tensor):
+        # HARDCODED FIX: Disable navigation for the static pick and place environment
+        return torch.zeros_like(actions[:, :3])
+
+    def get_torso_orientation_rpy_cmd_from_actions(self, actions: torch.Tensor):
+        # HARDCODED FIX: Lock torso
+        return torch.zeros_like(actions[:, :3])
+
+    def get_base_height_cmd_from_actions(self, actions: torch.Tensor):
+        # HARDCODED FIX: Lock base height
+        return torch.full_like(actions[:, 0], 0.74).unsqueeze(-1)
+
     def process_actions(self, actions: torch.Tensor):
         # 1. Prepare actions (same as base)
         self._raw_actions[:] = actions

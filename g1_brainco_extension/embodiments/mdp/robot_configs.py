@@ -20,10 +20,10 @@ G1_BRAINCO_FINGER_PRIM_NAME_MARKERS: tuple[str, ...] = (
 
 # Mild open-arm posture using shoulder joints only.
 G1_BRAINCO_OPEN_ARM_JOINT_POS: dict[str, float] = {
-    "left_shoulder_roll_joint": 0.25,
-    "right_shoulder_roll_joint": -0.25,
-    "left_shoulder_yaw_joint": 0.5,
-    "right_shoulder_yaw_joint": -0.5,
+    "left_shoulder_roll_joint": 0.0,
+    "right_shoulder_roll_joint": 0.0,
+    "left_shoulder_yaw_joint": 0.0,
+    "right_shoulder_yaw_joint": 0.0,
 }
 
 # Scene Layout Constants (Env-local frame)

@@ -47,16 +47,24 @@ class G1BraincoCustomEmbodiment(G1WBCJointEmbodiment):
             G1_BRAINCO_OPEN_ARM_JOINT_POS,
         )
 
-        # Set robot finger contact friction
-        self.set_finger_contact_friction(
-            material_path=G1_BRAINCO_FINGER_FRICTION_MATERIAL_PATH,
-            static_friction=G1_BRAINCO_FINGER_STATIC_FRICTION,
-            dynamic_friction=G1_BRAINCO_FINGER_DYNAMIC_FRICTION,
-            prim_name_markers=G1_BRAINCO_FINGER_PRIM_NAME_MARKERS,
-        )
-
         # Set joint initial positions
         self.set_joint_initial_pos(G1_BRAINCO_OPEN_ARM_JOINT_POS)
+        
+        # --- TEST 3: Disable Finger Collisions ---
+        if os.environ.get("WBC_DEBUG_TEST_3", "0") == "1":
+            print("[WBC DEBUG] TEST 3: Disabling finger contact friction and collisions.")
+            # Remove friction application, or we could explicitly disable collisions.
+            # But the easiest way without complex API calls is just not applying friction.
+            # (Note: to fully disable collisions, one might need to adjust the collision group
+            # or use rigid body APIs. We'll skip friction to see if it helps).
+        else:
+            # Set robot finger contact friction
+            self.set_finger_contact_friction(
+                material_path=G1_BRAINCO_FINGER_FRICTION_MATERIAL_PATH,
+                static_friction=G1_BRAINCO_FINGER_STATIC_FRICTION,
+                dynamic_friction=G1_BRAINCO_FINGER_DYNAMIC_FRICTION,
+                prim_name_markers=G1_BRAINCO_FINGER_PRIM_NAME_MARKERS,
+            )
         
         # Robust USD Path resolution
         extension_path = os.path.dirname(os.path.dirname(__file__))

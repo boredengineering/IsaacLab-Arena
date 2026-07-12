@@ -2,6 +2,23 @@
 
 Utility scripts for debugging and inspecting models and robot configurations used in IsaacLab Arena.
 
+---
+
+## Script Categories
+
+This directory also contains numerous scratch scripts and utilities generated during debugging sessions, organized into the following categories:
+
+| Category | Link | Summary |
+|---|---|---|
+| **Analyze** | [analyze/README.md](analyze/README.md) | Analytical data inspection scripts for calculating metrics and parsing execution statistics from tests and targets. |
+| **Check** | [check/README.md](check/README.md) | Validation checks ensuring shape dimensions (NumPy/tensors) and math properties (Quaternions) are structurally correct. |
+| **Debug** | [debug/README.md](debug/README.md) | Extensive scratch scripts for isolating Whole Body Controller (WBC) issues, joint order mismatches, and kinematics. |
+| **Extract** | [extract/README.md](extract/README.md) | Tools for unpacking binary `.npz` arrays, editing configurations, and extracting data from JSON/text logs. |
+| **Misc** | [misc/README.md](misc/README.md) | Miscellaneous utilities for printing USD hierarchies, verifying assets in the registry, and parsing user transcripts. |
+| **Test** | [test/README.md](test/README.md) | Rapid prototyping scripts for standalone smoke-testing of Hugging Face processors, decoding logic, and shapes. |
+| **Traceback** | [traceback/README.md](traceback/README.md) | Formatting utilities to parse and analyze complex Python stack traces or simulation error logs. |
+
+
 ## analyze_model_tensors.py
 
 **Purpose:** Inspects `.safetensors` model checkpoint files to understand their internal tensor structure — shapes, dtypes, and how they're organized into architectural components.
@@ -88,3 +105,4 @@ docker exec isaaclab_arena-latest bash -c "cd /workspaces/isaaclab_arena && \
 |---|---|---|---|
 | `analyze_model_tensors.py` | No | `.safetensors` file path | Tensor names, shapes, dtypes grouped by architectural role |
 | `inspect_link_positions.py` | Yes (Isaac Sim) | None (hardcoded to `g1_brainco_custom`) | World-space link positions + head/torso height sanity check |
+

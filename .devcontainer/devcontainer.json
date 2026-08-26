@@ -1,0 +1,76 @@
+{
+  "name": "Physical AI Full-Stack Robotics & Cloud Development Container",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "runArgs": [
+    "--gpus=all",
+    "--network=host",
+    "--ipc=host",
+    "--privileged",
+    "--ulimit", "memlock=-1",
+    "--ulimit", "stack=67108864",
+    "-e", "DISPLAY=${localEnv:DISPLAY}",
+    "-e", "NVIDIA_VISIBLE_DEVICES=all",
+    "-e", "NVIDIA_DRIVER_CAPABILITIES=all",
+    "-e", "MPLCONFIGDIR=/tmp/matplotlib",
+    "-e", "TF_DATA_DIR=/opt/tf-data",
+    "-e", "ANSIBLE_FORCE_COLOR=true",
+    "-e", "VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json",
+    "-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw",
+    "-v", "${localEnv:HOME}/datasets:/datasets:rw",
+    "-v", "${localEnv:HOME}/models:/models:rw",
+    "-v", "${localEnv:HOME}/eval:/eval:rw",
+    "-v", "${localEnv:HOME}/.aws:/root/.aws:rw",
+    "-v", "${localEnv:HOME}/.config/gcloud:/root/.config/gcloud:rw",
+    "-v", "${localEnv:HOME}/.azure:/root/.azure:rw"
+  ],
+  "containerEnv": {
+    "DATASET_DIR": "/datasets/isaaclab_arena/locomanipulation_tutorial",
+    "MODELS_DIR": "/models/isaaclab_arena/locomanipulation_tutorial",
+    "EVAL_DIR": "/eval/isaaclab_arena/locomanipulation_tutorial",
+    "MPLCONFIGDIR": "/tmp/matplotlib",
+    "PYTHONPATH": "/workspaces/isaaclab_arena:/workspaces/isaaclab_arena/source:/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab:${containerEnv:PYTHONPATH}"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter",
+        "quarto.quarto",
+        "ms-vscode.cpptools",
+        "tamasfe.even-better-toml",
+        "redhat.vscode-yaml",
+        "eamodio.gitlens",
+        "yzhang.markdown-all-in-one",
+        "GitHub.copilot",
+        "GitHub.copilot-chat",
+        "hashicorp.terraform",
+        "redhat.ansible",
+        "REditorSupport.r"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/isaac-sim/python.sh",
+        "python.analysis.extraPaths": [
+          "/workspaces/isaaclab_arena",
+          "/workspaces/isaaclab_arena/source",
+          "/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab"
+        ],
+        "python.analysis.indexing": true,
+        "python.analysis.typeCheckingMode": "basic",
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+  "initializeCommand": "mkdir -p ${localEnv:HOME}/datasets ${localEnv:HOME}/models ${localEnv:HOME}/eval ${localEnv:HOME}/.aws ${localEnv:HOME}/.config/gcloud ${localEnv:HOME}/.azure",
+  "postCreateCommand": "mkdir -p /tmp/matplotlib /opt/tf-data && chmod -R 777 /tmp/matplotlib /opt/tf-data",
+  "postStartCommand": "echo 'Physical AI & Cloud Stack Ready. GPU Check:' && nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader"
+}

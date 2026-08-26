@@ -1,0 +1,19 @@
+# Scene Graph Environmental Specification
+scene:
+  ground_plane:
+    type: default_ground_plane
+    z_height: 0.0
+  tables:
+    - name: worktable_01
+      usd_path: "omniverse://isaac/Props/Tables/table_wood.usd"
+      position: [0.5, 0.0, 0.0]
+      orientation: [1.0, 0.0, 0.0, 0.0]
+
+embodiment:
+  robot_type: "unitree_g1"
+  controller: "wbc_pink"
+  num_envs: 1
+
+inference:
+  policy_daemon_url: "tcp://127.0.0.1:5556"
+  camera_mode: "ego_view"

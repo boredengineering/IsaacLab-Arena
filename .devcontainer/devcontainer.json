@@ -71,6 +71,6 @@
     }
   },
   "initializeCommand": "mkdir -p ${localEnv:HOME}/datasets ${localEnv:HOME}/models ${localEnv:HOME}/eval ${localEnv:HOME}/.aws ${localEnv:HOME}/.config/gcloud ${localEnv:HOME}/.azure",
-  "postCreateCommand": "mkdir -p /tmp/matplotlib /opt/tf-data && chmod -R 777 /tmp/matplotlib /opt/tf-data",
+  "postCreateCommand": "mkdir -p /tmp/matplotlib /opt/tf-data && chmod -R 777 /tmp/matplotlib /opt/tf-data && if [ -f .devcontainer/init_agent_workspace.sh ]; then bash .devcontainer/init_agent_workspace.sh; elif [ -f useful_devcontainers/isaac-automator/devcontainer_v02/init_agent_workspace.sh ]; then bash useful_devcontainers/isaac-automator/devcontainer_v02/init_agent_workspace.sh; fi",
   "postStartCommand": "echo 'Physical AI & Cloud Stack Ready. GPU Check:' && nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader"
 }

@@ -142,7 +142,12 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
         click \
         randomname \
         pwgen \
-        debugpy && \
+        debugpy \
+        rdflib \
+        pyshacl \
+        oxigraph \
+        networkx \
+        neo4j && \
     ansible-galaxy collection install community.docker
 
 # Layer 5: Common Mount Points, Cache & Vulkan ICD Environment

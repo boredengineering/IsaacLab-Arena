@@ -451,7 +451,9 @@ cat <<'EOF_MCP' > /root/.gemini/config/mcp_config.json
   "mcpServers": {
     "ansible": {
       "command": "ansible-mcp-server",
-      "args": []
+      "args": [
+        "--stdio"
+      ]
     },
     "gcp-cloud": {
       "command": "gcloud-mcp",

@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. NVIDIA Isaac-GR00T Foundation Policy Server Sidecar
+  # ----------------------------------------------------------------------------
+  gr00t-policy-server:
+    image: gr00t-dev:latest
+    container_name: gr00t-policy-server
+    network_mode: host
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - GR00T_DIT_SDPA_MODE=${GR00T_DIT_SDPA_MODE:-math}
+      - HF_HOME=/root/.cache/huggingface
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - ..:/workspaces/isaaclab_arena
+      - ../submodules/Isaac-GR00T:/workspace/gr00t
+      - ${HOME}/models:/workspace/pretrained_ckpts
+      - ${HOME}/models:/models
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+    command: >
+      uv run python gr00t/eval/run_gr00t_server.py
+      --model-path ${GR00T_MODEL_PATH:-nvidia/GR00T-N1.6-DROID}
+      --embodiment-tag ${GR00T_EMBODIMENT:-OXE_DROID}
+      --device cuda
+      --host 127.0.0.1
+      --port ${GR00T_PORT:-5556}
+
+  # ----------------------------------------------------------------------------
+  # 2. IsaacLab-Arena Simulation Engine
+  # ----------------------------------------------------------------------------
+  isaaclab-arena:
+    image: isaaclab_arena:latest
+    container_name: isaaclab_arena-latest
+    network_mode: host
+    ipc: host
+    privileged: true
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    environment:
+      - DISPLAY=${DISPLAY}
+      - ACCEPT_EULA=Y
+      - PRIVACY_CONSENT=Y
+      - ISAACLAB_PATH=/workspaces/isaaclab_arena/submodules/IsaacLab
+    volumes:
+      - ..:/workspaces/isaaclab_arena
+      - ${HOME}/datasets:/datasets
+      - ${HOME}/models:/models
+      - ${HOME}/eval:/eval
+      - ${HOME}/.cache:/home/root/.cache
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /var/run/docker.sock:/var/run/docker.sock
+    stdin_open: true
+    tty: true
+    command: /bin/bash

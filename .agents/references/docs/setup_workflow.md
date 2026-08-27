@@ -119,7 +119,24 @@ python3 .agents/skills/isaac-installer/scripts/check_hardware.py
 2. When prompted, select **"Reopen in Container"** (or run `Dev Containers: Reopen in Container` from the Command Palette `Ctrl+Shift+P` / `Cmd+Shift+P`).
 3. The DevContainer will build and initialize using [`.devcontainer/devcontainer.json`](file:///workspaces/IsaacLab-Arena/.devcontainer/devcontainer.json).
 
-### Step 4.2: Managing NVIDIA Agent Skills
+### Step 4.2: Host Directory Persistence & Mount Assurance
+Before container mounting, the DevContainer `initializeCommand` automatically runs [`.devcontainer/ensure_host_directories.sh`](file:///workspaces/IsaacLab-Arena/.devcontainer/ensure_host_directories.sh) on the host machine to guarantee all persistent folders exist with your host user permissions:
+
+```bash
+# Can also be executed manually on the host at any time:
+bash .devcontainer/ensure_host_directories.sh
+```
+
+#### Shared Directory Mapping Contract:
+| Purpose | Host Workstation Path | Container Mount Point | In-Container Env Variable |
+| :--- | :--- | :--- | :--- |
+| **Datasets** | `$HOME/datasets/isaaclab_arena/locomanipulation_tutorial` | `/datasets/isaaclab_arena/locomanipulation_tutorial` | `$DATASET_DIR` |
+| **Models / Checkpoints** | `$HOME/models/isaaclab_arena/locomanipulation_tutorial` | `/models/isaaclab_arena/locomanipulation_tutorial` | `$MODELS_DIR` |
+| **Evaluation Data** | `$HOME/eval/isaaclab_arena/locomanipulation_tutorial` | `/eval/isaaclab_arena/locomanipulation_tutorial` | `$EVAL_DIR` |
+| **Hugging Face Cache** | `$HOME/.cache/huggingface` | `/root/.cache/huggingface` | `$HF_HOME` |
+| **Cloud & Git Configs** | `$HOME/{.aws, .config/gcloud, .azure, .config/gh}` | `/root/{.aws, .config/gcloud, .azure, .config/gh}` | Default tool locations |
+
+### Step 4.3: Managing NVIDIA Agent Skills
 Agent skills are managed on-demand via [`.agents/skills/install-nvidia-skills`](file:///workspaces/IsaacLab-Arena/.agents/skills/install-nvidia-skills/SKILL.md):
 
 ```bash
@@ -172,28 +189,64 @@ docker exec -it "$ARENA_CONTAINER" su $(id -un) -c \
 
 ---
 
-## 6. Host Policy Server Setup (`Isaac-GR00T` / `openpi`)
+## 6. Policy Foundation Server Execution (`Isaac-GR00T`)
 
-Foundation policy daemons execute on the host in Python 3.10 with `uv` to maintain clean separation from Isaac Sim:
+Foundation policy daemons execute either via **Containerized Microservices** (NVIDIA official image) or natively on the host in Python 3.10 via `uv`.
 
-### Step 6.1: Sync Host Python 3.10 Environment
+### Option A: Containerized Policy Server CLI (`run_gr00t_server.sh`) ⭐ *(Recommended)*
+Launch the official NVIDIA `gr00t-dev` container with pre-compiled FlashAttention, PyTorch3D, and Blackwell SM120 optimizations directly from your DevContainer or host terminal:
+
+```bash
+# 1. Start GR00T server (e.g. for DROID or G1 embodiment)
+./docker/run_gr00t_server.sh -m nvidia/GR00T-N1.6-DROID -e OXE_DROID
+
+# 2. Start with custom modality config (e.g. Unitree G1 WBC Pick & Place)
+./docker/run_gr00t_server.sh \
+  -m /models/isaaclab_arena/locomanipulation_tutorial/checkpoint-20000 \
+  -e NEW_EMBODIMENT \
+  -c isaaclab_arena_gr00t/embodiments/g1/g1_sim_wbc_data_config.py \
+  -p 5556 -d
+
+# 3. View logs or stop the background server
+docker logs -f gr00t-server
+./docker/run_gr00t_server.sh -k
+```
+
+---
+
+### Option B: Declarative Docker Compose Stack (`docker-compose.sim.yml`)
+Run both the **GR00T Policy Server** and the **IsaacLab-Arena Simulation** as a unified multi-container stack with a single command:
+
+```bash
+# 1. Start both services in background
+docker compose -f docker/docker-compose.sim.yml up -d
+
+# 2. Inspect policy streaming logs
+docker compose -f docker/docker-compose.sim.yml logs -f gr00t-policy-server
+
+# 3. Execute simulation benchmarks in the running Arena container
+docker exec -it isaaclab_arena-latest su $(id -un) -c \
+  "/isaac-sim/python.sh isaaclab_arena/tests/test_droid_eval.py"
+
+# 4. Tear down entire stack
+docker compose -f docker/docker-compose.sim.yml down
+```
+
+---
+
+### Option C: Bare-Metal Host Environment (`uv`)
+To run directly on bare metal without Docker containerization for the policy daemon:
+
 ```bash
 cd submodules/Isaac-GR00T
 uv sync --python 3.10
 uv pip install -e .
-```
 
-### Step 6.2: Launch Policy Daemon (ZeroMQ Port 5556)
-```bash
-# For SM120 Blackwell attention fallback (if needed)
-export GR00T_DIT_SDPA_MODE=math
-
-# Start policy daemon
+# Launch policy daemon on ZeroMQ port 5556
 uv run python gr00t/eval/run_gr00t_server.py \
-  --model_path <checkpoint_path> \
-  --embodiment_tag NEW_EMBODIMENT \
-  --host 0.0.0.0 \
-  --port 5556
+  --model-path nvidia/GR00T-N1.6-DROID \
+  --embodiment-tag OXE_DROID \
+  --device cuda --host 127.0.0.1 --port 5556
 ```
 *Note: Always use port `5556` to avoid collisions with VS Code internal debugger services on `5555`.*
 
@@ -225,3 +278,126 @@ docker exec "$ARENA_CONTAINER" su $(id -un) -c \
 docker exec "$ARENA_CONTAINER" su $(id -un) -c \
   "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/tests/test_object_on_microwave_tray.py"
 ```
+
+---
+
+## 9. End-to-End Evaluation: Unitree G1 Loco-Manipulation Box Pick & Place
+
+The canonical benchmark for validating the entire IsaacLab-Arena closed-loop policy execution pipeline is the **Unitree G1 Humanoid Box Pick and Place Task** (`galileo_g1_locomanip_pick_and_place`).
+
+### 9.1 Environment & Model Prerequisites
+Ensure directory persistence and pre-trained weights are present:
+
+* **Host Model Directory**: `$HOME/models/isaaclab_arena/locomanipulation_tutorial`
+* **Container Model Directory**: `/models/isaaclab_arena/locomanipulation_tutorial`
+* **Pre-Trained Checkpoint**: `checkpoint-20000` (`GN1x-Tuned-Arena-G1-Loco-Manipulation` revision `gn1_6`)
+
+*(If downloading fresh):*
+```bash
+hf download \
+  --revision gn1_6 \
+  nvidia/GN1x-Tuned-Arena-G1-Loco-Manipulation \
+  --local-dir $MODELS_DIR/checkpoint-20000
+```
+
+---
+
+### 9.2 Step 1: Launch the GR00T Policy Server
+
+Choose one of the following methods to launch the inference server (ZeroMQ port `5556`):
+
+#### Method A: Containerized Server CLI (Recommended)
+```bash
+./docker/run_gr00t_server.sh \
+  -m /models/isaaclab_arena/locomanipulation_tutorial/checkpoint-20000 \
+  -e NEW_EMBODIMENT \
+  -c isaaclab_arena_gr00t/embodiments/g1/g1_sim_wbc_data_config.py \
+  -p 5556 -d
+```
+
+#### Method B: Native Host Environment (`uv`)
+```bash
+cd submodules/Isaac-GR00T
+uv run python gr00t/eval/run_gr00t_server.py \
+  --modality-config-path ../../isaaclab_arena_gr00t/embodiments/g1/g1_sim_wbc_data_config.py \
+  --model-path $HOME/models/isaaclab_arena/locomanipulation_tutorial/checkpoint-20000 \
+  --embodiment-tag NEW_EMBODIMENT \
+  --device cuda --host 127.0.0.1 --port 5556
+```
+
+---
+
+### 9.3 Step 2: Run Single-Environment Interactive Evaluation
+Inside the **IsaacLab-Arena Container** (or executed via `docker exec "$ARENA_CONTAINER"`):
+
+```bash
+python isaaclab_arena/evaluation/policy_runner.py \
+  --viz kit \
+  --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
+  --policy_config_yaml_path isaaclab_arena_gr00t/policy/config/g1_locomanip_gr00t_closedloop_config.yaml \
+  --remote_host 127.0.0.1 \
+  --remote_port 5556 \
+  --num_steps 5000 \
+  --enable_cameras \
+  galileo_g1_locomanip_pick_and_place \
+  --object brown_box \
+  --embodiment g1_wbc_joint
+```
+
+* **Expected Output Metric**:
+  ```text
+  Metrics: {'success_rate': 1.0, 'num_episodes': 1}
+  ```
+
+---
+
+### 9.4 Step 3: Run Parallel Multi-Environment Evaluation
+For throughput and robustness testing across multiple simultaneous randomized environments:
+
+#### Single GPU (5 Parallel Envs):
+```bash
+python isaaclab_arena/evaluation/policy_runner.py \
+  --viz kit \
+  --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
+  --policy_config_yaml_path isaaclab_arena_gr00t/policy/config/g1_locomanip_gr00t_closedloop_config.yaml \
+  --remote_host 127.0.0.1 \
+  --remote_port 5556 \
+  --num_steps 1200 \
+  --num_envs 5 \
+  --enable_cameras \
+  --device cuda \
+  --policy_device cuda \
+  galileo_g1_locomanip_pick_and_place \
+  --object brown_box \
+  --embodiment g1_wbc_joint
+```
+
+#### Multi-GPU Distributed Evaluation (Headless):
+```bash
+python -m torch.distributed.run --nnode=1 --nproc_per_node=2 \
+  isaaclab_arena/evaluation/policy_runner.py \
+  --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
+  --policy_config_yaml_path isaaclab_arena_gr00t/policy/config/g1_locomanip_gr00t_closedloop_config.yaml \
+  --remote_host 127.0.0.1 \
+  --remote_port 5556 \
+  --num_steps 1200 \
+  --num_envs 5 \
+  --enable_cameras \
+  --device cuda \
+  --policy_device cuda \
+  --distributed \
+  --headless \
+  galileo_g1_locomanip_pick_and_place \
+  --object brown_box \
+  --embodiment g1_wbc_joint
+```
+
+---
+
+### 9.5 Key Operational Notes & Invariants
+1. **Embodiment Tag**: Must be `NEW_EMBODIMENT` for Unitree G1 WBC models.
+2. **Controller Selection (`g1_wbc_joint` vs `g1_wbc_pink`)**:
+   - `g1_wbc_pink` uses single-threaded Pinocchio QP (used during human teleoperation and demo collection with `--num_envs 1`).
+   - `g1_wbc_joint` directly tracks upper-body joint targets predicted by GR00T while delegating lower-body locomotion to the WBC policy, supporting parallel multi-env rollouts ($N > 1$).
+3. **Port Safety**: Always use port `5556` for GR00T ZeroMQ communication to avoid collision with VS Code's internal debug services on `5555`.
+

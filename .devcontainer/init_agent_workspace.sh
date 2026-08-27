@@ -485,4 +485,17 @@ chmod 644 /root/.claude.json
 
 echo "  ✓ Configured MCP servers for Antigravity, VS Code, Cursor, and Claude Code"
 
+# 16. Verify Persistent Mounts & Dataset/Model Directories
+echo "🔍 Verifying mounted storage volumes..."
+for mnt in "/datasets" "/models" "/eval" "/root/.cache/huggingface"; do
+  if [ -d "${mnt}" ]; then
+    echo "  ✓ Mounted: ${mnt} ($(df -h "${mnt}" 2>/dev/null | awk 'NR==2 {print $4}') available)"
+  else
+    mkdir -p "${mnt}"
+    echo "  ⚠️ Created fallback container directory: ${mnt}"
+  fi
+done
+
 echo "✨ [Physical AI Agent Initializer] Workspace initialization complete!"
+
+

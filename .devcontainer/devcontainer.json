@@ -22,6 +22,7 @@
     "-v", "${localEnv:HOME}/datasets:/datasets:rw",
     "-v", "${localEnv:HOME}/models:/models:rw",
     "-v", "${localEnv:HOME}/eval:/eval:rw",
+    "-v", "${localEnv:HOME}/.cache/huggingface:/root/.cache/huggingface:rw",
     "-v", "${localEnv:HOME}/.aws:/root/.aws:rw",
     "-v", "${localEnv:HOME}/.config/gcloud:/root/.config/gcloud:rw",
     "-v", "${localEnv:HOME}/.azure:/root/.azure:rw",
@@ -31,6 +32,7 @@
     "DATASET_DIR": "/datasets/isaaclab_arena/locomanipulation_tutorial",
     "MODELS_DIR": "/models/isaaclab_arena/locomanipulation_tutorial",
     "EVAL_DIR": "/eval/isaaclab_arena/locomanipulation_tutorial",
+    "HF_HOME": "/root/.cache/huggingface",
     "MPLCONFIGDIR": "/tmp/matplotlib",
     "PYTHONPATH": "/workspaces/isaaclab_arena:/workspaces/isaaclab_arena/source:/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab:${containerEnv:PYTHONPATH}"
   },
@@ -75,7 +77,7 @@
       }
     }
   },
-  "initializeCommand": "mkdir -p ${localEnv:HOME}/datasets ${localEnv:HOME}/models ${localEnv:HOME}/eval ${localEnv:HOME}/.aws ${localEnv:HOME}/.config/gcloud ${localEnv:HOME}/.azure",
+  "initializeCommand": "bash .devcontainer/ensure_host_directories.sh || mkdir -p ${localEnv:HOME}/datasets ${localEnv:HOME}/models ${localEnv:HOME}/eval ${localEnv:HOME}/.cache/huggingface ${localEnv:HOME}/.aws ${localEnv:HOME}/.config/gcloud ${localEnv:HOME}/.azure",
   "postCreateCommand": "mkdir -p /tmp/matplotlib /opt/tf-data && chmod -R 777 /tmp/matplotlib /opt/tf-data && if [ -f .devcontainer/init_agent_workspace.sh ]; then bash .devcontainer/init_agent_workspace.sh; elif [ -f useful_devcontainers/isaac-automator/devcontainer_v02/init_agent_workspace.sh ]; then bash useful_devcontainers/isaac-automator/devcontainer_v02/init_agent_workspace.sh; fi",
   "postStartCommand": "echo 'Physical AI & Cloud Stack Ready. GPU Check:' && nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader"
 }

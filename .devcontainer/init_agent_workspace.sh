@@ -472,34 +472,6 @@ cat <<'EOF_MCP' > /root/.gemini/config/mcp_config.json
       "args": [
         "/workspaces"
       ]
-    },
-    "neo4j": {
-      "command": "/usr/local/bin/neo4j-mcp-server",
-      "args": [
-        "--neo4j-uri", "bolt://localhost:7687",
-        "--neo4j-username", "neo4j",
-        "--neo4j-password", "isaaclab_arena_password"
-      ]
-    },
-    "neo4j-gds": {
-      "command": "uvx",
-      "args": [
-        "--python", "3.12",
-        "gds-agent",
-        "--db-url", "bolt://localhost:7687",
-        "--username", "neo4j",
-        "--password", "isaaclab_arena_password"
-      ]
-    },
-    "rdf-explorer": {
-      "command": "python3",
-      "args": [
-        "/opt/mcp-servers/mcp-rdf-explorer/src/server.py"
-      ]
-    },
-    "isaacsim-mcp": {
-      "command": "isaacsim-mcp-server",
-      "args": []
     }
   }
 }

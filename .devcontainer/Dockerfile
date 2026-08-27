@@ -147,26 +147,10 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
         pyshacl \
         oxigraph \
         networkx \
-        neo4j \
-        neo4j-mcp-server \
-        graphiti-core \
-        "mcp<2" \
-        httpx-sse \
-        pydantic-settings \
-        feedparser \
-        tiktoken && \
+        neo4j && \
     ansible-galaxy collection install community.docker
 
-# Layer 5: Advanced Knowledge Graph, RDF & Robotics MCP Server Repositories
-RUN mkdir -p /opt/mcp-servers && cd /opt/mcp-servers && \
-    git clone https://github.com/NVIDIA-Omniverse/kit-usd-agents.git && \
-    git clone https://github.com/whats2000/isaacsim-mcp-server.git && \
-    git clone https://github.com/omni-mcp/isaac-sim-mcp.git && \
-    git clone https://github.com/neo4j-contrib/gds-agent.git && \
-    git clone https://github.com/emekaokoye/mcp-rdf-explorer.git && \
-    pip3 install -e /opt/mcp-servers/isaacsim-mcp-server
-
-# Layer 6: Common Mount Points, Cache & Vulkan ICD Environment
+# Layer 5: Common Mount Points, Cache & Vulkan ICD Environment
 RUN mkdir -p /datasets /models /eval /tmp/matplotlib /opt/tf-data /workspaces && \
     chmod -R 777 /datasets /models /eval /tmp/matplotlib /opt/tf-data /workspaces && \
     mkdir -p /etc/vulkan/icd.d && \

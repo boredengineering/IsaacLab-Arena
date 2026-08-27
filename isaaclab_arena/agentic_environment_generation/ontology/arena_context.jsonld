@@ -1,0 +1,41 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "arena": "https://isaac-sim.github.io/arena/schema#",
+    "prov": "http://www.w3.org/ns/prov#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "geo": "http://www.opengis.net/ont/geosparql#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+
+    "EnvironmentGraph": "arena:EnvironmentGraph",
+    "Terrain": "arena:Terrain",
+    "Embodiment": "arena:Embodiment",
+    "Fixture": "arena:Fixture",
+    "RigidObject": "arena:RigidObject",
+    "EvaluationRun": "arena:EvaluationRun",
+
+    "id": "@id",
+    "type": "@type",
+    "env_name": "arena:envName",
+    "has_terrain": { "@id": "arena:hasTerrain", "@type": "@id" },
+    "has_embodiment": { "@id": "arena:hasEmbodiment", "@type": "@id" },
+    "has_fixture": { "@id": "arena:hasFixture", "@type": "@id" },
+    "has_object": { "@id": "arena:hasObject", "@type": "@id" },
+    "registry_name": "arena:registryName",
+    "usd_path": "arena:usdPath",
+    "controller_binding": "arena:controllerBinding",
+    "surface_anchor": "arena:surfaceAnchor",
+    "nominal_height": { "@id": "arena:nominalHeight", "@type": "xsd:float" },
+    "bound_x": { "@id": "arena:boundX", "@container": "@list" },
+    "bound_y": { "@id": "arena:boundY", "@container": "@list" },
+    "clearance": { "@id": "arena:requiredClearance", "@type": "xsd:float" },
+
+    "placed_on": { "@id": "arena:placedOn", "@type": "@id" },
+    "placed_inside": { "@id": "arena:placedInside", "@type": "@id" },
+    "nav_corridor_to": { "@id": "arena:navCorridorTo", "@type": "@id" },
+
+    "was_generated_by": { "@id": "prov:wasGeneratedBy", "@type": "@id" },
+    "was_derived_from": { "@id": "prov:wasDerivedFrom", "@type": "@id" },
+    "used": { "@id": "prov:used", "@type": "@id" }
+  }
+}

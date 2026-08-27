@@ -1,0 +1,46 @@
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+# 1. Mandatory Physical Ground Surface Invariant
+arena:MandatoryTerrainShape a sh:NodeShape ;
+    sh:targetClass arena:EnvironmentGraph ;
+    sh:property [
+        sh:path arena:hasTerrain ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "FATAL: Every EnvironmentGraph MUST contain exactly 1 physical terrain ground plane." ;
+    ] .
+
+# 2. Pink WBC Single-Threaded Pinocchio Invariant
+arena:PinkWBCEnvironmentCountShape a sh:NodeShape ;
+    sh:targetClass arena:Embodiment ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "CRITICAL: When using Pink WBC (g1_decoupled_wbc_pink_action), num_envs MUST equal 1 due to single-threaded Pinocchio QP solver." ;
+        sh:select """
+            PREFIX arena: <https://isaac-sim.github.io/arena/schema#>
+            SELECT $this
+            WHERE {
+                $this arena:controllerBinding "g1_decoupled_wbc_pink_action" .
+                $this arena:numEnvs ?envs .
+                FILTER (?envs > 1)
+            }
+        """ ;
+    ] .
+
+# 3. Room-Scale Locomotion Corridor Clearance Constraint
+arena:LocomotionCorridorClearanceShape a sh:NodeShape ;
+    sh:targetClass arena:EnvironmentGraph ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "ERROR: Free-space bipedal locomotion corridor clearance radius must be >= 0.60m." ;
+        sh:select """
+            PREFIX arena: <https://isaac-sim.github.io/arena/schema#>
+            SELECT $this
+            WHERE {
+                ?this arena:minClearanceRadius ?r .
+                FILTER (?r < 0.60)
+            }
+        """ ;
+    ] .

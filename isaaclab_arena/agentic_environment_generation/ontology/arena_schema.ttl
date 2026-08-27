@@ -1,0 +1,65 @@
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov:  <http://www.w3.org/ns/prov#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+# Classes
+arena:EnvironmentGraph a owl:Class, rdfs:Class ;
+    rdfs:label "Environment Graph" ;
+    rdfs:comment "Declarative attributed scene graph for IsaacLab-Arena." ;
+    rdfs:subClassOf prov:Entity .
+
+arena:SceneEntity a owl:Class, rdfs:Class ;
+    rdfs:label "Scene Entity" ;
+    rdfs:comment "Base class for all physical entities in an arena scene." ;
+    rdfs:subClassOf prov:Entity .
+
+arena:Terrain a owl:Class, rdfs:Class ;
+    rdfs:label "Terrain" ;
+    rdfs:subClassOf arena:SceneEntity .
+
+arena:Embodiment a owl:Class, rdfs:Class ;
+    rdfs:label "Embodiment" ;
+    rdfs:subClassOf arena:SceneEntity .
+
+arena:Fixture a owl:Class, rdfs:Class ;
+    rdfs:label "Fixture" ;
+    rdfs:subClassOf arena:SceneEntity .
+
+arena:RigidObject a owl:Class, rdfs:Class ;
+    rdfs:label "Rigid Object" ;
+    rdfs:subClassOf arena:SceneEntity .
+
+arena:EvaluationRun a owl:Class, rdfs:Class ;
+    rdfs:label "Evaluation Run" ;
+    rdfs:subClassOf prov:Entity .
+
+# Properties
+arena:hasTerrain a owl:ObjectProperty ;
+    rdfs:domain arena:EnvironmentGraph ;
+    rdfs:range arena:Terrain .
+
+arena:hasEmbodiment a owl:ObjectProperty ;
+    rdfs:domain arena:EnvironmentGraph ;
+    rdfs:range arena:Embodiment .
+
+arena:hasFixture a owl:ObjectProperty ;
+    rdfs:domain arena:EnvironmentGraph ;
+    rdfs:range arena:Fixture .
+
+arena:hasObject a owl:ObjectProperty ;
+    rdfs:domain arena:EnvironmentGraph ;
+    rdfs:range arena:RigidObject .
+
+arena:placedOn a owl:ObjectProperty ;
+    rdfs:domain arena:RigidObject ;
+    rdfs:range arena:SceneEntity .
+
+arena:placedInside a owl:ObjectProperty ;
+    rdfs:domain arena:RigidObject ;
+    rdfs:range arena:SceneEntity .
+
+arena:navCorridorTo a owl:ObjectProperty ;
+    rdfs:domain arena:SceneEntity ;
+    rdfs:range arena:SceneEntity .

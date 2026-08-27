@@ -16,6 +16,7 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    working_dir: /workspace/gr00t
     environment:
       - GR00T_DIT_SDPA_MODE=${GR00T_DIT_SDPA_MODE:-math}
       - HF_HOME=/root/.cache/huggingface

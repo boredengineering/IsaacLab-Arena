@@ -116,10 +116,26 @@ if docker ps -a -q --filter "name=^${CONTAINER_NAME}$" | grep -q .; then
     docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 fi
 
-# Prepare mounts
-MODELS_DIR="${MODELS_DIR:-$HOME/models}"
-HF_CACHE_DIR="${HF_CACHE_DIR:-$HOME/.cache/huggingface}"
-mkdir -p "${MODELS_DIR}" "${HF_CACHE_DIR}"
+# Prepare mounts (detect host paths if running inside a DevContainer via DooD)
+HOST_WORKSPACE_DIR="${WORKSPACE_DIR}"
+HOST_MODELS_DIR="${MODELS_DIR:-$HOME/models}"
+HOST_HF_CACHE_DIR="${HF_CACHE_DIR:-$HOME/.cache/huggingface}"
+
+if [ -f /.dockerenv ] || [ -f /run/.containerenv ]; then
+    DEVCONTAINER_ID=$(docker ps --filter "label=devcontainer.local_folder" --format '{{.ID}}' | head -1)
+    if [ -n "${DEVCONTAINER_ID}" ]; then
+        DETECTED_HOST_WS=$(docker inspect "${DEVCONTAINER_ID}" --format '{{index .Config.Labels "devcontainer.local_folder"}}' 2>/dev/null || true)
+        DETECTED_HOST_MODELS=$(docker inspect "${DEVCONTAINER_ID}" --format '{{range .Mounts}}{{if eq .Destination "/models"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)
+        DETECTED_HOST_HF=$(docker inspect "${DEVCONTAINER_ID}" --format '{{range .Mounts}}{{if eq .Destination "/root/.cache/huggingface"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)
+
+        [ -n "${DETECTED_HOST_WS}" ] && HOST_WORKSPACE_DIR="${DETECTED_HOST_WS}"
+        [ -n "${DETECTED_HOST_MODELS}" ] && HOST_MODELS_DIR="${DETECTED_HOST_MODELS}"
+        [ -n "${DETECTED_HOST_HF}" ] && HOST_HF_CACHE_DIR="${DETECTED_HOST_HF}"
+    fi
+fi
+
+HOST_GR00T_SUBMODULE="${HOST_WORKSPACE_DIR}/submodules/Isaac-GR00T"
+mkdir -p "${MODELS_DIR:-$HOME/models}" "${HF_CACHE_DIR:-$HOME/.cache/huggingface}" 2>/dev/null || true
 
 DOCKER_ENV=(
     "--env" "HF_HOME=/root/.cache/huggingface"
@@ -134,11 +150,11 @@ if [ -n "${SDPA_MODE}" ]; then
 fi
 
 DOCKER_VOLUMES=(
-    "-v" "${WORKSPACE_DIR}:/workspaces/isaaclab_arena"
-    "-v" "${GR00T_SUBMODULE}:/workspace/gr00t"
-    "-v" "${MODELS_DIR}:/workspace/pretrained_ckpts"
-    "-v" "${MODELS_DIR}:/models"
-    "-v" "${HF_CACHE_DIR}:/root/.cache/huggingface"
+    "-v" "${HOST_WORKSPACE_DIR}:/workspaces/isaaclab_arena"
+    "-v" "${HOST_GR00T_SUBMODULE}:/workspace/gr00t"
+    "-v" "${HOST_MODELS_DIR}:/workspace/pretrained_ckpts"
+    "-v" "${HOST_MODELS_DIR}:/models"
+    "-v" "${HOST_HF_CACHE_DIR}:/root/.cache/huggingface"
 )
 
 CMD_ARGS=(
@@ -170,6 +186,7 @@ docker run ${RUN_MODE} \
     --gpus all \
     --network host \
     --ipc host \
+    -w /workspace/gr00t \
     "${DOCKER_ENV[@]}" \
     "${DOCKER_VOLUMES[@]}" \
     "${IMAGE_NAME}:${IMAGE_TAG}" \

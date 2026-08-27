@@ -1,6 +1,6 @@
 # Master Plan: RDF-star, Labeled Property Graphs (LPG), and PROV-O Architecture for IsaacLab-Arena
 
-Implementation blueprint, codebase gap analysis, and scaffolded **RDF-star / JSON-LD 1.1 / W3C PROV-O** ontology architecture for elevating **IsaacLab-Arena**'s agentic environment generation into a formal **Semantic Web & Property Graph Pipeline**.
+Implementation blueprint, codebase gap analysis, scaffolded **RDF-star / JSON-LD 1.1 / W3C PROV-O** ontology architecture, and comprehensive **MCP Server & Skill Integration Roadmap** for elevating **IsaacLab-Arena**'s agentic environment generation into an enterprise-grade **Semantic Web & Property Graph Pipeline**.
 
 ---
 
@@ -18,14 +18,15 @@ flowchart TD
     subgraph KNOWLEDGE_PLANE ["1. Semantic & Provenance Plane (RDF-star / LPG / PROV-O)"]
         PROV["W3C PROV-O Lineage:\n• Agent (Gemini-2.0, Claude-3.7)\n• Activity (PromptSynthesis, CurriculumMutation)\n• Entity (TaskSpec, SceneGraph)"]
         JSON_LD["JSON-LD 1.1 / JSON-star Schema\n(Strict Structured Output Contract)"]
+        LPG_STORE["Native Property Graph (Neo4j / Cypher):\n(:RigidObject)-[:PLACED_ON {height: 0.75}]->(:Fixture)"]
         RDF_STAR["RDF-star Knowledge Graph:\n<< :box :placedOn :shelf >>\n  :contactAnchor :middle_tier ;\n  :metricBounds [x, y, z] ;\n  :clearance 0.08 ."]
         SHACL["SHACL-star Validation Engine:\n• Mandatory Ground Plane Invariant\n• Kinematic Workspace Manifold Gate\n• Pink WBC Single-Thread Invariant\n• Locomotion Corridor Clearance Gate"]
         
-        PROV --> JSON_LD --> RDF_STAR --> SHACL
+        PROV --> JSON_LD --> LPG_STORE <== "Isomorphic Mapping" ==> RDF_STAR --> SHACL
     end
 
     subgraph COMPILER_PLANE ["2. Lowering & Compilation Plane"]
-        LOWER["Lowering Compiler (rdf_to_arena_spec.py):\nSPARQL-star Query --> Spatial CSP --> ArenaEnvGraphSpec"]
+        LOWER["Lowering Compiler (rdf_to_arena_spec.py):\nSPARQL-star / Cypher Query --> Spatial CSP --> ArenaEnvGraphSpec"]
         SHACL ==> LOWER
     end
 
@@ -45,9 +46,91 @@ flowchart TD
 
 ---
 
-## 2. Comprehensive Codebase Review & Necessary Changes
+## 2. The Labeled Property Graph (LPG) Architecture
 
-A systematic audit of the `IsaacLab-Arena` repository identifies the following touchpoints across packages:
+The **Labeled Property Graph (LPG)** is implemented across three coordinated layers:
+
+```mermaid
+flowchart TD
+    subgraph LPG_LAYER_1 ["Layer 1: Storage & Graph Analytics (Neo4j / Cypher / Memgraph)"]
+        LPG_STORE["Native Property Graph Store:\n• Nodes: (:Embodiment {id: 'g1', mass: 35.0})\n• Edges: -[:PLACED_ON {height: 0.75, clearance: 0.08}]->"]
+    end
+
+    subgraph LPG_LAYER_2 ["Layer 2: Semantic Isomorphism & Invariant Gate (RDF-star / SHACL)"]
+        RDF_STAR["RDF-star Triples (W3C standard for LPG):\n<< :box :placedOn :shelf >> :nominalHeight 0.75 ."]
+    end
+
+    subgraph LPG_LAYER_3 ["Layer 3: Python In-Memory Runtime (NetworkX / ArenaEnvGraphSpec)"]
+        PY_GRAPH["ArenaEnvGraphSpec (In-Memory LPG Model):\n• AssetSpec Nodes + SpatialRelationSpec Edges with Properties"]
+    end
+
+    LPG_LAYER_1 <== "Isomorphic Projection" ==> LPG_LAYER_2
+    LPG_LAYER_2 ==> LPG_LAYER_3
+```
+
+### 2.1 Native LPG Cypher Schema & Examples
+
+#### A. Creating the Scene as an LPG (Cypher):
+```cypher
+// 1. Create Nodes with Labels and Properties
+CREATE (g1:Embodiment {
+    id: "g1_robot", 
+    registry_name: "g1_wbc_joint", 
+    controller: "g1_decoupled_wbc_pink_action", 
+    spawn_xyz: [0.0, 0.18, 0.0]
+})
+CREATE (room:Fixture {
+    id: "galileo_room", 
+    registry_name: "galileo_locomanip", 
+    usd_path: "isaaclab_arena/assets/galileo_locomanip.usd"
+})
+CREATE (box:RigidObject {
+    id: "brown_box", 
+    registry_name: "brown_box", 
+    is_target: true
+})
+CREATE (bin:RigidObject {
+    id: "blue_sorting_bin", 
+    registry_name: "blue_sorting_bin", 
+    is_receptacle: true
+})
+
+// 2. Create Directed Relationships WITH First-Class Properties (LPG)
+CREATE (box)-[:PLACED_ON {
+    surface_anchor: "shelf_tier_1", 
+    nominal_height: 0.0707, 
+    bound_x: [0.5535, 0.6035], 
+    bound_y: [0.1550, 0.2050], 
+    clearance: 0.05
+}]->(room)
+
+CREATE (bin)-[:PLACED_ON {
+    surface_anchor: "floor_deposit_zone", 
+    nominal_height: -0.2641, 
+    bound_x: [-0.2600, -0.2300], 
+    bound_y: [-1.6400, -1.6100]
+}]->(room)
+
+CREATE (box)-[:NAV_CORRIDOR_TO {
+    distance_m: 1.85, 
+    min_clearance_radius: 0.60
+}]->(bin);
+```
+
+#### B. Querying the LPG for Lowering to Simulation:
+```cypher
+// Extract all scene assets and their spatial relationship properties
+MATCH (obj:RigidObject)-[rel:PLACED_ON]->(fixture:Fixture)
+RETURN obj.id AS object_id, 
+       fixture.id AS fixture_id, 
+       rel.surface_anchor AS anchor, 
+       rel.nominal_height AS height, 
+       rel.bound_x AS bounds_x;
+```
+
+---
+
+## 3. Comprehensive Codebase Review & Necessary Changes
 
 ```mermaid
 flowchart LR
@@ -59,7 +142,7 @@ flowchart LR
     end
 ```
 
-### 2.1 `isaaclab_arena/agentic_environment_generation/`
+### 3.1 `isaaclab_arena/agentic_environment_generation/`
 * **Current State**:
   * [`inference_backend.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/inference_backend.py): Uses `build_strict_schema()` to convert Pydantic models into OpenAI-compatible strict JSON schemas.
   * [`spec_inference.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/spec_inference.py): Single-shot prompt translation into `ArenaEnvGraphSpec`.
@@ -70,16 +153,16 @@ flowchart LR
   2. **Replace `spec_validation.py` with SHACL**: Wrap `pyshacl` / in-memory `rdflib` or `oxigraph` to validate declarative graph instances against formal SHACL shapes.
   3. **Add Self-Healing Report Ingestion**: When SHACL returns violations, serialize the SHACL results graph and feed it back to the LLM agent for zero-shot self-repair.
 
-### 2.2 `isaaclab_arena/environment_spec/`
+### 3.2 `isaaclab_arena/environment_spec/`
 * **Current State**:
   * [`arena_env_graph_types.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/environment_spec/arena_env_graph_types.py): Defines `AssetSpec`, `ObjectReferenceSpec`, `SpatialRelationSpec`, `CompositeTaskSpec`, `TaskSpec`.
   * [`arena_env_graph_task_conversion_utils.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/environment_spec/arena_env_graph_task_conversion_utils.py): Instantiates tasks using `TaskRegistry`, but lacks dynamic `mimic_env_cfg_factory` injection for humanoid locomotion tasks.
 * **Necessary Changes**:
   1. **Extend `SpatialRelationSpec` to Support RDF-star Reified Properties**: Allow spatial relations to carry explicit metric anchors, bounding intervals, and locomotion clearance radii.
   2. **Add Mimic Factory Resolution in Task Conversion**: Support humanoid-specific task factories (e.g. `G1PickAndPlaceMimicEnvCfg`) during task construction.
-  3. **Add Graph Lowering Adapter (`rdf_to_arena_spec.py`)**: A SPARQL-star lowering module that transforms graph stores directly into validated `ArenaEnvGraphSpec` instances.
+  3. **Add Graph Lowering Adapter (`rdf_to_arena_spec.py`)**: A SPARQL-star / Cypher lowering module that transforms graph stores directly into validated `ArenaEnvGraphSpec` instances.
 
-### 2.3 `isaaclab_arena/evaluation/` & Telemetry
+### 3.3 `isaaclab_arena/evaluation/` & Telemetry
 * **Current State**:
   * [`policy_runner.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/evaluation/policy_runner.py): Evaluates closed-loop rollouts and prints console metrics, but does not persist formal provenance.
 * **Necessary Changes**:
@@ -88,11 +171,9 @@ flowchart LR
 
 ---
 
-## 3. Scaffolded Core RDF-star & JSON-LD 1.1 Schemas
+## 4. Scaffolded Core RDF-star & JSON-LD 1.1 Schemas
 
-### 3.1 Global JSON-LD Context (`arena_context.jsonld`)
-
-This context maps clean JSON keys directly into RDF URIs and RDF-star reified statements:
+### 4.1 Global JSON-LD Context (`arena_context.jsonld`)
 
 ```json
 {
@@ -140,7 +221,7 @@ This context maps clean JSON keys directly into RDF URIs and RDF-star reified st
 
 ---
 
-### 3.2 RDF-star Turtle-star Ontology Schema (`arena_schema.ttl`)
+### 4.2 RDF-star Turtle-star Ontology Schema (`arena_schema.ttl`)
 
 ```turtle
 @prefix arena: <https://isaac-sim.github.io/arena/schema#> .
@@ -194,7 +275,7 @@ arena:navCorridorTo a owl:ObjectProperty ;
 
 ---
 
-### 3.3 Concrete Scene Representation in Turtle-star (G1 Loco-Manipulation Box Transfer)
+### 4.3 Concrete Scene Representation in Turtle-star (G1 Loco-Manipulation Box Transfer)
 
 ```turtle
 @prefix :      <https://isaac-sim.github.io/arena/instances/> .
@@ -262,7 +343,7 @@ arena:navCorridorTo a owl:ObjectProperty ;
 
 ---
 
-## 4. W3C PROV-O Genealogy & Telemetry Engine
+## 5. W3C PROV-O Genealogy & Telemetry Engine
 
 ```mermaid
 flowchart LR
@@ -303,7 +384,7 @@ flowchart LR
 
 ---
 
-## 5. SHACL-star Semantic Validation Engine (`arena_constraints.shacl.ttl`)
+## 6. SHACL-star Semantic Validation Engine (`arena_constraints.shacl.ttl`)
 
 ```turtle
 @prefix arena: <https://isaac-sim.github.io/arena/schema#> .
@@ -354,9 +435,7 @@ arena:LocomotionCorridorClearanceShape a sh:NodeShape ;
 
 ---
 
-## 6. Lowering Compiler Architecture (`rdf_to_arena_spec.py`)
-
-The lowering compiler executes a SPARQL-star query to lower RDF-star graphs into the Pydantic `ArenaEnvGraphSpec`:
+## 7. Lowering Compiler Architecture (`rdf_to_arena_spec.py`)
 
 ```python
 # isaaclab_arena/agentic_environment_generation/rdf_lowering.py
@@ -392,7 +471,6 @@ def lower_rdf_graph_to_spec(graph: rdflib.Graph) -> ArenaEnvGraphSpec:
     rows = list(graph.query(SPARQL_LOWER_SCENE))
     assert rows, "SPARQL query returned no valid EnvironmentGraph."
     
-    # Construct spec dictionary from query bindings
     first = rows[0]
     spec_data: dict[str, Any] = {
         "env_name": str(first.env_name),
@@ -411,20 +489,114 @@ def lower_rdf_graph_to_spec(graph: rdflib.Graph) -> ArenaEnvGraphSpec:
 
 ---
 
-## 7. Phased Implementation Roadmap
+## 8. External Tooling, MCP Servers & Skills Ecosystem
+
+```mermaid
+flowchart LR
+    subgraph GRAPH_MCP ["1. Graph Database & Semantic MCPs"]
+        N1["neo4j/mcp (PyPI: neo4j-mcp-server)\n• Cypher queries\n• Schema exploration\n• Neo4j Aura Cloud / Local"]
+        N2["neo4j-contrib/gds-agent\n• Graph algorithms\n• Locomotion shortest path\n• Subgraph clustering"]
+        R1["emekaokoye/mcp-rdf-explorer\n• Local Turtle/TTL* files\n• Remote SPARQL endpoints"]
+    end
+
+    subgraph SIM_MCP ["2. Simulation & Omniverse MCPs"]
+        O1["NVIDIA-Omniverse/kit-usd-agents\n• USD Code MCP\n• Kit Extension MCP\n• Isaac Sim MCP\n• OmniUI MCP"]
+        O2["whats2000/isaacsim-mcp-server\n• Live scene control (42+ tools)\n• Object & robot spawn"]
+    end
+
+    subgraph SKILLS ["3. Robotics & Simulation Skills"]
+        S1["i4h-workflow-scene-edit\n• Interactive scene edits"]
+        S2["i4h-workflow-validate\n• Rollout validation"]
+        S3["omniverse-usd-performance-tuning\n• USD hierarchy optimization"]
+        S4["install-nvidia-skills\n• On-demand skill installer"]
+    end
+```
+
+### 8.1 Curated Ecosystem MCP Server Matrix
+
+| Category | Server / Repository | Capabilities | Role in Architecture |
+| :--- | :--- | :--- | :--- |
+| **LPG / Cypher** | **`neo4j/mcp`** (`neo4j-mcp-server`) | Direct Cypher read/write, schema introspection, Aura sync | Manages the native Labeled Property Graph store |
+| **Graph Algorithms** | **`neo4j-contrib/gds-agent`** | Graph pathfinding, shortest paths, centrality | Computes collision-free locomotion corridors |
+| **RDF / SPARQL** | **`emekaokoye/mcp-rdf-explorer`** | Turtle inspection, SPARQL-star queries | Inspects local `.ttl*` and remote triplestores |
+| **Enterprise Triplestore** | **`keonchennl/mcp-server-graphdb`** | Ontotext GraphDB connector | Enterprise-grade RDF-star knowledge repository |
+| **USD / Omniverse** | **`NVIDIA-Omniverse/kit-usd-agents`** | USD Code, Kit, Isaac Sim, OmniUI MCPs | Inspects USD APIs, prim hierarchies, and meshes |
+| **Live Sim Control** | **`whats2000/isaacsim-mcp-server`** | 42+ live simulation tools | Controls running Isaac Sim instances via socket |
+
+---
+
+## 9. Actionable Plan to Add Skills and MCP Servers
+
+### Step 1: Install Python Graph Semantic Stack
+```bash
+# In the project Python environment (or DevContainer)
+pip install rdflib pyshacl oxigraph networkx neo4j
+```
+
+### Step 2: Register Neo4j MCP Server (`neo4j-mcp-server`)
+1. Run local Neo4j Community instance via Docker:
+   ```bash
+   docker run -d --name neo4j-arena \
+       -p 7474:7474 -p 7687:7687 \
+       -e NEO4J_AUTH=neo4j/isaaclab_arena_password \
+       neo4j:5.26-community
+   ```
+2. Configure MCP server in Antigravity / Claude config:
+   ```json
+   {
+     "mcpServers": {
+       "neo4j": {
+         "command": "uvx",
+         "args": [
+           "neo4j-mcp-server",
+           "--neo4j-uri", "bolt://localhost:7687",
+           "--neo4j-user", "neo4j",
+           "--neo4j-password", "isaaclab_arena_password"
+         ]
+       }
+     }
+   }
+   ```
+
+### Step 3: Register NVIDIA Omniverse `kit-usd-agents` MCP
+1. Clone NVIDIA's official MCP suite:
+   ```bash
+   git clone https://github.com/NVIDIA-Omniverse/kit-usd-agents.git /opt/kit-usd-agents
+   ```
+2. Configure the USD Code MCP server:
+   ```json
+   {
+     "mcpServers": {
+       "usd-code": {
+         "command": "python",
+         "args": ["/opt/kit-usd-agents/servers/usd_code_server.py"]
+       }
+     }
+   }
+   ```
+
+### Step 4: Install Specialized NVIDIA Skills via `install-nvidia-skills`
+Run the skill installer to pull additional skills from `https://github.com/nvidia/skills`:
+* `omniverse-cad-to-simready`
+* `omniverse-usd-performance-tuning`
+* `warp-compile-time-optimizer`
+
+---
+
+## 10. Phased Implementation Roadmap
 
 ```mermaid
 gantt
     title RDF-star & PROV-O Migration Roadmap
     dateFormat  YYYY-MM-DD
-    section Phase 1: Ontology & JSON-LD
+    section Phase 1: Ontology & Schemas
     Codify arena_context.jsonld & arena_schema.ttl :p1, 2026-09-01, 3d
     section Phase 2: SHACL Validation
     Implement arena_constraints.shacl.ttl & pyshacl :p2, after p1, 3d
-    section Phase 3: Lowering & Lifting
-    Lowering Compiler & Task Factory Adapters      :p3, after p2, 4d
-    section Phase 4: Telemetry & PROV-O
-    Telemetry Exporter & Telemetry-to-PROV Engine  :p4, after p3, 3d
+    section Phase 3: Lowering & Task Adapters
+    Lowering Compiler & Mimic Task Factory Adapters :p3, after p2, 4d
+    section Phase 4: MCP & Tooling
+    Neo4j MCP & kit-usd-agents Integration          :p4, after p3, 3d
     section Phase 5: G1 Verification
     Closed-Loop G1 Loco-Manipulation Rollout (100) :p5, after p4, 4d
 ```
@@ -434,16 +606,17 @@ gantt
 * Update `spec_inference.py` to support JSON-LD 1.1 structured-output contracts.
 
 ### Phase 2: SHACL-star Semantic Engine (Days 4–6)
-* Codify `validation/arena_constraints.shacl.ttl` with the 5 physical/kinematic invariant shapes.
+* Codify `validation/arena_constraints.shacl.ttl` with physical/kinematic invariant shapes.
 * Integrate in-memory `pyshacl` validation directly into `EnvironmentGenerationAgent.generate_spec()`.
 
 ### Phase 3: Lowering & Task Factory Adapters (Days 7–10)
 * Implement `isaaclab_arena/agentic_environment_generation/rdf_lowering.py` (SPARQL-star lowering).
 * Extend `arena_env_graph_task_conversion_utils.py` to support humanoid `mimic_env_cfg_factory` injection.
 
-### Phase 4: Telemetry Engine & PROV-O Backpropagation (Days 11–13)
-* Instrument `policy_runner.py` to write JSON execution telemetry summaries (`success`, `latency`, `divergence`).
-* Develop `tools/telemetry_to_prov.py` to backpropagate execution metrics into PROV-O triples.
+### Phase 4: MCP & Tooling Integration (Days 11–13)
+* Stand up local Neo4j Docker container and register `neo4j-mcp-server`.
+* Integrate `NVIDIA-Omniverse/kit-usd-agents` USD Code MCP.
+* Instrument `policy_runner.py` with `telemetry_to_prov.py` for automated evaluation recording.
 
 ### Phase 5: End-to-End G1 Validation & Benchmarks (Days 14–17)
 * Run a 100-scene automated benchmark spanning Unitree G1, OXE Droid, and Franka Emika.

@@ -1,5 +1,9 @@
 # Master Plan: RDF-star, Labeled Property Graphs (LPG), and PROV-O Architecture for IsaacLab-Arena
 
+> [!IMPORTANT]
+> **STATUS: PENDING REVIEW / RFC (Request For Comments)**
+> This architectural plan is staged for design review. Please review the proposed **MCP Servers**, **Agent Skills**, and **Architectural Options & Trade-offs** in Section 8–10, and provide feedback or click **Proceed** to authorize execution.
+
 Implementation blueprint, codebase gap analysis, scaffolded **RDF-star / JSON-LD 1.1 / W3C PROV-O** ontology architecture, and comprehensive **MCP Server & Skill Integration Roadmap** for elevating **IsaacLab-Arena**'s agentic environment generation into an enterprise-grade **Semantic Web & Property Graph Pipeline**.
 
 ---
@@ -489,43 +493,96 @@ def lower_rdf_graph_to_spec(graph: rdflib.Graph) -> ArenaEnvGraphSpec:
 
 ---
 
-## 8. External Tooling, MCP Servers & Skills Ecosystem
+## 8. Integrated MCP Servers & Skills Ecosystem
 
 ```mermaid
-flowchart LR
-    subgraph GRAPH_MCP ["1. Graph Database & Semantic MCPs"]
-        N1["neo4j/mcp (PyPI: neo4j-mcp-server)\n• Cypher queries\n• Schema exploration\n• Neo4j Aura Cloud / Local"]
-        N2["neo4j-contrib/gds-agent\n• Graph algorithms\n• Locomotion shortest path\n• Subgraph clustering"]
-        R1["emekaokoye/mcp-rdf-explorer\n• Local Turtle/TTL* files\n• Remote SPARQL endpoints"]
+flowchart TD
+    subgraph ACTIVE_MCPS ["Active Runtime MCP Servers"]
+        M_FS["filesystem\n• Read/write TTL, JSON-LD, and specs"]
+        M_ANS["ansible\n• Automated sim cluster deployment"]
+        M_GCP["gcp-cloud\n• Cloud GPU provisioning for evals"]
+        M_PW["playwright\n• Visual web UI inspection (LeRobot/Neo4j)"]
+        M_TF["terraform\n• Cloud infrastructure as code"]
     end
 
-    subgraph SIM_MCP ["2. Simulation & Omniverse MCPs"]
-        O1["NVIDIA-Omniverse/kit-usd-agents\n• USD Code MCP\n• Kit Extension MCP\n• Isaac Sim MCP\n• OmniUI MCP"]
-        O2["whats2000/isaacsim-mcp-server\n• Live scene control (42+ tools)\n• Object & robot spawn"]
+    subgraph EXT_MCPS ["Target Graph & Simulation MCP Servers"]
+        E_NEO["neo4j/mcp (neo4j-mcp-server)\n• Cypher graph mutations & LPG schema"]
+        E_GDS["neo4j-contrib/gds-agent\n• Graph data science & shortest path"]
+        E_RDF["emekaokoye/mcp-rdf-explorer\n• RDF-star SPARQL inspection"]
+        E_USD["NVIDIA-Omniverse/kit-usd-agents\n• USD Code, OmniUI, Kit MCPs"]
+        E_SIM["whats2000/isaacsim-mcp-server\n• Live socket control (42+ tools)"]
     end
 
-    subgraph SKILLS ["3. Robotics & Simulation Skills"]
-        S1["i4h-workflow-scene-edit\n• Interactive scene edits"]
-        S2["i4h-workflow-validate\n• Rollout validation"]
-        S3["omniverse-usd-performance-tuning\n• USD hierarchy optimization"]
-        S4["install-nvidia-skills\n• On-demand skill installer"]
+    subgraph AGENT_SKILLS ["Repository & NVIDIA Agent Skills"]
+        S_RDF["agentic-rdf-star-env-gen\n• Main pipeline orchestrator"]
+        S_I4H["i4h-workflow suite\n• Scene edit, dataset mimic, rollout validate"]
+        S_OPT["cuopt-numerical-optimization-api\n• GPU-accelerated spatial CSP placement"]
+        S_DATA["data-designer\n• Synthetic dataset distribution builder"]
+        S_USD["omniverse-usd-performance-tuning\n• USD hierarchy & memory optimizer"]
+        S_CUDF["accelerated-computing-cudf\n• GPU DataFrame analytics for massive scenes"]
     end
+
+    ACTIVE_MCPS <--> S_RDF
+    EXT_MCPS <--> S_RDF
+    S_RDF --> S_OPT
+    S_RDF --> S_I4H
+    S_RDF --> S_USD
 ```
 
-### 8.1 Curated Ecosystem MCP Server Matrix
+### 8.1 Curated MCP Server Matrix
 
-| Category | Server / Repository | Capabilities | Role in Architecture |
+| Category | MCP Server | Server Name / Package | Key Tools & Capabilities | Role in Architecture |
+| :--- | :--- | :--- | :--- | :--- |
+| **Local I/O** | `filesystem` *(Active)* | Local Tool | `read_file`, `write_file`, `edit_file`, `directory_tree` | Direct authoring and inspection of `.ttl`, `.jsonld`, `.yaml` specs |
+| **Automation** | `ansible` *(Active)* | Local Tool | `create_ansible_projects`, `define_and_build_execution_env` | Orchestrates multi-node Isaac Sim evaluation clusters |
+| **Cloud Ops** | `gcp-cloud` *(Active)* | Local Tool | `run_gcloud_command` | Provisions high-performance GPU instances for batch evaluation |
+| **UI Testing** | `playwright` *(Active)* | Local Tool | `playwright_navigate`, `playwright_screenshot` | Inspects web dashboards (Neo4j Bloom, LeRobot HTML visualizer) |
+| **Cloud Infra** | `terraform` *(Active)* | Local Tool | `get_latest_provider_version`, `search_modules` | Declarative cloud resource lifecycle management |
+| **LPG / Cypher** | `neo4j` *(Planned)* | `neo4j-mcp-server` | Direct Cypher querying, node/relationship mutations, schema introspection | Serves as the native multi-entity property graph store |
+| **Graph Science**| `gds-agent` *(Planned)* | `neo4j-contrib/gds-agent`| Graph algorithms, centrality, topological pathfinding | Computes collision-free humanoid locomotion corridors |
+| **RDF Explorer** | `rdf-explorer` *(Planned)*| `emekaokoye/mcp-rdf-explorer` | Turtle inspection, SPARQL-star queries | Interrogates local triplestores and validation graphs |
+| **USD / Omniverse**| `kit-usd-agents` *(Planned)*| `NVIDIA-Omniverse/kit-usd-agents` | USD Code MCP, Kit Extension MCP, OmniUI MCP | Deep prim-tree inspection, USD schema verification, and material binding |
+| **Live Sim Control**| `isaacsim-mcp` *(Planned)* | `whats2000/isaacsim-mcp-server` | 42+ live simulation tools over socket | Live prim manipulation, robot spawning, and camera teleoperation |
+
+### 8.2 Curated Skills Matrix
+
+| Skill Name | Location / Source | Core Capabilities | Integration Hook |
 | :--- | :--- | :--- | :--- |
-| **LPG / Cypher** | **`neo4j/mcp`** (`neo4j-mcp-server`) | Direct Cypher read/write, schema introspection, Aura sync | Manages the native Labeled Property Graph store |
-| **Graph Algorithms** | **`neo4j-contrib/gds-agent`** | Graph pathfinding, shortest paths, centrality | Computes collision-free locomotion corridors |
-| **RDF / SPARQL** | **`emekaokoye/mcp-rdf-explorer`** | Turtle inspection, SPARQL-star queries | Inspects local `.ttl*` and remote triplestores |
-| **Enterprise Triplestore** | **`keonchennl/mcp-server-graphdb`** | Ontotext GraphDB connector | Enterprise-grade RDF-star knowledge repository |
-| **USD / Omniverse** | **`NVIDIA-Omniverse/kit-usd-agents`** | USD Code, Kit, Isaac Sim, OmniUI MCPs | Inspects USD APIs, prim hierarchies, and meshes |
-| **Live Sim Control** | **`whats2000/isaacsim-mcp-server`** | 42+ live simulation tools | Controls running Isaac Sim instances via socket |
+| [`agentic-rdf-star-env-gen`](file:///workspaces/IsaacLab-Arena/.agents/skills/agentic-rdf-star-env-gen/SKILL.md) | `.agents/skills/agentic-rdf-star-env-gen` | RDF-star parsing, SHACL validation, graph lowering, PROV-O telemetry | Primary driver for the semantic environment generation pipeline |
+| [`cuopt-numerical-optimization-api`](file:///workspaces/IsaacLab-Arena/.agents/skills/cuopt-numerical-optimization-api/SKILL.md) | `.agents/skills/cuopt-numerical-optimization-api` | GPU LP/MILP/QP solving | Solves 3D cluttered spatial layout & non-overlapping bounding CSPs |
+| [`i4h-workflow-scene-edit`](file:///workspaces/IsaacLab-Arena/.agents/skills/i4h-workflow-scene-edit/SKILL.md) | `.agents/skills/i4h-workflow-scene-edit` | Interactive in-sim scene editing with `--bridge` | Live adjustment of anchors, bounding limits, and randomized placements |
+| [`i4h-workflow-validate`](file:///workspaces/IsaacLab-Arena/.agents/skills/i4h-workflow-validate/SKILL.md) | `.agents/skills/i4h-workflow-validate` | Policy rollout execution and metric harvesting | Validates generated scenes with GR00T / OpenPI policies |
+| [`omniverse-usd-performance-tuning`](file:///workspaces/IsaacLab-Arena/.agents/skills/omniverse-usd-performance-tuning/SKILL.md) | `.agents/skills/omniverse-usd-performance-tuning` | USD scene hierarchy & memory optimization | Ensures USD stages meet real-time frame budget (<16ms) |
+| [`accelerated-computing-cudf`](file:///workspaces/IsaacLab-Arena/.agents/skills/accelerated-computing-cudf/SKILL.md) | `.agents/skills/accelerated-computing-cudf` | GPU DataFrame analytics | Accelerates massive multi-episode PROV-O audit queries |
+| [`data-designer`](file:///workspaces/IsaacLab-Arena/.agents/skills/data-designer/SKILL.md) | `.agents/skills/data-designer` | Synthetic dataset generation pipeline design | Guides curriculum generation and distribution coverage |
 
 ---
 
-## 9. Actionable Plan to Add Skills and MCP Servers
+## 9. Architectural Exploration Options & Trade-Offs
+
+We have identified **four architectural implementation options** for exploration during review:
+
+```mermaid
+flowchart TD
+    OPT_A["Option A: Pure In-Memory RDFLib + PySHACL\n(Lightweight, Zero Extra Infrastructure)"]
+    OPT_B["Option B: Dual-Store RDF-star + Neo4j LPG\n(High-Performance Visual & Graph Analytics)"]
+    OPT_C["Option C: RDF-star + GPU-Accelerated cuOpt Spatial Solver\n(Rigorous Continuous Metric Optimization)"]
+    OPT_D["Option D: Full Live-Sim Interactive Omniverse MCP Pipeline\n(Direct Socket & USD Real-Time Control)"]
+```
+
+### Option Comparison Matrix
+
+| Dimension | Option A: In-Memory RDFLib/SHACL | Option B: Neo4j LPG Dual-Store | Option C: RDF-star + cuOpt CSP | Option D: Live Sim MCP Loop |
+| :--- | :--- | :--- | :--- | :--- |
+| **Primary Strength** | Zero infra overhead; purely in-process Python | Rich Cypher graph querying & visual exploration (Bloom) | Solves highly complex 3D object clutter & collision constraints on GPU | Immediate interactive visual feedback inside Isaac Sim viewport |
+| **Infrastructure** | None (`pip install rdflib pyshacl`) | Docker container (`neo4j:5.26`) | NVIDIA GPU with cuOpt library | Running Isaac Sim Kit instance + MCP socket |
+| **Verification Speed** | Fast (<50ms per scene) | Moderate (~100ms via Bolt) | Ultra-fast GPU solve (<10ms) | Real-time interactive |
+| **Graph Scaling** | Up to $10^5$ triples | Up to $10^8$ nodes/edges | Continuous bounds | Single active stage |
+| **Recommended Use** | CI/CD automated validation & unit tests | Enterprise scene repository & curriculum mining | Highly congested manipulation scenes (cabinets, shelves) | Human-in-the-loop interactive scene design |
+
+---
+
+## 10. Actionable Plan to Add Skills and MCP Servers
 
 ### Step 1: Install Python Graph Semantic Stack
 ```bash
@@ -583,7 +640,7 @@ Run the skill installer to pull additional skills from `https://github.com/nvidi
 
 ---
 
-## 10. Phased Implementation Roadmap
+## 11. Phased Implementation Roadmap
 
 ```mermaid
 gantt
@@ -602,21 +659,21 @@ gantt
 ```
 
 ### Phase 1: Core Ontologies & JSON-LD Scaffold (Days 1–3)
-* Scaffold `isaaclab_arena/agentic_environment_generation/ontology/arena_context.jsonld` and `arena_schema.ttl`.
-* Update `spec_inference.py` to support JSON-LD 1.1 structured-output contracts.
+* Scaffold [`isaaclab_arena/agentic_environment_generation/ontology/arena_context.jsonld`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/ontology/arena_context.jsonld) and [`arena_schema.ttl`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/ontology/arena_schema.ttl).
+* Update [`spec_inference.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/spec_inference.py) to support JSON-LD 1.1 structured-output contracts.
 
 ### Phase 2: SHACL-star Semantic Engine (Days 4–6)
-* Codify `validation/arena_constraints.shacl.ttl` with physical/kinematic invariant shapes.
-* Integrate in-memory `pyshacl` validation directly into `EnvironmentGenerationAgent.generate_spec()`.
+* Codify [`arena_constraints.shacl.ttl`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/ontology/arena_constraints.shacl.ttl) with physical/kinematic invariant shapes.
+* Integrate in-memory `pyshacl` validation directly into [`EnvironmentGenerationAgent.generate_spec()`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/environment_generation_agent.py).
 
 ### Phase 3: Lowering & Task Factory Adapters (Days 7–10)
-* Implement `isaaclab_arena/agentic_environment_generation/rdf_lowering.py` (SPARQL-star lowering).
-* Extend `arena_env_graph_task_conversion_utils.py` to support humanoid `mimic_env_cfg_factory` injection.
+* Implement [`isaaclab_arena/agentic_environment_generation/rdf_lowering.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/rdf_lowering.py) (SPARQL-star lowering).
+* Extend [`arena_env_graph_task_conversion_utils.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/environment_spec/arena_env_graph_task_conversion_utils.py) to support humanoid `mimic_env_cfg_factory` injection.
 
 ### Phase 4: MCP & Tooling Integration (Days 11–13)
 * Stand up local Neo4j Docker container and register `neo4j-mcp-server`.
 * Integrate `NVIDIA-Omniverse/kit-usd-agents` USD Code MCP.
-* Instrument `policy_runner.py` with `telemetry_to_prov.py` for automated evaluation recording.
+* Instrument [`policy_runner.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/evaluation/policy_runner.py) with `telemetry_to_prov.py` for automated evaluation recording.
 
 ### Phase 5: End-to-End G1 Validation & Benchmarks (Days 14–17)
 * Run a 100-scene automated benchmark spanning Unitree G1, OXE Droid, and Franka Emika.

@@ -24,7 +24,8 @@
     "-v", "${localEnv:HOME}/eval:/eval:rw",
     "-v", "${localEnv:HOME}/.aws:/root/.aws:rw",
     "-v", "${localEnv:HOME}/.config/gcloud:/root/.config/gcloud:rw",
-    "-v", "${localEnv:HOME}/.azure:/root/.azure:rw"
+    "-v", "${localEnv:HOME}/.azure:/root/.azure:rw",
+    "-v", "/var/run/docker.sock:/var/run/docker.sock"
   ],
   "containerEnv": {
     "DATASET_DIR": "/datasets/isaaclab_arena/locomanipulation_tutorial",
@@ -34,6 +35,10 @@
     "PYTHONPATH": "/workspaces/isaaclab_arena:/workspaces/isaaclab_arena/source:/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab:${containerEnv:PYTHONPATH}"
   },
   "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "version": "latest",
+      "enableOnStartup": true
+    },
     "ghcr.io/devcontainers/features/node:1": {
       "version": "lts"
     },

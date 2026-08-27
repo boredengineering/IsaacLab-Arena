@@ -5,7 +5,20 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORKSPACE_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+# Resolve the Git repository root (where .git and top-level .agents/ reside)
+WORKSPACE_DIR="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "${WORKSPACE_DIR}" ]; then
+  curr="${SCRIPT_DIR}"
+  while [ "${curr}" != "/" ]; do
+    if [ -d "${curr}/.git" ] || [ -d "${curr}/.agents" ]; then
+      WORKSPACE_DIR="${curr}"
+      break
+    fi
+    curr="$(dirname "${curr}")"
+  done
+fi
+WORKSPACE_DIR="${WORKSPACE_DIR:-${SCRIPT_DIR}/../../../..}"
 
 show_help() {
   echo "NVIDIA Agent Skills Installer (https://github.com/nvidia/skills)"

@@ -102,3 +102,20 @@ core.*
 
 # uv venv (Arena native install)
 .venv*/
+
+# Installed external NVIDIA Agent Skills catalog & skills CLI artifacts
+skills-lock.json
+.agents/skills-lock.json
+.hermes/
+.claude/
+
+# Ignore external downloaded skills in .agents/skills/
+.agents/skills/*/
+
+# Whitelist core first-party Arena skills (always tracked)
+!.agents/skills/commit-and-pr/
+!.agents/skills/dev-container/
+!.agents/skills/install-nvidia-skills/
+!.agents/skills/isaac-automator/
+!.agents/skills/isaac-installer/
+!.agents/skills/run-tests/

@@ -36,6 +36,8 @@
 
 # IDE stuff
 *.vscode
+.vscode/mcp.json
+.cursor/
 *.*~
 TAGS
 

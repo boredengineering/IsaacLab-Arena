@@ -22,7 +22,7 @@ mkdir -p "${TARGET_DIR}/.agents/skills/isaac-automator/session-memory"
 mkdir -p "${TARGET_DIR}/.agents/skills/isaac-installer/scripts"
 mkdir -p "${TARGET_DIR}/.agents/skills/isaac-installer/references"
 mkdir -p "${TARGET_DIR}/.agents/skills/isaac-installer/examples"
-mkdir -p "${TARGET_DIR}/.agents/skills/accelerated-computing-cudf"
+mkdir -p "${TARGET_DIR}/.agents/skills/install-nvidia-skills/scripts"
 mkdir -p "${TARGET_DIR}/.agents/memory/sessions"
 mkdir -p "${TARGET_DIR}/.agents/references/docs"
 mkdir -p "${TARGET_DIR}/.agents/references/templates"
@@ -262,19 +262,96 @@ EOF_PY
   echo "  ✓ Generated skills/isaac-installer/scripts/check_hardware.py"
 fi
 
-# 12. accelerated-computing-cudf skill
-if [ ! -f "${TARGET_DIR}/.agents/skills/accelerated-computing-cudf/SKILL.md" ]; then
-  cat <<'EOF_SKILL' > "${TARGET_DIR}/.agents/skills/accelerated-computing-cudf/SKILL.md"
+# 12. install-nvidia-skills (On-demand official NVIDIA skills installer)
+if [ ! -f "${TARGET_DIR}/.agents/skills/install-nvidia-skills/SKILL.md" ]; then
+  cat <<'EOF_SKILL' > "${TARGET_DIR}/.agents/skills/install-nvidia-skills/SKILL.md"
 ---
-name: accelerated-computing-cudf
-description: Official NVIDIA-authored guidance for cuDF GPU DataFrames, pandas acceleration, ETL, and HDF5 trajectory conversions.
+name: install-nvidia-skills
+description: Prompts the user and installs official NVIDIA agent skills on-demand from https://github.com/nvidia/skills (e.g., cuDF, CUDA, NeMo, cuOpt, Omniverse, DeepStream).
 ---
 
-# Accelerated Computing cuDF Skill
+# NVIDIA Agent Skills Installer
 
-Use cuDF to accelerate trajectory dataset conversions (LeRobot / HDF5 / Parquet) directly on GPU memory.
+The official NVIDIA Agent Skills repository (`https://github.com/nvidia/skills`) contains 340+ specialized agent skills (such as `accelerated-computing-cudf`, `cupynumeric-guide`, `cudaq-guide`, `cuopt-overview`, `nemo-curator`, etc.).
+
+Because downloading and cloning the entire catalog takes noticeable network bandwidth and time (~1-2 minutes), **always prompt the user before installing** or install only the specific requested skill.
+
+## Interaction Rule for the Agent
+
+When the user asks for NVIDIA accelerated computing features, cuDF/GPU DataFrames, or official NVIDIA workflows:
+1. Check if the required skill is already present in `.agents/skills/<skill-name>/`.
+2. If not installed, ask the user if they would like to:
+   - **Fast Install**: Install only the specific needed skill (e.g. `accelerated-computing-cudf`, takes ~5 seconds).
+   - **Full Install**: Install the complete NVIDIA Skills catalog (340+ skills, takes ~1-2 minutes).
+   - **Skip**: Continue without downloading external skills.
+3. Execute the installer script based on the user's choice.
+
+## Usage
+
+Run the bundled installer script:
+
+```bash
+# Quick install for a specific skill (e.g. cuDF / GPU DataFrames)
+bash .agents/skills/install-nvidia-skills/scripts/install_nvidia_skills.sh --skill accelerated-computing-cudf
+
+# List available skills from the upstream catalog
+bash .agents/skills/install-nvidia-skills/scripts/install_nvidia_skills.sh --list
+
+# Install all skills from the catalog (takes ~1-2 mins)
+bash .agents/skills/install-nvidia-skills/scripts/install_nvidia_skills.sh --all
+```
 EOF_SKILL
-  echo "  ✓ Generated skills/accelerated-computing-cudf/SKILL.md"
+  echo "  ✓ Generated skills/install-nvidia-skills/SKILL.md"
+fi
+
+if [ ! -f "${TARGET_DIR}/.agents/skills/install-nvidia-skills/scripts/install_nvidia_skills.sh" ]; then
+  cat <<'EOF_SH' > "${TARGET_DIR}/.agents/skills/install-nvidia-skills/scripts/install_nvidia_skills.sh"
+#!/usr/bin/env bash
+# ==============================================================================
+# NVIDIA Agent Skills Installer (https://github.com/nvidia/skills)
+# ==============================================================================
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+
+show_help() {
+  echo "NVIDIA Agent Skills Installer (https://github.com/nvidia/skills)"
+  echo ""
+  echo "Usage:"
+  echo "  $0 --skill <name>   Install a specific NVIDIA skill (e.g. accelerated-computing-cudf)"
+  echo "  $0 --all            Install the full NVIDIA skills catalog (340+ skills, ~1-2 min)"
+  echo "  $0 --list           List all available skills from the upstream repository"
+  echo "  $0 --help           Show this help message"
+}
+
+case "${1:-}" in
+  --skill|-s)
+    SKILL_NAME="${2:-}"
+    if [ -z "$SKILL_NAME" ]; then
+      echo "❌ Error: --skill requires a skill name."
+      exit 1
+    fi
+    echo "📦 Installing NVIDIA skill '${SKILL_NAME}' into ${WORKSPACE_DIR}/.agents/skills/..."
+    (cd "${WORKSPACE_DIR}" && npx -y skills add nvidia/skills --skill "${SKILL_NAME}" --copy -y)
+    echo "✨ Skill '${SKILL_NAME}' installed successfully."
+    ;;
+  --all|-a)
+    echo "📦 Installing full NVIDIA skills catalog (~340+ skills) into ${WORKSPACE_DIR}/.agents/skills/..."
+    (cd "${WORKSPACE_DIR}" && npx -y skills add nvidia/skills --skill '*' --copy -y)
+    echo "✨ All NVIDIA skills installed successfully."
+    ;;
+  --list|-l)
+    echo "🔍 Fetching available skills from https://github.com/nvidia/skills..."
+    npx -y skills add nvidia/skills --list
+    ;;
+  *)
+    show_help
+    ;;
+esac
+EOF_SH
+  chmod +x "${TARGET_DIR}/.agents/skills/install-nvidia-skills/scripts/install_nvidia_skills.sh"
+  echo "  ✓ Generated skills/install-nvidia-skills/scripts/install_nvidia_skills.sh"
 fi
 
 # 13. Reference Templates
@@ -350,5 +427,49 @@ Troubleshooting guide for CUTLASS CuTe DSL, SDPA fallback modes (`GR00T_DIT_SDPA
 EOF_DOC
   echo "  ✓ Generated .agents/references/docs/debugging_arena_gr00t.md"
 fi
+
+# 15. Agent MCP Servers Configuration (Antigravity, VS Code, Cursor, Claude Code)
+mkdir -p /root/.gemini/config "${TARGET_DIR}/.vscode" "${TARGET_DIR}/.cursor"
+
+# Master MCP configuration (ansible, gcp-cloud, playwright, terraform, filesystem)
+cat <<'EOF_MCP' > /root/.gemini/config/mcp_config.json
+{
+  "mcpServers": {
+    "ansible": {
+      "command": "ansible-mcp-server",
+      "args": []
+    },
+    "gcp-cloud": {
+      "command": "gcloud-mcp",
+      "args": []
+    },
+    "playwright": {
+      "command": "playwright-mcp-server",
+      "args": []
+    },
+    "terraform": {
+      "command": "/usr/local/bin/terraform-mcp-server",
+      "args": []
+    },
+    "filesystem": {
+      "command": "mcp-server-filesystem",
+      "args": [
+        "/workspaces"
+      ]
+    }
+  }
+}
+EOF_MCP
+chmod 644 /root/.gemini/config/mcp_config.json
+
+# VS Code & Cursor workspace MCP configuration
+cp /root/.gemini/config/mcp_config.json "${TARGET_DIR}/.vscode/mcp.json"
+cp /root/.gemini/config/mcp_config.json "${TARGET_DIR}/.cursor/mcp.json"
+
+# Claude Code global MCP configuration
+cp /root/.gemini/config/mcp_config.json /root/.claude.json
+chmod 644 /root/.claude.json
+
+echo "  ✓ Configured MCP servers for Antigravity, VS Code, Cursor, and Claude Code"
 
 echo "✨ [Physical AI Agent Initializer] Workspace initialization complete!"

@@ -111,6 +111,21 @@ class EnvironmentGenerationAgent:
                 return None, spec.to_dict()
             spec = resolved
 
+        # Ensure root anchor relation exists for physical placement solver
+        has_anchor = any(r.kind == "is_anchor" for r in spec.relations)
+        if not has_anchor and spec.background:
+            from isaaclab_arena.environment_spec.arena_env_graph_spec import SpatialRelationSpec
+
+            spec.relations.insert(
+                0,
+                SpatialRelationSpec(
+                    kind="is_anchor",
+                    subject=spec.background.id,
+                    reference=None,
+                    params={},
+                ),
+            )
+
         # Semantic validation against W3C SHACL constraints
         try:
             from isaaclab_arena.agentic_environment_generation.rdf_lowering import spec_to_rdf_graph

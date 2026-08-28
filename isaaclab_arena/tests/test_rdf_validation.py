@@ -124,3 +124,42 @@ def test_narrow_corridor_clearance_fails_shacl():
     conforms, report = validate_rdf_environment_graph(graph)
     assert not conforms
     assert "0.60" in report or "clearance" in report.lower()
+
+
+HIERARCHICAL_VIOLATION_TTL = """
+@prefix :      <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+
+:scene_005 a arena:EnvironmentGraph ;
+    arena:envName "invalid_flat_placement" ;
+    arena:hasTerrain :ground ;
+    arena:hasEmbodiment :robot ;
+    arena:hasFixture :room ;
+    arena:hasObject :shelf, :box .
+
+:ground a arena:Terrain ;
+    arena:registryName "default_ground_plane" .
+
+:robot a arena:Embodiment ;
+    arena:registryName "unitree_g1" .
+
+:room a arena:Fixture ;
+    arena:registryName "galileo" .
+
+:shelf a arena:Furniture ;
+    arena:registryName "wireshelving" ;
+    arena:placedOn :room .
+
+:box a arena:RigidObject ;
+    arena:registryName "brown_box" ;
+    arena:placedOn :room . # Violates: should be on :shelf!
+"""
+
+
+def test_hierarchical_placement_fails_shacl_when_fixture_bypassed():
+    graph = rdflib.Graph()
+    graph.parse(data=HIERARCHICAL_VIOLATION_TTL, format="turtle")
+    conforms, report = validate_rdf_environment_graph(graph)
+    assert not conforms
+    assert "HierarchicalPlacementShape" in report or "furniture" in report.lower()
+

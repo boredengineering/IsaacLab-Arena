@@ -99,6 +99,12 @@ def add_agentic_env_gen_runner_cli_args(parser: argparse.ArgumentParser) -> None
         help="Directory for the generated YAML files (default: isaaclab_arena_environments/agent_generated).",
     )
     group.add_argument(
+        "--api_key",
+        type=str,
+        default=None,
+        help="Explicit API key for inference backend (default: NV_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY).",
+    )
+    group.add_argument(
         "--record_viewport_video",
         action="store_true",
         default=False,
@@ -132,6 +138,8 @@ def resolve_env_spec(args_cli: argparse.Namespace) -> Path:
         agent_kwargs["model"] = args_cli.model
     if args_cli.base_url:
         agent_kwargs["base_url"] = args_cli.base_url
+    if args_cli.api_key:
+        agent_kwargs["api_key"] = args_cli.api_key
     agent = EnvironmentGenerationAgent(**agent_kwargs)
     env_graph_spec, data = agent.generate_spec(
         args_cli.prompt,

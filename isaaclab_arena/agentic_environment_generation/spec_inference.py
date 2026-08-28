@@ -108,8 +108,10 @@ GUIDANCE:
   suffixes in ``id``.
 - Only populate ``object_references`` when the prompt explicitly mentions surfaces or appliances
   inside the background; otherwise leave it unset.
-- For each ``object_reference``, leave ``prim_path`` empty.
-- REQUIRED: include an ``is_anchor`` relation on the resting surface (background or an
-  ``object_reference`` within it).
-- All objects need an ``on`` relation with that anchor as ``reference``.
+- HIERARCHICAL SPATIAL PLACEMENT:
+  * When fixtures/furniture (e.g., wireshelving, maple_table, kitchen_counter) and movable items (e.g., brown_box, mustard_bottle, fruit, bowl) are present:
+    - Small movable items MUST have their 'on' relation reference the fixture/shelf (e.g., subject: 'brown_box', reference: 'wireshelving', params: {'surface_anchor': 'shelf_tier_1'}), NOT the room background.
+    - The fixture/shelf itself MUST have its 'on' relation reference the room background (e.g., subject: 'wireshelving', reference: 'galileo').
+    - Floor receptacles (e.g., blue_sorting_bin, floor zone) can reference the room background directly.
+  * For single tabletop backgrounds (e.g., maple_table_robolab), include an ``is_anchor`` relation on the resting surface and place items on it.
 """

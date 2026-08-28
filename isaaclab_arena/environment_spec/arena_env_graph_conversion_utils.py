@@ -122,7 +122,16 @@ def instantiate_assets_from_spec(
     for obj in graph_spec.objects:
         params = dict(obj.params)
         params.setdefault("instance_name", obj.id)
-        assets_by_node_id[obj.id] = asset_registry.get_asset_by_name(obj.registry_name)(**params)
+        initial_pose_data = params.pop("initial_pose", None)
+        asset_instance = asset_registry.get_asset_by_name(obj.registry_name)(**params)
+        if initial_pose_data and hasattr(asset_instance, "set_initial_pose"):
+            if isinstance(initial_pose_data, dict):
+                pos = tuple(initial_pose_data.get("position_xyz", [0.0, 0.0, 0.0]))
+                rot = tuple(initial_pose_data.get("rotation_xyzw", [0.0, 0.0, 0.0, 1.0]))
+                asset_instance.set_initial_pose(Pose(position_xyz=pos, rotation_xyzw=rot))
+            elif isinstance(initial_pose_data, Pose):
+                asset_instance.set_initial_pose(initial_pose_data)
+        assets_by_node_id[obj.id] = asset_instance
 
     for ref in graph_spec.object_references or []:
         assert ref.prim_path is not None, "Object reference must have a prim path"
@@ -151,13 +160,18 @@ def _attach_spatial_relations_to_assets(
     relations: list[SpatialRelationSpec], assets_by_node_id: dict[str, type[Asset]]
 ) -> None:
     """Attach one Relation per spatial relation to the asset(s) it targets, in place."""
+    import inspect
+
     for relation in relations:
         subject_asset = assets_by_node_id[relation.subject]
         relation_class = ObjectRelationLibraryRegistry().get_object_relation_by_name(relation.kind)
+        sig = inspect.signature(relation_class.__init__)
+        valid_kwargs = {k: v for k, v in relation.params.items() if k in sig.parameters}
         if relation_class.is_unary():
-            subject_asset.add_relation(relation_class(**relation.params))
+            subject_asset.add_relation(relation_class(**valid_kwargs))
             if relation.kind == "is_anchor" and subject_asset.get_initial_pose() is None:
                 subject_asset.set_initial_pose(Pose.identity())
         else:
             reference_asset = assets_by_node_id[relation.reference]
-            subject_asset.add_relation(relation_class(reference_asset, **relation.params))
+            subject_asset.add_relation(relation_class(reference_asset, **valid_kwargs))
+

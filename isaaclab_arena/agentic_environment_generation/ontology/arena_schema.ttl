@@ -31,8 +31,14 @@ arena:RigidObject a owl:Class, rdfs:Class ;
     rdfs:label "Rigid Object" ;
     rdfs:subClassOf arena:SceneEntity .
 
+arena:Camera a owl:Class, rdfs:Class ;
+    rdfs:label "Camera" ;
+    rdfs:comment "Sensory or viewport camera observing the scene or robot." ;
+    rdfs:subClassOf arena:SceneEntity .
+
 arena:EvaluationRun a owl:Class, rdfs:Class ;
     rdfs:label "Evaluation Run" ;
+    rdfs:comment "Recorded policy execution run with provenance and metrics." ;
     rdfs:subClassOf prov:Entity .
 
 # Properties
@@ -51,6 +57,18 @@ arena:hasFixture a owl:ObjectProperty ;
 arena:hasObject a owl:ObjectProperty ;
     rdfs:domain arena:EnvironmentGraph ;
     rdfs:range arena:RigidObject .
+
+arena:hasCamera a owl:ObjectProperty ;
+    rdfs:domain arena:EnvironmentGraph ;
+    rdfs:range arena:Camera .
+
+arena:observes a owl:ObjectProperty ;
+    rdfs:domain arena:Camera ;
+    rdfs:range arena:SceneEntity .
+
+arena:lookAtTarget a owl:ObjectProperty ;
+    rdfs:domain arena:Camera ;
+    rdfs:range arena:SceneEntity .
 
 arena:placedOn a owl:ObjectProperty ;
     rdfs:domain arena:RigidObject ;

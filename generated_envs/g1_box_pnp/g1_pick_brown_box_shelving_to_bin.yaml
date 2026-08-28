@@ -1,0 +1,45 @@
+env_name: g1_pick_brown_box_shelving_to_bin
+embodiment:
+  id: robot
+  registry_name: g1_wbc_pink
+  params: {}
+background:
+  id: galileo
+  registry_name: galileo
+  params: {}
+objects:
+- id: wireshelving
+  registry_name: wireshelving_a01_vomp_robolab
+  params: {}
+- id: brown_box
+  registry_name: brown_box
+  params: {}
+- id: blue_sorting_bin
+  registry_name: blue_sorting_bin
+  params: {}
+relations:
+- kind: is_anchor
+  subject: galileo
+  params: {}
+- kind: 'on'
+  subject: wireshelving
+  reference: galileo
+  params: {}
+- kind: 'on'
+  subject: brown_box
+  reference: wireshelving
+  params: {}
+- kind: 'on'
+  subject: blue_sorting_bin
+  reference: galileo
+  params: {}
+task:
+  composition: atomic
+  description: Pick up the brown box from the wire shelving and place it into the
+    blue sorting bin.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: brown_box
+      destination_location: blue_sorting_bin
+      background_scene: galileo

@@ -224,7 +224,12 @@ def spec_to_rdf_graph(spec: ArenaEnvGraphSpec) -> rdflib.Graph:
     # Objects
     for obj in spec.objects:
         obj_uri = INSTANCES[obj.id]
-        g.add((obj_uri, RDF.type, ARENA.RigidObject))
+        name_lower = obj.registry_name.lower()
+        if "shelf" in name_lower or "table" in name_lower or "counter" in name_lower:
+            g.add((obj_uri, RDF.type, ARENA.Fixture))
+            g.add((obj_uri, RDF.type, ARENA.Furniture))
+        else:
+            g.add((obj_uri, RDF.type, ARENA.RigidObject))
         g.add((obj_uri, ARENA.registryName, Literal(obj.registry_name, datatype=XSD.string)))
         g.add((scene_uri, ARENA.hasObject, obj_uri))
 
@@ -245,5 +250,13 @@ def spec_to_rdf_graph(spec: ArenaEnvGraphSpec) -> rdflib.Graph:
                 g.add((subj_uri, ARENA.surfaceAnchor, Literal(str(rel.params["surface_anchor"]), datatype=XSD.string)))
             if "nominal_height" in rel.params:
                 g.add((subj_uri, ARENA.nominalHeight, Literal(float(rel.params["nominal_height"]), datatype=XSD.float)))
+
+    # Cameras & Viewpoints
+    viewer_uri = INSTANCES[f"{spec.env_name or 'scene'}_viewer_cam"]
+    g.add((viewer_uri, RDF.type, ARENA.Camera))
+    target_id = spec.objects[0].id if spec.objects else (spec.background.id if spec.background else "scene")
+    g.add((viewer_uri, ARENA.observes, INSTANCES[target_id]))
+    g.add((viewer_uri, ARENA.lookAtTarget, INSTANCES[target_id]))
+    g.add((scene_uri, ARENA.hasCamera, viewer_uri))
 
     return g

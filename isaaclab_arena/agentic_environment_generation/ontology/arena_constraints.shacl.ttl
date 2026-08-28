@@ -44,3 +44,35 @@ arena:LocomotionCorridorClearanceShape a sh:NodeShape ;
             }
         """ ;
     ] .
+
+# 4. Hierarchical Placement Invariant: Manipulands must be placed on furniture/fixtures when present
+arena:HierarchicalPlacementShape a sh:NodeShape ;
+    sh:targetClass arena:EnvironmentGraph ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "ERROR: When a furniture fixture (e.g., shelving, table) is present, manipulands must be placed on the fixture rather than directly on the room background." ;
+        sh:select """
+            PREFIX arena: <https://isaac-sim.github.io/arena/schema#>
+            SELECT $this
+            WHERE {
+                $this arena:hasObject ?obj .
+                $this arena:hasObject ?fixture .
+                ?fixture a arena:Furniture .
+                ?obj a arena:RigidObject .
+                $this arena:hasFixture ?bg .
+                ?obj arena:placedOn ?bg .
+                FILTER (?obj != ?fixture)
+            }
+        """ ;
+    ] .
+
+# 5. Camera Observation Invariant: Camera must declare an observation target
+arena:CameraObservationShape a sh:NodeShape ;
+    sh:targetClass arena:Camera ;
+    sh:property [
+        sh:path arena:observes ;
+        sh:minCount 1 ;
+        sh:message "ERROR: Every Camera in the EnvironmentGraph must declare an 'arena:observes' relationship pointing to a scene entity." ;
+    ] .
+
+

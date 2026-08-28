@@ -187,6 +187,33 @@ CREATE (box)-[:NAV_CORRIDOR_TO {
 }]->(bin);
 ```
 
+### 2.2 Camera Semantic Representation & Viewport Grounding
+
+To prevent "black screen" viewports (where the camera points into empty building space or unanchored voids), Cameras are modeled as first-class semantic entities in RDF-star and Neo4j LPG:
+
+```mermaid
+flowchart LR
+    CAM[":task_viewer_cam\na arena:Camera"] -->|arena:observes| FIXTURE[":wireshelving\na arena:Fixture"]
+    CAM -->|arena:lookAtTarget| OBJ[":brown_box\na arena:RigidObject"]
+    ROBOT[":g1_robot\na arena:Embodiment"] -->|arena:standsNear| FIXTURE
+```
+
+```turtle
+# RDF-star Camera Triples
+:scene_001 arena:hasCamera :task_viewer_cam .
+
+:task_viewer_cam a arena:Camera ;
+    arena:observes :wireshelving ;
+    arena:lookAtTarget :brown_box ;
+    arena:eyeOffset [-1.5, -1.5, 1.5] ;
+    arena:fov "65.0"^^xsd:float .
+```
+
+* **Root Cause of Black Screen**: In massive environment USDs (e.g. `galileo` spanning $\pm 100\text{m}$), unanchored furniture placements scatter outside the active room zone. When the viewport camera targets the unanchored object, it points into the outer void.
+* **Solution**:
+  1. Primary interaction furniture (`wireshelving`, `table`) carries an explicit workspace initial pose (e.g., `position_xyz: [0.0, 1.1, 0.0]`) and is marked `is_anchor`.
+  2. The camera is semantically linked to observe the primary fixture/manipuland, ensuring the viewport is always centered on the robot and workspace.
+
 ---
 
 ## 3. Implemented Codebase Touchpoints
@@ -465,13 +492,13 @@ flowchart TD
 
 ## 9. Architectural Exploration Options & Trade-Offs
 
-| Dimension | Option A: In-Memory RDFLib/SHACL *(Active)* | Option B: Neo4j LPG Dual-Store | Option C: RDF-star + cuOpt CSP | Option D: Live Sim MCP Loop |
+| Dimension | Option A: In-Memory RDFLib/SHACL *(Active)* | Option B: Neo4j LPG Dual-Store *(Active)* | Option C: RDF-star + cuOpt CSP | Option D: Live Sim MCP Loop |
 | :--- | :--- | :--- | :--- | :--- |
 | **Primary Strength** | Zero infra overhead; purely in-process Python | Rich Cypher graph querying & visual exploration (Bloom) | Solves highly complex 3D object clutter & collision constraints on GPU | Immediate interactive visual feedback inside Isaac Sim viewport |
 | **Infrastructure** | None (`pip install rdflib pyshacl`) | Docker container (`neo4j:5.26`) | NVIDIA GPU with cuOpt library | Running Isaac Sim Kit instance + MCP socket |
-| **Verification Speed** | Ultra-fast (<15ms per scene) | Moderate (~100ms via Bolt) | Ultra-fast GPU solve (<10ms) | Real-time interactive |
+| **Verification Speed** | Ultra-fast (<15ms per scene) | Fast (~25ms via Bolt) | Ultra-fast GPU solve (<10ms) | Real-time interactive |
 | **Graph Scaling** | Up to $10^5$ triples | Up to $10^8$ nodes/edges | Continuous bounds | Single active stage |
-| **Current Status** | **Implemented & Verified** | Next Phase Target | Exploration Option | Exploration Option |
+| **Current Status** | **Implemented & Verified** | **Implemented & Verified** | Exploration Option | Exploration Option |
 
 ---
 
@@ -479,15 +506,18 @@ flowchart TD
 
 ### Step 1: Install Python Graph Semantic Stack *(Completed)*
 ```bash
-pip install rdflib==7.6.0 pyshacl==0.40.1
+pip install rdflib==7.6.0 pyshacl==0.40.1 neo4j==6.2.0
 ```
 
-### Step 2: Register Neo4j MCP Server (`neo4j-mcp-server`)
-1. Run local Neo4j Community instance via Docker:
+### Step 2: Register Neo4j MCP Server & Container (`neo4j-mcp-server`)
+1. Run local Neo4j Community instance via Docker with advertised ports:
    ```bash
    docker run -d --name neo4j-arena \
-       -p 7474:7474 -p 7687:7687 \
+       -p 7475:7474 -p 7688:7687 \
        -e NEO4J_AUTH=neo4j/isaaclab_arena_password \
+       -e NEO4J_dbms_default__advertised__address=localhost \
+       -e NEO4J_dbms_connector_bolt_advertised__address=localhost:7688 \
+       -e NEO4J_dbms_connector_http_advertised__address=localhost:7475 \
        neo4j:5.26-community
    ```
 2. Configure MCP server in Antigravity / Claude config:
@@ -498,7 +528,7 @@ pip install rdflib==7.6.0 pyshacl==0.40.1
          "command": "uvx",
          "args": [
            "neo4j-mcp-server",
-           "--neo4j-uri", "bolt://localhost:7687",
+           "--neo4j-uri", "bolt://localhost:7688",
            "--neo4j-user", "neo4j",
            "--neo4j-password", "isaaclab_arena_password"
          ]
@@ -604,11 +634,7 @@ docker exec -it isaaclab_arena-latest /isaac-sim/python.sh \
 
 #### C. All-in-One End-to-End Generation & Video Recording (`--mode full`):
 ```bash
-docker exec -it \
-  -e GEMINI_API_KEY="$GEMINI_API_KEY" \
-  -e OPENAI_API_KEY="$GEMINI_API_KEY" \
-  -e OPENAI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/" \
-  isaaclab_arena-latest /isaac-sim/python.sh \
+docker exec -it isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
   --mode full \
   --headless \
@@ -616,8 +642,10 @@ docker exec -it \
   --num_steps 100 \
   --enable_cameras \
   --record_viewport_video \
+  --api_key "$GEMINI_API_KEY" \
+  --base_url "https://generativelanguage.googleapis.com/v1beta/openai/" \
   --model "gemini-3.6-flash" \
-  --prompt "Unitree G1 humanoid pick up brown box from the shelf in galileo room and place it into the blue sorting bin" \
+  --prompt "Unitree G1 humanoid pick up brown box from the wireshelving in galileo room and place it into the blue sorting bin" \
   --out_dir /workspaces/isaaclab_arena/generated_envs/g1_box_pnp
 ```
 
@@ -736,6 +764,144 @@ Inspect and query the generated Labeled Property Graph (LPG) in Neo4j:
      ```cypher
      MATCH (n)-[r]->(m) RETURN n, r, m
      ```
+
+---
+
+## 13. Telescopic USD Scene Hierarchy & Dollhouse Unpacking Architecture
+
+### 13.1 The "Dollhouse" Mental Model
+
+A complex 3D simulation environment (e.g. a warehouse, kitchen, or laboratory USD) is not a single flat mesh, but a **structured architectural dollhouse**. Within this dollhouse, spatial containment unfolds telescopically across 6 discrete abstraction tiers:
+
+```mermaid
+flowchart TD
+    subgraph TIER_0 ["Tier 0: Root World Stage & Background Dollhouse"]
+        USD_BG["Scene USD Stage (e.g., galileo_simplified.usd, robocasa_kitchen.usd)\n• Root Transform, Physics Scene, Environment Lighting"]
+    end
+
+    subgraph TIER_1 ["Tier 1: Introspected Scene Sub-Zones & Built-in Prims"]
+        USD_PRIM_1["Built-in Storage Bay\n/World/galileo/StorageBay_01"]
+        USD_PRIM_2["Built-in Reception Counter\n/World/galileo/ReceptionCounter"]
+        USD_PRIM_3["Built-in Floor Staging Area\n/World/galileo/FloorZone_North"]
+    end
+
+    USD_BG -->|USD Stage Introspection| USD_PRIM_1
+    USD_BG -->|USD Stage Introspection| USD_PRIM_2
+    USD_BG -->|USD Stage Introspection| USD_PRIM_3
+
+    subgraph TIER_2 ["Tier 2: Spawned Furniture & Fixtures"]
+        FURN_1["Wire Shelving Unit\n(:wireshelving a arena:Furniture)"]
+        FURN_2["Sorting Bin Receptacle\n(:blue_sorting_bin a arena:Receptacle)"]
+    end
+
+    USD_PRIM_1 -->|ATTACHED_TO_PRIM| FURN_1
+    USD_PRIM_3 -->|ATTACHED_TO_PRIM| FURN_2
+
+    subgraph TIER_3 ["Tier 3: Introspected Fixture Sub-Surfaces & Tiers"]
+        SHELF_T1["Shelf Tier 1 (Lower Surface: z=0.45m)"]
+        SHELF_T2["Shelf Tier 2 (Middle Surface: z=0.75m)"]
+        SHELF_T3["Shelf Tier 3 (Upper Surface: z=1.15m)"]
+    end
+
+    FURN_1 -->|HAS_SUB_SURFACE| SHELF_T1
+    FURN_1 -->|HAS_SUB_SURFACE| SHELF_T2
+    FURN_1 -->|HAS_SUB_SURFACE| SHELF_T3
+
+    subgraph TIER_4 ["Tier 4: Manipulands & Dynamic Rigid Objects"]
+        OBJ_1["Brown Packaging Box\n(:brown_box a arena:RigidObject)"]
+    end
+
+    SHELF_T2 -->|PLACED_ON_TIER {clearance: 0.02m}| OBJ_1
+
+    subgraph TIER_5 ["Tier 5: Embodiment Standoff & Affordance Waypoints"]
+        ROBOT["Unitree G1 Bipedal Humanoid\n(:g1_robot a arena:Embodiment)"]
+    end
+
+    FURN_1 -->|STANDS_AT_AFFORDANCE {offset: [0.0, -0.85, 0.0], yaw: 90°}| ROBOT
+
+    subgraph TIER_6 ["Tier 6: Observational & Viewport Cameras"]
+        CAM["Task Viewport Camera\n(:spectator_cam a arena:Camera)"]
+    end
+
+    OBJ_1 -->|OBSERVES_INTERACTION_ZONE {eye: [-1.2, -1.0, 1.8], fov: 65°}| CAM
+```
+
+### 13.2 Telescopic RDF-star & LPG Schema Representation
+
+In the Property Graph, this multi-tier containment is encoded directly as attributed edges:
+
+```turtle
+# 1. Background Scene Introspection
+:galileo a arena:BackgroundScene ;
+    arena:usdPath "assets/galileo_simplified.usd" ;
+    arena:hasSubPrim :galileo_storage_bay_01, :galileo_floor_zone_north .
+
+:galileo_storage_bay_01 a arena:USDPrim ;
+    arena:primPath "/World/galileo/StorageBay_01" ;
+    arena:primType "Xform" ;
+    arena:worldCenter [ 0.0, 1.1, 0.0 ] ;
+    arena:bounds [ -1.0, 1.0, -0.5, 0.5, 0.0, 2.5 ] .
+
+# 2. Spawning Furniture inside the Dollhouse Room
+:wireshelving a arena:Furniture, arena:Fixture ;
+    arena:registryName "wireshelving_a01_vomp_robolab" ;
+    arena:attachedToPrim :galileo_storage_bay_01 ;
+    arena:hasSubSurface :shelf_tier_1, :shelf_tier_2, :shelf_tier_3 .
+
+:shelf_tier_2 a arena:SurfaceAnchor ;
+    arena:anchorName "shelf_tier_2" ;
+    arena:nominalHeight 0.75 ;
+    arena:usableArea [ 0.80, 0.40 ] .
+
+# 3. Placing Manipuland on the Shelf Tier
+<< :brown_box arena:placedOnSubSurface :shelf_tier_2 >>
+    arena:clearance "0.02"^^xsd:float ;
+    arena:contactNormal [ 0.0, 0.0, 1.0 ] .
+
+# 4. Robot Affordance Standoff
+<< :g1_robot arena:standsAtAffordance :wireshelving >>
+    arena:standoffDistance "0.85"^^xsd:float ;
+    arena:relativeHeading "front_facing" ;
+    arena:kinematicReachability true .
+
+# 5. Semantic Camera Grounding
+<< :task_viewer_cam arena:observesInteraction :wireshelving >>
+    arena:lookAtTarget :brown_box ;
+    arena:eyeOffset [ -1.5, -1.5, 1.5 ] ;
+    arena:fov "65.0"^^xsd:float .
+```
+
+### 13.3 Cypher Telescopic Query Patterns (Neo4j)
+
+```cypher
+// Query: Find the complete telescopic path from building down to manipuland and observing camera
+MATCH path = (bg:BackgroundScene)-[:CONTAINS_PRIM]->(zone:USDPrim)
+             <-[:ATTACHED_TO_PRIM]-(furn:Furniture)
+             -[:HAS_SUB_SURFACE]->(tier:SurfaceAnchor)
+             <-[:PLACED_ON_SUB_SURFACE]-(obj:RigidObject)
+MATCH (furn)<-[:STANDS_AT_AFFORDANCE]-(bot:Embodiment)
+MATCH (obj)<-[:OBSERVES_INTERACTION_ZONE]-(cam:Camera)
+RETURN bg.id AS room, zone.prim_path AS room_zone, furn.id AS fixture, 
+       tier.anchorName AS shelf_tier, obj.id AS object, 
+       bot.id AS robot, cam.id AS camera;
+```
+
+### 13.4 Two-Pass Telescopic Resolution Engine
+
+1. **Pass 1 (USD Dollhouse Introspection & Zone Selection)**:
+   * The agent queries the Background USD Prim Tree (using `load_usd_prim_tree()`) to inspect available sub-prims (rooms, tables, bays, counters).
+   * Generates `ObjectReference`s mapping semantic task zones to USD prim paths.
+
+2. **Pass 2 (Furniture & Manipuland Telescopic Lowering)**:
+   * Spawns furniture fixtures anchored to the selected room prims.
+   * Places manipulands onto fixture surface tiers rather than floor bounds.
+   * Computes robot affordance standoff poses ($\approx 0.85\text{m}$ in front of the fixture).
+   * Generates camera eye and lookat targets focused on the interaction envelope.
+
+3. **SHACL Telescopic Invariant Gate**:
+   * Rejects any scene where an object is placed in a non-existent prim path or an unanchored building coordinate.
+   * Ensures the camera viewing vector intersects the bounding box of the active interaction zone.
+
 
 
 

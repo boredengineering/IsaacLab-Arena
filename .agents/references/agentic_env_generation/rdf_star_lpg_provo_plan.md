@@ -135,7 +135,8 @@ CREATE (box)-[:NAV_CORRIDOR_TO {
 | [`isaaclab_arena/agentic_environment_generation/prim_path_inference.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/prim_path_inference.py) | **COMPLETED & TESTED** | Resilient USD prim resolution with fallback handling for remote S3 layers. |
 | [`isaaclab_arena/evaluation/telemetry_to_prov.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/evaluation/telemetry_to_prov.py) | **COMPLETED & TESTED** | Serializes rollout metrics and execution activities into `eval_telemetry.ttl`. |
 | [`isaaclab_arena/evaluation/policy_runner.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/evaluation/policy_runner.py) | **COMPLETED & TESTED** | Hooked rank-0 PROV-O telemetry serialization before evaluation reporting. |
-| [`isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py) | **COMPLETED & TESTED** | CLI runner supporting `--mode {full, resolve, build}`, `--base_url`, `--record_viewport_video`, and `--record_camera_video`. |
+| [`isaaclab_arena/agentic_environment_generation/lpg_neo4j_sync.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/lpg_neo4j_sync.py) | **COMPLETED & TESTED** | Native Cypher LPG synchronization, rich edge properties, and spatial hierarchy querying. |
+| [`isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py) | **COMPLETED & TESTED** | CLI runner supporting `--mode {full, resolve, build}`, `--base_url`, video recording, and automated Neo4j sync. |
 
 ---
 
@@ -452,9 +453,9 @@ gantt
     Phase 1: Core Ontologies & Schemas     :done, p1, 2026-08-27, 1d
     Phase 2: SHACL Validation & Agent Loop :done, p2, 2026-08-28, 1d
     Phase 3: Lowering, Lifting & PROV-O    :done, p3, 2026-08-28, 1d
+    Phase 4: Neo4j LPG Dual-Store Sync     :done, p4, 2026-08-28, 1d
     section Next Phases
-    Phase 4: Neo4j LPG Dual-Store Sync     :active, p4, 2026-08-29, 3d
-    Phase 5: Automated G1 100-Scene Evals  :p5, after p4, 4d
+    Phase 5: Automated G1 100-Scene Evals  :active, p5, 2026-08-29, 4d
 ```
 
 ---

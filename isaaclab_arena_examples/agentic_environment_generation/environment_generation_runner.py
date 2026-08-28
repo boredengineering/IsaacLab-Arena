@@ -156,6 +156,20 @@ def resolve_env_spec(args_cli: argparse.Namespace) -> Path:
     )
     path = write_env_graph_spec(env_graph_spec, args_cli.out_dir)
     print(f"[runner] wrote environment graph spec → {path}", flush=True)
+
+    # Optional Neo4j LPG synchronization (Phase 4)
+    try:
+        from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
+
+        lpg_summary = sync_spec_to_neo4j(env_graph_spec)
+        print(
+            f"[runner] synced to Neo4j LPG → {lpg_summary.get('node_count', 0)} nodes, "
+            f"{lpg_summary.get('rel_count', 0)} relations",
+            flush=True,
+        )
+    except Exception:
+        pass
+
     return path
 
 

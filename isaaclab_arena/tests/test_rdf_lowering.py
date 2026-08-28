@@ -83,3 +83,39 @@ def test_spec_to_rdf_graph_lifting_and_validation():
     lifted_graph = spec_to_rdf_graph(spec)
     conforms, report = validate_rdf_environment_graph(lifted_graph)
     assert conforms, f"Lifted graph failed SHACL validation:\n{report}"
+
+
+def test_telescopic_dollhouse_lifting_and_containment_triples():
+    from isaaclab_arena.agentic_environment_generation.rdf_lowering import spec_to_rdf_graph
+    from isaaclab_arena.environment_spec.arena_env_graph_types import AssetSpec, CompositeTaskSpec, SpatialRelationSpec, TaskSpec
+
+    spec = ArenaEnvGraphSpec(
+        env_name="test_dollhouse_env",
+        embodiment=AssetSpec(id="g1", registry_name="g1_wbc_joint"),
+        background=AssetSpec(id="galileo", registry_name="galileo_locomanip"),
+        objects=[
+            AssetSpec(id="wireshelving", registry_name="wireshelving_a01_vomp_robolab"),
+            AssetSpec(id="brown_box", registry_name="brown_box"),
+        ],
+        relations=[
+            SpatialRelationSpec(kind="is_anchor", subject="galileo"),
+            SpatialRelationSpec(kind="on", subject="wireshelving", reference="galileo"),
+            SpatialRelationSpec(kind="on", subject="brown_box", reference="wireshelving", params={"surface_anchor": "shelf_tier_2", "nominal_height": 0.75}),
+        ],
+        task=CompositeTaskSpec(
+            composition="atomic",
+            description="Pick brown box from shelving",
+            subtasks=[TaskSpec(kind="PickAndPlaceTask", params={"pick_up_object": "brown_box", "destination_location": "wireshelving"})],
+        ),
+    )
+
+
+    lifted = spec_to_rdf_graph(spec)
+    # Check that SurfaceAnchor and Camera nodes were generated
+    ARENA = rdflib.Namespace("https://isaac-sim.github.io/arena/schema#")
+    surface_anchors = list(lifted.subjects(rdflib.RDF.type, ARENA.SurfaceAnchor))
+    assert len(surface_anchors) >= 1
+
+    cameras = list(lifted.subjects(rdflib.RDF.type, ARENA.Camera))
+    assert len(cameras) >= 1
+

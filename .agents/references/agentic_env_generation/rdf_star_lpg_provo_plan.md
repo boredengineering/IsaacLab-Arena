@@ -20,31 +20,34 @@ This architecture addresses three foundational requirements:
 ```mermaid
 flowchart TD
     subgraph KNOWLEDGE_PLANE ["1. Semantic & Provenance Plane (RDF-star / LPG / PROV-O)"]
-        PROV["W3C PROV-O Lineage:\n• Agent (Gemini-3.6, Claude-3.7)\n• Activity (PromptSynthesis, CurriculumMutation)\n• Entity (TaskSpec, SceneGraph)"]
-        JSON_LD["JSON-LD 1.1 / JSON-star Schema\n(Strict Structured Output Contract)"]
-        LPG_STORE["Native Property Graph (Neo4j / Cypher):\n(:RigidObject)-[:PLACED_ON {height: 0.75}]->(:Fixture)"]
-        RDF_STAR["RDF-star Knowledge Graph:\n<< :box :placedOn :shelf >>\n  :contactAnchor :middle_tier ;\n  :metricBounds [x, y, z] ;\n  :clearance 0.08 ."]
-        SHACL["SHACL-star Validation Engine:\n• Mandatory Ground Plane Invariant\n• Kinematic Workspace Manifold Gate\n• Pink WBC Single-Thread Invariant\n• Locomotion Corridor Clearance Gate"]
+        PROV["W3C PROV-O Lineage:<br/>• Agent (Gemini-3.6, Claude-3.7)<br/>• Activity (PromptSynthesis, CurriculumMutation)<br/>• Entity (TaskSpec, SceneGraph)"]
+        JSON_LD["JSON-LD 1.1 / JSON-star Schema<br/>(Strict Structured Output Contract)"]
+        LPG_STORE["Native Property Graph (Neo4j / Cypher):<br/>(:RigidObject)-[:PLACED_ON {height: 0.75}]->(:Fixture)"]
+        RDF_STAR["RDF-star Knowledge Graph:<br/>&lt;&lt; :box :placedOn :shelf &gt;&gt;<br/>  :contactAnchor :middle_tier ;<br/>  :metricBounds [x, y, z] ;<br/>  :clearance 0.08 ."]
+        SHACL["SHACL-star Validation Engine:<br/>• Mandatory Ground Plane Invariant<br/>• Kinematic Workspace Manifold Gate<br/>• Pink WBC Single-Thread Invariant<br/>• Locomotion Corridor Clearance Gate"]
         
-        PROV --> JSON_LD --> LPG_STORE <== "Isomorphic Mapping" ==> RDF_STAR --> SHACL
+        PROV --> JSON_LD
+        JSON_LD --> LPG_STORE
+        LPG_STORE <-->|"Isomorphic Mapping"| RDF_STAR
+        RDF_STAR --> SHACL
     end
 
     subgraph COMPILER_PLANE ["2. Lowering & Compilation Plane"]
-        LOWER["Lowering Compiler (rdf_lowering.py):\nSPARQL-star / Cypher Query <== Bidirectional Lifting ==> ArenaEnvGraphSpec"]
-        SHACL ==> LOWER
+        LOWER["Lowering Compiler (rdf_lowering.py):<br/>SPARQL-star / Cypher Query &lt;== Bidirectional Lifting ==&gt; ArenaEnvGraphSpec"]
+        SHACL --> LOWER
     end
 
     subgraph SIMULATION_PLANE ["3. Physical Simulation Plane (Isaac Sim / PhysX / GR00T)"]
-        DOCKER_SIM["IsaacLab-Arena Docker Runtime:\n• Continuous Dynamics (50-1000 Hz)\n• Whole-Body Control (Pink / Joint WBC)\n• Multi-Camera Sensors (RGB-D)"]
-        GR00T_SRV["Isaac-GR00T Foundation Model Server:\n• Host / ZeroMQ (Port 5556 / 5558)"]
-        LOWER ==> DOCKER_SIM
-        DOCKER_SIM <== "ZeroMQ IPC (50 Hz)" ==> GR00T_SRV
+        DOCKER_SIM["IsaacLab-Arena Docker Runtime:<br/>• Continuous Dynamics (50-1000 Hz)<br/>• Whole-Body Control (Pink / Joint WBC)<br/>• Multi-Camera Sensors (RGB-D)"]
+        GR00T_SRV["Isaac-GR00T Foundation Model Server:<br/>• Host / ZeroMQ (Port 5556 / 5558)"]
+        LOWER --> DOCKER_SIM
+        DOCKER_SIM <-->|"ZeroMQ IPC (50 Hz)"| GR00T_SRV
     end
 
     subgraph TELEMETRY_PLANE ["4. Telemetry Backpropagation Loop"]
-        FEEDBACK["telemetry_to_prov.py:\n• Tier 3 Physics Settle Metrics\n• Tier 4 Task Success Phi(S_T)\n• Mean Step Latency & Trajectory MSE"]
+        FEEDBACK["telemetry_to_prov.py:<br/>• Tier 3 Physics Settle Metrics<br/>• Tier 4 Task Success Phi(S_T)<br/>• Mean Step Latency & Trajectory MSE"]
         DOCKER_SIM --> FEEDBACK
-        FEEDBACK ==> PROV
+        FEEDBACK --> PROV
     end
 ```
 
@@ -55,42 +58,49 @@ flowchart TD
 ```mermaid
 flowchart TD
     subgraph STAGE_1 ["1. Intent Synthesis & Reification"]
-        NL_PROMPT["Natural Language Prompt\n'Unitree G1 pick up brown box from shelf...'"]
-        LLM["LLM (Gemini 3.6 Flash / Claude 3.7)\nvia OpenAI-Compatible Endpoint"]
-        RAW_SPEC["Raw Environment Graph Spec\n(Pydantic / JSON-LD 1.1)"]
-        NL_PROMPT --> LLM --> RAW_SPEC
+        NL_PROMPT["Natural Language Prompt<br/>'Unitree G1 pick up brown box from shelf...'"]
+        LLM["LLM (Gemini 3.6 Flash / Claude 3.7)<br/>via OpenAI-Compatible Endpoint"]
+        RAW_SPEC["Raw Environment Graph Spec<br/>(Pydantic / JSON-LD 1.1)"]
+        NL_PROMPT --> LLM
+        LLM --> RAW_SPEC
     end
 
     subgraph STAGE_2 ["2. Semantic Invariant & SHACL Gate"]
-        LIFT["spec_to_rdf_graph()\n(Bidirectional Lifting)"]
-        RDF_STAR_NODE["RDF-star In-Memory Graph\n<< :brown_box :placedOn :wireshelving >>\n  :surfaceAnchor 'shelf_tier_1' ;\n  :nominalHeight 0.75 ."]
-        SHACL_GATE["SHACL-star Validator (pyshacl)\n• Terrain Plane Invariant\n• WBC Single-Thread Invariant\n• Corridor Clearance >= 0.60m\n• Fixture Containment Gate"]
-        RAW_SPEC --> LIFT --> RDF_STAR_NODE --> SHACL_GATE
+        LIFT["spec_to_rdf_graph()<br/>(Bidirectional Lifting)"]
+        RDF_STAR_NODE["RDF-star In-Memory Graph<br/>&lt;&lt; :brown_box :placedOn :wireshelving &gt;&gt;<br/>  :surfaceAnchor 'shelf_tier_1' ;<br/>  :nominalHeight 0.75 ."]
+        SHACL_GATE["SHACL-star Validator (pyshacl)<br/>• Terrain Plane Invariant<br/>• WBC Single-Thread Invariant<br/>• Corridor Clearance &gt;= 0.60m<br/>• Fixture Containment Gate"]
+        RAW_SPEC --> LIFT
+        LIFT --> RDF_STAR_NODE
+        RDF_STAR_NODE --> SHACL_GATE
     end
 
     subgraph STAGE_3 ["3. LPG Dual-Store Sync & Query"]
-        NEO4J_STORE["Neo4j Property Graph (neo4j-arena)\n• (:RigidObject)-[:PLACED_ON {height: 0.75}]->(:Fixture)\n• (:Embodiment)-[:STANDS_NEAR {distance: 0.85m}]->(:Fixture)\n• Cypher Spatial & Reachability Queries"]
+        NEO4J_STORE["Neo4j Property Graph (neo4j-arena)<br/>• (:RigidObject)-[:PLACED_ON {height: 0.75}]->(:Fixture)<br/>• (:Embodiment)-[:STANDS_NEAR {distance: 0.85m}]->(:Fixture)<br/>• Cypher Spatial & Reachability Queries"]
         SHACL_GATE ==>|"Valid Graph"| NEO4J_STORE
     end
 
     subgraph STAGE_4 ["4. Compilation & PhysX Simulation"]
-        LOWER_COMP["lower_rdf_graph_to_spec()\n(SPARQL-star Lowering Compiler)"]
-        YAML_SPEC["Validated Executable Spec YAML\n(g1_pick_and_place_brown_box.yaml)"]
-        BUILDER_PIPE["ArenaEnvBuilder & Task Factory\n(Scene Assembly & PhysX Spawners)"]
-        PHYSX_RUN["Isaac Sim / PhysX 6.0 Runtime\n• G1 Bipedal Locomotion (Pink WBC)\n• Stable Collision Settling\n• Viewport Video / GUI (--viz kit)"]
+        LOWER_COMP["lower_rdf_graph_to_spec()<br/>(SPARQL-star Lowering Compiler)"]
+        YAML_SPEC["Validated Executable Spec YAML<br/>(g1_pick_and_place_brown_box.yaml)"]
+        BUILDER_PIPE["ArenaEnvBuilder & Task Factory<br/>(Scene Assembly & PhysX Spawners)"]
+        PHYSX_RUN["Isaac Sim / PhysX 6.0 Runtime<br/>• G1 Bipedal Locomotion (Pink WBC)<br/>• Stable Collision Settling<br/>• Viewport Video / GUI (--viz kit)"]
         
-        SHACL_GATE ==> LOWER_COMP --> YAML_SPEC --> BUILDER_PIPE --> PHYSX_RUN
+        SHACL_GATE ==> LOWER_COMP
+        LOWER_COMP --> YAML_SPEC
+        YAML_SPEC --> BUILDER_PIPE
+        BUILDER_PIPE --> PHYSX_RUN
     end
 
     subgraph STAGE_5 ["5. Telemetry & Provenance Backpropagation"]
-        EVAL_PIPE["policy_runner.py Rollout\n(ZeroActionPolicy / GR00T Policy)"]
-        PROV_GRAPH["telemetry_to_prov.py\n(W3C PROV-O Graph: eval_telemetry.ttl)\n:eval_run prov:wasGeneratedBy :eval_act ;\n  prov:used :scene_graph, :model_checkpoint ;\n  arena:metric_success_rate 1.0 ."]
+        EVAL_PIPE["policy_runner.py Rollout<br/>(ZeroActionPolicy / GR00T Policy)"]
+        PROV_GRAPH["telemetry_to_prov.py<br/>(W3C PROV-O Graph: eval_telemetry.ttl)<br/>:eval_run prov:wasGeneratedBy :eval_act ;<br/>  prov:used :scene_graph, :model_checkpoint ;<br/>  arena:metric_success_rate 1.0 ."]
         
-        PHYSX_RUN --> EVAL_PIPE --> PROV_GRAPH
+        PHYSX_RUN --> EVAL_PIPE
+        EVAL_PIPE --> PROV_GRAPH
         PROV_GRAPH -.->|"Causal Feedback Loop"| NL_PROMPT
     end
 
-    SHACL_GATE -.->|"Violation Traces\n(Self-Healing Loop)"| LLM
+    SHACL_GATE -.->|"Violation Traces<br/>(Self-Healing Loop)"| LLM
 ```
 
 #### The 5 Pillars of the Mental Model
@@ -123,18 +133,18 @@ The **Labeled Property Graph (LPG)** is implemented across three coordinated lay
 ```mermaid
 flowchart TD
     subgraph LPG_LAYER_1 ["Layer 1: Storage & Graph Analytics (Neo4j / Cypher / Memgraph)"]
-        LPG_STORE["Native Property Graph Store:\n• Nodes: (:Embodiment {id: 'g1', mass: 35.0})\n• Edges: -[:PLACED_ON {height: 0.75, clearance: 0.08}]->"]
+        LPG_STORE["Native Property Graph Store:<br/>• Nodes: (:Embodiment {id: 'g1', mass: 35.0})<br/>• Edges: -[:PLACED_ON {height: 0.75, clearance: 0.08}]->"]
     end
 
     subgraph LPG_LAYER_2 ["Layer 2: Semantic Isomorphism & Invariant Gate (RDF-star / SHACL)"]
-        RDF_STAR["RDF-star Triples (W3C standard for LPG):\n<< :box :placedOn :shelf >> :nominalHeight 0.75 ."]
+        RDF_STAR["RDF-star Triples (W3C standard for LPG):<br/>&lt;&lt; :box :placedOn :shelf &gt;&gt; :nominalHeight 0.75 ."]
     end
 
     subgraph LPG_LAYER_3 ["Layer 3: Python In-Memory Runtime (NetworkX / ArenaEnvGraphSpec)"]
-        PY_GRAPH["ArenaEnvGraphSpec (In-Memory LPG Model):\n• AssetSpec Nodes + SpatialRelationSpec Edges with Properties"]
+        PY_GRAPH["ArenaEnvGraphSpec (In-Memory LPG Model):<br/>• AssetSpec Nodes + SpatialRelationSpec Edges with Properties"]
     end
 
-    LPG_LAYER_1 <== "Isomorphic Projection" ==> LPG_LAYER_2
+    LPG_LAYER_1 <-->|Isomorphic Projection| LPG_LAYER_2
     LPG_LAYER_2 ==> LPG_LAYER_3
 ```
 
@@ -192,10 +202,28 @@ CREATE (box)-[:NAV_CORRIDOR_TO {
 To prevent "black screen" viewports (where the camera points into empty building space or unanchored voids), Cameras are modeled as first-class semantic entities in RDF-star and Neo4j LPG:
 
 ```mermaid
-flowchart LR
-    CAM[":task_viewer_cam\na arena:Camera"] -->|arena:observes| FIXTURE[":wireshelving\na arena:Fixture"]
-    CAM -->|arena:lookAtTarget| OBJ[":brown_box\na arena:RigidObject"]
-    ROBOT[":g1_robot\na arena:Embodiment"] -->|arena:standsNear| FIXTURE
+flowchart TD
+    classDef scene fill:#1E293B,stroke:#64748B,stroke-width:2px,color:#F8FAFC;
+    classDef fixture fill:#B45309,stroke:#F59E0B,stroke-width:2px,color:#F8FAFC;
+    classDef object fill:#1D4ED8,stroke:#60A5FA,stroke-width:2px,color:#F8FAFC;
+    classDef robot fill:#4C1D95,stroke:#A78BFA,stroke-width:2px,color:#F8FAFC;
+    classDef camera fill:#9F1239,stroke:#FB7185,stroke-width:2px,color:#F8FAFC;
+
+    SCENE[":scene_001<br/><i>a arena:EnvironmentGraph</i>"]:::scene
+    CAM[":task_viewer_cam<br/><i>a arena:Camera</i><br/>[eyeOffset: -1.5, -1.5, 1.5]<br/>[fov: 65.0°]"]:::camera
+    FIXTURE[":wireshelving<br/><i>a arena:Furniture, arena:Fixture</i>"]:::fixture
+    OBJ[":brown_box<br/><i>a arena:RigidObject</i>"]:::object
+    ROBOT[":g1_robot<br/><i>a arena:Embodiment</i>"]:::robot
+
+    SCENE -->|"arena:hasCamera"| CAM
+    SCENE -->|"arena:hasFixture"| FIXTURE
+    SCENE -->|"arena:hasObject"| OBJ
+    SCENE -->|"arena:hasEmbodiment"| ROBOT
+
+    CAM -->|"arena:observes"| FIXTURE
+    CAM -->|"arena:lookAtTarget"| OBJ
+    ROBOT -->|"arena:standsNear (dist: 0.85m)"| FIXTURE
+    OBJ -->|"arena:placedOn"| FIXTURE
 ```
 
 ```turtle
@@ -285,6 +313,56 @@ flowchart LR
 
 ### 4.2 RDF-star Turtle-star Ontology Schema (`arena_schema.ttl`)
 
+```mermaid
+flowchart TD
+    classDef meta fill:#0F172A,stroke:#38BDF8,stroke-width:2px,color:#F8FAFC;
+    classDef classNode fill:#1E293B,stroke:#94A3B8,stroke-width:2px,color:#F8FAFC;
+    classDef subClassNode fill:#0F766E,stroke:#2DD4BF,stroke-width:2px,color:#F8FAFC;
+
+    ENV["arena:EnvironmentGraph<br/><i>a owl:Class</i>"]:::meta
+    PROV_ENT["prov:Entity<br/><i>a owl:Class</i>"]:::meta
+
+    SCENE_ENT["arena:SceneEntity<br/><i>a owl:Class</i>"]:::classNode
+    EVAL_RUN["arena:EvaluationRun<br/><i>a owl:Class</i>"]:::classNode
+
+    TERRAIN["arena:Terrain"]:::subClassNode
+    EMBODIMENT["arena:Embodiment"]:::subClassNode
+    FIXTURE["arena:Fixture"]:::subClassNode
+    FURNITURE["arena:Furniture"]:::subClassNode
+    USD_PRIM["arena:USDPrim"]:::subClassNode
+    SURFACE_ANCHOR["arena:SurfaceAnchor"]:::subClassNode
+    RIGID_OBJ["arena:RigidObject"]:::subClassNode
+    RECEPTACLE["arena:Receptacle"]:::subClassNode
+    CAMERA["arena:Camera"]:::subClassNode
+
+    ENV -.->|"rdfs:subClassOf"| PROV_ENT
+    SCENE_ENT -.->|"rdfs:subClassOf"| PROV_ENT
+    EVAL_RUN -.->|"rdfs:subClassOf"| PROV_ENT
+
+    TERRAIN -.->|"rdfs:subClassOf"| SCENE_ENT
+    EMBODIMENT -.->|"rdfs:subClassOf"| SCENE_ENT
+    FIXTURE -.->|"rdfs:subClassOf"| SCENE_ENT
+    USD_PRIM -.->|"rdfs:subClassOf"| SCENE_ENT
+    SURFACE_ANCHOR -.->|"rdfs:subClassOf"| SCENE_ENT
+    RIGID_OBJ -.->|"rdfs:subClassOf"| SCENE_ENT
+    CAMERA -.->|"rdfs:subClassOf"| SCENE_ENT
+
+    FURNITURE -.->|"rdfs:subClassOf"| FIXTURE
+    RECEPTACLE -.->|"rdfs:subClassOf"| RIGID_OBJ
+
+    ENV -->|"arena:hasTerrain"| TERRAIN
+    ENV -->|"arena:hasEmbodiment"| EMBODIMENT
+    ENV -->|"arena:hasFixture"| FIXTURE
+    ENV -->|"arena:hasObject"| RIGID_OBJ
+    ENV -->|"arena:hasCamera"| CAMERA
+
+    FIXTURE -->|"arena:attachedToPrim"| USD_PRIM
+    FIXTURE -->|"arena:hasSubSurface"| SURFACE_ANCHOR
+    RIGID_OBJ -->|"arena:placedOnSubSurface"| SURFACE_ANCHOR
+    EMBODIMENT -->|"arena:standsAtAffordance"| FIXTURE
+    CAMERA -->|"arena:observes"| SCENE_ENT
+```
+
 ```turtle
 @prefix arena: <https://isaac-sim.github.io/arena/schema#> .
 @prefix prov:  <http://www.w3.org/ns/prov#> .
@@ -341,16 +419,42 @@ arena:navCorridorTo a owl:ObjectProperty ;
 
 ```mermaid
 flowchart LR
-    AGENT["prov:Agent\n:agent_gemini_3_6"] -->|prov:wasAssociatedWith| ACT1["prov:Activity\n:activity_prompt_synthesis"]
-    SPEC["prov:Entity\n:grounded_task_spec_v1"] -->|prov:used| ACT1
-    ACT1 -->|prov:wasGeneratedBy| SCENE["prov:Entity\n:scene_g1_locomanip_001"]
+    AGENT["prov:Agent<br/>:agent_gemini_3_6"] -->|prov:wasAssociatedWith| ACT1["prov:Activity<br/>:activity_prompt_synthesis"]
+    SPEC["prov:Entity<br/>:grounded_task_spec_v1"] -->|prov:used| ACT1
+    ACT1 -->|prov:wasGeneratedBy| SCENE["prov:Entity<br/>:scene_g1_locomanip_001"]
     
-    SCENE -->|prov:used| ACT2["prov:Activity\n:activity_gr00t_eval_5558"]
-    POLICY["prov:Entity\n:checkpoint_20000"] -->|prov:used| ACT2
-    ACT2 -->|prov:wasGeneratedBy| EVAL["prov:Entity\n:eval_run_20260827_01\n• taskSuccess=1.0\n• meanLatencyMs=18.2\n• settleDivergence=0.0"]
+    SCENE -->|prov:used| ACT2["prov:Activity<br/>:activity_gr00t_eval_5558"]
+    POLICY["prov:Entity<br/>:checkpoint_20000"] -->|prov:used| ACT2
+    ACT2 -->|prov:wasGeneratedBy| EVAL["prov:Entity<br/>:eval_run_20260827_01<br/>• taskSuccess=1.0<br/>• meanLatencyMs=18.2<br/>• settleDivergence=0.0"]
 ```
 
 ### PROV-O Evaluation Run Triples (`eval_telemetry.ttl`)
+
+```mermaid
+flowchart TD
+    classDef agent fill:#312E81,stroke:#818CF8,stroke-width:2px,color:#F8FAFC;
+    classDef activity fill:#064E3B,stroke:#34D399,stroke-width:2px,color:#F8FAFC;
+    classDef entity fill:#1E293B,stroke:#94A3B8,stroke-width:2px,color:#F8FAFC;
+    classDef metric fill:#701A75,stroke:#F472B6,stroke-width:2px,color:#F8FAFC;
+
+    AGENT[":agent_gemini_3_6<br/><i>a prov:Agent</i><br/>[model: gemini-3.6-flash]"]:::agent
+    ACT_SYNTH[":activity_prompt_synthesis<br/><i>a prov:Activity</i>"]:::activity
+    SPEC[":grounded_task_spec_v1<br/><i>a prov:Entity</i>"]:::entity
+    SCENE[":scene_g1_locomanip_001<br/><i>a arena:EnvironmentGraph, prov:Entity</i>"]:::entity
+    CHECKPOINT[":checkpoint_20000<br/><i>a prov:Entity</i><br/>[weights: GR00T-v2.0]"]:::entity
+    ACT_EVAL[":activity_gr00t_eval_5558<br/><i>a prov:Activity</i><br/>[started: 2026-08-27T20:55:00Z]"]:::activity
+    EVAL_RUN[":eval_run_20260827_01<br/><i>a arena:EvaluationRun, prov:Entity</i><br/><b>taskSuccess:</b> true<br/><b>completedSteps:</b> 1200<br/><b>latency:</b> 18.2ms"]:::metric
+
+    AGENT -->|"prov:wasAssociatedWith"| ACT_SYNTH
+    ACT_SYNTH -->|"prov:used"| SPEC
+    ACT_SYNTH -->|"prov:wasGeneratedBy"| SCENE
+
+    AGENT -->|"prov:wasAssociatedWith"| ACT_EVAL
+    ACT_EVAL -->|"prov:used"| SCENE
+    ACT_EVAL -->|"prov:used"| CHECKPOINT
+    EVAL_RUN -->|"prov:wasGeneratedBy"| ACT_EVAL
+    EVAL_RUN -->|"arena:evaluatedGraph"| SCENE
+```
 
 ```turtle
 @prefix :      <https://isaac-sim.github.io/arena/instances/> .
@@ -380,10 +484,49 @@ flowchart LR
 
 ## 6. SHACL-star Semantic Validation Engine (`arena_constraints.shacl.ttl`)
 
+```mermaid
+flowchart TD
+    classDef shape fill:#451A03,stroke:#F59E0B,stroke-width:2px,color:#F8FAFC;
+    classDef target fill:#1E293B,stroke:#38BDF8,stroke-width:2px,color:#F8FAFC;
+    classDef pass fill:#064E3B,stroke:#10B981,stroke-width:2px,color:#F8FAFC;
+    classDef fail fill:#7F1D1D,stroke:#EF4444,stroke-width:2px,color:#F8FAFC;
+
+    GRAPH_TARGET["arena:EnvironmentGraph<br/><i>(Target Node)</i>"]:::target
+    EMB_TARGET["arena:Embodiment<br/><i>(Target Node)</i>"]:::target
+    CAM_TARGET["arena:Camera<br/><i>(Target Node)</i>"]:::target
+
+    S1["arena:MandatoryTerrainShape<br/>[minCount: 1, maxCount: 1]"]:::shape
+    S2["arena:PinkWBCEnvironmentCountShape<br/>[SPARQL: num_envs == 1]"]:::shape
+    S3["arena:LocomotionCorridorClearanceShape<br/>[SPARQL: clearance &gt;= 0.60m]"]:::shape
+    S4["arena:HierarchicalPlacementShape<br/>[SPARQL: manipuland on fixture]"]:::shape
+    S5["arena:CameraObservationShape<br/>[minCount: 1 target]"]:::shape
+    S6["arena:RobotAffordanceReachabilityShape<br/>[SPARQL: 0.50m &lt;= dist &lt;= 1.20m]"]:::shape
+
+    VALIDATOR["W3C pyshacl Engine<br/><i>(validate_rdf_environment_graph)</i>"]:::target
+
+    PASS_RES["conforms = True<br/><i>Lower to ArenaEnvGraphSpec</i>"]:::pass
+    FAIL_RES["conforms = False<br/><i>Self-Healing LLM Repair Prompt</i>"]:::fail
+
+    S1 -->|"sh:targetClass"| GRAPH_TARGET
+    S3 -->|"sh:targetClass"| GRAPH_TARGET
+    S4 -->|"sh:targetClass"| GRAPH_TARGET
+    S2 -->|"sh:targetClass"| EMB_TARGET
+    S6 -->|"sh:targetClass"| EMB_TARGET
+    S5 -->|"sh:targetClass"| CAM_TARGET
+
+    GRAPH_TARGET --> VALIDATOR
+    EMB_TARGET --> VALIDATOR
+    CAM_TARGET --> VALIDATOR
+
+    VALIDATOR -->|"Pass"| PASS_RES
+    VALIDATOR -->|"Violations"| FAIL_RES
+```
+
 ```turtle
 @prefix arena: <https://isaac-sim.github.io/arena/schema#> .
 @prefix sh:    <http://www.w3.org/ns/shacl#> .
 @prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
 
 # 1. Mandatory Physical Ground Surface Invariant
 arena:MandatoryTerrainShape a sh:NodeShape ;
@@ -457,28 +600,28 @@ compiled_spec = lower_rdf_graph_to_spec(rdf_graph)
 ```mermaid
 flowchart TD
     subgraph ACTIVE_MCPS ["Active Runtime MCP Servers"]
-        M_FS["filesystem\n• Read/write TTL, JSON-LD, and specs"]
-        M_ANS["ansible\n• Automated sim cluster deployment"]
-        M_GCP["gcp-cloud\n• Cloud GPU provisioning for evals"]
-        M_PW["playwright\n• Visual web UI inspection (LeRobot/Neo4j)"]
-        M_TF["terraform\n• Cloud infrastructure as code"]
+        M_FS["filesystem<br/>• Read/write TTL, JSON-LD, and specs"]
+        M_ANS["ansible<br/>• Automated sim cluster deployment"]
+        M_GCP["gcp-cloud<br/>• Cloud GPU provisioning for evals"]
+        M_PW["playwright<br/>• Visual web UI inspection (LeRobot/Neo4j)"]
+        M_TF["terraform<br/>• Cloud infrastructure as code"]
     end
 
     subgraph EXT_MCPS ["Target Graph & Simulation MCP Servers"]
-        E_NEO["neo4j/mcp (neo4j-mcp-server)\n• Cypher graph mutations & LPG schema"]
-        E_GDS["neo4j-contrib/gds-agent\n• Graph data science & shortest path"]
-        E_RDF["emekaokoye/mcp-rdf-explorer\n• RDF-star SPARQL inspection"]
-        E_USD["NVIDIA-Omniverse/kit-usd-agents\n• USD Code, OmniUI, Kit MCPs"]
-        E_SIM["whats2000/isaacsim-mcp-server\n• Live socket control (42+ tools)"]
+        E_NEO["neo4j/mcp (neo4j-mcp-server)<br/>• Cypher graph mutations & LPG schema"]
+        E_GDS["neo4j-contrib/gds-agent<br/>• Graph data science & shortest path"]
+        E_RDF["emekaokoye/mcp-rdf-explorer<br/>• RDF-star SPARQL inspection"]
+        E_USD["NVIDIA-Omniverse/kit-usd-agents<br/>• USD Code, OmniUI, Kit MCPs"]
+        E_SIM["whats2000/isaacsim-mcp-server<br/>• Live socket control (42+ tools)"]
     end
 
     subgraph AGENT_SKILLS ["Repository & NVIDIA Agent Skills"]
-        S_RDF["agentic-rdf-star-env-gen\n• Main pipeline orchestrator"]
-        S_I4H["i4h-workflow suite\n• Scene edit, dataset mimic, rollout validate"]
-        S_OPT["cuopt-numerical-optimization-api\n• GPU-accelerated spatial CSP placement"]
-        S_DATA["data-designer\n• Synthetic dataset distribution builder"]
-        S_USD["omniverse-usd-performance-tuning\n• USD hierarchy & memory optimizer"]
-        S_CUDF["accelerated-computing-cudf\n• GPU DataFrame analytics for massive scenes"]
+        S_RDF["agentic-rdf-star-env-gen<br/>• Main pipeline orchestrator"]
+        S_I4H["i4h-workflow suite<br/>• Scene edit, dataset mimic, rollout validate"]
+        S_OPT["cuopt-numerical-optimization-api<br/>• GPU-accelerated spatial CSP placement"]
+        S_DATA["data-designer<br/>• Synthetic dataset distribution builder"]
+        S_USD["omniverse-usd-performance-tuning<br/>• USD hierarchy & memory optimizer"]
+        S_CUDF["accelerated-computing-cudf<br/>• GPU DataFrame analytics for massive scenes"]
     end
 
     ACTIVE_MCPS <--> S_RDF
@@ -562,12 +705,14 @@ To maintain complete confidence throughout development, the pipeline adopts a **
 
 ```mermaid
 flowchart TD
-    T1["Tier 1: Fast Pytest Suite (<5s)\n• RDF-star SPARQL queries\n• SHACL constraint shapes\n• Bidirectional graph lifting\n• PROV-O serialization"]
-    T2["Tier 2: Knowledge Graph Resolution (--mode resolve)\n• LLM prompt synthesis\n• In-memory RDF-star graph construction\n• SHACL-star validation & self-healing"]
-    T3["Tier 3: Zero-Action Physics Settling (--mode build)\n• PhysX gravity & collision settlement\n• Bipedal humanoid balance check\n• Headless MP4 video recording / Live Viewport"]
-    T4["Tier 4: Closed-Loop Policy Rollout (policy_runner.py)\n• GR00T / OpenPI closed-loop execution (50 Hz)\n• Task success metric logging\n• Automated eval_telemetry.ttl PROV-O export"]
+    T1["Tier 1: Fast Pytest Suite (&lt;5s)<br/>• RDF-star SPARQL queries<br/>• SHACL constraint shapes<br/>• Bidirectional graph lifting<br/>• PROV-O serialization"]
+    T2["Tier 2: Knowledge Graph Resolution (--mode resolve)<br/>• LLM prompt synthesis<br/>• In-memory RDF-star graph construction<br/>• SHACL-star validation & self-healing"]
+    T3["Tier 3: Zero-Action Physics Settling (--mode build)<br/>• PhysX gravity & collision settlement<br/>• Bipedal humanoid balance check<br/>• Headless MP4 video recording / Live Viewport"]
+    T4["Tier 4: Closed-Loop Policy Rollout (policy_runner.py)<br/>• GR00T / OpenPI closed-loop execution (50 Hz)<br/>• Task success metric logging<br/>• Automated eval_telemetry.ttl PROV-O export"]
 
-    T1 --> T2 --> T3 --> T4
+    T1 --> T2
+    T2 --> T3
+    T3 --> T4
 ```
 
 ---
@@ -776,62 +921,89 @@ A complex 3D simulation environment (e.g. a warehouse, kitchen, or laboratory US
 ```mermaid
 flowchart TD
     subgraph TIER_0 ["Tier 0: Root World Stage & Background Dollhouse"]
-        USD_BG["Scene USD Stage (e.g., galileo_simplified.usd, robocasa_kitchen.usd)\n• Root Transform, Physics Scene, Environment Lighting"]
+        USD_BG["Scene USD Stage (e.g., galileo_simplified.usd, robocasa_kitchen.usd)<br/>• Root Transform, Physics Scene, Environment Lighting"]
     end
 
     subgraph TIER_1 ["Tier 1: Introspected Scene Sub-Zones & Built-in Prims"]
-        USD_PRIM_1["Built-in Storage Bay\n/World/galileo/StorageBay_01"]
-        USD_PRIM_2["Built-in Reception Counter\n/World/galileo/ReceptionCounter"]
-        USD_PRIM_3["Built-in Floor Staging Area\n/World/galileo/FloorZone_North"]
+        USD_PRIM_1["Built-in Storage Bay<br/>/World/galileo/StorageBay_01"]
+        USD_PRIM_2["Built-in Reception Counter<br/>/World/galileo/ReceptionCounter"]
+        USD_PRIM_3["Built-in Floor Staging Area<br/>/World/galileo/FloorZone_North"]
+        USD_BG -->|USD Stage Introspection| USD_PRIM_1
+        USD_BG -->|USD Stage Introspection| USD_PRIM_2
+        USD_BG -->|USD Stage Introspection| USD_PRIM_3
     end
-
-    USD_BG -->|USD Stage Introspection| USD_PRIM_1
-    USD_BG -->|USD Stage Introspection| USD_PRIM_2
-    USD_BG -->|USD Stage Introspection| USD_PRIM_3
 
     subgraph TIER_2 ["Tier 2: Spawned Furniture & Fixtures"]
-        FURN_1["Wire Shelving Unit\n(:wireshelving a arena:Furniture)"]
-        FURN_2["Sorting Bin Receptacle\n(:blue_sorting_bin a arena:Receptacle)"]
+        FURN_1["Wire Shelving Unit<br/>(:wireshelving a arena:Furniture)"]
+        FURN_2["Sorting Bin Receptacle<br/>(:blue_sorting_bin a arena:Receptacle)"]
+        USD_PRIM_1 -->|ATTACHED_TO_PRIM| FURN_1
+        USD_PRIM_3 -->|ATTACHED_TO_PRIM| FURN_2
     end
-
-    USD_PRIM_1 -->|ATTACHED_TO_PRIM| FURN_1
-    USD_PRIM_3 -->|ATTACHED_TO_PRIM| FURN_2
 
     subgraph TIER_3 ["Tier 3: Introspected Fixture Sub-Surfaces & Tiers"]
         SHELF_T1["Shelf Tier 1 (Lower Surface: z=0.45m)"]
         SHELF_T2["Shelf Tier 2 (Middle Surface: z=0.75m)"]
         SHELF_T3["Shelf Tier 3 (Upper Surface: z=1.15m)"]
+        FURN_1 -->|HAS_SUB_SURFACE| SHELF_T1
+        FURN_1 -->|HAS_SUB_SURFACE| SHELF_T2
+        FURN_1 -->|HAS_SUB_SURFACE| SHELF_T3
     end
-
-    FURN_1 -->|HAS_SUB_SURFACE| SHELF_T1
-    FURN_1 -->|HAS_SUB_SURFACE| SHELF_T2
-    FURN_1 -->|HAS_SUB_SURFACE| SHELF_T3
 
     subgraph TIER_4 ["Tier 4: Manipulands & Dynamic Rigid Objects"]
-        OBJ_1["Brown Packaging Box\n(:brown_box a arena:RigidObject)"]
+        OBJ_1["Brown Packaging Box<br/>(:brown_box a arena:RigidObject)"]
+        SHELF_T2 -->|"PLACED_ON_TIER (clearance: 0.02m)"| OBJ_1
     end
-
-    SHELF_T2 -->|PLACED_ON_TIER {clearance: 0.02m}| OBJ_1
 
     subgraph TIER_5 ["Tier 5: Embodiment Standoff & Affordance Waypoints"]
-        ROBOT["Unitree G1 Bipedal Humanoid\n(:g1_robot a arena:Embodiment)"]
+        ROBOT["Unitree G1 Bipedal Humanoid<br/>(:g1_robot a arena:Embodiment)"]
+        FURN_1 -->|"STANDS_AT_AFFORDANCE (offset: [0.0, -0.85, 0.0], yaw: 90°)"| ROBOT
     end
-
-    FURN_1 -->|STANDS_AT_AFFORDANCE {offset: [0.0, -0.85, 0.0], yaw: 90°}| ROBOT
 
     subgraph TIER_6 ["Tier 6: Observational & Viewport Cameras"]
-        CAM["Task Viewport Camera\n(:spectator_cam a arena:Camera)"]
+        CAM["Task Viewport Camera<br/>(:spectator_cam a arena:Camera)"]
+        OBJ_1 -->|"OBSERVES_INTERACTION_ZONE (eye: [-1.2, -1.0, 1.8], fov: 65°)"| CAM
     end
-
-    OBJ_1 -->|OBSERVES_INTERACTION_ZONE {eye: [-1.2, -1.0, 1.8], fov: 65°}| CAM
 ```
 
 ### 13.2 Telescopic RDF-star & LPG Schema Representation
 
 In the Property Graph, this multi-tier containment is encoded directly as attributed edges:
 
+```mermaid
+flowchart TD
+    %% Styling
+    classDef scene fill:#1E293B,stroke:#64748B,stroke-width:2px,color:#F8FAFC;
+    classDef prim fill:#0F766E,stroke:#14B8A6,stroke-width:2px,color:#F8FAFC;
+    classDef fixture fill:#B45309,stroke:#F59E0B,stroke-width:2px,color:#F8FAFC;
+    classDef surface fill:#D97706,stroke:#FDE68A,stroke-width:1px,color:#1E293B;
+    classDef object fill:#1D4ED8,stroke:#60A5FA,stroke-width:2px,color:#F8FAFC;
+    classDef robot fill:#4C1D95,stroke:#A78BFA,stroke-width:2px,color:#F8FAFC;
+    classDef camera fill:#9F1239,stroke:#FB7185,stroke-width:2px,color:#F8FAFC;
+
+    %% Entities
+    GALILEO[":galileo<br/><i>a arena:BackgroundScene</i>"]:::scene
+    STORAGE_BAY[":galileo_storage_bay_01<br/><i>a arena:USDPrim</i>"]:::prim
+    WIRESHELVING[":wireshelving<br/><i>a arena:Furniture, arena:Fixture</i>"]:::fixture
+    TIER_2[":shelf_tier_2<br/><i>a arena:SurfaceAnchor</i>"]:::surface
+    BROWN_BOX[":brown_box<br/><i>a arena:RigidObject</i>"]:::object
+    G1_ROBOT[":g1_robot<br/><i>a arena:Embodiment</i>"]:::robot
+    VIEWER_CAM[":task_viewer_cam<br/><i>a arena:Camera</i>"]:::camera
+
+    %% Telescopic Hierarchy
+    GALILEO -->|"arena:hasSubPrim"| STORAGE_BAY
+    WIRESHELVING -->|"arena:attachedToPrim"| STORAGE_BAY
+    WIRESHELVING -->|"arena:hasSubSurface"| TIER_2
+    
+    %% RDF-star Reified Relations
+    BROWN_BOX -->|"arena:placedOnSubSurface<br/><b>clearance:</b> 0.02m"| TIER_2
+    G1_ROBOT -->|"arena:standsAtAffordance<br/><b>standoff:</b> 0.85m"| WIRESHELVING
+    VIEWER_CAM -->|"arena:observesInteraction<br/><b>fov:</b> 65°"| WIRESHELVING
+    VIEWER_CAM -->|"arena:lookAtTarget"| BROWN_BOX
+```
+
 ```turtle
 # 1. Background Scene Introspection
+
 :galileo a arena:BackgroundScene ;
     arena:usdPath "assets/galileo_simplified.usd" ;
     arena:hasSubPrim :galileo_storage_bay_01, :galileo_floor_zone_north .

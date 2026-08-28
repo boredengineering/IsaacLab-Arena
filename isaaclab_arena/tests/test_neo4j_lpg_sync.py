@@ -90,3 +90,14 @@ def test_sync_spec_to_neo4j_and_query():
     assert box_rel["parent_id"] == "wireshelving"
     assert box_rel["surface_anchor"] == "shelf_tier_1"
     assert box_rel["nominal_height"] == 0.75
+
+    # Verify that Camera and SurfaceAnchor nodes exist in Neo4j
+    driver = get_neo4j_driver()
+    with driver.session() as session:
+        sa_res = session.run("MATCH (sa:SurfaceAnchor {env_name: 'test_g1_shelf_pnp_lpg'}) RETURN count(sa) AS count").single()
+        assert sa_res["count"] >= 1
+
+        cam_res = session.run("MATCH (c:Camera {env_name: 'test_g1_shelf_pnp_lpg'}) RETURN count(c) AS count").single()
+        assert cam_res["count"] >= 1
+    driver.close()
+

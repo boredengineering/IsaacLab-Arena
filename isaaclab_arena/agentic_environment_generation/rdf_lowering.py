@@ -221,25 +221,49 @@ def spec_to_rdf_graph(spec: ArenaEnvGraphSpec) -> rdflib.Graph:
         g.add((bg_uri, ARENA.registryName, Literal(spec.background.registry_name, datatype=XSD.string)))
         g.add((scene_uri, ARENA.hasFixture, bg_uri))
 
-    # Objects
+    # Introspected USD Object References (Dollhouse Sub-Prims)
+    if spec.object_references:
+        for ref in spec.object_references:
+            prim_uri = INSTANCES[ref.id]
+            g.add((prim_uri, RDF.type, ARENA.USDPrim))
+            if ref.prim_path:
+                g.add((prim_uri, ARENA.primPath, Literal(ref.prim_path, datatype=XSD.string)))
+            parent_uri = INSTANCES[ref.parent_id] if ref.parent_id else bg_uri
+            g.add((parent_uri, ARENA.hasSubPrim, prim_uri))
+
+    # Objects & Furniture
     for obj in spec.objects:
         obj_uri = INSTANCES[obj.id]
         name_lower = obj.registry_name.lower()
-        if "shelf" in name_lower or "table" in name_lower or "counter" in name_lower:
+        if "shelf" in name_lower or "table" in name_lower or "counter" in name_lower or "rack" in name_lower:
             g.add((obj_uri, RDF.type, ARENA.Fixture))
             g.add((obj_uri, RDF.type, ARENA.Furniture))
+        elif "bin" in name_lower or "box" in name_lower or "tray" in name_lower:
+            g.add((obj_uri, RDF.type, ARENA.RigidObject))
+            if "bin" in name_lower or "tray" in name_lower:
+                g.add((obj_uri, RDF.type, ARENA.Receptacle))
         else:
             g.add((obj_uri, RDF.type, ARENA.RigidObject))
         g.add((obj_uri, ARENA.registryName, Literal(obj.registry_name, datatype=XSD.string)))
         g.add((scene_uri, ARENA.hasObject, obj_uri))
 
-    # Relations
+    # Telescopic Spatial Relations & Affordance
+    primary_furniture_uri = None
     for rel in spec.relations:
         subj_uri = INSTANCES[rel.subject]
         if rel.reference:
             ref_uri = INSTANCES[rel.reference]
             if rel.kind == "on":
                 g.add((subj_uri, ARENA.placedOn, ref_uri))
+                # Check for telescopic sub-surface tier
+                if rel.params and "surface_anchor" in rel.params:
+                    anchor_name = str(rel.params["surface_anchor"])
+                    anchor_uri = INSTANCES[f"{rel.reference}_{anchor_name}"]
+                    g.add((anchor_uri, RDF.type, ARENA.SurfaceAnchor))
+                    g.add((anchor_uri, ARENA.anchorName, Literal(anchor_name, datatype=XSD.string)))
+                    g.add((ref_uri, ARENA.hasSubSurface, anchor_uri))
+                    g.add((subj_uri, ARENA.placedOnSubSurface, anchor_uri))
+                    primary_furniture_uri = ref_uri
             elif rel.kind == "inside":
                 g.add((subj_uri, ARENA.placedInside, ref_uri))
             elif rel.kind == "nav_corridor":
@@ -251,12 +275,21 @@ def spec_to_rdf_graph(spec: ArenaEnvGraphSpec) -> rdflib.Graph:
             if "nominal_height" in rel.params:
                 g.add((subj_uri, ARENA.nominalHeight, Literal(float(rel.params["nominal_height"]), datatype=XSD.float)))
 
-    # Cameras & Viewpoints
+    # Robot Standoff Affordance Link
+    if spec.embodiment and (primary_furniture_uri or spec.objects):
+        target_furn = primary_furniture_uri or INSTANCES[spec.objects[0].id]
+        g.add((robot_uri, ARENA.standsAtAffordance, target_furn))
+        g.add((robot_uri, ARENA.standoffDistance, Literal(0.85, datatype=XSD.float)))
+
+    # Cameras & Viewpoints Grounding
     viewer_uri = INSTANCES[f"{spec.env_name or 'scene'}_viewer_cam"]
     g.add((viewer_uri, RDF.type, ARENA.Camera))
     target_id = spec.objects[0].id if spec.objects else (spec.background.id if spec.background else "scene")
-    g.add((viewer_uri, ARENA.observes, INSTANCES[target_id]))
-    g.add((viewer_uri, ARENA.lookAtTarget, INSTANCES[target_id]))
+    target_node = INSTANCES[target_id]
+    g.add((viewer_uri, ARENA.observes, target_node))
+    g.add((viewer_uri, ARENA.observesInteraction, target_node))
+    g.add((viewer_uri, ARENA.lookAtTarget, target_node))
     g.add((scene_uri, ARENA.hasCamera, viewer_uri))
 
     return g
+

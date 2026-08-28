@@ -75,4 +75,21 @@ arena:CameraObservationShape a sh:NodeShape ;
         sh:message "ERROR: Every Camera in the EnvironmentGraph must declare an 'arena:observes' relationship pointing to a scene entity." ;
     ] .
 
+# 6. Robot Affordance Reachability Invariant
+arena:RobotAffordanceReachabilityShape a sh:NodeShape ;
+    sh:targetClass arena:Embodiment ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "ERROR: Embodiment standoff distance to furniture interaction affordance must be between 0.50m and 1.20m." ;
+        sh:select """
+            PREFIX arena: <https://isaac-sim.github.io/arena/schema#>
+            SELECT $this
+            WHERE {
+                $this arena:standoffDistance ?dist .
+                FILTER (?dist < 0.50 || ?dist > 1.20)
+            }
+        """ ;
+    ] .
+
+
 

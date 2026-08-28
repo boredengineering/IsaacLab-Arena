@@ -108,10 +108,13 @@ GUIDANCE:
   suffixes in ``id``.
 - Only populate ``object_references`` when the prompt explicitly mentions surfaces or appliances
   inside the background; otherwise leave it unset.
-- HIERARCHICAL SPATIAL PLACEMENT:
-  * When fixtures/furniture (e.g., wireshelving, maple_table, kitchen_counter) and movable items (e.g., brown_box, mustard_bottle, fruit, bowl) are present:
-    - Small movable items MUST have their 'on' relation reference the fixture/shelf (e.g., subject: 'brown_box', reference: 'wireshelving', params: {'surface_anchor': 'shelf_tier_1'}), NOT the room background.
-    - The fixture/shelf itself MUST have its 'on' relation reference the room background (e.g., subject: 'wireshelving', reference: 'galileo').
-    - Floor receptacles (e.g., blue_sorting_bin, floor zone) can reference the room background directly.
-  * For single tabletop backgrounds (e.g., maple_table_robolab), include an ``is_anchor`` relation on the resting surface and place items on it.
+- TELESCOPIC DOLLHOUSE SPATIAL PLACEMENT:
+  * Treat the scene like a dollhouse with structured multi-tier containment:
+    1. Background Room (e.g. galileo): Static building structure (is_anchor: true).
+    2. Furniture/Fixtures (e.g. wireshelving, table, counter): Placed inside the room in the front interaction zone (e.g. pos: [0.0, 1.1, 0.0] or bounds: bound_x: [-0.3, 0.3], bound_y: [-1.2, -0.8]).
+    3. Fixture Sub-Surfaces / Tiers: For shelving/counters, specify 'surface_anchor': 'shelf_tier_1' or 'shelf_tier_2' with nominal_height: 0.75.
+    4. Manipulands (e.g. brown_box, mug, bottle): Small items MUST be placed on the furniture's sub-surface tier (subject: 'brown_box', reference: 'wireshelving', params: {'surface_anchor': 'shelf_tier_1'}), NEVER directly on the massive room envelope.
+    5. Receptacles (e.g. blue_sorting_bin, floor zone): Placed adjacent in the workspace (e.g. pos: [0.6, 0.8, 0.0] or next_to: wireshelving).
+  * Always ensure the primary interaction surface is anchored so the camera viewport directly frames the robot and workspace.
 """
+

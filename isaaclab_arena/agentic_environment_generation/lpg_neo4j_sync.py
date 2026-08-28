@@ -95,9 +95,9 @@ def sync_spec_to_neo4j(
                     params=str(spec.background.params),
                 )
 
-            # 4. Merge Objects
+            # 4. Merge Objects & Furniture
             for obj in spec.objects:
-                label = "Fixture" if "table" in obj.registry_name or "shelf" in obj.registry_name or "room" in obj.registry_name else "RigidObject"
+                label = "Fixture:Furniture" if "table" in obj.registry_name or "shelf" in obj.registry_name or "rack" in obj.registry_name else ("RigidObject:Receptacle" if "bin" in obj.registry_name else "RigidObject")
                 session.run(
                     f"""
                     MATCH (e:EnvironmentGraph {{name: $env_name}})
@@ -112,7 +112,27 @@ def sync_spec_to_neo4j(
                     params=str(obj.params),
                 )
 
+            # 4b. Merge Introspected USD Prims (Dollhouse Sub-Prims)
+            if spec.object_references:
+                for ref in spec.object_references:
+                    session.run(
+                        """
+                        MATCH (e:EnvironmentGraph {name: $env_name})
+                        MERGE (p:USDPrim {id: $id, env_name: $env_name})
+                        SET p.prim_path = $prim_path,
+                            p.object_type = $object_type,
+                            p.parent_id = $parent_id
+                        MERGE (e)-[:CONTAINS_PRIM]->(p)
+                        """,
+                        env_name=spec.env_name,
+                        id=ref.id,
+                        prim_path=ref.prim_path or "",
+                        object_type=str(ref.object_type),
+                        parent_id=ref.parent_id or "",
+                    )
+
             # 5. Merge Relations with Rich Properties (LPG Edges)
+            primary_furniture_id = None
             for rel in spec.relations:
                 rel_kind = rel.kind.upper()
                 if rel_kind == "ON":
@@ -150,16 +170,74 @@ def sync_spec_to_neo4j(
                         params=str(rel.params),
                     )
 
+                    # If sub-surface tier anchor specified, materialize SurfaceAnchor node
+                    if "surface_anchor" in rel.params:
+                        anchor_name = str(rel.params["surface_anchor"])
+                        session.run(
+                            """
+                            MATCH (r {id: $reference, env_name: $env_name}),
+                                  (s {id: $subject, env_name: $env_name})
+                            MERGE (sa:SurfaceAnchor {id: $anchor_id, env_name: $env_name})
+                            SET sa.anchor_name = $anchor_name,
+                                sa.nominal_height = $nominal_height
+                            MERGE (r)-[:HAS_SUB_SURFACE]->(sa)
+                            MERGE (s)-[:PLACED_ON_SUB_SURFACE]->(sa)
+                            """,
+                            env_name=spec.env_name,
+                            reference=rel.reference,
+                            subject=rel.subject,
+                            anchor_id=f"{rel.reference}_{anchor_name}",
+                            anchor_name=anchor_name,
+                            nominal_height=float(rel.params.get("nominal_height", 0.0)),
+                        )
+                        primary_furniture_id = rel.reference
+
+            # 6. Merge Robot Affordance Standoff Link
+            if spec.embodiment:
+                target_fid = primary_furniture_id or (spec.objects[0].id if spec.objects else None)
+                if target_fid:
+                    session.run(
+                        """
+                        MATCH (emb:Embodiment {id: $emb_id, env_name: $env_name}),
+                              (furn {id: $furn_id, env_name: $env_name})
+                        MERGE (emb)-[a:STANDS_AT_AFFORDANCE]->(furn)
+                        SET a.standoff_distance = 0.85,
+                            a.relative_heading = 'front_facing'
+                        """,
+                        env_name=spec.env_name,
+                        emb_id=spec.embodiment.id,
+                        furn_id=target_fid,
+                    )
+
+            # 7. Merge Camera Viewport Grounding
+            cam_target_id = spec.objects[0].id if spec.objects else (spec.background.id if spec.background else None)
+            if cam_target_id:
+                session.run(
+                    """
+                    MATCH (e:EnvironmentGraph {name: $env_name}),
+                          (target {id: $target_id, env_name: $env_name})
+                    MERGE (cam:Camera {id: $cam_id, env_name: $env_name})
+                    SET cam.fov = 65.0,
+                        cam.eye_offset = [-1.5, -1.5, 1.5]
+                    MERGE (e)-[:HAS_CAMERA]->(cam)
+                    MERGE (cam)-[:OBSERVES_INTERACTION_ZONE]->(target)
+                    """,
+                    env_name=spec.env_name,
+                    cam_id=f"{spec.env_name}_viewer_cam",
+                    target_id=cam_target_id,
+                )
+
             # Summary verification
             result = session.run(
                 """
                 MATCH (e:EnvironmentGraph {name: $env_name})
-                OPTIONAL MATCH (e)-[:HAS_EMBODIMENT|HAS_TERRAIN|CONTAINS_OBJECT]->(n)
-                OPTIONAL MATCH (n)-[r]->(m) WHERE r.env_name IS NULL
+                OPTIONAL MATCH (e)-[:HAS_EMBODIMENT|HAS_TERRAIN|CONTAINS_OBJECT|CONTAINS_PRIM|HAS_CAMERA]->(n)
+                OPTIONAL MATCH (n)-[r]->(m)
                 RETURN count(DISTINCT n) AS node_count, count(DISTINCT r) AS rel_count
                 """,
                 env_name=spec.env_name,
             ).single()
+
 
             return {
                 "env_name": spec.env_name,

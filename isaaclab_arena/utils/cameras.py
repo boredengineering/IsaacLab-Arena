@@ -177,3 +177,74 @@ def get_viewer_cfg_look_at_object(lookat_object: Asset, offset: np.ndarray) -> V
     camera_vec = np.array(lookat, dtype=float) + np.array(offset, dtype=float)
     camera_position = tuple(float(x) for x in camera_vec.tolist())
     return ViewerCfg(eye=camera_position, lookat=lookat, origin_type="env")
+
+
+def compute_robot_relative_viewer_cfg(
+    embodiment: Asset | None,
+    lookat_target: Asset | None = None,
+    standoff_back: float = 1.10,
+    standoff_side: float = 0.65,
+    elevation: float = 0.85,
+    fallback_offset: tuple[float, float, float] = (-1.5, -1.5, 1.5),
+) -> ViewerCfg:
+    """Compute an over-the-shoulder perspective ViewerCfg relative to the robot's base frame and gaze centroid.
+
+    Positions the camera behind and to the side of the robot's shoulder, pointing directly
+    at the active manipulation centroid or lookat target.
+
+    Args:
+        embodiment: The robot asset whose pose anchors the perspective camera.
+        lookat_target: Optional target asset (e.g. manipuland or receptacle) to focus on.
+        standoff_back: Distance in meters to place camera behind robot along heading.
+        standoff_side: Distance in meters to place camera laterally (positive = right shoulder).
+        elevation: Height in meters above robot standing height (z=0.75m).
+        fallback_offset: Offset used if robot pose is not yet known.
+
+    Returns:
+        ViewerCfg configured with robot-relative eye and lookat coordinates.
+    """
+    import math
+
+    if embodiment is not None:
+        robot_pose = embodiment.get_initial_pose()
+        if isinstance(robot_pose, PoseRange):
+            robot_pose = robot_pose.get_midpoint()
+
+        if robot_pose is not None:
+            r_pos = robot_pose.position_xyz
+            r_rot = robot_pose.rotation_xyzw  # (x, y, z, w)
+
+            # Compute yaw from quaternion (x, y, z, w)
+            qx, qy, qz, qw = r_rot
+            siny_cosp = 2.0 * (qw * qz + qx * qy)
+            cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
+            yaw = math.atan2(siny_cosp, cosy_cosp)
+
+            u_fwd = np.array([math.cos(yaw), math.sin(yaw), 0.0])
+            u_lat = np.array([-math.sin(yaw), math.cos(yaw), 0.0])
+
+            # Standing pelvis level is ~0.75m above base
+            r_center = np.array([r_pos[0], r_pos[1], r_pos[2] + 0.75])
+            eye = r_center - standoff_back * u_fwd + standoff_side * u_lat + np.array([0.0, 0.0, elevation])
+
+            if lookat_target is not None and lookat_target.get_initial_pose() is not None:
+                t_pose = lookat_target.get_initial_pose()
+                if isinstance(t_pose, PoseRange):
+                    t_pose = t_pose.get_midpoint()
+                lookat = np.array(t_pose.position_xyz)
+            else:
+                # Default lookat: 0.9m in front of robot at table height
+                lookat = r_center + 0.9 * u_fwd - np.array([0.0, 0.0, 0.1])
+
+            return ViewerCfg(
+                eye=tuple(float(x) for x in eye),
+                lookat=tuple(float(x) for x in lookat),
+                origin_type="env",
+            )
+
+    # Fallback to lookat target if embodiment pose not set
+    if lookat_target is not None:
+        return get_viewer_cfg_look_at_object(lookat_target, np.array(fallback_offset))
+
+    return ViewerCfg()
+

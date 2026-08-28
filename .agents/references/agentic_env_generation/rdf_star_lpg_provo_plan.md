@@ -1249,6 +1249,552 @@ arena:orthogonallyObservedBy a owl:ObjectProperty ;
     arena:targetAsset :brown_box .
 ```
 
+---
+
+## 15. Inside-Out Dynamic Relationship Expansion Architecture
+
+### 15.1 Paradigm Shift: Inside-Out vs. Top-Down Scene Generation
+
+Traditional environment synthesis attempted a **Top-Down** approach: starting from a massive 200m building mesh and randomly trying to scatter furniture and robots within it, resulting in empty voids, collision jams, and disconnected cameras.
+
+The LPG and RDF-star architecture instead operates **Inside-Out**, expanding symmetrically from the most critical interaction relationships towards the surrounding background:
+
+```mermaid
+flowchart TD
+    classDef core fill:#991B1B,stroke:#F87171,stroke-width:2px,color:#F8FAFC;
+    classDef anchor fill:#B45309,stroke:#F59E0B,stroke-width:2px,color:#F8FAFC;
+    classDef robot fill:#4C1D95,stroke:#A78BFA,stroke-width:2px,color:#F8FAFC;
+    classDef camera fill:#9F1239,stroke:#FB7185,stroke-width:2px,color:#F8FAFC;
+    classDef scene fill:#1E293B,stroke:#64748B,stroke-width:2px,color:#F8FAFC;
+
+    subgraph RANK_0 ["Rank 0: Task Goal Core (Active Manipulation Pair)"]
+        TASK_CORE["Task Objective: Pick(o_1) & Place(o_2)<br/>• Active Manipulation Centroid: P_task = 0.5*(P_o1 + P_o2)<br/>• Interaction Envelope Radius: r = 0.40m"]:::core
+    end
+
+    subgraph RANK_1 ["Rank 1: Dynamic Surface Anchor Construction"]
+        ANCHOR["Dynamic Support Anchor (Shelf Tier / Table Top)<br/>• Surface Bounds encompassing o_1, o_2 with clearance<br/>• Anchor Height: z_surface = 0.75m"]:::anchor
+    end
+
+    subgraph RANK_2 ["Rank 2: Robot Kinematic Affordance Standoff"]
+        BOT_STAND["Embodiment Base Alignment<br/>• Standoff: d_standoff = -0.03m from front edge<br/>• Heading: yaw facing P_task<br/>• Dual-Arm Pink IK Reach Ellipsoid Check"]:::robot
+    end
+
+    subgraph RANK_3 ["Rank 3: Observation Camera Triad Grounding"]
+        CAM_RIG["Camera Triad<br/>• Perspective: Over-the-shoulder (az: 45°, el: 35°, d: 1.6m)<br/>• Top: Orthogonal overhead (z = z_task + 1.35m)<br/>• Ego: head_link pitch-gaze"]:::camera
+    end
+
+    subgraph RANK_4 ["Rank 4: Surrounding USD Scene & Physics Floor Raycasting"]
+        ROOM_SURROUND["Background Scene USD & Collision Envelope<br/>• Floor Raycast: z_floor = z_anchor - h_fixture<br/>• Workspace Prim Pruning: Deactivate clutter in r &lt;= 1.5m"]:::scene
+    end
+
+    TASK_CORE ==>|1. Expands To Support| ANCHOR
+    ANCHOR ==>|2. Expands To Standoff| BOT_STAND
+    BOT_STAND ==>|3. Expands To Gaze| CAM_RIG
+    ANCHOR ==>|4. Expands To Room| ROOM_SURROUND
+    BOT_STAND ==>|4. Expands To Floor| ROOM_SURROUND
+```
+
+---
+
+### 15.2 Rank-Ordered Expansion Protocol
+
+1. **Rank 0 (Task Goal Core)**:
+   * The user prompt specifies the goal pair: e.g. `pick_up_object: apple`, `destination_location: plate`.
+   * These objects form the initial core interaction seed.
+2. **Rank 1 (Dynamic Surface Anchor)**:
+   * The LPG identifies the support relation. Rather than hardcoding spatial bounding boxes, the anchor is a dynamic surface representation derived from the task objects' combined footprint plus clearance:
+     $$\mathcal{B}_{\text{anchor}} = \text{AABB}(o_1) \cup \text{AABB}(o_2) \oplus \delta_{\text{clearance}}$$
+3. **Rank 2 (Robot Affordance Standoff)**:
+   * The robot is positioned at the front edge of the dynamic anchor along the task interaction axis, facing the task centroid.
+4. **Rank 3 (Camera Triad Grounding)**:
+   * The perspective viewport camera is locked into an invariant over-the-shoulder vector from the robot's pelvis frame pointing at the task centroid.
+   * The top camera is locked directly above the task centroid.
+5. **Rank 4 (Surrounding Scene & Floor Raycasting)**:
+   * Floor contact is resolved dynamically by projecting raycasts downward from the anchor and robot feet onto the USD collision mesh ($z_{\text{floor}}$), eliminating hardcoded floor plane injections.
+   * Background prims within the active task radius $R_{\text{active}} \le 1.5\text{m}$ that are not part of the task graph are automatically deactivated pre-startup.
+
+---
+
+### 15.3 Cypher Inside-Out Expansion Query
+
+```cypher
+// 1. Start from Task Goal Pair (Rank 0)
+MATCH (task:TaskSpec)-[:TARGETS_OBJECT]->(o1:RigidObject)
+MATCH (task)-[:TARGETS_DESTINATION]->(o2:RigidObject)
+
+// 2. Expand outwards to Dynamic Support Anchor (Rank 1)
+MATCH (o1)-[:PLACED_ON_SUB_SURFACE]->(anchor:SurfaceAnchor)<-[:PLACED_ON_SUB_SURFACE]-(o2)
+MATCH (furn:Furniture)-[:HAS_SUB_SURFACE]->(anchor)
+
+// 3. Expand outwards to Robot Standoff (Rank 2)
+MATCH (furn)<-[:STANDS_AT_AFFORDANCE]-(robot:Embodiment)
+
+// 4. Expand outwards to Camera Triad (Rank 3)
+MATCH (robot)-[:FRAMES_PERSPECTIVE_VIEW]->(cam_persp:PerspectiveCamera)
+MATCH (anchor)-[:ORTHOGONALLY_OBSERVED_BY]->(cam_top:TopCamera)
+
+// 5. Expand outwards to Room & Floor (Rank 4)
+MATCH (furn)-[:ATTACHED_TO_PRIM]->(room_zone:USDPrim)<-[:CONTAINS_PRIM]-(room:BackgroundScene)
+
+RETURN task.description, o1.id, o2.id, anchor.anchorName, robot.id, 
+       cam_persp.id, cam_top.id, room.id;
+```
+
+---
+
+## 16. Recursive USD Prim Scene Graph Mapping & Bidirectional LPG $\leftrightarrow$ RDF-star Isomorphism Engine
+
+### 16.1 The Challenge: Progressive Scene Graph Decomposition of `galileo.usd`
+
+Massive environment assets like `galileo.usd` (spanning $\pm 100\text{m}$ with hundreds of nested sub-prims, warehouse racks, storage bays, and collision meshes) cannot be treated as opaque monolithic background meshes. Doing so leaves the AI agent blind to the internal rooms, shelves, collision barriers, and floor planes.
+
+To solve this, the pipeline incorporates an **Automated Recursive Scene Graph Lifter** that extracts the full hierarchy of USD Prims into a **Dual-Store LPG (Neo4j) & RDF-star Knowledge Graph**, enabling progressive multi-depth AI exploration:
+
+```mermaid
+flowchart TD
+    classDef stage fill:#0F172A,stroke:#38BDF8,stroke-width:2px,color:#F8FAFC;
+    classDef zone fill:#064E3B,stroke:#34D399,stroke-width:2px,color:#F8FAFC;
+    classDef fixture fill:#B45309,stroke:#F59E0B,stroke-width:2px,color:#F8FAFC;
+    classDef surface fill:#D97706,stroke:#FDE68A,stroke-width:1px,color:#1E293B;
+    classDef task fill:#991B1B,stroke:#F87171,stroke-width:2px,color:#F8FAFC;
+    classDef agent fill:#4C1D95,stroke:#A78BFA,stroke-width:2px,color:#F8FAFC;
+
+    subgraph USD_STAGE ["USD Stage Decomposition (galileo.usd)"]
+        D0["Depth 0: Root USD Stage<br/>/World/galileo (200m x 200m building)"]:::stage
+        D1["Depth 1: Functional Sub-Zones<br/>• /World/galileo/StorageBay_01<br/>• /World/galileo/ReceptionCounter<br/>• /World/galileo/WorkshopZone"]:::zone
+        D2["Depth 2: Fixtures & Obstacles<br/>• /World/galileo/StorageBay_01/wireshelving<br/>• /World/galileo/StorageBay_01/pallet_rack"]:::fixture
+        D3["Depth 3: Sub-Surfaces & Tiers<br/>• shelf_tier_1 (z=0.45m)<br/>• shelf_tier_2 (z=0.75m)<br/>• shelf_tier_3 (z=1.15m)"]:::surface
+        D4["Depth 4: Task Placement & Affordance<br/>• brown_box placedOnSubSurface shelf_tier_2<br/>• g1_robot standsAtAffordance (dist: 0.85m)<br/>• Camera Triad (Ego / Top / Over-the-Shoulder)"]:::task
+    end
+
+    subgraph PROGRESSIVE_AGENT ["Recursive AI Agent Exploration Loop"]
+        LLM_AGENT["Antigravity AI Agent / LLM Orchestrator<br/>(Progressive Cypher / SPARQL Reasoning)"]:::agent
+        NEO_LPG["Neo4j LPG Store<br/>(High-Performance Spatial Graph Queries)"]:::stage
+        RDF_STAR_STORE["RDF-star / SHACL Store<br/>(Formal Ontological Invariant Gate)"]:::stage
+    end
+
+    D0 --> D1
+    D1 --> D2
+    D2 --> D3
+    D3 --> D4
+
+    D0 -.->|USD Parser & BBoxCache| NEO_LPG
+    D1 -.->|USD Parser & BBoxCache| NEO_LPG
+    D2 -.->|USD Parser & BBoxCache| NEO_LPG
+    D3 -.->|USD Parser & BBoxCache| NEO_LPG
+
+    NEO_LPG <-->|"Bidirectional Isomorphism Engine<br/>(LPG &lt;==&gt; RDF-star)"| RDF_STAR_STORE
+
+    LLM_AGENT <-->|"1. Query Available Zones"| NEO_LPG
+    LLM_AGENT <-->|"2. Query Fixtures in Zone"| NEO_LPG
+    LLM_AGENT <-->|"3. Query Surface Tiers"| NEO_LPG
+    LLM_AGENT -->|"4. Assert Task & Affordances"| RDF_STAR_STORE
+```
+
+---
+
+### 16.2 The Bidirectional LPG $\leftrightarrow$ RDF-star Isomorphism Engine
+
+The system maintains formal mathematical isomorphism between the Property Graph (LPG in Neo4j) and the RDF-star Semantic Graph:
+
+| Property Graph Concept (LPG / Neo4j) | RDF-star Semantic Mapping (W3C standard) | Example in `galileo.usd` |
+| :--- | :--- | :--- |
+| **Node Label (`:USDPrim`)** | `rdf:type arena:USDPrim` | `:galileo_bay_01 a arena:USDPrim .` |
+| **Node Property (`prim_path`)** | RDF Datatype Property `arena:primPath` | `:galileo_bay_01 arena:primPath "/World/galileo/StorageBay_01" .` |
+| **Node Property (`world_bbox`)** | RDF Literal / List `arena:worldBoundingBox` | `:galileo_bay_01 arena:bounds [-1.0, 1.0, -0.5, 0.5, 0.0, 2.5] .` |
+| **Directed Relationship (`[:ATTACHED_TO_PRIM]`)** | RDF Object Property `arena:attachedToPrim` | `:wireshelving arena:attachedToPrim :galileo_bay_01 .` |
+| **Edge Property (`{nominal_height: 0.75, clearance: 0.05}`)** | **RDF-star Reified Triples (First-Class Metadata)** | `<< :box arena:placedOnSubSurface :shelf_tier_2 >> arena:nominalHeight 0.75 ; arena:clearance 0.05 .` |
+
+#### Isomorphism Conversion Code Contract:
+```python
+def lpg_edge_to_rdf_star(subject_id: str, rel_type: str, object_id: str, properties: dict) -> str:
+    """Converts a Neo4j LPG edge with properties into an RDF-star reified triple."""
+    subj = f":{subject_id}"
+    pred = f"arena:{rel_type.lower()}"
+    obj = f":{object_id}"
+    
+    reified_header = f"<< {subj} {pred} {obj} >>"
+    property_lines = []
+    for k, v in properties.items():
+        if isinstance(v, (int, float)):
+            property_lines.append(f'    arena:{k} "{v}"^^xsd:float')
+        elif isinstance(v, str):
+            property_lines.append(f'    arena:{k} "{v}"')
+        elif isinstance(v, (list, tuple)):
+            property_lines.append(f'    arena:{k} {list(v)}')
+            
+    return reified_header + "\n" + " ;\n".join(property_lines) + " .\n"
+```
+
+---
+
+### 16.3 The 5-Step Recursive Agent Exploration Protocol
+
+When given a high-level task prompt (*"Unitree G1 pick up brown box from wireshelving in Galileo and place into blue sorting bin"*), the Antigravity Agent recursively queries and maps the environment:
+
+#### Step 1: Macro Zone Discovery (Recursion Depth 0 $\to$ 1)
+The agent queries the top-level zones in `galileo.usd`:
+```cypher
+MATCH (bg:BackgroundScene {name: 'galileo'})-[:HAS_USD_ZONE]->(zone:USDPrim)
+RETURN zone.prim_path AS prim, zone.zone_type AS type, zone.world_center AS center
+```
+*Result*: Agent selects `/World/galileo/StorageBay_01` based on task semantics (storage/shelving).
+
+#### Step 2: In-Zone Fixture & Obstacle Discovery (Recursion Depth 1 $\to$ 2)
+The agent queries existing fixtures or anchors inside the selected bay:
+```cypher
+MATCH (zone:USDPrim {prim_path: '/World/galileo/StorageBay_01'})-[:CONTAINS_FIXTURE]->(f:Furniture)
+RETURN f.id, f.registry_name, f.bounds
+```
+*Result*: Discovers `wireshelving` fixture or creates local anchor at bay coordinates `[0.0, 1.1, 0.0]`.
+
+#### Step 3: Micro Surface & Tier Discovery (Recursion Depth 2 $\to$ 3)
+The agent queries the functional surface tiers of the fixture:
+```cypher
+MATCH (f:Furniture {id: 'wireshelving'})-[:HAS_SUB_SURFACE]->(tier:SurfaceAnchor)
+RETURN tier.anchorName, tier.nominal_height, tier.usable_area
+```
+*Result*: Selects `shelf_tier_2` ($z=0.75\text{m}$) for pick object and floor deposit zone for receptacle.
+
+#### Step 4: Affordance & Camera Grounding (Recursion Depth 3 $\to$ 4)
+* Places `brown_box` onto `shelf_tier_2` with $0.02\text{m}$ clearance.
+* Solves `g1_robot` standing standoff $0.85\text{m}$ in front of the shelf facing $+X$.
+* Computes Robot-Centric Camera Triad:
+  - Perspective camera: $1.1\text{m}$ behind, $0.65\text{m}$ right, $0.85\text{m}$ above pelvis looking at the shelf.
+  - Top camera: $1.35\text{m}$ above workspace centroid looking down.
+
+#### Step 5: Physics Verification & Clutter Pruning (Recursion Depth 4)
+* Queries USD collision mesh directly beneath the robot feet to resolve exact $z_{\text{floor}} = -0.795\text{m}$.
+* Queries all background prims within $1.5\text{m}$ of the workspace centroid and generates deactivation terms for non-task props.
+
+---
+
+### 16.4 Implementation Touchpoints in Codebase
+
+| Component | Target File | Implementation Plan |
+| :--- | :--- | :--- |
+| **USD Stage Introspector** | [`isaaclab_arena/agentic_environment_generation/usd_stage_introspection.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/usd_stage_introspection.py) | Use `pxr.Usd` and `UsdGeom.BBoxCache` to extract rooms, collision hulls, and surface tiers into structured JSON. |
+| **LPG Neo4j Sync** | [`isaaclab_arena/agentic_environment_generation/lpg_neo4j_sync.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/lpg_neo4j_sync.py) | Synchronize full USD Prim hierarchies (`:USDPrim`, `:HAS_USD_ZONE`, `[:ATTACHED_TO_PRIM]`) to Neo4j. |
+| **RDF-star Lowering Compiler** | [`isaaclab_arena/agentic_environment_generation/rdf_lowering.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/rdf_lowering.py) | Lift and lower telescopic sub-prims, surface anchors, and camera triad between RDF-star and `ArenaEnvGraphSpec`. |
+| **Camera Controller** | [`isaaclab_arena/utils/cameras.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/utils/cameras.py) | Implement [`compute_robot_relative_viewer_cfg()`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/utils/cameras.py#L182-L248) and hook into [`ArenaEnvBuilder`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/environments/arena_env_builder.py#L326-L338). |
+| **Recursive Agent Loop** | [`isaaclab_arena/agentic_environment_generation/environment_generation_agent.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/environment_generation_agent.py) | Multi-pass agent that explores USD zones, grounds surface tiers, and validates against SHACL constraints. |
+
+---
+
+### 16.5 Neo4j Bloom Query for Galileo Exploration
+
+To explore the mapped `galileo.usd` scene graph interactively in Neo4j Bloom / Browser:
+
+```cypher
+// Interactive Query: Visualize Galileo Room, Fixtures, Surface Tiers, Robot Standoff, and Cameras
+MATCH (bg:BackgroundScene {name: 'galileo'})-[:HAS_USD_ZONE]->(zone:USDPrim)
+OPTIONAL MATCH (zone)<-[:ATTACHED_TO_PRIM]-(furn:Furniture)
+OPTIONAL MATCH (furn)-[:HAS_SUB_SURFACE]->(tier:SurfaceAnchor)
+OPTIONAL MATCH (tier)<-[:PLACED_ON_SUB_SURFACE]-(obj:RigidObject)
+OPTIONAL MATCH (furn)<-[:STANDS_AT_AFFORDANCE]-(robot:Embodiment)
+OPTIONAL MATCH (robot)-[:FRAMES_PERSPECTIVE_VIEW]->(cam:PerspectiveCamera)
+RETURN bg, zone, furn, tier, obj, robot, cam;
+```
+
+---
+
+## 17. Generalist USD Traversal Engine & Directed Cyclic Random Graph (DCRG) Architecture
+
+### 17.1 Mathematical Formulation: Scene Graphs as Directed Cyclic Random Graphs (DCRG)
+
+In generalized robotics simulation and physical AI, an environment cannot be simplified into a simple acyclic tree. Physical environments and task workflows form a **Directed Cyclic Random Graph (DCRG)**:
+
+$$\mathcal{G} = (\mathcal{V}, \mathcal{E}, \mathcal{P}, \mathcal{R})$$
+
+Where:
+* $\mathcal{V}$ is the set of heterogeneous scene vertices (Rooms, Fixtures, Surface Anchors, Manipulands, Embodiments, Cameras, Lighting, Tasks).
+* $\mathcal{E} \subseteq \mathcal{V} \times \mathcal{V} \times \mathcal{T}$ is the set of directed typed edges (`CONTAINS`, `SUPPORTS`, `REACHES`, `OBSERVES`, `OBSTRUCTS`, `FEEDS_INTO`).
+* **Cyclicity**: The graph contains closed directed cycles:
+  - *Kinematic-Obstacle Cycle*: $\text{Robot} \xrightarrow{\text{MANIPULATES}} \text{Object} \xrightarrow{\text{RESTS\_ON}} \text{Table} \xrightarrow{\text{IMPEDES\_PATH}} \text{Robot}$.
+  - *Perception Feedback Cycle*: $\text{Camera} \xrightarrow{\text{FRAMES}} \text{RobotGaze} \xrightarrow{\text{TRACKS}} \text{Target} \xrightarrow{\text{DEFINES\_LOOKAT}} \text{Camera}$.
+  - *State Transition Cycle*: $\text{State}_{\text{Pick}} \xrightarrow{\text{SUCCESS}} \text{State}_{\text{Place}} \xrightarrow{\text{RESET}} \text{State}_{\text{Pick}}$.
+* $\mathcal{P}(\text{state} \mid \mathcal{G})$ is the set of stochastic probability distributions (Domain Randomization):
+  - Spatial pose ranges: $\vec{x}_{\text{pose}} \sim \mathcal{U}[\vec{x}_{\text{min}}, \vec{x}_{\text{max}}]$ on dynamic polygon manifolds $\mathcal{S}_{\text{surface}}$.
+  - Physical distributions: Friction $\mu \sim \mathcal{N}(\mu_0, \sigma_\mu^2)$, Mass $m \sim \mathcal{U}[m_{\text{min}}, m_{\text{max}}]$, Camera focal jitter $\Delta f$.
+
+```mermaid
+flowchart LR
+    classDef robot fill:#4C1D95,stroke:#A78BFA,stroke-width:2px,color:#F8FAFC;
+    classDef object fill:#1D4ED8,stroke:#60A5FA,stroke-width:2px,color:#F8FAFC;
+    classDef fixture fill:#B45309,stroke:#F59E0B,stroke-width:2px,color:#F8FAFC;
+    classDef camera fill:#9F1239,stroke:#FB7185,stroke-width:2px,color:#F8FAFC;
+    classDef room fill:#064E3B,stroke:#34D399,stroke-width:2px,color:#F8FAFC;
+
+    ROOM["Room Zone<br/><i>/World/Zone</i>"]:::room
+    ROBOT["G1 Humanoid<br/><i>:g1_robot</i>"]:::robot
+    OBJ["Manipuland<br/><i>:target_object</i>"]:::object
+    TABLE["Support Fixture<br/><i>:workstation</i>"]:::fixture
+    CAM["Observer Camera<br/><i>:perspective_cam</i>"]:::camera
+
+    ROOM -->|"CONTAINS_FIXTURE"| TABLE
+    ROOM -->|"ENCLOSES_SPACE"| ROBOT
+    TABLE -->|"PROVIDES_SUPPORT {mu ~ U[0.4, 0.8]}"| OBJ
+    ROBOT -->|"REACHES_INTO {ellipsoid_dist &lt;= 0.72m}"| OBJ
+    ROBOT -->|"STANDS_NEAR {clearance: 0.85m}"| TABLE
+    TABLE -->|"OBSTRUCTS_FEET_ZONE"| ROBOT
+    CAM -->|"FRAMES_PERSPECTIVE_VIEW"| ROBOT
+    CAM -->|"LOOK_AT_TARGET"| OBJ
+    OBJ -->|"OCCLUDES_CAMERA_RAYCAST"| CAM
+```
+
+---
+
+### 17.2 Intentions & Redesign of `usd_stage_introspection.py`
+
+Rather than relying on brittle hardcoded strings (`"shelf"`, `"table"`, `"bay"`), `usd_stage_introspection.py` is being refactored into a **Generalist Geometric & Physical USD Traversal Engine**:
+
+```mermaid
+flowchart TD
+    classDef step fill:#1E293B,stroke:#64748B,stroke-width:2px,color:#F8FAFC;
+    classDef geom fill:#0F766E,stroke:#2DD4BF,stroke-width:2px,color:#F8FAFC;
+    classDef phys fill:#B45309,stroke:#F59E0B,stroke-width:2px,color:#F8FAFC;
+    classDef graph fill:#4C1D95,stroke:#A78BFA,stroke-width:2px,color:#F8FAFC;
+
+    STAGE["Arbitrary USD Stage<br/>(galileo.usd, robocasa_kitchen.usd, factory.usd)"]:::step
+
+    subgraph ENGINE ["Generalist USD Traversal Engine (usd_stage_introspection.py)"]
+        CRAWLER["1. Universal USD Crawler<br/>• pxr.Usd.Stage traversal<br/>• pxr.UsdGeom.BBoxCache (OBB/AABB)"]:::geom
+        SURFACE_EXTRACT["2. Geometric Surface Extractor<br/>• Mesh face normal filtering: n_z &gt;= 0.95<br/>• Planar polygon clustering (area &gt;= 0.04 m²)"]:::geom
+        PHYS_CLASSIFIER["3. Physics & Semantic Classifier<br/>• UsdPhysics.CollisionAPI (Static Fixtures)<br/>• UsdPhysics.RigidBodyAPI (Dynamic Objects)<br/>• UsdPhysics.Joint (Articulated Mechanisms)"]:::phys
+        DCRG_BUILDER["4. DCRG Spatial Relation Builder<br/>• Spatial containment matrices<br/>• Contact manifolds & clearance envelopes<br/>• Stochastic domain randomization bounds"]:::graph
+    end
+
+    LPG_STORE["Neo4j LPG Store<br/>(Directed Cyclic Graph)"]:::step
+    RDF_STORE["RDF-star / SHACL Store<br/>(Reified Probabilistic Triples)"]:::step
+
+    STAGE --> CRAWLER
+    CRAWLER --> SURFACE_EXTRACT
+    CRAWLER --> PHYS_CLASSIFIER
+    SURFACE_EXTRACT --> DCRG_BUILDER
+    PHYS_CLASSIFIER --> DCRG_BUILDER
+
+    DCRG_BUILDER --> LPG_STORE
+    DCRG_BUILDER --> RDF_STORE
+```
+
+#### Key Functional Enhancements:
+1. **Geometric Surface Extractor (No string heuristics)**:
+   - Reads raw mesh vertices (`UsdGeom.Mesh.GetPointsAttr()`) and face indices.
+   - Computes face normal vectors $\vec{n} = \frac{(v_1 - v_0) \times (v_2 - v_0)}{\|(v_1 - v_0) \times (v_2 - v_0)\|}$.
+   - Filters horizontal faces ($\vec{n} \cdot \hat{z} \ge 0.95$) and clusters contiguous coplanar patches into **Dynamic `SurfaceAnchor`s** with exact polygon boundaries and nominal heights.
+2. **Physics & Articulation Classification**:
+   - Inspects `UsdPhysics` APIs: Static colliders become `:Fixture`, unconstrained rigid bodies become `:RigidObject`, and jointed chains become `:ArticulatedFixture`.
+3. **Spatial Containment & Contact Graph**:
+   - Automatically computes 3D AABB inclusion: If $\text{AABB}(A) \subset \text{AABB}(B)$, creates `(A)-[:ENCLOSED_BY]->(B)`.
+   - If $\text{BottomFace}(A)$ rests within $\Delta z \le 0.02\text{m}$ of $\text{TopFace}(B)$, creates `(A)-[:RESTS_ON]->(B)`.
+
+---
+
+### 17.3 Recursive Progressive Agent Traversal over DCRGs
+
+To prevent infinite loops when an LLM agent queries a cyclic graph, the agent traversal protocol employs **Ranked Subgraph Focus with Cycle Detection**:
+
+```python
+class RecursiveSceneGraphExplorer:
+    """Recursively queries the Directed Cyclic Random Graph with cycle prevention."""
+
+    def __init__(self, neo4j_driver):
+        self.driver = neo4j_driver
+        self.visited_nodes: set[str] = set()
+
+    def explore_zone_recursively(self, zone_id: str, max_depth: int = 4) -> dict[str, Any]:
+        """Progressively expands outward from zone_id up to max_depth."""
+        query = """
+        MATCH path = (root {id: $zone_id})-[r*1..4]-(neighbor)
+        WHERE ALL(n IN nodes(path) WHERE single(x IN nodes(path) WHERE x = n))
+        RETURN nodes(path) AS entities, relationships(path) AS relations
+        """
+        with self.driver.session() as session:
+            result = session.run(query, zone_id=zone_id)
+            return self._format_dcrg_subgraph(result)
+```
+
+---
+
+### 17.4 RDF-star Representation of Probabilistic DCRGs
+
+In RDF-star, stochastic bounds and cyclic relations are reified with first-class distribution metadata:
+
+```turtle
+# 1. Dynamic Surface Anchor with Stochastic Sampling Polygon
+:shelf_tier_2 a arena:SurfaceAnchor ;
+    arena:nominalHeight "0.75"^^xsd:float ;
+    arena:polygonVertices ( [ -0.4, -0.2, 0.75 ] [ 0.4, -0.2, 0.75 ] [ 0.4, 0.2, 0.75 ] [ -0.4, 0.2, 0.75 ] ) .
+
+# 2. Reified Random Placement Distribution
+<< :brown_box arena:placedOnSubSurface :shelf_tier_2 >>
+    arena:poseDistribution "uniform_box" ;
+    arena:positionLow [ -0.15, -0.10, 0.76 ] ;
+    arena:positionHigh [ 0.15, 0.10, 0.76 ] ;
+    arena:yawRange [ -0.25, 0.25 ] ;
+    arena:frictionRange [ 0.5, 0.8 ] .
+
+# 3. Kinematic-Obstacle Cycle
+<< :g1_robot arena:standsAtAffordance :wireshelving >>
+    arena:standoffDistance "0.85"^^xsd:float .
+
+<< :wireshelving arena:impedesFootprint :g1_robot >>
+    arena:minClearanceRadius "0.45"^^xsd:float .
+```
+
+---
+
+## 18. The Causality Light Cone Architecture: Entropy Collapse & Progressive Graph Hops
+
+### 18.1 The Paradigm: Creating Causality in High-Entropy USD Environments
+
+In an ungrounded USD stage (or a raw language prompt), there is initially **zero physical and spatial causality**:
+* Objects are unanchored floating coordinate noise scattered across unbounded $\mathbb{R}^3$.
+* Fixtures have no established floor contact and may spawn into building walls.
+* Robots have no reachability guarantee and can spawn in mid-air or out of manipulation range.
+* Cameras have no gaze coupling and point into black voids or behind structural pillars.
+
+When an environment lacks causality, every asset is an independent random variable with maximum entropy ($\mathcal{H} \to \infty$). The purpose of the agentic graph generation pipeline is **creating causality**: injecting physical, geometric, and semantic dependency chains where none existed before.
+
+```mermaid
+flowchart TD
+    classDef past fill:#064E3B,stroke:#34D399,stroke-width:2px,color:#F8FAFC;
+    classDef seed fill:#991B1B,stroke:#F87171,stroke-width:2px,color:#F8FAFC;
+    classDef future fill:#1D4ED8,stroke:#60A5FA,stroke-width:2px,color:#F8FAFC;
+    classDef outside fill:#334155,stroke:#64748B,stroke-width:1px,color:#94A3B8;
+
+    subgraph PAST_CONE ["1. Past Causality Light Cone (Preconditions & Support Manifold)"]
+        ROOM_FLOOR["USD Stage Floor Mesh<br/>(Normal Contact & Raycast Anchor: z_floor = -0.795m)"]:::past
+        FIXTURE_SUPPORT["Shelf Fixture & Tier Anchor<br/>(Physical Support Manifold: z_shelf = 0.75m)"]:::past
+    end
+
+    subgraph SEED_EVENT ["2. The Causal Seed Event (Task Objective)"]
+        TASK_EVENT["TASK EVENT: Pick(Box) & Place(Bin)<br/>• Active Manipulation Centroid: P_task<br/>• Collapses Spatial Uncertainty"]:::seed
+    end
+
+    subgraph FUTURE_CONE ["3. Future Causality Light Cone (Affordances, Reachability & Gaze)"]
+        ROBOT_MANIFOLD["Robot Kinematic Reach Cone<br/>(||P_robot - P_task|| &lt;= 0.72m, facing theta)"]:::future
+        CAMERA_FRUSTUM["Camera Line-of-Sight Frustum Cone<br/>(Over-the-shoulder, unoccluded line to P_task)"]:::future
+    end
+
+    subgraph OUTSIDE_CONE ["4. Spacelike Separated / Forbidden States (Pruned by SHACL)"]
+        FLOATING_BOX["Floating Box in Void"]:::outside
+        OCCLUDED_CAM["Camera Behind Concrete Wall"]:::outside
+        FALLING_ROBOT["Robot Spawned in Mid-Air"]:::outside
+    end
+
+    ROOM_FLOOR ==>|Causal Precondition| FIXTURE_SUPPORT
+    FIXTURE_SUPPORT ==>|Causal Support| TASK_EVENT
+    TASK_EVENT ==>|Causal Reachability Constraint| ROBOT_MANIFOLD
+    TASK_EVENT ==>|Causal Viewport Constraint| CAMERA_FRUSTUM
+    ROBOT_MANIFOLD ==>|Foot Contact Grounding| ROOM_FLOOR
+
+    OUTSIDE_CONE -.->|Rejected by SHACL Invariant Gate| SEED_EVENT
+```
+
+---
+
+### 18.2 Mathematical Formalization of the Causality Light Cone
+
+Inspired by relativistic causality (where an event $E_0$ at spacetime $(t_0, \vec{x}_0)$ can only interact with entities inside its light cone $c^2 \Delta t^2 \ge \Delta x^2$), the **Semantic Causality Light Cone** defines the valid manifold of scene entities:
+
+$$\mathcal{C}(E_0) = \mathcal{C}^{-}(E_0) \cup \{E_0\} \cup \mathcal{C}^{+}(E_0)$$
+
+Where:
+1. **$E_0 = (\text{TaskObjective}, \vec{P}_{\text{task}})$ (The Causal Seed Event)**:
+   The interaction centroid $\vec{P}_{\text{task}} = \frac{1}{2}(\vec{P}_{\text{pick}} + \vec{P}_{\text{place}})$ anchors the entire scene.
+2. **$\mathcal{C}^{-}(E_0)$ (The Past Light Cone — Physical Preconditions)**:
+   Entities that *must exist and be physically grounded* for $E_0$ to be stable:
+   $$\mathcal{C}^{-}(E_0) = \left\{ \text{Fixture } F, \text{Surface } S, \text{Floor } G \;\middle|\; \vec{P}_{\text{task}} \in \text{Polygon}(S), \; z_S = z_F + h_{\text{tier}}, \; z_F = z_G + h_{\text{fixture}} \right\}$$
+   *If the shelf is missing or floating, the past light cone is broken $\to$ simulation explodes.*
+3. **$\mathcal{C}^{+}(E_0)$ (The Future Light Cone — Affordances & Observers)**:
+   Entities that *can interact with or observe* $E_0$:
+   $$\mathcal{C}^{+}(E_0) = \left\{ \text{Robot } R, \text{Camera } C \;\middle|\; \|\vec{P}_R - \vec{P}_{\text{task}}\| \le L_{\text{reach}}, \; \text{Raycast}(C \to \vec{P}_{\text{task}}) \cap \text{Obstacles} = \emptyset \right\}$$
+   *Any robot or camera placed outside $\mathcal{C}^{+}(E_0)$ cannot reach or see the task.*
+4. **Forbidden / Spacelike-Separated Manifold**:
+   Any configuration $\vec{x} \notin \mathcal{C}(E_0)$ violates physics or task reachability and is strictly pruned by SHACL-star.
+
+---
+
+### 18.3 Progressive Graph Hops as Shannon Entropy Collapse
+
+At each graph hop in the Labeled Property Graph (LPG), the agent traverses along the causality light cone, collapsing uncertainty and writing the resulting reified constraints to RDF-star:
+
+$$\mathcal{H}(\text{SceneState}) = \mathcal{H}(E_0) + \mathcal{H}(\text{Support} \mid E_0) + \mathcal{H}(\text{Robot} \mid \text{Support}, E_0) + \mathcal{H}(\text{Camera} \mid \text{Robot}, E_0) + \dots$$
+
+| Graph Hop Step | Prior State (No Causality) | Light Cone Constraint Applied | Result in RDF-star (Causality Created) |
+| :--- | :--- | :--- | :--- |
+| **Hop 0: Seed** | $\infty$ possible tasks in building | User prompt: `Pick(Box), Place(Bin)` | Defines Task Interaction Centroid $\vec{P}_{\text{task}}$. |
+| **Hop 1: Support** | Shelf floating anywhere in $\pm 100\text{m}$ | Must physically support $\vec{P}_{\text{task}}$ at surface $z=0.75\text{m}$ | `<< :box :placedOnSubSurface :shelf_tier >>` (Entropy drops by 90%). |
+| **Hop 2: Robot Standoff** | Robot can spawn anywhere in space | Must lie inside Kinematic Reach Cone ($\le 0.72\text{m}$) | `<< :g1_robot :standsAtAffordance :shelf >> :standoff 0.85m` (Entropy drops by 99%). |
+| **Hop 3: Camera Triad** | Viewport points into black void | Must lie inside Over-the-Shoulder Frustum Cone | `<< :persp_cam :framesPerspectiveView :g1_robot >> :lookAt :box` (Unoccluded view). |
+| **Hop 4: Ground Raycast** | Robot feet float or bounce | Must intersect USD Stage Floor Mesh ($z = -0.795\text{m}$) | `<< :g1_robot :groundedOn :galileo_floor >> :z -0.795m` (Zero physics penetration). |
+
+---
+
+### 18.4 Cyclic Causal Closure & Equilibrium
+
+Because the graph is a **Directed Cyclic Random Graph (DCRG)**, the causal chain forms a closed loop:
+
+$$\text{Floor} \xrightarrow{\text{grounds}} \text{Shelf} \xrightarrow{\text{supports}} \text{Box} \xrightarrow{\text{demands\_reach}} \text{Robot} \xrightarrow{\text{stands\_on}} \text{Floor}$$
+
+A generated environment is physically valid if and only if the causal loop achieves equilibrium:
+
+$$\oint_{\text{cycle}} \text{CausalConstraints} = \text{Valid}$$
+
+* **SHACL-star Validation Gate**: If any link in the cycle fails (e.g. shelf height exceeds maximum arm elevation, or shelf collision hull forces the robot beyond reach distance), the causal loop fails to close, triggering automatic curriculum repair.
+* **PROV-O Lineage**: Records the complete causal provenance trail (`prov:wasDerivedFrom`, `prov:wasGeneratedBy`) documenting the exact sequence of graph hops that collapsed the scene entropy.
+
+---
+
+### 18.5 RDF-star Representation of Causal Light Cones
+
+```turtle
+# 1. Causal Seed Event
+:task_seed_001 a arena:TaskSeedEvent ;
+    arena:interactionCentroid [ 0.5785, 0.165, 0.735 ] ;
+    arena:pickTarget :brown_box ;
+    arena:placeTarget :blue_bin .
+
+# 2. Past Light Cone: Physical Grounding Manifold
+<< :brown_box arena:pastCausalAnchor :shelf_tier_2 >>
+    arena:normalContact [ 0.0, 0.0, 1.0 ] ;
+    arena:surfaceHeight "0.75"^^xsd:float ;
+    arena:groundFloorRef "-0.795"^^xsd:float .
+
+# 3. Future Light Cone: Kinematic & Perception Manifold
+<< :g1_robot arena:futureCausalAffordance :task_seed_001 >>
+    arena:reachEllipsoidMax "0.72"^^xsd:float ;
+    arena:standoffDistance "0.85"^^xsd:float ;
+    arena:facingAzimuth "0.0"^^xsd:float .
+
+<< :persp_cam arena:futureCausalFrustum :task_seed_001 >>
+    arena:cameraMode "over_the_shoulder" ;
+    arena:standoffDistance "1.6"^^xsd:float ;
+    arena:lineOfSightClearance true .
+```
+
+---
+
+### 18.6 Cypher Causal Light Cone Query in Neo4j
+
+```cypher
+// Query: Verify Closed Causal Loop from Seed through Support, Robot, Camera, and Floor
+MATCH (seed:TaskSeedEvent)-[:TARGETS]->(box:RigidObject)
+MATCH (box)-[:PLACED_ON_SUB_SURFACE]->(tier:SurfaceAnchor)<-[:HAS_SUB_SURFACE]-(shelf:Furniture)
+MATCH (shelf)-[:ATTACHED_TO_PRIM]->(zone:USDPrim)
+MATCH (shelf)<-[:STANDS_AT_AFFORDANCE]-(robot:Embodiment)
+MATCH (robot)-[:FRAMES_PERSPECTIVE_VIEW]->(cam:PerspectiveCamera)
+MATCH (robot)-[:GROUNDED_ON]->(floor:USDPrim)
+WHERE robot.standoff_distance <= 0.85 
+  AND cam.has_clear_line_of_sight = true
+RETURN seed.id, box.id, shelf.id, robot.id, cam.id, floor.id;
+```
+
+
+
+
+
 
 
 

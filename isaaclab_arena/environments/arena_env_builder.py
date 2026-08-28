@@ -324,6 +324,17 @@ class ArenaEnvBuilder:
         episode_recorders_cfg = self._compose_episode_recorders_cfg(self.arena_env.episode_recorder_terms)
 
         viewer_cfg = task.get_viewer_cfg()
+        if (
+            (viewer_cfg is None or getattr(viewer_cfg, "eye", None) == (7.5, 7.5, 7.5))
+            and embodiment is not None
+        ):
+            from isaaclab_arena.utils.cameras import compute_robot_relative_viewer_cfg
+
+            lookat_target = getattr(task, "pick_up_object", None)
+            viewer_cfg = compute_robot_relative_viewer_cfg(
+                embodiment=embodiment,
+                lookat_target=lookat_target,
+            )
 
         episode_length_s = task.get_episode_length_s()
 

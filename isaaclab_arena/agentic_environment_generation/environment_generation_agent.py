@@ -111,20 +111,8 @@ class EnvironmentGenerationAgent:
                 return None, spec.to_dict()
             spec = resolved
 
-        # Ensure root anchor relation exists for physical placement solver
-        has_anchor = any(r.kind == "is_anchor" for r in spec.relations)
-        if not has_anchor and spec.background:
-            from isaaclab_arena.environment_spec.arena_env_graph_spec import SpatialRelationSpec
-
-            spec.relations.insert(
-                0,
-                SpatialRelationSpec(
-                    kind="is_anchor",
-                    subject=spec.background.id,
-                    reference=None,
-                    params={},
-                ),
-            )
+        # Ensure root anchor relation exists for physical placement solver and ground dollhouse hierarchy
+        spec = _ground_telescopic_dollhouse_spec(spec)
 
         # Semantic validation against W3C SHACL constraints
         try:
@@ -139,6 +127,76 @@ class EnvironmentGenerationAgent:
             self._traces.append(f"RDF/SHACL validation skipped: {exc}")
 
         return spec, None
+
+
+def _ground_telescopic_dollhouse_spec(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphSpec:
+    """Ensure background, furniture, and receptacles are anchored in the workspace to prevent scattered spawns."""
+    from isaaclab_arena.environment_spec.arena_env_graph_types import SpatialRelationSpec
+
+    furniture_keywords = ("shelf", "shelving", "table", "counter", "desk", "cabinet", "stand")
+    receptacle_keywords = ("bin", "basket", "tray", "box_target", "receptacle")
+
+    # 1. Background scene root anchor
+    has_bg_anchor = any(r.kind == "is_anchor" and r.subject == spec.background.id for r in spec.relations)
+    if not has_bg_anchor:
+        spec.relations.insert(
+            0,
+            SpatialRelationSpec(
+                kind="is_anchor",
+                subject=spec.background.id,
+                reference=None,
+                params={},
+            ),
+        )
+
+    anchored_subjects = {r.subject for r in spec.relations if r.kind == "is_anchor"}
+
+    for obj in spec.objects:
+        obj_name_lower = f"{obj.id} {obj.registry_name}".lower()
+        is_furniture = any(k in obj_name_lower for k in furniture_keywords)
+        is_receptacle = any(k in obj_name_lower for k in receptacle_keywords)
+
+        if is_furniture:
+            if "initial_pose" not in obj.params:
+                obj.params["initial_pose"] = {
+                    "position_xyz": [0.0, 1.1, 0.0],
+                    "rotation_xyzw": [0.0, 0.0, 0.0, 1.0],
+                }
+            anchored_subjects.add(obj.id)
+
+        elif is_receptacle:
+            if "initial_pose" not in obj.params:
+                obj.params["initial_pose"] = {
+                    "position_xyz": [0.6, 0.8, 0.0],
+                    "rotation_xyzw": [0.0, 0.0, 0.0, 1.0],
+                }
+            anchored_subjects.add(obj.id)
+
+    # Clean and rebuild relations list without duplicates or redundant placements
+    cleaned_relations: list[SpatialRelationSpec] = []
+    seen_rel_signatures: set[tuple[str, str, str | None]] = set()
+
+    for anchor_id in [spec.background.id, *(o.id for o in spec.objects if o.id in anchored_subjects)]:
+        sig = ("is_anchor", anchor_id, None)
+        if sig not in seen_rel_signatures:
+            cleaned_relations.append(
+                SpatialRelationSpec(kind="is_anchor", subject=anchor_id, reference=None, params={})
+            )
+            seen_rel_signatures.add(sig)
+
+    for r in spec.relations:
+        if r.kind == "is_anchor":
+            continue
+        # Skip redundant 'on' if the subject is already anchored with an explicit initial_pose
+        if r.kind == "on" and r.subject in anchored_subjects and r.reference == spec.background.id:
+            continue
+        sig = (r.kind, r.subject, r.reference)
+        if sig not in seen_rel_signatures:
+            cleaned_relations.append(r)
+            seen_rel_signatures.add(sig)
+
+    spec.relations = cleaned_relations
+    return spec
 
 
 # ---------------------------------------------------------------------------

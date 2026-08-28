@@ -231,7 +231,7 @@ def sync_spec_to_neo4j(
             result = session.run(
                 """
                 MATCH (e:EnvironmentGraph {name: $env_name})
-                OPTIONAL MATCH (e)-[:HAS_EMBODIMENT|HAS_TERRAIN|CONTAINS_OBJECT|CONTAINS_PRIM|HAS_CAMERA]->(n)
+                OPTIONAL MATCH (e)-[rel]->(n)
                 OPTIONAL MATCH (n)-[r]->(m)
                 RETURN count(DISTINCT n) AS node_count, count(DISTINCT r) AS rel_count
                 """,
@@ -263,8 +263,9 @@ def query_spatial_hierarchy(
         with driver.session() as session:
             result = session.run(
                 """
-                MATCH (s)-[r:PLACED_ON|PLACED_INSIDE]->(parent)
+                MATCH (s)-[r]->(parent)
                 WHERE s.env_name = $env_name AND parent.env_name = $env_name
+                  AND type(r) IN ['PLACED_ON', 'PLACED_INSIDE', 'ATTACHED_TO_PRIM', 'HAS_SUB_SURFACE', 'PLACED_ON_SUB_SURFACE']
                 RETURN s.id AS subject,
                        type(r) AS relation,
                        parent.id AS parent_id,

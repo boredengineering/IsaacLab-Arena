@@ -85,11 +85,16 @@ def test_sync_spec_to_neo4j_and_query():
     assert len(hierarchy) >= 3
 
     # Verify that brown_box is child of wireshelving with surface_anchor
-    box_rel = next((h for h in hierarchy if h["subject"] == "brown_box"), None)
+    box_rel = next((h for h in hierarchy if h["subject"] == "brown_box" and h["relation"] == "PLACED_ON"), None)
     assert box_rel is not None
     assert box_rel["parent_id"] == "wireshelving"
     assert box_rel["surface_anchor"] == "shelf_tier_1"
     assert box_rel["nominal_height"] == 0.75
+
+    # Verify telescopic PLACED_ON_SUB_SURFACE relation exists
+    sub_surface_rel = next((h for h in hierarchy if h["subject"] == "brown_box" and h["relation"] == "PLACED_ON_SUB_SURFACE"), None)
+    assert sub_surface_rel is not None
+    assert sub_surface_rel["parent_id"] == "wireshelving_shelf_tier_1"
 
     # Verify that Camera and SurfaceAnchor nodes exist in Neo4j
     driver = get_neo4j_driver()

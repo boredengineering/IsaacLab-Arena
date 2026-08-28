@@ -1074,6 +1074,182 @@ RETURN bg.id AS room, zone.prim_path AS room_zone, furn.id AS fixture,
    * Rejects any scene where an object is placed in a non-existent prim path or an unanchored building coordinate.
    * Ensures the camera viewing vector intersects the bounding box of the active interaction zone.
 
+---
+
+## 14. Scene Relationship Exploration Algorithms & Robot-Centric Multi-Camera Framing
+
+### 14.1 Insights from `g1_brainco_extension` (`0.2.1-dev`)
+
+In the `g1_brainco_extension` project on branch `0.2.1-dev`, composing an apple pick-and-place task in `galileo_simplified.usd` revealed critical geometric and semantic realities for complex USD environments:
+
+1. **Camera-to-Robot Grounding**: Perspective and observation cameras cannot be statically defined in world space. When a robot turns, relocates, or works in a different bay, a static camera ends up behind building walls or pointing into empty voids. The spectator/perspective camera must maintain an **invariant geometric transform relative to the robot base and its manipulation workspace**.
+2. **The Camera Triad**:
+   * **Ego Head Camera (`arena:EgoCamera`)**: Mounted on `head_link`, looking down at the dual-arm workspace for neural policy input (GR00T / OpenPI).
+   * **Top-Down Camera (`arena:TopCamera`)**: Positioned orthogonally above the interaction centroid looking straight down, providing spatial layout clarity and container boundary verification.
+   * **Perspective Viewport Camera (`arena:PerspectiveCamera`)**: Positioned at a fixed azimuth/elevation over the robot's shoulder (e.g. $45^\circ$ azimuth, $35^\circ$ elevation, $1.6\text{m}$ standoff) focusing on the midpoint between the robot's hands and the target manipuland.
+3. **Active Workspace Subgraph Isolation**: In massive USD scenes ($>200\text{m}$ building models), $>95\%$ of meshes are decorative or distant. The environment generator must isolate the **minimal active interaction subgraph** (Support Fixture $\to$ Robot Standoff $\to$ Manipulands $\to$ Camera Triad) and deactivate unreferenced clutter prims in the immediate task volume.
+
+---
+
+### 14.2 Robot-Centric Multi-Camera Knowledge Graph
+
+```mermaid
+flowchart TD
+    classDef robot fill:#4C1D95,stroke:#A78BFA,stroke-width:2px,color:#F8FAFC;
+    classDef camera fill:#9F1239,stroke:#FB7185,stroke-width:2px,color:#F8FAFC;
+    classDef workspace fill:#0F766E,stroke:#2DD4BF,stroke-width:2px,color:#F8FAFC;
+    classDef object fill:#1D4ED8,stroke:#60A5FA,stroke-width:2px,color:#F8FAFC;
+    classDef fixture fill:#B45309,stroke:#F59E0B,stroke-width:2px,color:#F8FAFC;
+
+    ROBOT[":g1_robot<br/><i>a arena:Embodiment</i><br/>[basePose: (x_r, y_r, yaw_r)]"]:::robot
+    SHELF[":wireshelving<br/><i>a arena:Furniture</i>"]:::fixture
+    APPLE[":apple<br/><i>a arena:RigidObject</i>"]:::object
+    PLATE[":plate<br/><i>a arena:Receptacle</i>"]:::object
+
+    WS_CENTER["Active Workspace Centroid<br/><i>P_ws = 0.5 * (P_apple + P_plate)</i>"]:::workspace
+
+    TOP_CAM[":top_camera<br/><i>a arena:TopCamera</i><br/>[eye: P_ws + (0, 0, 1.4m)]<br/>[lookAt: P_ws]"]:::camera
+    PERSP_CAM[":perspective_camera<br/><i>a arena:PerspectiveCamera</i><br/>[mode: over_the_shoulder]<br/>[standoff: 1.6m, az: 45°, el: 35°]"]:::camera
+    HEAD_CAM[":head_camera<br/><i>a arena:EgoCamera</i><br/>[prim: head_link/RobotHeadCam]"]:::camera
+
+    ROBOT -->|"arena:standsAtAffordance (dist: 0.85m)"| SHELF
+    APPLE -->|"arena:placedOnSubSurface"| SHELF
+    PLATE -->|"arena:placedOnSubSurface"| SHELF
+    APPLE -->|"arena:destinationLocation"| PLATE
+
+    ROBOT -->|"arena:hasOnboardCamera"| HEAD_CAM
+    ROBOT -->|"arena:framesPerspectiveView"| PERSP_CAM
+    WS_CENTER -->|"arena:orthogonallyObservedBy"| TOP_CAM
+
+    PERSP_CAM -->|"arena:lookAtTarget"| WS_CENTER
+    HEAD_CAM -->|"arena:gazeTarget"| APPLE
+```
+
+---
+
+### 14.3 Four Core Algorithms for Scene Relationship Exploration
+
+#### Algorithm 1: Robot-Centric Perspective & Top Camera Framing
+Computes invariant camera eye/lookat coordinates dynamically from the robot's base frame and active manipulation centroid:
+
+```python
+def compute_robot_relative_camera_poses(
+    robot_pos: tuple[float, float, float],
+    robot_yaw_rad: float,
+    manipuland_pos: tuple[float, float, float],
+    destination_pos: tuple[float, float, float] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Compute exact camera coordinates for the Perspective, Top, and Ego triad."""
+    import numpy as np
+
+    # 1. Interaction Workspace Centroid
+    if destination_pos is not None:
+        ws_centroid = 0.5 * (np.array(manipuland_pos) + np.array(destination_pos))
+    else:
+        ws_centroid = np.array(manipuland_pos)
+
+    # 2. Robot Direction Vectors
+    u_fwd = np.array([np.cos(robot_yaw_rad), np.sin(robot_yaw_rad), 0.0])
+    u_lat = np.array([-np.sin(robot_yaw_rad), np.cos(robot_yaw_rad), 0.0])
+
+    # 3. Perspective Viewport Camera (Over-the-shoulder, 45 deg lateral, 35 deg elevation)
+    d_back = 1.10   # meters behind robot
+    d_side = 0.65   # meters to the side (right shoulder)
+    h_elev = 0.85   # meters above pelvis
+    r_pelvis_z = robot_pos[2] + 0.75
+
+    persp_eye = (
+        np.array([robot_pos[0], robot_pos[1], r_pelvis_z])
+        - d_back * u_fwd
+        + d_side * u_lat
+        + np.array([0.0, 0.0, h_elev])
+    )
+
+    # 4. Top-Down Orthogonal Camera
+    h_top = 1.35  # meters above workspace plane
+    top_eye = ws_centroid + np.array([0.0, 0.0, h_top])
+
+    return {
+        "perspective_camera": {
+            "eye": tuple(float(x) for x in persp_eye),
+            "lookat": tuple(float(x) for x in ws_centroid),
+            "fov": 65.0,
+            "mode": "over_the_shoulder",
+        },
+        "top_camera": {
+            "eye": tuple(float(x) for x in top_eye),
+            "lookat": tuple(float(x) for x in ws_centroid),
+            "fov": 60.0,
+            "mode": "top_down_orthogonal",
+        },
+    }
+```
+
+---
+
+#### Algorithm 2: Active Interaction Subgraph Isolation ("What Matters" Extractor)
+Filters complex building stages (e.g. `galileo_simplified.usd`) and isolates the active task volume:
+
+1. **Anchor Discovery**: Find the primary fixture supporting the task (`shelf`, `table`, `counter`).
+2. **Radial Clearance Sphere**: Compute active radius $R_{\text{active}} = 1.5\text{m}$ around the fixture centroid.
+3. **USD Prim Pruning**: Query all USD prims within $R_{\text{active}}$. Prims not belonging to the fixture, manipuland, or destination are flagged for `prestartup` deactivation (e.g. `deactivate_background_prims`), preventing collision mesh interference with the robot's arms.
+4. **Floor Patch Grounding**: Measure the support top height $z_{\text{shelf}}$ and project ground contact plane $z_{\text{floor}} = z_{\text{shelf}} - h_{\text{fixture\_height}}$, ensuring feet rest flush without penetration.
+
+---
+
+#### Algorithm 3: Frustum-Occlusion Raycast & Line-of-Sight Visibility Discovery
+Ensures the perspective camera is never placed behind background building columns or high structural beams:
+
+1. **Candidate Trajectory**: Generate a candidate camera arc $\mathcal{C}(\theta)$ for azimuth angles $\theta \in [20^\circ, 70^\circ]$ relative to the robot's facing vector.
+2. **Raycast Query**: Cast rays from $\mathcal{C}(\theta)$ to the robot hands and the target object against the background USD collision mesh.
+3. **Occlusion Score**: Select the azimuth $\theta^*$ with zero ray intersections and maximum clearance from adjacent obstacle hulls.
+
+---
+
+#### Algorithm 4: Dual-Arm Reachability & Kinematic Standoff Alignment
+Positions the robot base optimally relative to the fixture edge:
+
+1. **Edge Extraction**: Find the front bounding edge of the support surface along the active interaction axis.
+2. **Standoff Distance**: Position the robot pelvis at $d_{\text{standoff}} = -0.03\text{m}$ inside the front bounding edge along $X$, with lateral offset $y_{\text{robot}} = 0.08\text{m}$ centered between the pick object ($y = -0.105\text{m}$) and destination plate ($y = +0.105\text{m}$).
+3. **Arm Reach Verification**: Verify that both pick and place targets lie within the Pink IK reach ellipsoid ($\le 0.72\text{m}$ from the respective shoulder joint).
+
+---
+
+### 14.4 RDF-star Schema Extensions for Robot-Centric Cameras (`arena_schema.ttl`)
+
+```turtle
+# Camera Sub-Classes
+arena:TopCamera a owl:Class ;
+    rdfs:subClassOf arena:Camera ;
+    rdfs:comment "Orthogonal overhead camera centered directly on the manipulation workspace." .
+
+arena:PerspectiveCamera a owl:Class ;
+    rdfs:subClassOf arena:Camera ;
+    rdfs:comment "Over-the-shoulder or third-person viewport camera relative to the robot." .
+
+arena:EgoCamera a owl:Class ;
+    rdfs:subClassOf arena:Camera ;
+    rdfs:comment "Onboard egocentric camera mounted on the robot head link." .
+
+# Object Properties
+arena:framesPerspectiveView a owl:ObjectProperty ;
+    rdfs:domain arena:Embodiment ;
+    rdfs:range arena:PerspectiveCamera .
+
+arena:orthogonallyObservedBy a owl:ObjectProperty ;
+    rdfs:domain arena:SceneEntity ;
+    rdfs:range arena:TopCamera .
+
+# Reified RDF-star Triples
+<< :perspective_cam arena:framesPerspectiveView :g1_robot >>
+    arena:cameraMode "over_the_shoulder" ;
+    arena:azimuthOffset "45.0"^^xsd:float ;
+    arena:elevationOffset "35.0"^^xsd:float ;
+    arena:standoffDistance "1.6"^^xsd:float ;
+    arena:targetAsset :brown_box .
+```
+
+
 
 
 

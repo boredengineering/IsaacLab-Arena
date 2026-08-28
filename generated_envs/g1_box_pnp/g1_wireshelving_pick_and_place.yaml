@@ -1,4 +1,4 @@
-env_name: g1_pick_brown_box_shelving_to_bin
+env_name: g1_wireshelving_pick_and_place
 embodiment:
   id: robot
   registry_name: g1_wbc_pink
@@ -10,20 +10,42 @@ background:
 objects:
 - id: wireshelving
   registry_name: wireshelving_a01_vomp_robolab
-  params: {}
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.0
+      - 1.1
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
 - id: brown_box
   registry_name: brown_box
   params: {}
 - id: blue_sorting_bin
   registry_name: blue_sorting_bin
-  params: {}
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.6
+      - 0.8
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
 relations:
 - kind: is_anchor
   subject: galileo_room
   params: {}
-- kind: 'on'
+- kind: is_anchor
   subject: wireshelving
-  reference: galileo_room
+  params: {}
+- kind: is_anchor
+  subject: blue_sorting_bin
   params: {}
 - kind: 'on'
   subject: brown_box
@@ -35,8 +57,8 @@ relations:
   params: {}
 task:
   composition: atomic
-  description: Pick up the brown box from the wire shelving and place it into the
-    blue sorting bin.
+  description: Unitree G1 humanoid pick up brown box from the wireshelving in galileo
+    room and place it into the blue sorting bin
   subtasks:
   - kind: PickAndPlaceTask
     params:

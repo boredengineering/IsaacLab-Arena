@@ -45,6 +45,7 @@ def inspect_environment(driver, env_name: str) -> None:
                    bg.id AS terrain_id,
                    bg.registry_name AS terrain_registry,
                    collect(DISTINCT {id: obj.id, registry: obj.registry_name, labels: labels(obj)}) AS objects
+            LIMIT 1
             """,
             env_name=env_name,
         ).single()

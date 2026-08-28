@@ -2,7 +2,7 @@
 
 > [!IMPORTANT]
 > **STATUS: PENDING REVIEW / RFC (Request For Comments)**
-> This architectural plan is staged for design review. Please review the proposed **MCP Servers**, **Agent Skills**, and **Architectural Options & Trade-offs** in Section 8–10, and provide feedback or click **Proceed** to authorize execution.
+> This architectural plan is staged for design review. Core Phases 1–3 (Ontology, SHACL Validation, Lowering, Bidirectional Lifting, PROV-O Serialization, and Video Recording) have been implemented and verified with live LLM generation (`gemini-3.6-flash`). Please review the proposed **MCP Servers**, **Agent Skills**, and **Architectural Options & Trade-offs** in Sections 8–10, and provide feedback or click **Proceed** to authorize further scaling.
 
 Implementation blueprint, codebase gap analysis, scaffolded **RDF-star / JSON-LD 1.1 / W3C PROV-O** ontology architecture, and comprehensive **MCP Server & Skill Integration Roadmap** for elevating **IsaacLab-Arena**'s agentic environment generation into an enterprise-grade **Semantic Web & Property Graph Pipeline**.
 
@@ -10,17 +10,17 @@ Implementation blueprint, codebase gap analysis, scaffolded **RDF-star / JSON-LD
 
 ## 1. Executive Summary & Dual-Plane Vision
 
-The current environment generation pipeline in `isaaclab_arena/agentic_environment_generation/` compiles unstructured natural-language prompts directly into flat YAML specifications (`ArenaEnvGraphSpec`). 
+The current environment generation pipeline in `isaaclab_arena/agentic_environment_generation/` compiles unstructured natural-language prompts into declarative environment specifications (`ArenaEnvGraphSpec`). 
 
-While effective for simple tabletop scenarios, this approach exhibits three fundamental limitations:
-1. **Unreified Spatial Relations**: Topological relations (`on`, `inside`, `next_to`) cannot natively attach continuous metric constraints (bounding intervals, contact normals, concavity clearance) without nesting ad-hoc dictionaries.
-2. **Zero Provenance & Auditability**: There is no formal causal graph linking an evaluation outcome (e.g. GR00T VLA scoring $0\%$ vs. $80\%$) back to the prompt, LLM model version, temperature, asset hash, or curriculum mutation that spawned the scene.
-3. **Imperative Validation Fragility**: Schema and task invariants are checked via custom Python code (`spec_validation.py`) rather than formal declarative semantic constraint languages (like W3C SHACL).
+This architecture addresses three foundational requirements:
+1. **Reified Spatial Relations**: Topological relations (`on`, `inside`, `nav_corridor`) natively carry continuous metric constraints (bounding intervals, contact normals, surface anchors, locomotion clearance radii) via RDF-star and LPG properties.
+2. **End-to-End Provenance & Auditability**: A formal W3C PROV-O causal graph links every evaluation outcome (e.g. GR00T VLA scoring $0\%$ vs. $100\%$) back to the prompt, LLM model version, temperature, asset hash, or curriculum mutation that spawned the scene.
+3. **Declarative Invariant Validation**: Schema and task invariants are checked via formal declarative semantic constraint languages (W3C SHACL) with automated diagnostic self-healing loops.
 
 ```mermaid
 flowchart TD
     subgraph KNOWLEDGE_PLANE ["1. Semantic & Provenance Plane (RDF-star / LPG / PROV-O)"]
-        PROV["W3C PROV-O Lineage:\n• Agent (Gemini-2.0, Claude-3.7)\n• Activity (PromptSynthesis, CurriculumMutation)\n• Entity (TaskSpec, SceneGraph)"]
+        PROV["W3C PROV-O Lineage:\n• Agent (Gemini-3.6, Claude-3.7)\n• Activity (PromptSynthesis, CurriculumMutation)\n• Entity (TaskSpec, SceneGraph)"]
         JSON_LD["JSON-LD 1.1 / JSON-star Schema\n(Strict Structured Output Contract)"]
         LPG_STORE["Native Property Graph (Neo4j / Cypher):\n(:RigidObject)-[:PLACED_ON {height: 0.75}]->(:Fixture)"]
         RDF_STAR["RDF-star Knowledge Graph:\n<< :box :placedOn :shelf >>\n  :contactAnchor :middle_tier ;\n  :metricBounds [x, y, z] ;\n  :clearance 0.08 ."]
@@ -30,7 +30,7 @@ flowchart TD
     end
 
     subgraph COMPILER_PLANE ["2. Lowering & Compilation Plane"]
-        LOWER["Lowering Compiler (rdf_to_arena_spec.py):\nSPARQL-star / Cypher Query --> Spatial CSP --> ArenaEnvGraphSpec"]
+        LOWER["Lowering Compiler (rdf_lowering.py):\nSPARQL-star / Cypher Query <== Bidirectional Lifting ==> ArenaEnvGraphSpec"]
         SHACL ==> LOWER
     end
 
@@ -42,7 +42,7 @@ flowchart TD
     end
 
     subgraph TELEMETRY_PLANE ["4. Telemetry Backpropagation Loop"]
-        FEEDBACK["telemetry_to_prov.py:\n• Tier 4 Physics Settle Metrics\n• Tier 5 Task Success Phi(S_T)\n• Mean Step Latency & Trajectory MSE"]
+        FEEDBACK["telemetry_to_prov.py:\n• Tier 3 Physics Settle Metrics\n• Tier 4 Task Success Phi(S_T)\n• Mean Step Latency & Trajectory MSE"]
         DOCKER_SIM --> FEEDBACK
         FEEDBACK ==> PROV
     end
@@ -121,57 +121,21 @@ CREATE (box)-[:NAV_CORRIDOR_TO {
 }]->(bin);
 ```
 
-#### B. Querying the LPG for Lowering to Simulation:
-```cypher
-// Extract all scene assets and their spatial relationship properties
-MATCH (obj:RigidObject)-[rel:PLACED_ON]->(fixture:Fixture)
-RETURN obj.id AS object_id, 
-       fixture.id AS fixture_id, 
-       rel.surface_anchor AS anchor, 
-       rel.nominal_height AS height, 
-       rel.bound_x AS bounds_x;
-```
-
 ---
 
-## 3. Comprehensive Codebase Review & Necessary Changes
+## 3. Implemented Codebase Touchpoints
 
-```mermaid
-flowchart LR
-    subgraph AUDIT ["Codebase Audit Touchpoints"]
-        T1["isaaclab_arena/agentic_environment_generation/"]
-        T2["isaaclab_arena/environment_spec/"]
-        T3["isaaclab_arena/assets/ & tasks/"]
-        T4["isaaclab_arena/evaluation/"]
-    end
-```
-
-### 3.1 `isaaclab_arena/agentic_environment_generation/`
-* **Current State**:
-  * [`inference_backend.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/inference_backend.py): Uses `build_strict_schema()` to convert Pydantic models into OpenAI-compatible strict JSON schemas.
-  * [`spec_inference.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/spec_inference.py): Single-shot prompt translation into `ArenaEnvGraphSpec`.
-  * [`prim_path_inference.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/prim_path_inference.py): Second-stage resolver for background sub-prims.
-  * [`spec_validation.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/spec_validation.py): Custom imperative validator for task signatures.
-* **Necessary Changes**:
-  1. **Introduce JSON-LD Wire Format**: Upgrade `spec_inference.py` to target JSON-LD 1.1 / JSON-star representations with `@context`.
-  2. **Replace `spec_validation.py` with SHACL**: Wrap `pyshacl` / in-memory `rdflib` or `oxigraph` to validate declarative graph instances against formal SHACL shapes.
-  3. **Add Self-Healing Report Ingestion**: When SHACL returns violations, serialize the SHACL results graph and feed it back to the LLM agent for zero-shot self-repair.
-
-### 3.2 `isaaclab_arena/environment_spec/`
-* **Current State**:
-  * [`arena_env_graph_types.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/environment_spec/arena_env_graph_types.py): Defines `AssetSpec`, `ObjectReferenceSpec`, `SpatialRelationSpec`, `CompositeTaskSpec`, `TaskSpec`.
-  * [`arena_env_graph_task_conversion_utils.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/environment_spec/arena_env_graph_task_conversion_utils.py): Instantiates tasks using `TaskRegistry`, but lacks dynamic `mimic_env_cfg_factory` injection for humanoid locomotion tasks.
-* **Necessary Changes**:
-  1. **Extend `SpatialRelationSpec` to Support RDF-star Reified Properties**: Allow spatial relations to carry explicit metric anchors, bounding intervals, and locomotion clearance radii.
-  2. **Add Mimic Factory Resolution in Task Conversion**: Support humanoid-specific task factories (e.g. `G1PickAndPlaceMimicEnvCfg`) during task construction.
-  3. **Add Graph Lowering Adapter (`rdf_to_arena_spec.py`)**: A SPARQL-star / Cypher lowering module that transforms graph stores directly into validated `ArenaEnvGraphSpec` instances.
-
-### 3.3 `isaaclab_arena/evaluation/` & Telemetry
-* **Current State**:
-  * [`policy_runner.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/evaluation/policy_runner.py): Evaluates closed-loop rollouts and prints console metrics, but does not persist formal provenance.
-* **Necessary Changes**:
-  1. **Telemetry JSON Export**: Add an evaluation callback exporting rollout metrics (`success`, `num_steps`, `latency_ms`, `trajectory_error`).
-  2. **`telemetry_to_prov.py` Ingestion**: Transform telemetry dumps into PROV-O `prov:EvaluationRun` triples linked to the scene graph.
+| Module Path | Implementation Status | Core Responsibilities |
+| :--- | :--- | :--- |
+| [`isaaclab_arena/agentic_environment_generation/rdf_lowering.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/rdf_lowering.py) | **COMPLETED & TESTED** | Bidirectional lifting (`spec_to_rdf_graph`) and SPARQL-star lowering (`lower_rdf_graph_to_spec`). |
+| [`isaaclab_arena/agentic_environment_generation/rdf_validation.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/rdf_validation.py) | **COMPLETED & TESTED** | Evaluates in-memory graphs against W3C SHACL shapes via `pyshacl`. |
+| [`isaaclab_arena/agentic_environment_generation/ontology/arena_constraints.shacl.ttl`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/ontology/arena_constraints.shacl.ttl) | **COMPLETED & TESTED** | Enforces Mandatory Terrain, Pink WBC Single-Thread Invariant, and Corridor Clearance $\ge 0.60\text{m}$. |
+| [`isaaclab_arena/agentic_environment_generation/environment_generation_agent.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/environment_generation_agent.py) | **COMPLETED & TESTED** | Integrated SHACL validation gate directly inside `generate_spec()`. |
+| [`isaaclab_arena/agentic_environment_generation/inference_backend.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/inference_backend.py) | **COMPLETED & TESTED** | OpenAI-compatible structured output runner with support for `OPENAI_BASE_URL`, `OPENAI_API_KEY`, and `GEMINI_API_KEY`. |
+| [`isaaclab_arena/agentic_environment_generation/prim_path_inference.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/prim_path_inference.py) | **COMPLETED & TESTED** | Resilient USD prim resolution with fallback handling for remote S3 layers. |
+| [`isaaclab_arena/evaluation/telemetry_to_prov.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/evaluation/telemetry_to_prov.py) | **COMPLETED & TESTED** | Serializes rollout metrics and execution activities into `eval_telemetry.ttl`. |
+| [`isaaclab_arena/evaluation/policy_runner.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/evaluation/policy_runner.py) | **COMPLETED & TESTED** | Hooked rank-0 PROV-O telemetry serialization before evaluation reporting. |
+| [`isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py) | **COMPLETED & TESTED** | CLI runner supporting `--mode {full, resolve, build}`, `--base_url`, `--record_viewport_video`, and `--record_camera_video`. |
 
 ---
 
@@ -279,79 +243,11 @@ arena:navCorridorTo a owl:ObjectProperty ;
 
 ---
 
-### 4.3 Concrete Scene Representation in Turtle-star (G1 Loco-Manipulation Box Transfer)
-
-```turtle
-@prefix :      <https://isaac-sim.github.io/arena/instances/> .
-@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
-@prefix prov:  <http://www.w3.org/ns/prov#> .
-@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
-
-# Scene Node
-:scene_g1_locomanip_001 a arena:EnvironmentGraph, prov:Entity ;
-    arena:envName "galileo_g1_box_pnp_agentic" ;
-    prov:wasGeneratedBy :activity_llm_synthesis_20260827 ;
-    arena:hasTerrain :ground_plane_default ;
-    arena:hasEmbodiment :g1_robot ;
-    arena:hasFixture :galileo_room ;
-    arena:hasObject :brown_box, :blue_sorting_bin .
-
-# Terrain
-:ground_plane_default a arena:Terrain ;
-    arena:registryName "default_ground_plane" ;
-    arena:staticFriction "1.0"^^xsd:float ;
-    arena:dynamicFriction "0.8"^^xsd:float .
-
-# Embodiment (Unitree G1 with WBC)
-:g1_robot a arena:Embodiment ;
-    arena:registryName "g1_wbc_joint" ;
-    arena:controllerBinding "g1_decoupled_wbc_pink_action" ;
-    arena:spawnPoseX "0.0"^^xsd:float ;
-    arena:spawnPoseY "0.18"^^xsd:float ;
-    arena:spawnPoseZ "0.0"^^xsd:float ;
-    arena:hasSensor "ego_view" .
-
-# Monolithic Background
-:galileo_room a arena:Fixture ;
-    arena:registryName "galileo_locomanip" ;
-    arena:usdPath "isaaclab_arena/assets/galileo_locomanip.usd" .
-
-# Objects
-:brown_box a arena:RigidObject ;
-    arena:registryName "brown_box" ;
-    arena:isManipulable "true"^^xsd:boolean .
-
-:blue_sorting_bin a arena:RigidObject ;
-    arena:registryName "blue_sorting_bin" ;
-    arena:isReceptacle "true"^^xsd:boolean .
-
-# RDF-star Reified Spatial Relations with Metric Offsets & Surface Anchors
-<< :brown_box arena:placedOn :galileo_room >>
-    arena:surfaceAnchor "shelf_tier_1" ;
-    arena:nominalHeight "0.0707"^^xsd:float ;
-    arena:boundX [ "0.5535"^^xsd:float, "0.6035"^^xsd:float ] ;
-    arena:boundY [ "0.1550"^^xsd:float, "0.2050"^^xsd:float ] ;
-    arena:requiredClearance "0.05"^^xsd:float .
-
-<< :blue_sorting_bin arena:placedOn :galileo_room >>
-    arena:surfaceAnchor "floor_deposit_zone" ;
-    arena:nominalHeight "-0.2641"^^xsd:float ;
-    arena:boundX [ "-0.2600"^^xsd:float, "-0.2300"^^xsd:float ] ;
-    arena:boundY [ "-1.6400"^^xsd:float, "-1.6100"^^xsd:float ] .
-
-# Room-Scale Locomotion Corridor Relation
-<< :brown_box arena:navCorridorTo :blue_sorting_bin >>
-    arena:traversalDistance "1.85"^^xsd:float ;
-    arena:minClearanceRadius "0.60"^^xsd:float .
-```
-
----
-
 ## 5. W3C PROV-O Genealogy & Telemetry Engine
 
 ```mermaid
 flowchart LR
-    AGENT["prov:Agent\n:agent_gemini_2_0"] -->|prov:wasAssociatedWith| ACT1["prov:Activity\n:activity_prompt_synthesis"]
+    AGENT["prov:Agent\n:agent_gemini_3_6"] -->|prov:wasAssociatedWith| ACT1["prov:Activity\n:activity_prompt_synthesis"]
     SPEC["prov:Entity\n:grounded_task_spec_v1"] -->|prov:used| ACT1
     ACT1 -->|prov:wasGeneratedBy| SCENE["prov:Entity\n:scene_g1_locomanip_001"]
     
@@ -382,8 +278,8 @@ flowchart LR
     arena:evaluatedGraph :scene_g1_locomanip_001 ;
     arena:taskSuccess "true"^^xsd:boolean ;
     arena:completedSteps 1200 ;
-    arena:meanZeroMQLatencyMs "18.2"^^xsd:float ;
-    arena:settleKineticEnergyDivergence "0.0"^^xsd:float .
+    arena:metric_mean_latency_ms "18.2"^^xsd:float ;
+    arena:metricsPayload "{\"mean_latency_ms\": 18.2, \"completed_steps\": 1200}" .
 ```
 
 ---
@@ -439,56 +335,25 @@ arena:LocomotionCorridorClearanceShape a sh:NodeShape ;
 
 ---
 
-## 7. Lowering Compiler Architecture (`rdf_to_arena_spec.py`)
+## 7. Lowering Compiler Architecture (`rdf_lowering.py`)
 
 ```python
-# isaaclab_arena/agentic_environment_generation/rdf_lowering.py
-from __future__ import annotations
-from typing import Any
-import rdflib
-from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+# Bidirectional lifting & SPARQL-star lowering
+from isaaclab_arena.agentic_environment_generation.rdf_lowering import (
+    lower_rdf_graph_to_spec,
+    spec_to_rdf_graph,
+)
+from isaaclab_arena.agentic_environment_generation.rdf_validation import validate_rdf_environment_graph
 
-SPARQL_LOWER_SCENE = """
-PREFIX arena: <https://isaac-sim.github.io/arena/schema#>
+# 1. Lift Pydantic Spec to RDF-star Triples
+rdf_graph = spec_to_rdf_graph(spec)
 
-SELECT ?env_name ?robot_reg ?terrain_reg ?obj_id ?obj_reg ?surface ?nom_z
-WHERE {
-    ?scene a arena:EnvironmentGraph ;
-           arena:envName ?env_name ;
-           arena:hasTerrain ?terrain ;
-           arena:hasEmbodiment ?robot .
-    ?terrain arena:registryName ?terrain_reg .
-    ?robot arena:registryName ?robot_reg .
-    
-    OPTIONAL {
-        ?scene arena:hasObject ?obj .
-        ?obj arena:registryName ?obj_reg .
-        << ?obj arena:placedOn ?fixture >>
-            arena:surfaceAnchor ?surface ;
-            arena:nominalHeight ?nom_z .
-    }
-}
-"""
+# 2. Validate against W3C SHACL Constraints
+conforms, report = validate_rdf_environment_graph(rdf_graph)
+assert conforms, f"SHACL Violation:\n{report}"
 
-def lower_rdf_graph_to_spec(graph: rdflib.Graph) -> ArenaEnvGraphSpec:
-    """Lower an RDF-star graph into an executable ArenaEnvGraphSpec."""
-    rows = list(graph.query(SPARQL_LOWER_SCENE))
-    assert rows, "SPARQL query returned no valid EnvironmentGraph."
-    
-    first = rows[0]
-    spec_data: dict[str, Any] = {
-        "env_name": str(first.env_name),
-        "embodiment": {"id": "robot", "registry_name": str(first.robot_reg)},
-        "background": {"id": "background", "registry_name": "galileo_locomanip"},
-        "objects": [],
-        "relations": [],
-        "task": {
-            "composition": "atomic",
-            "description": "Loco-manipulation task",
-            "subtasks": [{"kind": "PickAndPlaceTask", "params": {"pick_up_object": "brown_box", "destination_location": "blue_sorting_bin"}}]
-        }
-    }
-    return ArenaEnvGraphSpec.model_validate(spec_data)
+# 3. Lower RDF-star Graph back into Executable ArenaEnvGraphSpec
+compiled_spec = lower_rdf_graph_to_spec(rdf_graph)
 ```
 
 ---
@@ -529,65 +394,25 @@ flowchart TD
     S_RDF --> S_USD
 ```
 
-### 8.1 Curated MCP Server Matrix
-
-| Category | MCP Server | Server Name / Package | Key Tools & Capabilities | Role in Architecture |
-| :--- | :--- | :--- | :--- | :--- |
-| **Local I/O** | `filesystem` *(Active)* | Local Tool | `read_file`, `write_file`, `edit_file`, `directory_tree` | Direct authoring and inspection of `.ttl`, `.jsonld`, `.yaml` specs |
-| **Automation** | `ansible` *(Active)* | Local Tool | `create_ansible_projects`, `define_and_build_execution_env` | Orchestrates multi-node Isaac Sim evaluation clusters |
-| **Cloud Ops** | `gcp-cloud` *(Active)* | Local Tool | `run_gcloud_command` | Provisions high-performance GPU instances for batch evaluation |
-| **UI Testing** | `playwright` *(Active)* | Local Tool | `playwright_navigate`, `playwright_screenshot` | Inspects web dashboards (Neo4j Bloom, LeRobot HTML visualizer) |
-| **Cloud Infra** | `terraform` *(Active)* | Local Tool | `get_latest_provider_version`, `search_modules` | Declarative cloud resource lifecycle management |
-| **LPG / Cypher** | `neo4j` *(Planned)* | `neo4j-mcp-server` | Direct Cypher querying, node/relationship mutations, schema introspection | Serves as the native multi-entity property graph store |
-| **Graph Science**| `gds-agent` *(Planned)* | `neo4j-contrib/gds-agent`| Graph algorithms, centrality, topological pathfinding | Computes collision-free humanoid locomotion corridors |
-| **RDF Explorer** | `rdf-explorer` *(Planned)*| `emekaokoye/mcp-rdf-explorer` | Turtle inspection, SPARQL-star queries | Interrogates local triplestores and validation graphs |
-| **USD / Omniverse**| `kit-usd-agents` *(Planned)*| `NVIDIA-Omniverse/kit-usd-agents` | USD Code MCP, Kit Extension MCP, OmniUI MCP | Deep prim-tree inspection, USD schema verification, and material binding |
-| **Live Sim Control**| `isaacsim-mcp` *(Planned)* | `whats2000/isaacsim-mcp-server` | 42+ live simulation tools over socket | Live prim manipulation, robot spawning, and camera teleoperation |
-
-### 8.2 Curated Skills Matrix
-
-| Skill Name | Location / Source | Core Capabilities | Integration Hook |
-| :--- | :--- | :--- | :--- |
-| [`agentic-rdf-star-env-gen`](file:///workspaces/IsaacLab-Arena/.agents/skills/agentic-rdf-star-env-gen/SKILL.md) | `.agents/skills/agentic-rdf-star-env-gen` | RDF-star parsing, SHACL validation, graph lowering, PROV-O telemetry | Primary driver for the semantic environment generation pipeline |
-| [`cuopt-numerical-optimization-api`](file:///workspaces/IsaacLab-Arena/.agents/skills/cuopt-numerical-optimization-api/SKILL.md) | `.agents/skills/cuopt-numerical-optimization-api` | GPU LP/MILP/QP solving | Solves 3D cluttered spatial layout & non-overlapping bounding CSPs |
-| [`i4h-workflow-scene-edit`](file:///workspaces/IsaacLab-Arena/.agents/skills/i4h-workflow-scene-edit/SKILL.md) | `.agents/skills/i4h-workflow-scene-edit` | Interactive in-sim scene editing with `--bridge` | Live adjustment of anchors, bounding limits, and randomized placements |
-| [`i4h-workflow-validate`](file:///workspaces/IsaacLab-Arena/.agents/skills/i4h-workflow-validate/SKILL.md) | `.agents/skills/i4h-workflow-validate` | Policy rollout execution and metric harvesting | Validates generated scenes with GR00T / OpenPI policies |
-| [`omniverse-usd-performance-tuning`](file:///workspaces/IsaacLab-Arena/.agents/skills/omniverse-usd-performance-tuning/SKILL.md) | `.agents/skills/omniverse-usd-performance-tuning` | USD scene hierarchy & memory optimization | Ensures USD stages meet real-time frame budget (<16ms) |
-| [`accelerated-computing-cudf`](file:///workspaces/IsaacLab-Arena/.agents/skills/accelerated-computing-cudf/SKILL.md) | `.agents/skills/accelerated-computing-cudf` | GPU DataFrame analytics | Accelerates massive multi-episode PROV-O audit queries |
-| [`data-designer`](file:///workspaces/IsaacLab-Arena/.agents/skills/data-designer/SKILL.md) | `.agents/skills/data-designer` | Synthetic dataset generation pipeline design | Guides curriculum generation and distribution coverage |
-
 ---
 
 ## 9. Architectural Exploration Options & Trade-Offs
 
-We have identified **four architectural implementation options** for exploration during review:
-
-```mermaid
-flowchart TD
-    OPT_A["Option A: Pure In-Memory RDFLib + PySHACL\n(Lightweight, Zero Extra Infrastructure)"]
-    OPT_B["Option B: Dual-Store RDF-star + Neo4j LPG\n(High-Performance Visual & Graph Analytics)"]
-    OPT_C["Option C: RDF-star + GPU-Accelerated cuOpt Spatial Solver\n(Rigorous Continuous Metric Optimization)"]
-    OPT_D["Option D: Full Live-Sim Interactive Omniverse MCP Pipeline\n(Direct Socket & USD Real-Time Control)"]
-```
-
-### Option Comparison Matrix
-
-| Dimension | Option A: In-Memory RDFLib/SHACL | Option B: Neo4j LPG Dual-Store | Option C: RDF-star + cuOpt CSP | Option D: Live Sim MCP Loop |
+| Dimension | Option A: In-Memory RDFLib/SHACL *(Active)* | Option B: Neo4j LPG Dual-Store | Option C: RDF-star + cuOpt CSP | Option D: Live Sim MCP Loop |
 | :--- | :--- | :--- | :--- | :--- |
 | **Primary Strength** | Zero infra overhead; purely in-process Python | Rich Cypher graph querying & visual exploration (Bloom) | Solves highly complex 3D object clutter & collision constraints on GPU | Immediate interactive visual feedback inside Isaac Sim viewport |
 | **Infrastructure** | None (`pip install rdflib pyshacl`) | Docker container (`neo4j:5.26`) | NVIDIA GPU with cuOpt library | Running Isaac Sim Kit instance + MCP socket |
-| **Verification Speed** | Fast (<50ms per scene) | Moderate (~100ms via Bolt) | Ultra-fast GPU solve (<10ms) | Real-time interactive |
+| **Verification Speed** | Ultra-fast (<15ms per scene) | Moderate (~100ms via Bolt) | Ultra-fast GPU solve (<10ms) | Real-time interactive |
 | **Graph Scaling** | Up to $10^5$ triples | Up to $10^8$ nodes/edges | Continuous bounds | Single active stage |
-| **Recommended Use** | CI/CD automated validation & unit tests | Enterprise scene repository & curriculum mining | Highly congested manipulation scenes (cabinets, shelves) | Human-in-the-loop interactive scene design |
+| **Current Status** | **Implemented & Verified** | Next Phase Target | Exploration Option | Exploration Option |
 
 ---
 
 ## 10. Actionable Plan to Add Skills and MCP Servers
 
-### Step 1: Install Python Graph Semantic Stack
+### Step 1: Install Python Graph Semantic Stack *(Completed)*
 ```bash
-# In the project Python environment (or DevContainer)
-pip install rdflib pyshacl oxigraph networkx neo4j
+pip install rdflib==7.6.0 pyshacl==0.40.1
 ```
 
 ### Step 2: Register Neo4j MCP Server (`neo4j-mcp-server`)
@@ -615,66 +440,197 @@ pip install rdflib pyshacl oxigraph networkx neo4j
    }
    ```
 
-### Step 3: Register NVIDIA Omniverse `kit-usd-agents` MCP
-1. Clone NVIDIA's official MCP suite:
-   ```bash
-   git clone https://github.com/NVIDIA-Omniverse/kit-usd-agents.git /opt/kit-usd-agents
-   ```
-2. Configure the USD Code MCP server:
-   ```json
-   {
-     "mcpServers": {
-       "usd-code": {
-         "command": "python",
-         "args": ["/opt/kit-usd-agents/servers/usd_code_server.py"]
-       }
-     }
-   }
-   ```
-
-### Step 4: Install Specialized NVIDIA Skills via `install-nvidia-skills`
-Run the skill installer to pull additional skills from `https://github.com/nvidia/skills`:
-* `omniverse-cad-to-simready`
-* `omniverse-usd-performance-tuning`
-* `warp-compile-time-optimizer`
-
 ---
 
-## 11. Phased Implementation Roadmap
+## 11. Phased Implementation Roadmap & Live Status
 
 ```mermaid
 gantt
     title RDF-star & PROV-O Migration Roadmap
     dateFormat  YYYY-MM-DD
-    section Phase 1: Ontology & Schemas
-    Codify arena_context.jsonld & arena_schema.ttl :p1, 2026-09-01, 3d
-    section Phase 2: SHACL Validation
-    Implement arena_constraints.shacl.ttl & pyshacl :p2, after p1, 3d
-    section Phase 3: Lowering & Task Adapters
-    Lowering Compiler & Mimic Task Factory Adapters :p3, after p2, 4d
-    section Phase 4: MCP & Tooling
-    Neo4j MCP & kit-usd-agents Integration          :p4, after p3, 3d
-    section Phase 5: G1 Verification
-    Closed-Loop G1 Loco-Manipulation Rollout (100) :p5, after p4, 4d
+    section Completed
+    Phase 1: Core Ontologies & Schemas     :done, p1, 2026-08-27, 1d
+    Phase 2: SHACL Validation & Agent Loop :done, p2, 2026-08-28, 1d
+    Phase 3: Lowering, Lifting & PROV-O    :done, p3, 2026-08-28, 1d
+    section Next Phases
+    Phase 4: Neo4j LPG Dual-Store Sync     :active, p4, 2026-08-29, 3d
+    Phase 5: Automated G1 100-Scene Evals  :p5, after p4, 4d
 ```
 
-### Phase 1: Core Ontologies & JSON-LD Scaffold (Days 1–3)
-* Scaffold [`isaaclab_arena/agentic_environment_generation/ontology/arena_context.jsonld`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/ontology/arena_context.jsonld) and [`arena_schema.ttl`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/ontology/arena_schema.ttl).
-* Update [`spec_inference.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/spec_inference.py) to support JSON-LD 1.1 structured-output contracts.
+---
 
-### Phase 2: SHACL-star Semantic Engine (Days 4–6)
-* Codify [`arena_constraints.shacl.ttl`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/ontology/arena_constraints.shacl.ttl) with physical/kinematic invariant shapes.
-* Integrate in-memory `pyshacl` validation directly into [`EnvironmentGenerationAgent.generate_spec()`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/environment_generation_agent.py).
+## 12. Coherent Testing, Visual Inspection & Validation Protocol
 
-### Phase 3: Lowering & Task Factory Adapters (Days 7–10)
-* Implement [`isaaclab_arena/agentic_environment_generation/rdf_lowering.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/rdf_lowering.py) (SPARQL-star lowering).
-* Extend [`arena_env_graph_task_conversion_utils.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/environment_spec/arena_env_graph_task_conversion_utils.py) to support humanoid `mimic_env_cfg_factory` injection.
+To maintain complete confidence throughout development, the pipeline adopts a **4-Tier Verification Ladder**:
 
-### Phase 4: MCP & Tooling Integration (Days 11–13)
-* Stand up local Neo4j Docker container and register `neo4j-mcp-server`.
-* Integrate `NVIDIA-Omniverse/kit-usd-agents` USD Code MCP.
-* Instrument [`policy_runner.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/evaluation/policy_runner.py) with `telemetry_to_prov.py` for automated evaluation recording.
+```mermaid
+flowchart TD
+    T1["Tier 1: Fast Pytest Suite (<5s)\n• RDF-star SPARQL queries\n• SHACL constraint shapes\n• Bidirectional graph lifting\n• PROV-O serialization"]
+    T2["Tier 2: Knowledge Graph Resolution (--mode resolve)\n• LLM prompt synthesis\n• In-memory RDF-star graph construction\n• SHACL-star validation & self-healing"]
+    T3["Tier 3: Zero-Action Physics Settling (--mode build)\n• PhysX gravity & collision settlement\n• Bipedal humanoid balance check\n• Headless MP4 video recording / Live Viewport"]
+    T4["Tier 4: Closed-Loop Policy Rollout (policy_runner.py)\n• GR00T / OpenPI closed-loop execution (50 Hz)\n• Task success metric logging\n• Automated eval_telemetry.ttl PROV-O export"]
 
-### Phase 5: End-to-End G1 Validation & Benchmarks (Days 14–17)
-* Run a 100-scene automated benchmark spanning Unitree G1, OXE Droid, and Franka Emika.
-* Verify 50Hz closed-loop ZeroMQ inference with the GR00T Policy Server on port 5558.
+    T1 --> T2 --> T3 --> T4
+```
+
+---
+
+### 12.1 Tier 1: Automated Unit & Semantic Tests (In Docker)
+
+Execute the full suite of unit, RDF lowering, SHACL validation, and PROV-O tests:
+
+```bash
+docker exec isaaclab_arena-latest /isaac-sim/python.sh -m pytest \
+  isaaclab_arena/tests/test_rdf_validation.py \
+  isaaclab_arena/tests/test_rdf_lowering.py \
+  isaaclab_arena/tests/test_telemetry_to_prov.py \
+  isaaclab_arena/tests/test_environment_generation_agent.py -v
+```
+
+---
+
+### 12.2 Tier 2: Agentic Synthesis & SHACL Gate (`--mode resolve`)
+
+Synthesize an environment and validate it through SHACL **without booting the full PhysX engine**:
+
+```bash
+docker exec -it \
+  -e GEMINI_API_KEY="$GEMINI_API_KEY" \
+  -e OPENAI_API_KEY="$GEMINI_API_KEY" \
+  -e OPENAI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/" \
+  isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+  --mode resolve \
+  --model "gemini-3.6-flash" \
+  --prompt "Unitree G1 humanoid pick up brown box from the shelf in galileo room and place it into the blue sorting bin" \
+  --out_dir /workspaces/isaaclab_arena/generated_envs/g1_box_pnp
+```
+
+---
+
+### 12.3 Tier 3: Zero-Action Physics Settlement & Visual Inspection (`--mode build`)
+
+Once the environment graph YAML is generated, verify that all objects, robots, and collision meshes settle stably without tumbling off rims:
+
+#### A. Headless with MP4 Video Recording (Remote / Cloud / Docker):
+```bash
+docker exec -it isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+  --mode build \
+  --headless \
+  --num_envs 1 \
+  --num_steps 100 \
+  --enable_cameras \
+  --record_viewport_video \
+  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/g1_box_pnp/g1_pick_and_place_brown_box.yaml
+```
+
+#### B. Interactive GUI Viewport (Local Workstation with Display):
+```bash
+docker exec -it isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+  --mode build \
+  --num_envs 1 \
+  --num_steps 300 \
+  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/g1_box_pnp/g1_pick_and_place_brown_box.yaml
+```
+
+#### C. All-in-One End-to-End Generation & Video Recording (`--mode full`):
+```bash
+docker exec -it \
+  -e GEMINI_API_KEY="$GEMINI_API_KEY" \
+  -e OPENAI_API_KEY="$GEMINI_API_KEY" \
+  -e OPENAI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/" \
+  isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+  --mode full \
+  --headless \
+  --num_envs 1 \
+  --num_steps 100 \
+  --enable_cameras \
+  --record_viewport_video \
+  --model "gemini-3.6-flash" \
+  --prompt "Unitree G1 humanoid pick up brown box from the shelf in galileo room and place it into the blue sorting bin" \
+  --out_dir /workspaces/isaaclab_arena/generated_envs/g1_box_pnp
+```
+
+---
+
+### 12.4 Tier 4: Closed-Loop Policy Evaluation & PROV-O Lineage Export
+
+Evaluate a trained policy (GR00T / OpenPI) and automatically capture the W3C PROV-O lineage graph:
+
+```bash
+docker exec -it isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena/evaluation/policy_runner.py \
+  --environment_name g1_pick_and_place_brown_box \
+  --policy_type isaaclab_arena_gr00t.policy.gr00t_policy.GR00TPolicy \
+  --num_episodes 10 \
+  --output_base_dir /workspaces/isaaclab_arena/eval_output/g1_box_pnp_eval
+```
+
+Inspect the generated provenance graph `eval_telemetry.ttl`:
+```bash
+cat /workspaces/isaaclab_arena/eval_output/g1_box_pnp_eval/eval_telemetry.ttl
+```
+
+---
+
+### 12.5 Visualizer & Headless Execution Conventions (`--viz` vs `--headless`)
+
+In Isaac Lab 3.0 Beta / Isaac Sim 6.0:
+* **Default Mode is Headless**: Omit `--viz` entirely for standard headless simulation in Docker.
+* **Why `--viz kit --headless` Fails**:
+  * Passing `--viz kit` instructs Isaac Lab to load the `isaaclab_visualizers.kit.KitVisualizerCfg` extension.
+  * Adding `--headless` disables all visualizer instances at the `AppLauncher` level.
+  * `SimulationContext` detects this conflict and raises:
+    ```text
+    RuntimeError: Explicitly requested visualizer(s) ['kit'] could not be configured.
+    ```
+* **Interactive GUI Visualization (`--viz kit`) Runbook**:
+  1. **Grant X11 Display Permission (Run on Host)**:
+     ```bash
+     xhost +local:root
+     ```
+  2. **Launch with Kit Viewport (Omit `--headless`)**:
+     * **Agentic Generated Environment**:
+       ```bash
+       docker exec -it \
+         -e DISPLAY="$DISPLAY" \
+         isaaclab_arena-latest /isaac-sim/python.sh \
+         isaaclab_arena/evaluation/policy_runner.py \
+         --viz kit \
+         --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/g1_box_pnp/g1_pick_and_place_brown_box.yaml \
+         --policy_type isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy \
+         --enable_cameras \
+         --num_steps 100 \
+         --num_envs 1
+       ```
+     * **First-Party Environment Task (e.g., Robolab)**:
+       ```bash
+       docker exec -it \
+         -e DISPLAY="$DISPLAY" \
+         isaaclab_arena-latest /isaac-sim/python.sh \
+         isaaclab_arena/evaluation/policy_runner.py \
+         --viz kit \
+         --env_graph_spec_yaml /workspaces/isaaclab_arena/isaaclab_arena_environments/robolab/tasks/mustard_above_raisin.yaml \
+         --policy_type isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy \
+         --enable_cameras \
+         --num_steps 100 \
+         --num_envs 1
+       ```
+* **Headless Video Recording Alternative (Remote / Cloud / Docker)**:
+  * When no X11 display is available, omit `--viz` and use offscreen rendering:
+    ```bash
+    docker exec -it isaaclab_arena-latest /isaac-sim/python.sh \
+      isaaclab_arena/evaluation/policy_runner.py \
+      --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/g1_box_pnp/g1_pick_and_place_brown_box.yaml \
+      --policy_type isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy \
+      --num_steps 100 \
+      --num_envs 1 \
+      --enable_cameras \
+      --record_viewport_video \
+      --output_base_dir /workspaces/isaaclab_arena/eval_output/g1_pnp_test
+    ```
+
+

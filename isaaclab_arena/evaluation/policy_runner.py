@@ -258,6 +258,29 @@ def main():
         # Write and serve the evaluation report.
         # Only the local rank 0 writes/serves it, to avoid races on a shared output dir.
         if get_local_rank() == 0:
+            if metrics is not None:
+                try:
+                    from isaaclab_arena.evaluation.telemetry_to_prov import record_eval_telemetry_to_prov
+
+                    env_name = getattr(args_cli, "environment_name", None)
+                    if not env_name or env_name == "arena_env":
+                        yaml_arg = getattr(args_cli, "env_graph_spec_yaml", None)
+                        if yaml_arg:
+                            from pathlib import Path
+                            env_name = Path(yaml_arg).stem.replace("_env_graph", "")
+                        else:
+                            env_name = "arena_env"
+                    policy_name = getattr(args_cli, "policy_type", None)
+                    plain_metrics = metrics_to_plain_python_types(metrics)
+                    record_eval_telemetry_to_prov(
+                        output_dir=output_dir,
+                        env_name=env_name,
+                        metrics=plain_metrics if isinstance(plain_metrics, dict) else {},
+                        policy_name=policy_name,
+                    )
+                except Exception as exc:
+                    print(f"Warning: Failed to record PROV-O telemetry: {exc}")
+
             report_path = build_report(output_dir)
             if args_cli.serve_evaluation_report:
                 serve_until_ctrl_c(report_path.parent, args_cli.evaluation_report_port, report_path.name)

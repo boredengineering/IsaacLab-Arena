@@ -62,10 +62,21 @@ class InferenceBackend:
         assert (
             0 <= max_retries < MAX_RETRIES_LIMIT
         ), f"max_retries must be in [0, {MAX_RETRIES_LIMIT}), got {max_retries}"
-        resolved_api_key = api_key or os.getenv("NV_API_KEY")
-        assert resolved_api_key, "API key required: set NV_API_KEY or pass api_key."
-        resolved_base_url = base_url or DEFAULT_BASE_URL
-        resolved_model = model or DEFAULT_MODEL
+        resolved_api_key = (
+            api_key
+            or os.getenv("NV_API_KEY")
+            or os.getenv("OPENAI_API_KEY")
+            or os.getenv("GEMINI_API_KEY")
+        )
+        assert resolved_api_key, "API key required: set NV_API_KEY, OPENAI_API_KEY, or pass api_key."
+        resolved_base_url = (
+            base_url
+            or os.getenv("OPENAI_BASE_URL")
+            or os.getenv("NV_BASE_URL")
+            or os.getenv("BASE_URL")
+            or DEFAULT_BASE_URL
+        )
+        resolved_model = model or os.getenv("OPENAI_MODEL") or os.getenv("NV_MODEL") or DEFAULT_MODEL
         client = OpenAI(api_key=resolved_api_key, base_url=resolved_base_url)
         self._client: OpenAI = client
         self._model = resolved_model

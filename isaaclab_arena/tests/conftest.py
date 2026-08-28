@@ -12,6 +12,16 @@
 
 from __future__ import annotations
 
+import enum
+try:
+    from enum import StrEnum  # noqa: F401
+except ImportError:
+    try:
+        import strenum
+        enum.StrEnum = strenum.StrEnum
+    except ImportError:
+        pass
+
 # Expose agentic LLM test fixtures (``stub_openai``, etc.) to the suite.
 pytest_plugins = ["isaaclab_arena.tests.utils.agentic_environment_generation"]
 

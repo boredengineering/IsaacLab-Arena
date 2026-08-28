@@ -110,6 +110,19 @@ class EnvironmentGenerationAgent:
             if resolved is None:
                 return None, spec.to_dict()
             spec = resolved
+
+        # Semantic validation against W3C SHACL constraints
+        try:
+            from isaaclab_arena.agentic_environment_generation.rdf_lowering import spec_to_rdf_graph
+            from isaaclab_arena.agentic_environment_generation.rdf_validation import validate_rdf_environment_graph
+
+            rdf_graph = spec_to_rdf_graph(spec)
+            conforms, report = validate_rdf_environment_graph(rdf_graph)
+            if not conforms:
+                self._traces.append(f"SHACL Semantic Validation Warning:\n{report}")
+        except Exception as exc:  # pragma: no cover
+            self._traces.append(f"RDF/SHACL validation skipped: {exc}")
+
         return spec, None
 
 

@@ -75,6 +75,12 @@ def add_agentic_env_gen_runner_cli_args(parser: argparse.ArgumentParser) -> None
         help="Override the LLM model id (default: agent's built-in default).",
     )
     group.add_argument(
+        "--base_url",
+        type=str,
+        default=None,
+        help="Override the LLM base URL endpoint (default: env var or built-in default).",
+    )
+    group.add_argument(
         "--temperature",
         type=float,
         default=0.2,
@@ -91,6 +97,18 @@ def add_agentic_env_gen_runner_cli_args(parser: argparse.ArgumentParser) -> None
         type=Path,
         default=DEFAULT_AGENTIC_OUTPUT_DIR,
         help="Directory for the generated YAML files (default: isaaclab_arena_environments/agent_generated).",
+    )
+    group.add_argument(
+        "--record_viewport_video",
+        action="store_true",
+        default=False,
+        help="Record an mp4 video of the rollout viewport (uses gymnasium.wrappers.RecordVideo).",
+    )
+    group.add_argument(
+        "--record_camera_video",
+        action="store_true",
+        default=False,
+        help="Record one mp4 per camera in obs['camera_obs'].",
     )
 
 
@@ -112,6 +130,8 @@ def resolve_env_spec(args_cli: argparse.Namespace) -> Path:
     agent_kwargs: dict = {"temperature": args_cli.temperature}
     if args_cli.model:
         agent_kwargs["model"] = args_cli.model
+    if args_cli.base_url:
+        agent_kwargs["base_url"] = args_cli.base_url
     agent = EnvironmentGenerationAgent(**agent_kwargs)
     env_graph_spec, data = agent.generate_spec(
         args_cli.prompt,
@@ -202,13 +222,21 @@ def build_env_from_env_graph_spec(env_graph_spec_path: Path, args_cli: argparse.
     """Build a gymnasium env from an environment graph spec YAML."""
     from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
     from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
+    from isaaclab_arena.video.video_recording import VideoRecordingCfg, wrap_env_for_video
 
     loaded_env_graph_spec = ArenaEnvGraphSpec.from_yaml(env_graph_spec_path)
     arena_env = loaded_env_graph_spec.to_arena_env()
     # TODO(cvolk, 2026-07-06): [typed-config-migration] Pass ArenaEnvBuilderCfg into this function after this
     # runner stops carrying all configuration in one argparse Namespace.
+    video_cfg = VideoRecordingCfg(
+        record_viewport_video=getattr(args_cli, "record_viewport_video", False),
+        record_camera_video=getattr(args_cli, "record_camera_video", False),
+        video_base_dir=str(args_cli.out_dir / "videos" if hasattr(args_cli, "out_dir") else "videos"),
+    )
     builder = ArenaEnvBuilder(arena_env, arena_env_builder_cfg_from_argparse(args_cli))
-    env = builder.make_registered()
+    env = builder.make_registered(render_mode=video_cfg.render_mode)
+    if video_cfg.enabled:
+        env = wrap_env_for_video(env, video_cfg, args_cli.num_steps, None)
     print(
         f"[runner] built env {arena_env.name!r} from environment graph spec {env_graph_spec_path}",
         flush=True,

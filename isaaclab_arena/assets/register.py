@@ -3,7 +3,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-from types import get_original_bases
+try:
+    from types import get_original_bases
+except ImportError:
+    from typing_extensions import get_original_bases
 from typing import TYPE_CHECKING, get_args, get_origin
 
 from isaaclab_arena.assets.registries import (

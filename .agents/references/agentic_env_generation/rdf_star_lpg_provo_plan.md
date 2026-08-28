@@ -50,6 +50,72 @@ flowchart TD
 
 ---
 
+### 1.1 The Complete Mental Model: Semantic-Physical Life of an Environment
+
+```mermaid
+flowchart TD
+    subgraph STAGE_1 ["1. Intent Synthesis & Reification"]
+        NL_PROMPT["Natural Language Prompt\n'Unitree G1 pick up brown box from shelf...'"]
+        LLM["LLM (Gemini 3.6 Flash / Claude 3.7)\nvia OpenAI-Compatible Endpoint"]
+        RAW_SPEC["Raw Environment Graph Spec\n(Pydantic / JSON-LD 1.1)"]
+        NL_PROMPT --> LLM --> RAW_SPEC
+    end
+
+    subgraph STAGE_2 ["2. Semantic Invariant & SHACL Gate"]
+        LIFT["spec_to_rdf_graph()\n(Bidirectional Lifting)"]
+        RDF_STAR_NODE["RDF-star In-Memory Graph\n<< :brown_box :placedOn :wireshelving >>\n  :surfaceAnchor 'shelf_tier_1' ;\n  :nominalHeight 0.75 ."]
+        SHACL_GATE["SHACL-star Validator (pyshacl)\n• Terrain Plane Invariant\n• WBC Single-Thread Invariant\n• Corridor Clearance >= 0.60m\n• Fixture Containment Gate"]
+        RAW_SPEC --> LIFT --> RDF_STAR_NODE --> SHACL_GATE
+    end
+
+    subgraph STAGE_3 ["3. LPG Dual-Store Sync & Query"]
+        NEO4J_STORE["Neo4j Property Graph (neo4j-arena)\n• (:RigidObject)-[:PLACED_ON {height: 0.75}]->(:Fixture)\n• (:Embodiment)-[:STANDS_NEAR {distance: 0.85m}]->(:Fixture)\n• Cypher Spatial & Reachability Queries"]
+        SHACL_GATE ==>|"Valid Graph"| NEO4J_STORE
+    end
+
+    subgraph STAGE_4 ["4. Compilation & PhysX Simulation"]
+        LOWER_COMP["lower_rdf_graph_to_spec()\n(SPARQL-star Lowering Compiler)"]
+        YAML_SPEC["Validated Executable Spec YAML\n(g1_pick_and_place_brown_box.yaml)"]
+        BUILDER_PIPE["ArenaEnvBuilder & Task Factory\n(Scene Assembly & PhysX Spawners)"]
+        PHYSX_RUN["Isaac Sim / PhysX 6.0 Runtime\n• G1 Bipedal Locomotion (Pink WBC)\n• Stable Collision Settling\n• Viewport Video / GUI (--viz kit)"]
+        
+        SHACL_GATE ==> LOWER_COMP --> YAML_SPEC --> BUILDER_PIPE --> PHYSX_RUN
+    end
+
+    subgraph STAGE_5 ["5. Telemetry & Provenance Backpropagation"]
+        EVAL_PIPE["policy_runner.py Rollout\n(ZeroActionPolicy / GR00T Policy)"]
+        PROV_GRAPH["telemetry_to_prov.py\n(W3C PROV-O Graph: eval_telemetry.ttl)\n:eval_run prov:wasGeneratedBy :eval_act ;\n  prov:used :scene_graph, :model_checkpoint ;\n  arena:metric_success_rate 1.0 ."]
+        
+        PHYSX_RUN --> EVAL_PIPE --> PROV_GRAPH
+        PROV_GRAPH -.->|"Causal Feedback Loop"| NL_PROMPT
+    end
+
+    SHACL_GATE -.->|"Violation Traces\n(Self-Healing Loop)"| LLM
+```
+
+#### The 5 Pillars of the Mental Model
+
+1. **Dual-Plane Duality (Semantic Plane $\leftrightarrow$ Simulation Plane)**:
+   * *Semantic Plane*: Operates on entities, continuous edge properties (`surface_anchor`, `nominal_height`, `clearance`), and lineage graphs.
+   * *Simulation Plane*: Operates on continuous physical dynamics, collision meshes, sensor streams, and joint torques.
+   * *Compiler Bridge*: SPARQL-star lowering compiler (`rdf_lowering.py`) and Cypher synchronizer (`lpg_neo4j_sync.py`) perform bidirectional translations.
+
+2. **Hierarchical Spatial Containment**:
+   * Prevents objects from scattering across massive building USD bounds by strictly enforcing parent-child spatial hierarchies:
+     $$\text{Building} \xrightarrow{\text{CONTAINS\_FIXTURE}} \text{Shelf/Table} \xrightarrow{\text{PLACED\_ON } \{\text{anchor, height}\}} \text{Manipuland}$$
+     $$\text{Shelf/Table} \xleftarrow{\text{STANDS\_NEAR } \{\text{dist: 0.85m, facing: shelf}\}} \text{Humanoid Robot}$$
+
+3. **Declarative SHACL-star Invariant Gates**:
+   * Eliminates invalid physical setups (void spawns, single-threaded QP solver multi-env violations, unnavigable gaps $<0.60\text{m}$) before simulation boot. Violations trigger an automated LLM self-healing repair prompt.
+
+4. **Enterprise LPG Dual-Store (Neo4j)**:
+   * Graph persistence on Bolt port `7687` allows complex spatial topology queries, pathfinding, and interactive visual exploration in Neo4j Bloom.
+
+5. **W3C PROV-O Telemetry & Auditability**:
+   * Evaluated outcomes are serialized into `eval_telemetry.ttl`, enabling root-cause attribution linking physical task success/failure back to the prompt, model checkpoint, and scene parameters.
+
+---
+
 ## 2. The Labeled Property Graph (LPG) Architecture
 
 The **Labeled Property Graph (LPG)** is implemented across three coordinated layers:
@@ -633,5 +699,44 @@ In Isaac Lab 3.0 Beta / Isaac Sim 6.0:
       --record_viewport_video \
       --output_base_dir /workspaces/isaaclab_arena/eval_output/g1_pnp_test
     ```
+
+---
+
+### 12.6 Tier 2b: Neo4j LPG & Cypher Spatial Inspection
+
+Inspect and query the generated Labeled Property Graph (LPG) in Neo4j:
+
+1. **List Stored Environments**:
+   ```bash
+   docker exec -it isaaclab_arena-latest /isaac-sim/python.sh \
+     isaaclab_arena_examples/agentic_environment_generation/inspect_lpg.py --list
+   ```
+
+2. **Inspect Entities, Spatial Anchors & Containment Chains**:
+   ```bash
+   docker exec -it isaaclab_arena-latest /isaac-sim/python.sh \
+     isaaclab_arena_examples/agentic_environment_generation/inspect_lpg.py \
+     --env_name test_g1_shelf_pnp_lpg
+   ```
+
+3. **Execute Ad-Hoc Cypher Spatial Queries**:
+   ```bash
+   docker exec -it isaaclab_arena-latest /isaac-sim/python.sh \
+     isaaclab_arena_examples/agentic_environment_generation/inspect_lpg.py \
+     --cypher "MATCH (s)-[r]->(t) WHERE r.surface_anchor IS NOT NULL RETURN s.id, type(r), r.surface_anchor, r.nominal_height, t.id"
+   ```
+
+4. **Neo4j Web Browser (Bloom Graph UI)**:
+   * Open **`http://localhost:7475`** (or `http://127.0.0.1:7475`) in your host browser.
+   * In the connection modal, configure:
+     * **Connect URL**: `bolt://localhost:7688` (or `neo4j://localhost:7688`)
+     * **Username**: `neo4j`
+     * **Password**: `isaaclab_arena_password`
+   * In the top Cypher query bar, run:
+     ```cypher
+     MATCH (n)-[r]->(m) RETURN n, r, m
+     ```
+
+
 
 

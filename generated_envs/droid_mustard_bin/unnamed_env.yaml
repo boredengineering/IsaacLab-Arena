@@ -1,0 +1,95 @@
+embodiment: droid_abs_joint_pos
+background: maple_table_robolab
+objects:
+- id: mustard_bottle
+  registry_name: mustard_bottle
+  initial_pose:
+    position:
+    - 0.0
+    - 1.1
+    - 0.0
+    orientation:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+- id: grey_bin
+  registry_name: grey_bin_robolab
+  initial_pose:
+    position:
+    - 0.5
+    - 1.0
+    - 0.0
+    orientation:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+object_references:
+- id: table_surface
+  background_id: maple_table_robolab
+  surface_name: table_top
+task:
+  task_type: PickAndPlaceTask
+  params:
+    pick_up_object: mustard_bottle
+    destination_location: grey_bin
+    background_scene: maple_table_robolab
+reified_relations:
+- relation_type: PLACED_ON
+  subject: mustard_bottle
+  reference: maple_table_robolab
+  params:
+    surface_anchor: table_top
+    required_headroom: 0.35
+    required_friction: 0.6
+    delta_x:
+      lower: -0.15
+      upper: 0.15
+    delta_y:
+      lower: -0.15
+      upper: 0.15
+    delta_z:
+      lower: 0.0
+      upper: 0.02
+  prior_entropy: 2.5
+  evidence_sources:
+  - user_prompt
+  - tabletop_manipulation
+- relation_type: PLACED_ON
+  subject: grey_bin
+  reference: maple_table_robolab
+  params:
+    surface_anchor: table_top
+    required_headroom: 0.0
+    required_friction: 0.5
+    delta_x:
+      lower: -0.2
+      upper: 0.2
+    delta_y:
+      lower: -0.2
+      upper: 0.2
+    delta_z:
+      lower: 0.0
+      upper: 0.02
+  prior_entropy: 2.0
+  evidence_sources:
+  - user_prompt
+  - tabletop_manipulation
+- relation_type: STANDS_NEAR
+  subject: droid_abs_joint_pos
+  reference: maple_table_robolab
+  params:
+    kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 1.8
+  evidence_sources:
+  - user_prompt
+  - droid_tabletop_workspace
+- relation_type: RECEPTACLE_FOR
+  subject: grey_bin
+  reference: mustard_bottle
+  params: {}
+  prior_entropy: 1.5
+  evidence_sources:
+  - user_prompt
+  - pick_and_place_goal

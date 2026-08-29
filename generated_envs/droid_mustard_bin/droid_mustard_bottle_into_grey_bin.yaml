@@ -1,0 +1,176 @@
+env_name: droid_mustard_bottle_into_grey_bin
+embodiment:
+  id: droid
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.0
+      - 0.35
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.7071
+      - 0.7071
+background:
+  id: maple_table
+  registry_name: maple_table_robolab
+  params: {}
+objects:
+- id: mustard_bottle
+  registry_name: mustard_bottle
+  params: {}
+- id: grey_bin
+  registry_name: grey_bin_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.6
+      - 0.8
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: maple_table
+  params: {}
+- kind: is_anchor
+  subject: grey_bin
+  params: {}
+- kind: 'on'
+  subject: mustard_bottle
+  reference: maple_table
+  params: {}
+- kind: next_to
+  subject: mustard_bottle
+  reference: grey_bin
+  params:
+    distance: 0.2
+reified_relations:
+- reifier_id: reifier_mustard_table
+  source_id: mustard_bottle
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_top
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.2
+    max_val: 0.2
+    nominal: 0.0
+  delta_y:
+    min_val: -0.2
+    max_val: 0.2
+    nominal: 0.1
+  delta_z:
+    min_val: 0.0
+    max_val: 0.05
+    nominal: 0.0
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.5
+  evidence_sources:
+  - user_prompt
+  - tabletop_manipulation
+- reifier_id: reifier_bin_table
+  source_id: grey_bin
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_top
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: 0.1
+    max_val: 0.35
+    nominal: 0.25
+  delta_y:
+    min_val: -0.2
+    max_val: 0.2
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.05
+    nominal: 0.0
+  required_headroom: 0.4
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.4
+  evidence_sources:
+  - user_prompt
+  - tabletop_manipulation
+- reifier_id: reifier_bin_receptacle
+  source_id: grey_bin
+  relation_type: RECEPTACLE_FOR
+  target_id: mustard_bottle
+  surface_anchor: bin_interior
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.1
+    nominal: 0.0
+  required_headroom: 0.3
+  required_friction: 0.4
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.0
+  posterior_entropy: 0.3
+  evidence_sources:
+  - user_prompt
+- reifier_id: reifier_droid_table
+  source_id: droid
+  relation_type: STANDS_NEAR
+  target_id: maple_table
+  contact_normal:
+  - 0.0
+  - 1.0
+  - 0.0
+  delta_x:
+    min_val: -0.1
+    max_val: 0.1
+    nominal: 0.0
+  delta_y:
+    min_val: -0.6
+    max_val: -0.4
+    nominal: -0.5
+  delta_z:
+    min_val: 0.0
+    max_val: 0.0
+    nominal: 0.0
+  required_headroom: 0.8
+  required_friction: 0.8
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.2
+  evidence_sources:
+  - user_prompt
+task:
+  composition: atomic
+  description: Droid picks up the mustard bottle from the maple table and places it
+    in the grey bin.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: mustard_bottle
+      destination_location: grey_bin
+      background_scene: maple_table

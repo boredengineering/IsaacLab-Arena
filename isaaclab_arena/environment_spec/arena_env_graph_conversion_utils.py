@@ -165,8 +165,22 @@ def _attach_spatial_relations_to_assets(
     for relation in relations:
         subject_asset = assets_by_node_id[relation.subject]
         relation_class = ObjectRelationLibraryRegistry().get_object_relation_by_name(relation.kind)
+        params = dict(relation.params or {})
+
+        # Unpack vector position parameters (e.g. pos: [x, y, z]) into x, y, z kwargs for AtPosition
+        for pos_key in ("pos", "position", "xyz", "position_xyz"):
+            if pos_key in params and isinstance(params[pos_key], (list, tuple)) and len(params[pos_key]) >= 3:
+                coords = params[pos_key]
+                if "x" not in params:
+                    params["x"] = float(coords[0])
+                if "y" not in params:
+                    params["y"] = float(coords[1])
+                if "z" not in params:
+                    params["z"] = float(coords[2])
+                break
+
         sig = inspect.signature(relation_class.__init__)
-        valid_kwargs = {k: v for k, v in relation.params.items() if k in sig.parameters}
+        valid_kwargs = {k: v for k, v in params.items() if k in sig.parameters}
         if relation_class.is_unary():
             subject_asset.add_relation(relation_class(**valid_kwargs))
             if relation.kind == "is_anchor" and subject_asset.get_initial_pose() is None:

@@ -102,6 +102,17 @@ def _prim_path_for_relative(registry_name: str, prim_path: str) -> str:
     return f"{{ENV_REGEX_NS}}/{registry_name}/{prim_path.lstrip('/')}"
 
 
+def _parse_pose_data(pose_data: Any) -> Pose | None:
+    """Parse raw dictionary or Pose object into a typed Pose."""
+    if isinstance(pose_data, dict):
+        pos = tuple(pose_data.get("position_xyz", [0.0, 0.0, 0.0]))
+        rot = tuple(pose_data.get("rotation_xyzw", [0.0, 0.0, 0.0, 1.0]))
+        return Pose(position_xyz=pos, rotation_xyzw=rot)
+    elif isinstance(pose_data, Pose):
+        return pose_data
+    return None
+
+
 def instantiate_assets_from_spec(
     graph_spec: ArenaEnvGraphSpec, asset_registry: Any, enable_cameras: bool = False
 ) -> dict[str, type[Asset]]:
@@ -111,12 +122,23 @@ def instantiate_assets_from_spec(
     embodiment_params = dict(graph_spec.embodiment.params)
     if enable_cameras:
         embodiment_params.setdefault("enable_cameras", True)
+    emb_pose_data = embodiment_params.pop("initial_pose", None)
+    if emb_pose_data is not None:
+        parsed_emb_pose = _parse_pose_data(emb_pose_data)
+        if parsed_emb_pose is not None:
+            embodiment_params["initial_pose"] = parsed_emb_pose
     assets_by_node_id[graph_spec.embodiment.id] = asset_registry.get_asset_by_name(graph_spec.embodiment.registry_name)(
         **embodiment_params
     )
 
+    bg_params = dict(graph_spec.background.params)
+    bg_pose_data = bg_params.pop("initial_pose", None)
+    if bg_pose_data is not None:
+        parsed_bg_pose = _parse_pose_data(bg_pose_data)
+        if parsed_bg_pose is not None:
+            bg_params["initial_pose"] = parsed_bg_pose
     assets_by_node_id[graph_spec.background.id] = asset_registry.get_asset_by_name(graph_spec.background.registry_name)(
-        **graph_spec.background.params
+        **bg_params
     )
 
     for obj in graph_spec.objects:
@@ -124,13 +146,9 @@ def instantiate_assets_from_spec(
         params.setdefault("instance_name", obj.id)
         initial_pose_data = params.pop("initial_pose", None)
         asset_instance = asset_registry.get_asset_by_name(obj.registry_name)(**params)
-        if initial_pose_data and hasattr(asset_instance, "set_initial_pose"):
-            if isinstance(initial_pose_data, dict):
-                pos = tuple(initial_pose_data.get("position_xyz", [0.0, 0.0, 0.0]))
-                rot = tuple(initial_pose_data.get("rotation_xyzw", [0.0, 0.0, 0.0, 1.0]))
-                asset_instance.set_initial_pose(Pose(position_xyz=pos, rotation_xyzw=rot))
-            elif isinstance(initial_pose_data, Pose):
-                asset_instance.set_initial_pose(initial_pose_data)
+        parsed_obj_pose = _parse_pose_data(initial_pose_data)
+        if parsed_obj_pose is not None and hasattr(asset_instance, "set_initial_pose"):
+            asset_instance.set_initial_pose(parsed_obj_pose)
         assets_by_node_id[obj.id] = asset_instance
 
     for ref in graph_spec.object_references or []:

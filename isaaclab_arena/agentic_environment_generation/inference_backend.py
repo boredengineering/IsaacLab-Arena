@@ -64,13 +64,15 @@ class InferenceBackend:
         ), f"max_retries must be in [0, {MAX_RETRIES_LIMIT}), got {max_retries}"
         resolved_api_key = (
             api_key
+            or os.getenv("OPENROUTER_API_KEY")
             or os.getenv("NV_API_KEY")
             or os.getenv("OPENAI_API_KEY")
             or os.getenv("GEMINI_API_KEY")
         )
-        assert resolved_api_key, "API key required: set NV_API_KEY, OPENAI_API_KEY, or pass api_key."
+        assert resolved_api_key, "API key required: set OPENROUTER_API_KEY, NV_API_KEY, OPENAI_API_KEY, or pass api_key."
         resolved_base_url = (
             base_url
+            or os.getenv("OPENROUTER_BASE_URL")
             or os.getenv("OPENAI_BASE_URL")
             or os.getenv("NV_BASE_URL")
             or os.getenv("BASE_URL")

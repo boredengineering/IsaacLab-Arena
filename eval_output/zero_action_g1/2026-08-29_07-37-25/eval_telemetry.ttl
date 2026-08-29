@@ -1,0 +1,22 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:eval_run_1787989093 a prov:Entity,
+        arena:EvaluationRun ;
+    prov:wasGeneratedBy :activity_eval_run_1787989093 ;
+    arena:evaluatedGraph :pick_brown_box_from_wireshelving_into_bin ;
+    arena:metric_num_episodes 5 ;
+    arena:metric_object_moved_rate "1.0"^^xsd:float ;
+    arena:metric_success_rate "0.0"^^xsd:float ;
+    arena:metricsPayload "{\"num_episodes\": 5, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}"^^xsd:string .
+
+:activity_eval_run_1787989093 a prov:Activity ;
+    prov:endedAtTime "2026-08-29T07:38:13.324457+00:00"^^xsd:dateTime ;
+    prov:used :pick_brown_box_from_wireshelving_into_bin,
+        :policy_isaaclab_arena_policy_zero_action_policy_ZeroActionPolicy .
+
+:policy_isaaclab_arena_policy_zero_action_policy_ZeroActionPolicy a prov:Entity ;
+    arena:modelWeightsPath "isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy"^^xsd:string .
+

@@ -136,6 +136,9 @@ def _ground_telescopic_dollhouse_spec(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphS
     furniture_keywords = ("shelf", "shelving", "table", "counter", "desk", "cabinet", "stand")
     receptacle_keywords = ("bin", "basket", "tray", "box_target", "receptacle")
 
+    bg_lower = f"{spec.background.id} {spec.background.registry_name}".lower()
+    floor_z = -0.795 if "galileo" in bg_lower or "room" in bg_lower else 0.0
+
     # 1. Background scene root anchor
     has_bg_anchor = any(r.kind == "is_anchor" and r.subject == spec.background.id for r in spec.relations)
     if not has_bg_anchor:
@@ -159,7 +162,7 @@ def _ground_telescopic_dollhouse_spec(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphS
         if is_furniture:
             if "initial_pose" not in obj.params:
                 obj.params["initial_pose"] = {
-                    "position_xyz": [0.0, 1.1, 0.0],
+                    "position_xyz": [0.0, 1.1, floor_z],
                     "rotation_xyzw": [0.0, 0.0, 0.0, 1.0],
                 }
             anchored_subjects.add(obj.id)
@@ -167,10 +170,18 @@ def _ground_telescopic_dollhouse_spec(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphS
         elif is_receptacle:
             if "initial_pose" not in obj.params:
                 obj.params["initial_pose"] = {
-                    "position_xyz": [0.6, 0.8, 0.0],
+                    "position_xyz": [0.6, 0.8, floor_z],
                     "rotation_xyzw": [0.0, 0.0, 0.0, 1.0],
                 }
             anchored_subjects.add(obj.id)
+
+    # 2. Embodiment Grounding
+    if spec.embodiment and "initial_pose" not in spec.embodiment.params:
+        # Position humanoid facing the workspace along the reach manifold
+        spec.embodiment.params["initial_pose"] = {
+            "position_xyz": [0.0, 0.35, floor_z],
+            "rotation_xyzw": [0.0, 0.0, 0.7071, 0.7071],  # Face +Y toward shelving
+        }
 
     # Clean and rebuild relations list without duplicates or redundant placements
     cleaned_relations: list[SpatialRelationSpec] = []

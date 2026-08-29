@@ -2,7 +2,10 @@ env_name: pick_brown_box_from_wireshelving_into_bin
 embodiment:
   id: g1_wbc_pink
   registry_name: g1_wbc_pink
-  params: {}
+  params:
+    initial_pose:
+      position_xyz: [0.0, 0.35, -0.795]
+      rotation_xyzw: [0.0, 0.0, 0.7071, 0.7071]
 background:
   id: galileo
   registry_name: galileo
@@ -12,13 +15,13 @@ objects:
   registry_name: wireshelving_a01_vomp_robolab
   params:
     initial_pose:
-      position_xyz: [0.0, 1.1, 0.0]
+      position_xyz: [0.0, 1.1, -0.795]
       rotation_xyzw: [0.0, 0.0, 0.0, 1.0]
 - id: blue_sorting_bin
   registry_name: blue_sorting_bin
   params:
     initial_pose:
-      position_xyz: [0.6, 0.8, 0.0]
+      position_xyz: [0.6, 0.8, -0.795]
       rotation_xyzw: [0.0, 0.0, 0.0, 1.0]
 - id: brown_box
   registry_name: brown_box
@@ -40,6 +43,8 @@ relations:
   subject: brown_box
   reference: wireshelving
   params:
+    surface_anchor: shelf_tier_2
+    nominal_height: 0.75
     clearance_m: 0.02
 task:
   composition: atomic

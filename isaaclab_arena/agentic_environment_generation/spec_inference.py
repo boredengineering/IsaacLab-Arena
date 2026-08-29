@@ -110,11 +110,12 @@ GUIDANCE:
   inside the background; otherwise leave it unset.
 - TELESCOPIC DOLLHOUSE SPATIAL PLACEMENT:
   * Treat the scene like a dollhouse with structured multi-tier containment:
-    1. Background Room (e.g. galileo): Static building structure (is_anchor: true).
-    2. Furniture/Fixtures (e.g. wireshelving, table, counter): Placed inside the room in the front interaction zone (e.g. pos: [0.0, 1.1, 0.0] or bounds: bound_x: [-0.3, 0.3], bound_y: [-1.2, -0.8]).
-    3. Fixture Sub-Surfaces / Tiers: For shelving/counters, specify 'surface_anchor': 'shelf_tier_1' or 'shelf_tier_2' with nominal_height: 0.75.
-    4. Manipulands (e.g. brown_box, mug, bottle): Small items MUST be placed on the furniture's sub-surface tier (subject: 'brown_box', reference: 'wireshelving', params: {'surface_anchor': 'shelf_tier_1'}), NEVER directly on the massive room envelope.
-    5. Receptacles (e.g. blue_sorting_bin, floor zone): Placed adjacent in the workspace (e.g. pos: [0.6, 0.8, 0.0] or next_to: wireshelving).
+    1. Background Room (e.g. galileo): Static building structure (is_anchor: true). Note: Room floor level is z = -0.795m.
+    2. Embodiment Base Stance: Grounded firmly on the room floor at z = -0.795m (e.g. pos: [0.0, 0.35, -0.795]), facing the shelving/workspace in the +Y direction.
+    3. Furniture/Fixtures (e.g. wireshelving, table, counter): Placed on the floor inside the room in the front interaction zone (e.g. pos: [0.0, 1.1, -0.795]).
+    4. Fixture Sub-Surfaces / Tiers: For shelving/counters, specify 'surface_anchor': 'shelf_tier_1' or 'shelf_tier_2' with nominal_height: 0.75.
+    5. Manipulands (e.g. brown_box, mug, bottle): Small items MUST be placed on the furniture's sub-surface tier (subject: 'brown_box', reference: 'wireshelving', params: {'surface_anchor': 'shelf_tier_1'}), NEVER directly on the massive room envelope.
+    6. Receptacles (e.g. blue_sorting_bin, floor zone): Placed adjacent on the floor in the workspace (e.g. pos: [0.6, 0.8, -0.795] or next_to: wireshelving).
   * Always ensure the primary interaction surface is anchored so the camera viewport directly frames the robot and workspace.
 """
 

@@ -60,6 +60,18 @@ class ArenaEnvGraphSpec(BaseModel):
         default=None, description="Optional authoring-time CLI flags that swap an asset's registry_name; usually empty."
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_spec_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            normalized = dict(data)
+            if not normalized.get("env_name"):
+                emb = normalized.get("embodiment")
+                emb_name = emb if isinstance(emb, str) else (emb.get("registry_name", "env") if isinstance(emb, dict) else "env")
+                normalized["env_name"] = f"{emb_name}_generated_task"
+            return normalized
+        return data
+
     @field_validator("object_references", "cli_override_specs", "reified_relations", mode="before")
     @classmethod
     def _none_if_empty_list(cls, value: Any) -> Any:

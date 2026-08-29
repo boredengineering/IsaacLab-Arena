@@ -217,9 +217,17 @@ def _apply_strict_constraints(node: dict | list) -> None:
 
 
 def _extract_response_text(message: ChatCompletionMessage) -> str | None:
-    """Pull structured-output text from a chat-completion message."""
-    if message.content:
-        return message.content
-    # ``reasoning_content`` is NVIDIA DeepSeek's provider-specific
-    # channel; it is not a declared field on ``ChatCompletionMessage``
-    return getattr(message, "reasoning_content", None)
+    """Pull structured-output text from a chat-completion message and strip markdown fences."""
+    raw = message.content or getattr(message, "reasoning_content", None)
+    if not raw:
+        return None
+    raw = raw.strip()
+    # Strip markdown ```json ... ``` or ``` ... ``` code blocks commonly emitted by Anthropic / OpenRouter
+    if raw.startswith("```"):
+        lines = raw.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        raw = "\n".join(lines).strip()
+    return raw

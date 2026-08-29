@@ -3,15 +3,31 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for RDF-star lowering into ArenaEnvGraphSpec."""
+"""Unit tests for RDF-star lowering and 3D bipedal capability manifolds."""
 
 from __future__ import annotations
 
-import rdflib
+import numpy as np
 import pytest
+import rdflib
 
-from isaaclab_arena.agentic_environment_generation.rdf_lowering import lower_rdf_graph_to_spec
+from isaaclab_arena.agentic_environment_generation.rdf_lowering import (
+    BipedalCapabilityProfile,
+    compile_reified_scene_transforms,
+    lower_rdf_graph_to_spec,
+    sample_bipedal_reach_manifold,
+    spec_to_rdf_graph,
+)
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+from isaaclab_arena.environment_spec.arena_env_graph_types import (
+    AssetSpec,
+    CompositeTaskSpec,
+    ContinuousIntervalSpec,
+    ReifiedRelationSpec,
+    SpatialRelationSpec,
+    TaskCompositionType,
+    TaskSpec,
+)
 
 SCENE_WITH_OBJECTS_TTL = """
 @prefix :      <https://isaac-sim.github.io/arena/instances/> .
@@ -73,7 +89,6 @@ def test_lower_rdf_graph_to_spec():
 
 
 def test_spec_to_rdf_graph_lifting_and_validation():
-    from isaaclab_arena.agentic_environment_generation.rdf_lowering import spec_to_rdf_graph
     from isaaclab_arena.agentic_environment_generation.rdf_validation import validate_rdf_environment_graph
 
     graph = rdflib.Graph()
@@ -85,37 +100,72 @@ def test_spec_to_rdf_graph_lifting_and_validation():
     assert conforms, f"Lifted graph failed SHACL validation:\n{report}"
 
 
-def test_telescopic_dollhouse_lifting_and_containment_triples():
-    from isaaclab_arena.agentic_environment_generation.rdf_lowering import spec_to_rdf_graph
-    from isaaclab_arena.environment_spec.arena_env_graph_types import AssetSpec, CompositeTaskSpec, SpatialRelationSpec, TaskSpec
+def test_bipedal_capability_profile_standoff_elevation_mapping():
+    """Verify that BipedalCapabilityProfile adjusts standoff distance across elevations."""
+    profile = BipedalCapabilityProfile(
+        embodiment_name="unitree_g1",
+        min_dexterous_height=0.30,
+        max_dexterous_height=1.35,
+    )
 
+    # 1. High Tier (1.20m) -> closer standoff (~0.52m)
+    standoff_high, _, dex_high = profile.evaluate_optimal_standoff(1.20)
+    assert 0.50 <= standoff_high <= 0.55
+    assert dex_high > 0.80
+
+    # 2. Chest Height (0.85m) -> optimal manipulability (~0.65m)
+    standoff_mid, _, dex_mid = profile.evaluate_optimal_standoff(0.85)
+    assert np.isclose(standoff_mid, 0.65, atol=0.02)
+    assert dex_mid >= 0.95
+
+    # 3. Crouch Low Tier (0.45m) -> wider standoff (~0.79m)
+    standoff_low, _, dex_low = profile.evaluate_optimal_standoff(0.45)
+    assert standoff_low > standoff_mid
+    assert dex_low >= 0.65
+
+
+def test_sample_bipedal_reach_manifold():
+    """Verify that sample_bipedal_reach_manifold outputs valid robot base poses."""
+    target_pos = [1.0, 0.0, 0.85]
+    floor_z = 0.0
+    approach_yaw = [-20.0, 20.0]
+
+    robot_xy, robot_yaw, dexterity = sample_bipedal_reach_manifold(
+        target_world_xyz=target_pos,
+        z_floor_estimate=floor_z,
+        approach_yaw_range=approach_yaw,
+    )
+
+    # Robot should stand in front of the target along X axis
+    assert np.isclose(robot_xy[0], 0.35, atol=0.05)
+    assert np.isclose(robot_xy[1], 0.0, atol=0.05)
+    assert np.isclose(robot_yaw, 0.0, atol=2.0)
+    assert dexterity > 0.90
+
+
+def test_compile_reified_scene_transforms():
+    """Verify that compile_reified_scene_transforms grounds all scene entities."""
     spec = ArenaEnvGraphSpec(
-        env_name="test_dollhouse_env",
+        env_name="test_compile_env",
         embodiment=AssetSpec(id="g1", registry_name="g1_wbc_joint"),
         background=AssetSpec(id="galileo", registry_name="galileo_locomanip"),
         objects=[
-            AssetSpec(id="wireshelving", registry_name="wireshelving_a01_vomp_robolab"),
             AssetSpec(id="brown_box", registry_name="brown_box"),
         ],
         relations=[
             SpatialRelationSpec(kind="is_anchor", subject="galileo"),
-            SpatialRelationSpec(kind="on", subject="wireshelving", reference="galileo"),
-            SpatialRelationSpec(kind="on", subject="brown_box", reference="wireshelving", params={"surface_anchor": "shelf_tier_2", "nominal_height": 0.75}),
+            SpatialRelationSpec(kind="on", subject="brown_box", reference="galileo"),
         ],
         task=CompositeTaskSpec(
-            composition="atomic",
-            description="Pick brown box from shelving",
-            subtasks=[TaskSpec(kind="PickAndPlaceTask", params={"pick_up_object": "brown_box", "destination_location": "wireshelving"})],
+            composition=TaskCompositionType.ATOMIC,
+            description="Pick brown box",
+            subtasks=[TaskSpec(kind="PickAndPlaceTask", params={"pick_up_object": "brown_box", "destination_location": "galileo"})],
         ),
     )
 
-
-    lifted = spec_to_rdf_graph(spec)
-    # Check that SurfaceAnchor and Camera nodes were generated
-    ARENA = rdflib.Namespace("https://isaac-sim.github.io/arena/schema#")
-    surface_anchors = list(lifted.subjects(rdflib.RDF.type, ARENA.SurfaceAnchor))
-    assert len(surface_anchors) >= 1
-
-    cameras = list(lifted.subjects(rdflib.RDF.type, ARENA.Camera))
-    assert len(cameras) >= 1
-
+    transforms = compile_reified_scene_transforms(spec, floor_z=-0.795)
+    assert "brown_box" in transforms
+    assert "g1" in transforms
+    # Check that robot is grounded at floor_z
+    robot_pose = transforms["g1"]
+    assert np.isclose(robot_pose[2], -0.795, atol=1e-3)

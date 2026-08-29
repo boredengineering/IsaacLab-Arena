@@ -250,3 +250,77 @@ class CliOverrideSpec(BaseModel):
     def dest(self) -> str:
         """The argparse attribute name for this flag (dashes become underscores)."""
         return self.arg.replace("-", "_")
+
+
+class ContinuousIntervalSpec(BaseModel):
+    """Bounded continuous interval for domain randomization and tolerance gating."""
+
+    min_val: float = Field(description="Minimum bound of the tolerance interval.")
+    max_val: float = Field(description="Maximum bound of the tolerance interval.")
+    nominal: float = Field(description="Nominal/mean value for deterministic execution.")
+
+
+class ReifiedRelationSpec(BaseModel):
+    """RDF 1.2 Reified Spatial and Functional Invariant Contract."""
+
+    reifier_id: str = Field(
+        min_length=1,
+        description="Unique RDF 1.2 reifier identifier (e.g. 'reifier_box_shelf').",
+    )
+    source_id: str = Field(
+        min_length=1,
+        description="Subject node id in the causal relation.",
+    )
+    relation_type: str = Field(
+        min_length=1,
+        description="Type of the reified relation (e.g. 'PLACED_ON', 'STANDS_NEAR', 'RECEPTACLE_FOR', 'OBSERVES').",
+    )
+    target_id: str = Field(
+        min_length=1,
+        description="Object node id in the causal relation.",
+    )
+    surface_anchor: str | None = Field(
+        default=None,
+        description="Introspected USD geometric patch identifier (e.g. 'shelf_patch_2').",
+    )
+    contact_normal: tuple[float, float, float] = Field(
+        default=(0.0, 0.0, 1.0),
+        description="Unit contact normal vector in world space.",
+    )
+    delta_x: ContinuousIntervalSpec = Field(
+        default_factory=lambda: ContinuousIntervalSpec(min_val=-0.05, max_val=0.05, nominal=0.0),
+        description="Relative positional offset interval along local X axis.",
+    )
+    delta_y: ContinuousIntervalSpec = Field(
+        default_factory=lambda: ContinuousIntervalSpec(min_val=-0.05, max_val=0.05, nominal=0.0),
+        description="Relative positional offset interval along local Y axis.",
+    )
+    delta_z: ContinuousIntervalSpec = Field(
+        default_factory=lambda: ContinuousIntervalSpec(min_val=0.0, max_val=0.03, nominal=0.01),
+        description="Vertical clearance offset interval along contact normal.",
+    )
+    required_headroom: float = Field(
+        default=0.35,
+        description="Minimum vertical clearance (meters) required above the contact surface.",
+    )
+    required_friction: float = Field(
+        default=0.60,
+        description="Minimum static friction coefficient required for stable contact.",
+    )
+    kinematic_manifold: str = Field(
+        default="unitree_g1_bimanual_chest_height",
+        description="Embodiment reachability manifold profile identifier.",
+    )
+    prior_entropy: float = Field(
+        default=2.5,
+        description="Prior Shannon entropy (nats) representing ungrounded spatial uncertainty.",
+    )
+    posterior_entropy: float = Field(
+        default=0.05,
+        description="Posterior Shannon entropy (nats) after geometric affordance conditioning.",
+    )
+    evidence_sources: list[str] = Field(
+        default_factory=list,
+        description="Lineage provenance IDs of sensory observations that informed this contract.",
+    )
+

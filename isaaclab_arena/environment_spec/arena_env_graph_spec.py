@@ -23,6 +23,7 @@ from isaaclab_arena.environment_spec.arena_env_graph_types import (
     CompositeTaskSpec,
     ObjectReferenceSpec,
     PlacementValidatorSpec,
+    ReifiedRelationSpec,
     SpatialRelationSpec,
     TaskSpec,
 )
@@ -47,6 +48,9 @@ class ArenaEnvGraphSpec(BaseModel):
     relations: list[SpatialRelationSpec] = Field(
         default_factory=list, description="Spatial layout relations across all assets."
     )
+    reified_relations: list[ReifiedRelationSpec] | None = Field(
+        default=None, description="RDF 1.2 reified causal and physical invariant relations."
+    )
     placement_validators: PlacementValidatorSpec | None = Field(
         default=None,
         description="Per-env placement validators; none runs all build-time checks.",
@@ -56,7 +60,7 @@ class ArenaEnvGraphSpec(BaseModel):
         default=None, description="Optional authoring-time CLI flags that swap an asset's registry_name; usually empty."
     )
 
-    @field_validator("object_references", "cli_override_specs", mode="before")
+    @field_validator("object_references", "cli_override_specs", "reified_relations", mode="before")
     @classmethod
     def _none_if_empty_list(cls, value: Any) -> Any:
         if value == []:

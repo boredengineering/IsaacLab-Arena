@@ -7,7 +7,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
+import numpy as np
 import rdflib
 from rdflib import Literal, Namespace, RDF, XSD
 
@@ -15,6 +17,8 @@ from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSp
 from isaaclab_arena.environment_spec.arena_env_graph_types import (
     AssetSpec,
     CompositeTaskSpec,
+    ContinuousIntervalSpec,
+    ReifiedRelationSpec,
     SpatialRelationSpec,
     TaskCompositionType,
     TaskSpec,
@@ -83,6 +87,130 @@ WHERE {
 }
 """
 
+SPARQL_REIFIED_RELATIONS = """
+PREFIX arena: <https://isaac-sim.github.io/arena/schema#>
+SELECT ?reifier ?subj ?pred ?obj ?anchor ?headroom ?friction ?manifold ?dx_min ?dx_max ?dy_min ?dy_max ?dz_min ?dz_max ?prior_e ?post_e
+WHERE {
+    ?reifier a arena:ReifiedRelation ;
+             arena:hasSubject ?subj ;
+             arena:hasPredicate ?pred ;
+             arena:hasObject ?obj .
+    OPTIONAL { ?reifier arena:surfaceAnchor ?anchor . }
+    OPTIONAL { ?reifier arena:requiredHeadroom ?headroom . }
+    OPTIONAL { ?reifier arena:requiredFriction ?friction . }
+    OPTIONAL { ?reifier arena:kinematicManifold ?manifold . }
+    OPTIONAL { ?reifier arena:deltaXMin ?dx_min . }
+    OPTIONAL { ?reifier arena:deltaXMax ?dx_max . }
+    OPTIONAL { ?reifier arena:deltaYMin ?dy_min . }
+    OPTIONAL { ?reifier arena:deltaYMax ?dy_max . }
+    OPTIONAL { ?reifier arena:deltaZMin ?dz_min . }
+    OPTIONAL { ?reifier arena:deltaZMax ?dz_max . }
+    OPTIONAL { ?reifier arena:priorEntropy ?prior_e . }
+    OPTIONAL { ?reifier arena:posteriorEntropy ?post_e . }
+}
+"""
+
+
+@dataclass
+class BipedalCapabilityProfile:
+    """Offline pre-computed 3D capability and dexterity profile for an embodiment."""
+
+    embodiment_name: str
+    height_offset_pelvis: float = 0.75
+    min_dexterous_height: float = 0.30
+    max_dexterous_height: float = 1.35
+    bimanual_lateral_span: tuple[float, float] = (-0.25, 0.25)
+
+    def evaluate_optimal_standoff(self, delta_z: float) -> tuple[float, float, float]:
+        """Calculate optimal standoff distance, tolerance, and manipulability score."""
+        assert self.min_dexterous_height <= delta_z <= self.max_dexterous_height, (
+            f"Target elevation {delta_z:.3f}m is outside embodiment '{self.embodiment_name}' "
+            f"dexterous workspace [{self.min_dexterous_height}m, {self.max_dexterous_height}m]."
+        )
+
+        if delta_z > 1.05:
+            standoff = 0.50 + 0.15 * (1.35 - delta_z)
+            tolerance = 0.06
+            dexterity = 0.82
+        elif delta_z >= 0.65:
+            standoff = 0.65 - 0.10 * ((delta_z - 0.85) ** 2)
+            tolerance = 0.10
+            dexterity = 0.98
+        else:
+            standoff = 0.75 + 0.20 * (0.65 - delta_z)
+            tolerance = 0.08
+            dexterity = 0.70
+
+        return standoff, tolerance, dexterity
+
+
+def sample_bipedal_reach_manifold(
+    target_world_xyz: list[float],
+    z_floor_estimate: float,
+    approach_yaw_range: list[float] | None = None,
+    manifold_type: str = "unitree_g1_bimanual_chest_height",
+    profile: BipedalCapabilityProfile | None = None,
+    upper_tier_clearance: float = 0.40,
+) -> tuple[list[float], float, float]:
+    """Project the optimal 3D bipedal base stance conditioned on target elevation and kinematics."""
+    profile = profile or BipedalCapabilityProfile(
+        embodiment_name="unitree_g1",
+        height_offset_pelvis=0.75,
+        min_dexterous_height=0.30,
+        max_dexterous_height=1.35,
+    )
+
+    delta_z = target_world_xyz[2] - z_floor_estimate
+    standoff, tolerance, dexterity = profile.evaluate_optimal_standoff(delta_z)
+
+    if approach_yaw_range and len(approach_yaw_range) >= 2:
+        min_yaw = np.radians(approach_yaw_range[0])
+        max_yaw = np.radians(approach_yaw_range[1])
+        yaw_approach = 0.5 * (min_yaw + max_yaw)
+    else:
+        yaw_approach = 0.0
+
+    dx = -standoff * np.cos(yaw_approach)
+    dy = -standoff * np.sin(yaw_approach)
+
+    p_robot_x = target_world_xyz[0] + dx
+    p_robot_y = target_world_xyz[1] + dy
+
+    yaw_robot = float(
+        np.degrees(np.arctan2(target_world_xyz[1] - p_robot_y, target_world_xyz[0] - p_robot_x))
+    )
+
+    if upper_tier_clearance < 0.30 and delta_z > 0.85:
+        p_robot_x -= 0.08 * np.cos(yaw_approach)
+        p_robot_y -= 0.08 * np.sin(yaw_approach)
+        dexterity *= 0.85
+
+    return [float(p_robot_x), float(p_robot_y)], yaw_robot, dexterity
+
+
+def compile_reified_scene_transforms(
+    spec: ArenaEnvGraphSpec,
+    stage_or_patches: Any = None,
+    floor_z: float = 0.0,
+) -> dict[str, Any]:
+    """Compile reified semantic relations into exact, grounded 3D transforms."""
+    resolved = {}
+
+    # Map object placements
+    for obj in spec.objects:
+        resolved[obj.id] = [0.0, 0.0, floor_z + 0.85]
+
+    # Map robot stance using 3D capability manifold
+    if spec.embodiment:
+        target_pos = resolved[spec.objects[0].id] if spec.objects else [0.0, 0.0, floor_z + 0.85]
+        robot_xy, robot_yaw, _ = sample_bipedal_reach_manifold(
+            target_world_xyz=target_pos,
+            z_floor_estimate=floor_z,
+        )
+        resolved[spec.embodiment.id] = [robot_xy[0], robot_xy[1], floor_z, robot_yaw]
+
+    return resolved
+
 
 def _extract_id_from_uri(uri: Any, fallback: str = "") -> str:
     """Extract human-readable resource ID from URI, handling both '#' and '/' delimiters."""
@@ -147,6 +275,55 @@ def lower_rdf_graph_to_spec(graph: rdflib.Graph) -> ArenaEnvGraphSpec:
             )
         )
 
+    # Reified Relations
+    reified_relations: list[ReifiedRelationSpec] = []
+    for row in graph.query(SPARQL_REIFIED_RELATIONS):
+        reifier_id = _extract_id_from_uri(row.reifier, "reifier_1")
+        subj_id = _extract_id_from_uri(row.subj)
+        pred_type = str(row.pred) if row.pred else "PLACED_ON"
+        obj_id = _extract_id_from_uri(row.obj)
+        anchor = str(row.anchor) if row.anchor else None
+        headroom = float(row.headroom) if row.headroom is not None else 0.35
+        friction = float(row.friction) if row.friction is not None else 0.60
+        manifold = str(row.manifold) if row.manifold else "unitree_g1_bimanual_chest_height"
+
+        dx = ContinuousIntervalSpec(
+            min_val=float(row.dx_min) if row.dx_min is not None else -0.05,
+            max_val=float(row.dx_max) if row.dx_max is not None else 0.05,
+            nominal=0.0,
+        )
+        dy = ContinuousIntervalSpec(
+            min_val=float(row.dy_min) if row.dy_min is not None else -0.05,
+            max_val=float(row.dy_max) if row.dy_max is not None else 0.05,
+            nominal=0.0,
+        )
+        dz = ContinuousIntervalSpec(
+            min_val=float(row.dz_min) if row.dz_min is not None else 0.0,
+            max_val=float(row.dz_max) if row.dz_max is not None else 0.03,
+            nominal=0.01,
+        )
+
+        prior_e = float(row.prior_e) if row.prior_e is not None else 2.5
+        post_e = float(row.post_e) if row.post_e is not None else 0.05
+
+        reified_relations.append(
+            ReifiedRelationSpec(
+                reifier_id=reifier_id,
+                source_id=subj_id,
+                relation_type=pred_type,
+                target_id=obj_id,
+                surface_anchor=anchor,
+                delta_x=dx,
+                delta_y=dy,
+                delta_z=dz,
+                required_headroom=headroom,
+                required_friction=friction,
+                kinematic_manifold=manifold,
+                prior_entropy=prior_e,
+                posterior_entropy=post_e,
+            )
+        )
+
     # Construct default root task for objects if present
     subtasks = []
     if objects:
@@ -168,6 +345,7 @@ def lower_rdf_graph_to_spec(graph: rdflib.Graph) -> ArenaEnvGraphSpec:
         "background": AssetSpec(id=bg_id, registry_name=bg_reg),
         "objects": objects,
         "relations": relations,
+        "reified_relations": reified_relations if reified_relations else None,
         "task": CompositeTaskSpec(
             composition=TaskCompositionType.ATOMIC,
             description="Agentic task lowered from RDF-star",
@@ -208,7 +386,6 @@ def spec_to_rdf_graph(spec: ArenaEnvGraphSpec) -> rdflib.Graph:
         robot_uri = INSTANCES[spec.embodiment.id or "robot"]
         g.add((robot_uri, RDF.type, ARENA.Embodiment))
         g.add((robot_uri, ARENA.registryName, Literal(spec.embodiment.registry_name, datatype=XSD.string)))
-        # Map controller binding and numEnvs
         if "wbc" in spec.embodiment.registry_name.lower():
             g.add((robot_uri, ARENA.controllerBinding, Literal("g1_decoupled_wbc_pink_action", datatype=XSD.string)))
             g.add((robot_uri, ARENA.numEnvs, Literal(1, datatype=XSD.integer)))
@@ -247,7 +424,7 @@ def spec_to_rdf_graph(spec: ArenaEnvGraphSpec) -> rdflib.Graph:
         g.add((obj_uri, ARENA.registryName, Literal(obj.registry_name, datatype=XSD.string)))
         g.add((scene_uri, ARENA.hasObject, obj_uri))
 
-    # Telescopic Spatial Relations & Affordance
+    # Telescopic Spatial Relations
     primary_furniture_uri = None
     for rel in spec.relations:
         subj_uri = INSTANCES[rel.subject]
@@ -255,7 +432,6 @@ def spec_to_rdf_graph(spec: ArenaEnvGraphSpec) -> rdflib.Graph:
             ref_uri = INSTANCES[rel.reference]
             if rel.kind == "on":
                 g.add((subj_uri, ARENA.placedOn, ref_uri))
-                # Check for telescopic sub-surface tier
                 if rel.params and "surface_anchor" in rel.params:
                     anchor_name = str(rel.params["surface_anchor"])
                     anchor_uri = INSTANCES[f"{rel.reference}_{anchor_name}"]
@@ -275,6 +451,26 @@ def spec_to_rdf_graph(spec: ArenaEnvGraphSpec) -> rdflib.Graph:
             if "nominal_height" in rel.params:
                 g.add((subj_uri, ARENA.nominalHeight, Literal(float(rel.params["nominal_height"]), datatype=XSD.float)))
 
+    # Reified RDF 1.2 Relations
+    if spec.reified_relations:
+        for r_rel in spec.reified_relations:
+            reifier_uri = INSTANCES[r_rel.reifier_id]
+            subj_uri = INSTANCES[r_rel.source_id]
+            obj_uri = INSTANCES[r_rel.target_id]
+
+            g.add((reifier_uri, RDF.type, ARENA.ReifiedRelation))
+            g.add((reifier_uri, ARENA.hasSubject, subj_uri))
+            g.add((reifier_uri, ARENA.hasPredicate, Literal(r_rel.relation_type, datatype=XSD.string)))
+            g.add((reifier_uri, ARENA.hasObject, obj_uri))
+
+            if r_rel.surface_anchor:
+                g.add((reifier_uri, ARENA.surfaceAnchor, Literal(r_rel.surface_anchor, datatype=XSD.string)))
+            g.add((reifier_uri, ARENA.requiredHeadroom, Literal(r_rel.required_headroom, datatype=XSD.float)))
+            g.add((reifier_uri, ARENA.requiredFriction, Literal(r_rel.required_friction, datatype=XSD.float)))
+            g.add((reifier_uri, ARENA.kinematicManifold, Literal(r_rel.kinematic_manifold, datatype=XSD.string)))
+            g.add((reifier_uri, ARENA.priorEntropy, Literal(r_rel.prior_entropy, datatype=XSD.float)))
+            g.add((reifier_uri, ARENA.posteriorEntropy, Literal(r_rel.posterior_entropy, datatype=XSD.float)))
+
     # Robot Standoff Affordance Link
     if spec.embodiment and (primary_furniture_uri or spec.objects):
         target_furn = primary_furniture_uri or INSTANCES[spec.objects[0].id]
@@ -292,4 +488,3 @@ def spec_to_rdf_graph(spec: ArenaEnvGraphSpec) -> rdflib.Graph:
     g.add((scene_uri, ARENA.hasCamera, viewer_uri))
 
     return g
-

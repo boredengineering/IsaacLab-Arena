@@ -70,15 +70,31 @@ class InferenceBackend:
             or os.getenv("GEMINI_API_KEY")
         )
         assert resolved_api_key, "API key required: set OPENROUTER_API_KEY, NV_API_KEY, OPENAI_API_KEY, or pass api_key."
+
+        is_openrouter = (
+            resolved_api_key.startswith("sk-or-")
+            or bool(os.getenv("OPENROUTER_API_KEY"))
+            or (base_url is not None and "openrouter.ai" in base_url)
+            or bool(os.getenv("OPENROUTER_BASE_URL"))
+        )
+        default_endpoint = "https://openrouter.ai/api/v1" if is_openrouter else DEFAULT_BASE_URL
+        default_model_id = (os.getenv("OPENROUTER_MODEL") or "google/gemini-3.7-flash") if is_openrouter else DEFAULT_MODEL
+
         resolved_base_url = (
             base_url
             or os.getenv("OPENROUTER_BASE_URL")
             or os.getenv("OPENAI_BASE_URL")
             or os.getenv("NV_BASE_URL")
             or os.getenv("BASE_URL")
-            or DEFAULT_BASE_URL
+            or default_endpoint
         )
-        resolved_model = model or os.getenv("OPENAI_MODEL") or os.getenv("NV_MODEL") or DEFAULT_MODEL
+        resolved_model = (
+            model
+            or (os.getenv("OPENROUTER_MODEL") if is_openrouter else None)
+            or os.getenv("OPENAI_MODEL")
+            or os.getenv("NV_MODEL")
+            or default_model_id
+        )
         client = OpenAI(api_key=resolved_api_key, base_url=resolved_base_url)
         self._client: OpenAI = client
         self._model = resolved_model

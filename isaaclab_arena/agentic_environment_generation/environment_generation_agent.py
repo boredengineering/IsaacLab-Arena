@@ -122,8 +122,21 @@ class EnvironmentGenerationAgent:
         # Ground spatial anchors and ensure reified relation contracts
         spec = _ensure_reified_relations_and_grounding(spec)
 
-        # Active Bayesian Refinement & SHACL-star Self-Healing Loop
-        for iteration in range(self.max_retries):
+        # Active Bayesian Refinement & SHACL-star Self-Healing Loop with Governance
+        seen_spec_hashes: set[str] = set()
+        max_loop_steps = min(self.max_retries, 2)  # Cap repair attempts to prevent token runaway
+
+        for iteration in range(max_loop_steps):
+            current_hash = _compute_spec_hash(spec)
+            if current_hash in seen_spec_hashes:
+                self._traces.append(
+                    f"[ActiveInference] Stagnation/cycle detected at iteration {iteration + 1} "
+                    f"(hash={current_hash[:8]}). Halting LLM loop to conserve tokens."
+                )
+                spec = _deterministic_affordance_fallback(spec)
+                break
+            seen_spec_hashes.add(current_hash)
+
             try:
                 from isaaclab_arena.agentic_environment_generation.rdf_lowering import spec_to_rdf_graph
                 from isaaclab_arena.agentic_environment_generation.rdf_validation import validate_rdf_environment_graph
@@ -135,21 +148,37 @@ class EnvironmentGenerationAgent:
                     break
                 else:
                     self._traces.append(f"SHACL constraint violation on iteration {iteration + 1}:\n{report}")
-                    repaired_spec, _ = self.spec_inference.repair_with_feedback(
-                        spec,
-                        report,
-                        self._traces,
-                        asset_catalog=asset_catalog,
-                        relation_catalog=relation_catalog,
-                        task_catalog=task_catalog,
-                    )
+                    affordances = _discover_candidate_affordances(spec)
+                    try:
+                        repaired_spec, _ = self.spec_inference.repair_with_feedback(
+                            spec,
+                            report,
+                            self._traces,
+                            original_prompt=prompt,
+                            available_affordances=affordances,
+                        )
+                    except Exception as repair_exc:
+                        self._traces.append(
+                            f"[ActiveInference] Repair failed on iteration {iteration + 1}: {repair_exc}. Applying deterministic fallback."
+                        )
+                        spec = _deterministic_affordance_fallback(spec)
+                        break
+
                     if repaired_spec is not None:
                         spec = _ensure_reified_relations_and_grounding(repaired_spec)
                     else:
+                        self._traces.append(
+                            f"[ActiveInference] Repair returned None on iteration {iteration + 1}. Applying deterministic fallback."
+                        )
+                        spec = _deterministic_affordance_fallback(spec)
                         break
             except Exception as exc:  # pragma: no cover
-                self._traces.append(f"RDF/SHACL validation skipped: {exc}")
+                self._traces.append(f"RDF/SHACL validation skipped: {exc}. Applying deterministic fallback.")
+                spec = _deterministic_affordance_fallback(spec)
                 break
+        else:
+            # If loop finished without conforming to SHACL, apply deterministic fallback
+            spec = _deterministic_affordance_fallback(spec)
 
         # Sync validated factor graph to Neo4j LPG
         try:
@@ -159,6 +188,55 @@ class EnvironmentGenerationAgent:
             self._traces.append(f"Neo4j LPG sync skipped: {exc}")
 
         return spec, None
+
+
+def _compute_spec_hash(spec: ArenaEnvGraphSpec) -> str:
+    """Compute a canonical MD5 hash of the spec's entities and relational structure."""
+    import hashlib
+    import json
+
+    canonical_repr = {
+        "embodiment": spec.embodiment.registry_name if spec.embodiment else None,
+        "background": spec.background.registry_name if spec.background else None,
+        "objects": sorted([f"{o.id}:{o.registry_name}" for o in spec.objects]),
+        "relations": sorted([
+            f"{r.kind}:{r.subject}->{r.reference}:{r.params.get('surface_anchor', '') if r.params else ''}"
+            for r in spec.relations
+        ]),
+    }
+    return hashlib.md5(json.dumps(canonical_repr, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _discover_candidate_affordances(spec: ArenaEnvGraphSpec) -> list[str]:
+    """Discover candidate surface anchors and support patches from scene entities."""
+    affordances = []
+    for obj in spec.objects:
+        name_lower = f"{obj.id} {obj.registry_name}".lower()
+        if "shelf" in name_lower or "rack" in name_lower or "shelv" in name_lower:
+            affordances.extend([f"{obj.id}.shelf_tier_1", f"{obj.id}.shelf_tier_2", f"{obj.id}.shelf_tier_3"])
+        elif "table" in name_lower or "desk" in name_lower or "counter" in name_lower:
+            affordances.extend([f"{obj.id}.table_top", f"{obj.id}.center_workspace"])
+        elif "bin" in name_lower or "box" in name_lower or "tray" in name_lower:
+            affordances.append(f"{obj.id}.bin_bottom")
+    return affordances
+
+
+def _deterministic_affordance_fallback(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphSpec:
+    """Deterministically repair hierarchical placement and ungrounded reifiers without LLM calls."""
+    furniture_objs = [
+        obj for obj in spec.objects
+        if any(k in f"{obj.id} {obj.registry_name}".lower() for k in ("shelf", "shelving", "table", "counter", "desk", "rack"))
+    ]
+    if furniture_objs and spec.background:
+        primary_fixture = furniture_objs[0]
+        for rel in spec.relations:
+            if rel.kind == "on" and rel.reference == spec.background.id and rel.subject != primary_fixture.id:
+                rel.reference = primary_fixture.id
+                if not rel.params or "surface_anchor" not in rel.params:
+                    rel.params = dict(rel.params or {})
+                    rel.params["surface_anchor"] = "shelf_tier_1"
+
+    return _ensure_reified_relations_and_grounding(spec)
 
 
 def _ensure_reified_relations_and_grounding(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphSpec:

@@ -167,6 +167,77 @@ class TestGenerateSpec:
         assert spec.reified_relations is not None
         assert len(spec.reified_relations) >= 1
 
+    def test_active_inference_stagnation_guard_triggers_deterministic_fallback(self, agent):
+        agent_obj, client = agent
+        # Spec with invalid hierarchical placement
+        invalid_spec = minimal_spec_dict()
+        invalid_spec["objects"].append({
+            "id": "wireshelving",
+            "registry_name": "wireshelving_a01_vomp_robolab",
+            "params": {},
+        })
+        invalid_spec["relations"] = [
+            {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "wireshelving", "reference": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "bowl_ycb_robolab", "reference": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "rubiks_cube_hot3d_robolab", "reference": "maple_table_robolab", "params": {}},
+        ]
+
+        # Return identical invalid spec on repair to simulate LLM stagnation/cycle
+        client.chat.completions.create.side_effect = [
+            chat_response(content=json.dumps(invalid_spec)),
+            chat_response(content=json.dumps(invalid_spec)),
+        ]
+
+        spec, data = agent_obj.generate_spec(
+            "pick up cube from shelf on table",
+            asset_catalog=catalog("catalog"),
+            relation_catalog=relation_catalog("RELATIONS"),
+            task_catalog=make_task_catalog("TASKS"),
+        )
+        assert spec is not None
+        assert data is None
+        # Verify stagnation guard triggered and halted LLM calls
+        assert any("Stagnation/cycle detected" in line for line in agent_obj.traces)
+        # Verify deterministic fallback resolved the relations to the wireshelving fixture
+        cube_rel = next(r for r in spec.relations if r.subject == "rubiks_cube_hot3d_robolab")
+        assert cube_rel.reference == "wireshelving"
+
+    def test_active_inference_repair_none_triggers_deterministic_fallback(self, agent):
+        agent_obj, client = agent
+        invalid_spec = minimal_spec_dict()
+        invalid_spec["objects"].append({
+            "id": "wireshelving",
+            "registry_name": "wireshelving_a01_vomp_robolab",
+            "params": {},
+        })
+        invalid_spec["relations"] = [
+            {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "wireshelving", "reference": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "rubiks_cube_hot3d_robolab", "reference": "maple_table_robolab", "params": {}},
+        ]
+
+        # LLM returns invalid JSON on repair
+        client.chat.completions.create.side_effect = [
+            chat_response(content=json.dumps(invalid_spec)),
+            chat_response(content="invalid json"),
+            chat_response(content="invalid json"),
+            chat_response(content="invalid json"),
+            chat_response(content="invalid json"),
+        ]
+
+        spec, data = agent_obj.generate_spec(
+            "pick up cube from shelf on table",
+            asset_catalog=catalog("catalog"),
+            relation_catalog=relation_catalog("RELATIONS"),
+            task_catalog=make_task_catalog("TASKS"),
+        )
+        assert spec is not None
+        assert data is None
+        assert any("Applying deterministic fallback" in line for line in agent_obj.traces)
+        cube_rel = next(r for r in spec.relations if r.subject == "rubiks_cube_hot3d_robolab")
+        assert cube_rel.reference == "wireshelving"
+
 
 
 # ---------------------------------------------------------------------------

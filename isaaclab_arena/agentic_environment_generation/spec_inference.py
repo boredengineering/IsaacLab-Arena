@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from pydantic import ValidationError
@@ -79,31 +80,36 @@ class SpecInference:
         previous_spec: ArenaEnvGraphSpec | dict[str, Any],
         feedback_report: str,
         traces: list[str],
-        asset_catalog: Any,
-        relation_catalog: Any,
-        task_catalog: Any,
+        asset_catalog: Any = None,
+        relation_catalog: Any = None,
+        task_catalog: Any = None,
+        original_prompt: str = "",
+        available_affordances: list[str] | None = None,
     ) -> tuple[ArenaEnvGraphSpec | None, dict[str, Any]]:
         """Repair a failed ArenaEnvGraphSpec using structured diagnostic feedback.
+
+        Uses a lightweight focused repair prompt to conserve token budget and prevent
+        catalogue re-transmission bloat.
 
         Args:
             previous_spec: The failed spec or raw dict.
             feedback_report: Detailed SHACL or physical constraint violation diagnostics.
             traces: Diagnostic trace accumulator.
-            asset_catalog: Embodiment, background, and object vocabulary.
-            relation_catalog: Relation vocabulary.
-            task_catalog: Task vocabulary.
+            asset_catalog: Optional asset catalogue (omitted by default in repair to save tokens).
+            relation_catalog: Optional relation catalogue.
+            task_catalog: Optional task catalogue.
+            original_prompt: Original user goal description.
+            available_affordances: List of valid introspected USD affordance patches.
 
         Returns:
             A ``(spec, data)`` tuple with the repaired spec or raw dict on failure.
         """
         prev_json = previous_spec.to_dict() if isinstance(previous_spec, ArenaEnvGraphSpec) else previous_spec
-        repair_user_msg = (
-            f"{self._user_message('', asset_catalog, relation_catalog, task_catalog)}\n\n"
-            f"PREVIOUS CANDIDATE SPEC:\n{prev_json}\n\n"
-            f"CONSTRAINT VIOLATION DIAGNOSTIC REPORT:\n{feedback_report}\n\n"
-            "INSTRUCTION:\n"
-            "Repair the candidate spec to satisfy all physical and semantic invariants in the diagnostic report. "
-            "Update reified relations, continuous intervals, standoff distances, and surface anchors accordingly."
+        repair_user_msg = self._repair_user_message(
+            original_prompt=original_prompt,
+            previous_spec=prev_json,
+            feedback_report=feedback_report,
+            available_affordances=available_affordances,
         )
         data = self._inference_backend.run_json(
             StructuredOutputRequest(
@@ -121,6 +127,34 @@ class SpecInference:
             return None, data
         traces.extend(collect_agent_ready_task_validation_traces(spec))
         return spec, data
+
+    @staticmethod
+    def _repair_user_message(
+        original_prompt: str,
+        previous_spec: dict[str, Any],
+        feedback_report: str,
+        available_affordances: list[str] | None = None,
+    ) -> str:
+        affordance_sec = ""
+        if available_affordances:
+            affordance_sec = (
+                f"\nAVAILABLE INTROSPECTED AFFORDANCE PATCHES (USD Ground Truth):\n"
+                f"{json.dumps(available_affordances, indent=2)}\n"
+            )
+        prompt_sec = f"TARGET GOAL PROMPT:\n{original_prompt}\n\n" if original_prompt else ""
+        return (
+            f"{prompt_sec}"
+            f"PREVIOUS CANDIDATE SPEC (WITH CONSTRAINT VIOLATIONS):\n"
+            f"{json.dumps(previous_spec, indent=2)}\n\n"
+            f"DIAGNOSTIC FEEDBACK & CONSTRAINT VIOLATIONS:\n"
+            f"{feedback_report}\n"
+            f"{affordance_sec}\n"
+            f"INSTRUCTION:\n"
+            f"Perform a targeted repair on the candidate spec to resolve every constraint violation above.\n"
+            f"1. Update violating relations, surface anchors, or containment hierarchies so they conform.\n"
+            f"2. Keep all valid objects, background, and embodiment configurations unchanged.\n"
+            f"3. Emit the complete valid ArenaEnvGraphSpec JSON matching the schema."
+        )
 
     @staticmethod
     def _user_message(

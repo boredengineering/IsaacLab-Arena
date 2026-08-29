@@ -117,6 +117,57 @@ class TestGenerateSpec:
         assert client.chat.completions.create.call_count == 2
         assert any("is not in the background prim tree" in line for line in agent_obj.traces)
 
+    def test_active_bayesian_repair_loop_on_shacl_violation(self, agent):
+        agent_obj, client = agent
+        # First response: invalid hierarchical placement (cube placed directly on background table instead of shelf)
+        invalid_pass1 = minimal_spec_dict()
+        invalid_pass1["objects"].append({
+            "id": "wireshelving",
+            "registry_name": "wireshelving_a01_vomp_robolab",
+            "params": {},
+        })
+        invalid_pass1["relations"] = [
+            {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "wireshelving", "reference": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "bowl_ycb_robolab", "reference": "maple_table_robolab", "params": {}},
+            # rubiks_cube placed on maple_table_robolab directly despite wireshelving presence (triggers SHACL violation)
+            {"kind": "on", "subject": "rubiks_cube_hot3d_robolab", "reference": "maple_table_robolab", "params": {}},
+        ]
+
+        # Repaired response: rubiks_cube and bowl placed on wireshelving
+        repaired_spec_dict = minimal_spec_dict()
+        repaired_spec_dict["objects"].append({
+            "id": "wireshelving",
+            "registry_name": "wireshelving_a01_vomp_robolab",
+            "params": {},
+        })
+        repaired_spec_dict["relations"] = [
+            {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "wireshelving", "reference": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "bowl_ycb_robolab", "reference": "wireshelving", "params": {"surface_anchor": "shelf_tier_2"}},
+            {"kind": "on", "subject": "rubiks_cube_hot3d_robolab", "reference": "wireshelving", "params": {"surface_anchor": "shelf_tier_1"}},
+        ]
+
+        client.chat.completions.create.side_effect = [
+            chat_response(content=json.dumps(invalid_pass1)),
+            chat_response(content=json.dumps(repaired_spec_dict)),
+        ]
+
+        spec, data = agent_obj.generate_spec(
+            "pick up cube from shelf on table",
+            asset_catalog=catalog("catalog"),
+            relation_catalog=relation_catalog("RELATIONS"),
+            task_catalog=make_task_catalog("TASKS"),
+        )
+        assert spec is not None
+        assert data is None
+        assert client.chat.completions.create.call_count == 2
+        assert any("SHACL constraint violation on iteration 1" in line for line in agent_obj.traces)
+        assert any("SHACL semantic validation passed on iteration 2" in line for line in agent_obj.traces)
+        assert spec.reified_relations is not None
+        assert len(spec.reified_relations) >= 1
+
+
 
 # ---------------------------------------------------------------------------
 # Live endpoint (network + auth required)

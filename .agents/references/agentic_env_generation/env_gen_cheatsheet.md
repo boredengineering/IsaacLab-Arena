@@ -137,7 +137,7 @@ docker exec -it isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena/evaluation/policy_runner.py \
   --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/g1_box_pnp/pick_brown_box_from_wireshelving_into_bin.yaml \
   --policy_type isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy \
-  --num_steps 200 \
+  --num_steps 1200 \
   --num_envs 1 \
   --enable_cameras \
   --record_viewport_video \

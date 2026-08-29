@@ -74,6 +74,54 @@ class SpecInference:
         traces.extend(collect_agent_ready_task_validation_traces(spec))
         return spec, data
 
+    def repair_with_feedback(
+        self,
+        previous_spec: ArenaEnvGraphSpec | dict[str, Any],
+        feedback_report: str,
+        traces: list[str],
+        asset_catalog: Any,
+        relation_catalog: Any,
+        task_catalog: Any,
+    ) -> tuple[ArenaEnvGraphSpec | None, dict[str, Any]]:
+        """Repair a failed ArenaEnvGraphSpec using structured diagnostic feedback.
+
+        Args:
+            previous_spec: The failed spec or raw dict.
+            feedback_report: Detailed SHACL or physical constraint violation diagnostics.
+            traces: Diagnostic trace accumulator.
+            asset_catalog: Embodiment, background, and object vocabulary.
+            relation_catalog: Relation vocabulary.
+            task_catalog: Task vocabulary.
+
+        Returns:
+            A ``(spec, data)`` tuple with the repaired spec or raw dict on failure.
+        """
+        prev_json = previous_spec.to_dict() if isinstance(previous_spec, ArenaEnvGraphSpec) else previous_spec
+        repair_user_msg = (
+            f"{self._user_message('', asset_catalog, relation_catalog, task_catalog)}\n\n"
+            f"PREVIOUS CANDIDATE SPEC:\n{prev_json}\n\n"
+            f"CONSTRAINT VIOLATION DIAGNOSTIC REPORT:\n{feedback_report}\n\n"
+            "INSTRUCTION:\n"
+            "Repair the candidate spec to satisfy all physical and semantic invariants in the diagnostic report. "
+            "Update reified relations, continuous intervals, standoff distances, and surface anchors accordingly."
+        )
+        data = self._inference_backend.run_json(
+            StructuredOutputRequest(
+                schema_name="ArenaEnvGraphSpec",
+                schema=self._schema,
+                system=self._system_prompt(),
+                user=repair_user_msg,
+                retry_label="repair_spec",
+            )
+        )
+        try:
+            spec = ArenaEnvGraphSpec.model_validate(data)
+        except ValidationError as exc:
+            traces.extend(format_validation_error(exc))
+            return None, data
+        traces.extend(collect_agent_ready_task_validation_traces(spec))
+        return spec, data
+
     @staticmethod
     def _user_message(
         prompt: str,
@@ -86,13 +134,15 @@ class SpecInference:
             f"{relation_catalog.to_catalog_string()}\n\n"
             f"{task_catalog.to_catalog_string()}"
         )
-        return f"{vocabulary}\n\nUSER PROMPT:\n{prompt}"
+        if prompt:
+            return f"{vocabulary}\n\nUSER PROMPT:\n{prompt}"
+        return vocabulary
 
     @staticmethod
     def _system_prompt() -> str:
         return """\
 You are an environment-generator for robot manipulation tasks.
-Convert a natural-language prompt into an ArenaEnvGraphSpec.
+Convert a natural-language prompt into an ArenaEnvGraphSpec with formal semantic reification.
 
 GUIDANCE:
 - Follow the per-field ``description`` strings in the schema.
@@ -102,20 +152,34 @@ GUIDANCE:
   If the prompt includes the exact registry name, use it.
   If no reasonable match can be found, return empty string.
   If multiple reasonable matches are found, return the closest match or the one with the most specific name.
-- For embodiment, if the prompt only mention the robot family (driod/franka) and there are multiple
-  variance of that family in EMBODIMENTS, pick the one with the default tag.
+- For embodiment, if the prompt only mentions the robot family (droid/franka/g1) and there are multiple
+  variations of that family in EMBODIMENTS, pick the one with the default tag.
 - For multiple instances of the same registry asset, use semantic (left/right) or numerical (1/2/3)
   suffixes in ``id``.
 - Only populate ``object_references`` when the prompt explicitly mentions surfaces or appliances
   inside the background; otherwise leave it unset.
-- TELESCOPIC DOLLHOUSE SPATIAL PLACEMENT:
-  * Treat the scene like a dollhouse with structured multi-tier containment:
-    1. Background Room (e.g. galileo): Static building structure (is_anchor: true). Note: Room floor level is z = -0.795m.
-    2. Embodiment Base Stance: Grounded firmly on the room floor at z = -0.795m (e.g. pos: [0.0, 0.35, -0.795]), facing the shelving/workspace in the +Y direction.
-    3. Furniture/Fixtures (e.g. wireshelving, table, counter): Placed on the floor inside the room in the front interaction zone (e.g. pos: [0.0, 1.1, -0.795]).
-    4. Fixture Sub-Surfaces / Tiers: For shelving/counters, specify 'surface_anchor': 'shelf_tier_1' or 'shelf_tier_2' with nominal_height: 0.75.
-    5. Manipulands (e.g. brown_box, mug, bottle): Small items MUST be placed on the furniture's sub-surface tier (subject: 'brown_box', reference: 'wireshelving', params: {'surface_anchor': 'shelf_tier_1'}), NEVER directly on the massive room envelope.
-    6. Receptacles (e.g. blue_sorting_bin, floor zone): Placed adjacent on the floor in the workspace (e.g. pos: [0.6, 0.8, -0.795] or next_to: wireshelving).
-  * Always ensure the primary interaction surface is anchored so the camera viewport directly frames the robot and workspace.
+
+SEMANTIC REIFICATION & BAYESIAN CAUSAL CONTRACTS:
+- Populate ``reified_relations`` for every primary physical interaction:
+  * PLACED_ON: Connects manipuland to support surface or fixture tier.
+    - Set ``surface_anchor`` (e.g. 'shelf_tier_2', 'table_top').
+    - Set ``required_headroom`` (e.g. 0.35m for lifting clearance).
+    - Set ``required_friction`` (e.g. 0.60 for slip-free contact).
+    - Set ``delta_x``, ``delta_y``, ``delta_z`` tolerance intervals as ContinuousIntervalSpec.
+  * STANDS_NEAR: Connects embodiment to primary workspace or fixture.
+    - Set ``kinematic_manifold`` to match embodiment capability (e.g. 'unitree_g1_bimanual_chest_height', 'unitree_g1_crouch_manipulation', 'tabletop_stationary_reach').
+  * RECEPTACLE_FOR: Connects destination container/bin to the placement goal.
+  * OBSERVES: Connects sensor/camera to interaction zones.
+- Set ``prior_entropy`` (e.g. 2.5 nats) and document ``evidence_sources`` (e.g. ['user_prompt', 'room_scale_locomanipulation']).
+
+TELESCOPIC DOLLHOUSE SPATIAL PLACEMENT:
+- Treat the scene like a dollhouse with structured multi-tier containment:
+  1. Background Room (e.g. galileo): Static building structure (is_anchor: true). Note: Room floor level is z = -0.795m.
+  2. Embodiment Base Stance: Grounded firmly on the room floor at z = -0.795m (e.g. pos: [0.0, 0.35, -0.795]), facing the shelving/workspace in the +Y direction.
+  3. Furniture/Fixtures (e.g. wireshelving, table, counter): Placed on the floor inside the room in the front interaction zone (e.g. pos: [0.0, 1.1, -0.795]).
+  4. Fixture Sub-Surfaces / Tiers: For shelving/counters, specify 'surface_anchor': 'shelf_tier_1' or 'shelf_tier_2' with nominal_height: 0.75.
+  5. Manipulands (e.g. brown_box, mug, bottle): Small items MUST be placed on the furniture's sub-surface tier (subject: 'brown_box', reference: 'wireshelving', params: {'surface_anchor': 'shelf_tier_1'}), NEVER directly on the massive room envelope.
+  6. Receptacles (e.g. blue_sorting_bin, floor zone): Placed adjacent on the floor in the workspace (e.g. pos: [0.6, 0.8, -0.795] or next_to: wireshelving).
+- Always ensure the primary interaction surface is anchored so the camera viewport directly frames the robot and workspace.
 """
 

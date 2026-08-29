@@ -412,7 +412,7 @@ def spec_to_rdf_graph(spec: ArenaEnvGraphSpec) -> rdflib.Graph:
     for obj in spec.objects:
         obj_uri = INSTANCES[obj.id]
         name_lower = obj.registry_name.lower()
-        if "shelf" in name_lower or "table" in name_lower or "counter" in name_lower or "rack" in name_lower:
+        if "shelf" in name_lower or "shelv" in name_lower or "table" in name_lower or "counter" in name_lower or "rack" in name_lower:
             g.add((obj_uri, RDF.type, ARENA.Fixture))
             g.add((obj_uri, RDF.type, ARENA.Furniture))
         elif "bin" in name_lower or "box" in name_lower or "tray" in name_lower:

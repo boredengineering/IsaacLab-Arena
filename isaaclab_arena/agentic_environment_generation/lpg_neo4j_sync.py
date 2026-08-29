@@ -192,6 +192,53 @@ def sync_spec_to_neo4j(
                         )
                         primary_furniture_id = rel.reference
 
+            # 5b. Merge RDF 1.2 Reified Relation Factor Nodes
+            if spec.reified_relations:
+                for reif in spec.reified_relations:
+                    session.run(
+                        """
+                        MATCH (e:EnvironmentGraph {name: $env_name}),
+                              (s {id: $source_id, env_name: $env_name}),
+                              (t {id: $target_id, env_name: $env_name})
+                        MERGE (rf:ReifiedRelation {reifier_id: $reifier_id, env_name: $env_name})
+                        SET rf.relation_type = $relation_type,
+                            rf.surface_anchor = $surface_anchor,
+                            rf.contact_normal = $contact_normal,
+                            rf.delta_x_min = $dx_min,
+                            rf.delta_x_max = $dx_max,
+                            rf.delta_y_min = $dy_min,
+                            rf.delta_y_max = $dy_max,
+                            rf.delta_z_nominal = $dz_nom,
+                            rf.required_headroom = $headroom,
+                            rf.required_friction = $friction,
+                            rf.kinematic_manifold = $manifold,
+                            rf.prior_entropy = $prior_e,
+                            rf.posterior_entropy = $post_e,
+                            rf.evidence_sources = $evidence
+                        MERGE (e)-[:HAS_REIFIER]->(rf)
+                        MERGE (rf)-[:REIFIES_SUBJECT]->(s)
+                        MERGE (rf)-[:REIFIES_OBJECT]->(t)
+                        """,
+                        env_name=spec.env_name,
+                        reifier_id=reif.reifier_id,
+                        relation_type=reif.relation_type,
+                        source_id=reif.source_id,
+                        target_id=reif.target_id,
+                        surface_anchor=reif.surface_anchor or "",
+                        contact_normal=list(reif.contact_normal),
+                        dx_min=float(reif.delta_x.min_val),
+                        dx_max=float(reif.delta_x.max_val),
+                        dy_min=float(reif.delta_y.min_val),
+                        dy_max=float(reif.delta_y.max_val),
+                        dz_nom=float(reif.delta_z.nominal),
+                        headroom=float(reif.required_headroom),
+                        friction=float(reif.required_friction),
+                        manifold=reif.kinematic_manifold,
+                        prior_e=float(reif.prior_entropy),
+                        post_e=float(reif.posterior_entropy),
+                        evidence=reif.evidence_sources,
+                    )
+
             # 6. Merge Robot Affordance Standoff Link
             if spec.embodiment:
                 target_fid = primary_furniture_id or (spec.objects[0].id if spec.objects else None)
@@ -238,12 +285,46 @@ def sync_spec_to_neo4j(
                 env_name=spec.env_name,
             ).single()
 
-
             return {
                 "env_name": spec.env_name,
                 "node_count": result["node_count"] if result else 0,
                 "rel_count": result["rel_count"] if result else 0,
             }
+    finally:
+        if owns_driver:
+            driver.close()
+
+
+def query_reified_relations(
+    env_name: str,
+    driver: Optional[neo4j.Driver] = None,
+) -> List[Dict[str, Any]]:
+    """Queries all active reified relation factor nodes for an environment in Neo4j."""
+    owns_driver = False
+    if driver is None:
+        driver = get_neo4j_driver()
+        owns_driver = True
+
+    try:
+        with driver.session() as session:
+            result = session.run(
+                """
+                MATCH (e:EnvironmentGraph {name: $env_name})-[:HAS_REIFIER]->(rf:ReifiedRelation)
+                MATCH (rf)-[:REIFIES_SUBJECT]->(s), (rf)-[:REIFIES_OBJECT]->(t)
+                RETURN rf.reifier_id AS reifier_id,
+                       rf.relation_type AS relation_type,
+                       s.id AS source_id,
+                       t.id AS target_id,
+                       rf.surface_anchor AS surface_anchor,
+                       rf.required_headroom AS required_headroom,
+                       rf.required_friction AS required_friction,
+                       rf.kinematic_manifold AS kinematic_manifold,
+                       rf.prior_entropy AS prior_entropy,
+                       rf.posterior_entropy AS posterior_entropy
+                """,
+                env_name=env_name,
+            )
+            return [record.data() for record in result]
     finally:
         if owns_driver:
             driver.close()

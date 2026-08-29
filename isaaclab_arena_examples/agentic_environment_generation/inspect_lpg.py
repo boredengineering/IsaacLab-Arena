@@ -84,6 +84,16 @@ def inspect_environment(driver, env_name: str) -> None:
             for chain in chains:
                 print(f"  • {' -> '.join(chain)}")
 
+        # 4. RDF 1.2 Reified Factor Graph Nodes
+        from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import query_reified_relations
+        reifiers = query_reified_relations(env_name, driver=driver)
+        if reifiers:
+            print(f"\n[RDF 1.2 Reified Factor Nodes ({len(reifiers)})]")
+            for rf in reifiers:
+                print(f"  • << :{rf['reifier_id']} | :{rf['source_id']} :{rf['relation_type']} :{rf['target_id']} >>")
+                print(f"      anchor: {rf['surface_anchor']} | headroom: {rf['required_headroom']}m | friction: {rf['required_friction']}")
+                print(f"      manifold: {rf['kinematic_manifold']} | prior_H: {rf['prior_entropy']} nats | post_H: {rf['posterior_entropy']} nats")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Inspect Labeled Property Graphs in Neo4j.")

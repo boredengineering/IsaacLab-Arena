@@ -106,3 +106,72 @@ def test_sync_spec_to_neo4j_and_query():
         assert cam_res["count"] >= 1
     driver.close()
 
+
+@pytest.mark.skipif(not _is_neo4j_reachable(), reason="Neo4j instance not reachable at bolt://172.17.0.2:7687")
+def test_sync_reified_relation_factor_nodes_to_neo4j():
+    from isaaclab_arena.environment_spec.arena_env_graph_types import ContinuousIntervalSpec, ReifiedRelationSpec
+    from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import query_reified_relations
+
+    spec = ArenaEnvGraphSpec(
+        env_name="test_g1_reified_factor_graph",
+        embodiment=AssetSpec(id="g1_robot", registry_name="g1_wbc_pink"),
+        background=AssetSpec(id="galileo_room", registry_name="galileo"),
+        objects=[
+            AssetSpec(id="wireshelving", registry_name="wireshelving_a01_vomp_robolab"),
+            AssetSpec(id="brown_box", registry_name="brown_box"),
+        ],
+        relations=[
+            SpatialRelationSpec(kind="on", subject="brown_box", reference="wireshelving", params={"surface_anchor": "shelf_tier_2"}),
+        ],
+        reified_relations=[
+            ReifiedRelationSpec(
+                reifier_id="reifier_box_shelf_tier2",
+                source_id="brown_box",
+                relation_type="PLACED_ON",
+                target_id="wireshelving",
+                surface_anchor="shelf_tier_2",
+                contact_normal=(0.0, 0.0, 1.0),
+                delta_x=ContinuousIntervalSpec(min_val=-0.04, max_val=0.04, nominal=0.0),
+                delta_y=ContinuousIntervalSpec(min_val=-0.04, max_val=0.04, nominal=0.0),
+                delta_z=ContinuousIntervalSpec(min_val=0.0, max_val=0.02, nominal=0.01),
+                required_headroom=0.38,
+                required_friction=0.65,
+                kinematic_manifold="unitree_g1_bimanual_chest_height",
+                prior_entropy=2.8,
+                posterior_entropy=0.04,
+                evidence_sources=["test_reification_proof"],
+            )
+        ],
+        task=CompositeTaskSpec(
+            composition="atomic",
+            description="Pick brown box from shelf",
+            subtasks=[
+                TaskSpec(
+                    kind="PickAndPlaceTask",
+                    params={
+                        "pick_up_object": "brown_box",
+                        "destination_location": "wireshelving",
+                        "background_scene": "galileo_room",
+                    },
+                )
+            ],
+        ),
+    )
+
+    summary = sync_spec_to_neo4j(spec)
+    assert summary["env_name"] == "test_g1_reified_factor_graph"
+
+    reifiers = query_reified_relations("test_g1_reified_factor_graph")
+    assert len(reifiers) == 1
+    r = reifiers[0]
+    assert r["reifier_id"] == "reifier_box_shelf_tier2"
+    assert r["source_id"] == "brown_box"
+    assert r["target_id"] == "wireshelving"
+    assert r["surface_anchor"] == "shelf_tier_2"
+    assert r["required_headroom"] == 0.38
+    assert r["required_friction"] == 0.65
+    assert r["kinematic_manifold"] == "unitree_g1_bimanual_chest_height"
+    assert r["prior_entropy"] == 2.8
+    assert r["posterior_entropy"] == 0.04
+
+

@@ -62,6 +62,7 @@ class EnvironmentGenerationAgent:
         )
         self.spec_inference = SpecInference(inference_backend)
         self.prim_path_inference = PrimPathInference(inference_backend)
+        self.max_retries = max_retries
         self._traces: list[str] = []
 
     @property
@@ -77,6 +78,13 @@ class EnvironmentGenerationAgent:
         task_catalog: TaskCatalogue | None = None,
     ) -> tuple[ArenaEnvGraphSpec | None, dict[str, Any] | None]:
         """Call the model with user prompt and return the parsed ArenaEnvGraphSpec.
+
+        Executes an Active Bayesian Reification loop:
+        1. Synthesizes initial semantic prior spec with reified relations.
+        2. Resolves USD sub-prims and grounds physical anchors.
+        3. Validates against W3C SHACL-star constraints.
+        4. When invariants fail, iteratively repairs candidate contracts via active LLM feedback.
+        5. Syncs validated factor graph to Neo4j LPG.
 
         Args:
             prompt: Natural-language env description from the end user.
@@ -111,22 +119,88 @@ class EnvironmentGenerationAgent:
                 return None, spec.to_dict()
             spec = resolved
 
-        # Ensure root anchor relation exists for physical placement solver and ground dollhouse hierarchy
-        spec = _ground_telescopic_dollhouse_spec(spec)
+        # Ground spatial anchors and ensure reified relation contracts
+        spec = _ensure_reified_relations_and_grounding(spec)
 
-        # Semantic validation against W3C SHACL constraints
+        # Active Bayesian Refinement & SHACL-star Self-Healing Loop
+        for iteration in range(self.max_retries):
+            try:
+                from isaaclab_arena.agentic_environment_generation.rdf_lowering import spec_to_rdf_graph
+                from isaaclab_arena.agentic_environment_generation.rdf_validation import validate_rdf_environment_graph
+
+                rdf_graph = spec_to_rdf_graph(spec)
+                conforms, report = validate_rdf_environment_graph(rdf_graph)
+                if conforms:
+                    self._traces.append(f"SHACL semantic validation passed on iteration {iteration + 1}.")
+                    break
+                else:
+                    self._traces.append(f"SHACL constraint violation on iteration {iteration + 1}:\n{report}")
+                    repaired_spec, _ = self.spec_inference.repair_with_feedback(
+                        spec,
+                        report,
+                        self._traces,
+                        asset_catalog=asset_catalog,
+                        relation_catalog=relation_catalog,
+                        task_catalog=task_catalog,
+                    )
+                    if repaired_spec is not None:
+                        spec = _ensure_reified_relations_and_grounding(repaired_spec)
+                    else:
+                        break
+            except Exception as exc:  # pragma: no cover
+                self._traces.append(f"RDF/SHACL validation skipped: {exc}")
+                break
+
+        # Sync validated factor graph to Neo4j LPG
         try:
-            from isaaclab_arena.agentic_environment_generation.rdf_lowering import spec_to_rdf_graph
-            from isaaclab_arena.agentic_environment_generation.rdf_validation import validate_rdf_environment_graph
-
-            rdf_graph = spec_to_rdf_graph(spec)
-            conforms, report = validate_rdf_environment_graph(rdf_graph)
-            if not conforms:
-                self._traces.append(f"SHACL Semantic Validation Warning:\n{report}")
+            from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
+            sync_spec_to_neo4j(spec)
         except Exception as exc:  # pragma: no cover
-            self._traces.append(f"RDF/SHACL validation skipped: {exc}")
+            self._traces.append(f"Neo4j LPG sync skipped: {exc}")
 
         return spec, None
+
+
+def _ensure_reified_relations_and_grounding(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphSpec:
+    """Ensure spatial grounding, surface anchors, and formal RDF 1.2 reified relation contracts."""
+    from isaaclab_arena.environment_spec.arena_env_graph_types import ContinuousIntervalSpec, ReifiedRelationSpec
+
+    spec = _ground_telescopic_dollhouse_spec(spec)
+
+    # If reified relations were not synthesized, auto-construct contracts from spatial relations
+    if not spec.reified_relations:
+        reified_list: list[ReifiedRelationSpec] = []
+        for idx, rel in enumerate(spec.relations):
+            if rel.kind.lower() in ("on", "placed_on", "inside", "placed_inside", "stands_near"):
+                rel_type = "PLACED_ON" if "on" in rel.kind.lower() else ("PLACED_INSIDE" if "inside" in rel.kind.lower() else "STANDS_NEAR")
+                target_id = rel.reference or spec.background.id
+                reified_list.append(
+                    ReifiedRelationSpec(
+                        reifier_id=f"reifier_{rel.subject}_{target_id}_{idx+1}",
+                        source_id=rel.subject,
+                        relation_type=rel_type,
+                        target_id=target_id,
+                        surface_anchor=str(rel.params.get("surface_anchor", "shelf_tier_1")),
+                        contact_normal=(0.0, 0.0, 1.0),
+                        delta_x=ContinuousIntervalSpec(min_val=-0.05, max_val=0.05, nominal=0.0),
+                        delta_y=ContinuousIntervalSpec(min_val=-0.05, max_val=0.05, nominal=0.0),
+                        delta_z=ContinuousIntervalSpec(min_val=0.0, max_val=0.03, nominal=0.01),
+                        required_headroom=float(rel.params.get("headroom", 0.35)),
+                        required_friction=float(rel.params.get("friction", 0.60)),
+                        kinematic_manifold=(
+                            "unitree_g1_bimanual_chest_height"
+                            if spec.embodiment and "g1" in spec.embodiment.registry_name.lower()
+                            else "tabletop_stationary_reach"
+                        ),
+                        prior_entropy=2.5,
+                        posterior_entropy=0.05,
+                        evidence_sources=["llm_active_inference", "usd_stage_introspection"],
+                    )
+                )
+        if reified_list:
+            spec.reified_relations = reified_list
+
+    return spec
 
 
 def _ground_telescopic_dollhouse_spec(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphSpec:

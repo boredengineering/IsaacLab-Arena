@@ -1,0 +1,194 @@
+env_name: g1_wireshelving_box_sorting
+embodiment:
+  id: g1_robot
+  registry_name: g1_wbc_pink
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.0
+      - 0.35
+      - -0.795
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.7071
+      - 0.7071
+background:
+  id: galileo_scene
+  registry_name: galileo
+  params: {}
+objects:
+- id: wireshelving
+  registry_name: wireshelving_a01_vomp_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.0
+      - 1.1
+      - -0.795
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: brown_box
+  registry_name: brown_box
+  params: {}
+- id: blue_sorting_bin
+  registry_name: blue_sorting_bin
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.6
+      - 0.8
+      - -0.795
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: galileo_scene
+  params: {}
+- kind: is_anchor
+  subject: wireshelving
+  params: {}
+- kind: is_anchor
+  subject: blue_sorting_bin
+  params: {}
+- kind: at_position
+  subject: g1_robot
+  params:
+    pos:
+    - 0.0
+    - 0.35
+    - -0.795
+- kind: at_position
+  subject: wireshelving
+  params:
+    pos:
+    - 0.0
+    - 1.1
+    - -0.795
+- kind: 'on'
+  subject: brown_box
+  reference: wireshelving
+  params:
+    surface_anchor: shelf_tier_1
+- kind: at_position
+  subject: blue_sorting_bin
+  params:
+    pos:
+    - 0.55
+    - 0.8
+    - -0.795
+- kind: face_to
+  subject: g1_robot
+  reference: wireshelving
+  params: {}
+reified_relations:
+- reifier_id: reifier_g1_stands_wireshelving
+  source_id: g1_robot
+  relation_type: STANDS_NEAR
+  target_id: wireshelving
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.15
+    max_val: 0.15
+    nominal: 0.0
+  delta_y:
+    min_val: -0.1
+    max_val: 0.1
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.0
+    nominal: 0.0
+  required_headroom: 1.5
+  required_friction: 0.8
+  kinematic_manifold: unitree_g1_bimanual_chest_height
+  prior_entropy: 2.5
+  posterior_entropy: 0.35
+  evidence_sources:
+  - user_prompt
+  - room_scale_locomanipulation
+- reifier_id: reifier_box_on_wireshelving
+  source_id: brown_box
+  relation_type: PLACED_ON
+  target_id: wireshelving
+  surface_anchor: shelf_tier_1
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.2
+    max_val: 0.2
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.0
+    nominal: 0.0
+  required_headroom: 0.4
+  required_friction: 0.6
+  kinematic_manifold: unitree_g1_bimanual_chest_height
+  prior_entropy: 2.2
+  posterior_entropy: 0.28
+  evidence_sources:
+  - user_prompt
+  - surface_affordance_geometry
+- reifier_id: reifier_bin_receptacle_box
+  source_id: blue_sorting_bin
+  relation_type: RECEPTACLE_FOR
+  target_id: brown_box
+  surface_anchor: bin_bottom
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.1
+    max_val: 0.1
+    nominal: 0.0
+  delta_y:
+    min_val: -0.1
+    max_val: 0.1
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.0
+    nominal: 0.0
+  required_headroom: 0.35
+  required_friction: 0.5
+  kinematic_manifold: unitree_g1_crouch_manipulation
+  prior_entropy: 2.0
+  posterior_entropy: 0.3
+  evidence_sources:
+  - user_prompt
+  - container_containment_specs
+placement_validators:
+  enabled_checks:
+  - collision
+  - support
+  - reachability
+  required_checks:
+  - collision
+  - support
+task:
+  composition: atomic
+  description: Pick up the brown box from the wireshelving and place it into the blue
+    sorting bin.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: brown_box
+      destination_location: blue_sorting_bin
+      background_scene: galileo_scene

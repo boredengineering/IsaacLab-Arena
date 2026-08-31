@@ -33,6 +33,8 @@ def sync_spec_to_neo4j(
     spec: ArenaEnvGraphSpec,
     driver: Optional[neo4j.Driver] = None,
     telemetry: Optional[Any] = None,
+    parent_env_name: Optional[str] = None,
+    derivation_feedback: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Synchronizes an ArenaEnvGraphSpec into Neo4j as a Labeled Property Graph (LPG).
 
@@ -40,6 +42,8 @@ def sync_spec_to_neo4j(
         spec: The arena environment graph specification.
         driver: Optional active Neo4j driver.
         telemetry: Optional ActiveInferenceTelemetry metadata.
+        parent_env_name: Optional name of the parent EnvironmentGraph this was derived from.
+        derivation_feedback: User critique or feedback that guided the derivation.
 
     Returns:
         A dictionary containing summary counts of synced nodes and edges.
@@ -88,6 +92,22 @@ def sync_spec_to_neo4j(
                 model_name=model_name,
                 is_converged=is_converged,
             )
+
+            # Record derivation provenance if derived from a parent environment graph
+            if parent_env_name and parent_env_name != spec.env_name:
+                session.run(
+                    """
+                    MERGE (parent:EnvironmentGraph {name: $parent_name})
+                    WITH parent
+                    MATCH (child:EnvironmentGraph {name: $child_name})
+                    MERGE (child)-[r:WAS_DERIVED_FROM]->(parent)
+                    SET r.feedback = $feedback,
+                        r.timestamp = datetime()
+                    """,
+                    parent_name=parent_env_name,
+                    child_name=spec.env_name,
+                    feedback=derivation_feedback or "",
+                )
 
             # 2. Merge Embodiment Node
             if spec.embodiment:

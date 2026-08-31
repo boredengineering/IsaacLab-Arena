@@ -105,6 +105,18 @@ def add_agentic_env_gen_runner_cli_args(parser: argparse.ArgumentParser) -> None
         help="Explicit API key for inference backend (default: NV_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY).",
     )
     group.add_argument(
+        "--base_spec",
+        type=Path,
+        default=None,
+        help="Path to an existing ArenaEnvGraphSpec YAML to refine or continue from.",
+    )
+    group.add_argument(
+        "--feedback",
+        type=str,
+        default=None,
+        help="Natural-language instructions describing what to change in --base_spec.",
+    )
+    group.add_argument(
         "--record_viewport_video",
         action="store_true",
         default=False,
@@ -127,8 +139,6 @@ def resolve_env_spec(args_cli: argparse.Namespace) -> Path:
         build_task_catalogue,
     )
 
-    print(f"\n[runner] prompt: {args_cli.prompt!r}", flush=True)
-
     asset_catalog = build_asset_catalogue()
     relation_catalog = build_relation_catalogue()
     task_catalog = build_task_catalogue()
@@ -141,12 +151,28 @@ def resolve_env_spec(args_cli: argparse.Namespace) -> Path:
     if args_cli.api_key:
         agent_kwargs["api_key"] = args_cli.api_key
     agent = EnvironmentGenerationAgent(**agent_kwargs)
-    env_graph_spec, data = agent.generate_spec(
-        args_cli.prompt,
-        asset_catalog=asset_catalog,
-        relation_catalog=relation_catalog,
-        task_catalog=task_catalog,
-    )
+
+    if args_cli.base_spec:
+        from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+
+        base_spec = ArenaEnvGraphSpec.from_yaml(args_cli.base_spec)
+        refinement_prompt = args_cli.feedback or args_cli.prompt
+        print(f"\n[runner] refining base spec '{args_cli.base_spec}' with feedback: {refinement_prompt!r}", flush=True)
+        env_graph_spec, data = agent.refine_spec(
+            base_spec,
+            feedback=refinement_prompt,
+            asset_catalog=asset_catalog,
+            relation_catalog=relation_catalog,
+            task_catalog=task_catalog,
+        )
+    else:
+        print(f"\n[runner] prompt: {args_cli.prompt!r}", flush=True)
+        env_graph_spec, data = agent.generate_spec(
+            args_cli.prompt,
+            asset_catalog=asset_catalog,
+            relation_catalog=relation_catalog,
+            task_catalog=task_catalog,
+        )
     # agent.traces holds one line per failure, e.g.
     #   "embodiment.registry_name: Unknown asset registry_name 'not_a_real_asset'"
     #   "Task 'PickAndPlaceTask' is missing required param 'pick_up_object'"
@@ -172,7 +198,14 @@ def resolve_env_spec(args_cli: argparse.Namespace) -> Path:
     try:
         from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
 
-        lpg_summary = sync_spec_to_neo4j(env_graph_spec, telemetry=agent.telemetry)
+        parent_name = base_spec.env_name if args_cli.base_spec else None
+        feedback_txt = args_cli.feedback or args_cli.prompt if args_cli.base_spec else None
+        lpg_summary = sync_spec_to_neo4j(
+            env_graph_spec,
+            telemetry=agent.telemetry,
+            parent_env_name=parent_name,
+            derivation_feedback=feedback_txt,
+        )
         print(
             f"[runner] synced to Neo4j LPG → {lpg_summary.get('node_count', 0)} nodes, "
             f"{lpg_summary.get('rel_count', 0)} relations",

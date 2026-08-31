@@ -280,6 +280,33 @@ class TestGenerateSpec:
         assert "Active Bayesian Inference" in summary_card
         assert "Repair Iterations:   1" in summary_card
 
+    def test_refine_spec_with_user_feedback(self, agent):
+        """Test that refine_spec successfully applies user modification feedback to an existing spec."""
+        agent_obj, client = agent
+        base_dict = minimal_spec_dict()
+        base_spec = ArenaEnvGraphSpec.model_validate(base_dict)
+
+        # Refined spec swaps bowl with wooden bowl and adds a banana
+        refined_dict = minimal_spec_dict()
+        refined_dict["objects"].append({"id": "banana", "registry_name": "banana_ycb_robolab", "role": "object"})
+        refined_dict["relations"].append(
+            {"kind": "on", "subject": "banana", "reference": "maple_table_robolab", "params": {"surface_anchor": "table_top"}}
+        )
+
+        client.chat.completions.create.return_value = chat_response(content=json.dumps(refined_dict))
+
+        spec, data = agent_obj.refine_spec(
+            base_spec,
+            "Add a banana onto the maple table next to the cube",
+            asset_catalog=catalog("catalog"),
+            relation_catalog=relation_catalog("RELATIONS"),
+            task_catalog=make_task_catalog("TASKS"),
+        )
+        assert spec is not None
+        assert data is None
+        assert any(obj.id == "banana" for obj in spec.objects)
+        assert client.chat.completions.create.call_count == 1
+
 
 
 # ---------------------------------------------------------------------------

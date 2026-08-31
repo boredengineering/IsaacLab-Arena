@@ -306,6 +306,177 @@ class EnvironmentGenerationAgent:
 
         return spec, None
 
+    def refine_spec(
+        self,
+        base_spec: ArenaEnvGraphSpec,
+        feedback: str,
+        asset_catalog: Any = None,
+        relation_catalog: Any = None,
+        task_catalog: Any = None,
+    ) -> tuple[ArenaEnvGraphSpec | None, dict[str, Any] | None]:
+        """Refine or modify an existing ArenaEnvGraphSpec using natural-language instructions.
+
+        Args:
+            base_spec: The starting ArenaEnvGraphSpec to edit or continue from.
+            feedback: Natural-language critique or modification instructions.
+            asset_catalog: Pre-built asset vocabulary.
+            relation_catalog: Pre-built relation vocabulary.
+            task_catalog: Pre-built task vocabulary.
+
+        Returns:
+            A ``(spec, data)`` tuple with the refined, validated specification.
+        """
+        self._traces = []
+        start_t = time.perf_counter()
+        repair_iterations = 0
+        shacl_passed = False
+        geometry_passed = False
+        stagnation_detected = False
+        converged = False
+
+        asset_catalog = asset_catalog or build_asset_catalogue()
+        relation_catalog = relation_catalog or build_relation_catalogue()
+        task_catalog = task_catalog or build_task_catalogue()
+        affordances = _discover_candidate_affordances(base_spec)
+
+        spec, data = self.spec_inference.repair_with_feedback(
+            base_spec,
+            feedback_report=f"USER REFINEMENT INSTRUCTIONS:\n{feedback}",
+            traces=self._traces,
+            asset_catalog=asset_catalog,
+            relation_catalog=relation_catalog,
+            task_catalog=task_catalog,
+            original_prompt=feedback,
+            available_affordances=affordances,
+        )
+        if spec is None:
+            duration_s = time.perf_counter() - start_t
+            backend_tel = getattr(self.inference_backend, "telemetry", None)
+            self._telemetry = ActiveInferenceTelemetry(
+                model=getattr(self.inference_backend, "model", "unknown"),
+                total_llm_calls=backend_tel.total_calls if backend_tel else 0,
+                repair_iterations=0,
+                prompt_tokens=backend_tel.total_prompt_tokens if backend_tel else 0,
+                completion_tokens=backend_tel.total_completion_tokens if backend_tel else 0,
+                total_tokens=backend_tel.total_tokens if backend_tel else 0,
+                duration_s=duration_s,
+                converged=False,
+                shacl_passed=False,
+                geometry_passed=False,
+                stagnation_detected=False,
+                traces=list(self._traces),
+            )
+            return None, data
+
+        if spec.object_references:
+            resolved = self.prim_path_inference.infer(spec, self._traces)
+            if resolved is not None:
+                spec = resolved
+
+        # Ground spatial anchors and ensure reified relation contracts
+        spec = _ensure_reified_relations_and_grounding(spec)
+
+        # Active Bayesian Refinement & SHACL-star Self-Healing Loop with Governance
+        seen_spec_hashes: set[str] = set()
+        max_loop_steps = min(self.max_retries, 2)
+
+        for iteration in range(max_loop_steps):
+            current_hash = _compute_spec_hash(spec)
+            if current_hash in seen_spec_hashes:
+                stagnation_detected = True
+                self._traces.append(
+                    f"[ActiveInference] Stagnation/cycle detected at iteration {iteration + 1} "
+                    f"(hash={current_hash[:8]}). Halting LLM loop to conserve tokens."
+                )
+                spec = _deterministic_affordance_fallback(spec)
+                break
+            seen_spec_hashes.add(current_hash)
+
+            try:
+                from isaaclab_arena.agentic_environment_generation.rdf_lowering import spec_to_rdf_graph
+                from isaaclab_arena.agentic_environment_generation.rdf_validation import validate_rdf_environment_graph
+                from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import validate_spatial_geometry
+
+                rdf_graph = spec_to_rdf_graph(spec)
+                shacl_conforms, shacl_report = validate_rdf_environment_graph(rdf_graph)
+                geom_conforms, geom_diagnostics = validate_spatial_geometry(spec)
+
+                if shacl_conforms and geom_conforms:
+                    shacl_passed = True
+                    geometry_passed = True
+                    converged = True
+                    self._traces.append(f"SHACL semantic validation passed on refinement iteration {iteration + 1}.")
+                    self._traces.append(f"Spatial Geometric validation passed on refinement iteration {iteration + 1}.")
+                    break
+                else:
+                    repair_iterations += 1
+                    combined_report_parts = []
+                    if not shacl_conforms:
+                        combined_report_parts.append(f"SHACL constraint violation on iteration {iteration + 1}:\n{shacl_report}")
+                        self._traces.append(f"SHACL constraint violation on iteration {iteration + 1}:\n{shacl_report}")
+                    if not geom_conforms:
+                        geom_text = "\n".join(geom_diagnostics)
+                        combined_report_parts.append(f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}")
+                        self._traces.append(f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}")
+
+                    combined_report = "\n\n".join(combined_report_parts)
+                    affordances = _discover_candidate_affordances(spec)
+                    try:
+                        repaired_spec, _ = self.spec_inference.repair_with_feedback(
+                            spec,
+                            combined_report,
+                            self._traces,
+                            original_prompt=feedback,
+                            available_affordances=affordances,
+                        )
+                    except Exception as repair_exc:
+                        self._traces.append(
+                            f"[ActiveInference] Refinement repair failed: {repair_exc}. Applying deterministic fallback."
+                        )
+                        spec = _deterministic_affordance_fallback(spec)
+                        break
+
+                    if repaired_spec is not None:
+                        spec = _ensure_reified_relations_and_grounding(repaired_spec)
+                    else:
+                        self._traces.append(
+                            f"[ActiveInference] Refinement repair returned None. Applying deterministic fallback."
+                        )
+                        spec = _deterministic_affordance_fallback(spec)
+                        break
+            except Exception as exc:  # pragma: no cover
+                self._traces.append(f"RDF/SHACL validation skipped: {exc}. Applying deterministic fallback.")
+                spec = _deterministic_affordance_fallback(spec)
+                break
+        else:
+            spec = _deterministic_affordance_fallback(spec)
+
+        duration_s = time.perf_counter() - start_t
+        backend_tel = getattr(self.inference_backend, "telemetry", None)
+        self._telemetry = ActiveInferenceTelemetry(
+            model=getattr(self.inference_backend, "model", "unknown"),
+            total_llm_calls=backend_tel.total_calls if backend_tel else 0,
+            repair_iterations=repair_iterations,
+            prompt_tokens=backend_tel.total_prompt_tokens if backend_tel else 0,
+            completion_tokens=backend_tel.total_completion_tokens if backend_tel else 0,
+            total_tokens=backend_tel.total_tokens if backend_tel else 0,
+            duration_s=duration_s,
+            converged=converged,
+            shacl_passed=shacl_passed,
+            geometry_passed=geometry_passed,
+            stagnation_detected=stagnation_detected,
+            traces=list(self._traces),
+        )
+
+        # Sync validated factor graph to Neo4j LPG
+        try:
+            from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
+            sync_spec_to_neo4j(spec, telemetry=self._telemetry)
+        except Exception as exc:  # pragma: no cover
+            self._traces.append(f"Neo4j LPG sync skipped: {exc}")
+
+        return spec, None
+
 
 def _compute_spec_hash(spec: ArenaEnvGraphSpec) -> str:
     """Compute a canonical MD5 hash of the spec's entities and relational structure."""

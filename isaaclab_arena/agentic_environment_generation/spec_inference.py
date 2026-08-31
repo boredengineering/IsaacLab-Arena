@@ -110,6 +110,7 @@ class SpecInference:
             previous_spec=prev_json,
             feedback_report=feedback_report,
             available_affordances=available_affordances,
+            asset_catalog=asset_catalog,
         )
         data = self._inference_backend.run_json(
             StructuredOutputRequest(
@@ -134,6 +135,7 @@ class SpecInference:
         previous_spec: dict[str, Any],
         feedback_report: str,
         available_affordances: list[str] | None = None,
+        asset_catalog: Any = None,
     ) -> str:
         affordance_sec = ""
         if available_affordances:
@@ -141,18 +143,23 @@ class SpecInference:
                 f"\nAVAILABLE INTROSPECTED AFFORDANCE PATCHES (USD Ground Truth):\n"
                 f"{json.dumps(available_affordances, indent=2)}\n"
             )
-        prompt_sec = f"TARGET GOAL PROMPT:\n{original_prompt}\n\n" if original_prompt else ""
+        catalog_sec = ""
+        if asset_catalog is not None:
+            cat_str = asset_catalog.to_catalog_string() if hasattr(asset_catalog, "to_catalog_string") else str(asset_catalog)
+            catalog_sec = f"\nREGISTERED ASSET VOCABULARY:\n{cat_str}\n\n"
+        prompt_sec = f"TARGET GOAL / REFINEMENT REQUEST:\n{original_prompt}\n\n" if original_prompt else ""
         return (
+            f"{catalog_sec}"
             f"{prompt_sec}"
-            f"PREVIOUS CANDIDATE SPEC (WITH CONSTRAINT VIOLATIONS):\n"
+            f"PREVIOUS CANDIDATE SPEC:\n"
             f"{json.dumps(previous_spec, indent=2)}\n\n"
-            f"DIAGNOSTIC FEEDBACK & CONSTRAINT VIOLATIONS:\n"
+            f"DIAGNOSTIC FEEDBACK & INSTRUCTIONS:\n"
             f"{feedback_report}\n"
             f"{affordance_sec}\n"
             f"INSTRUCTION:\n"
-            f"Perform a targeted repair on the candidate spec to resolve every constraint violation above.\n"
-            f"1. Update violating relations, surface anchors, or containment hierarchies so they conform.\n"
-            f"2. Keep all valid objects, background, and embodiment configurations unchanged.\n"
+            f"Perform a targeted modification on the candidate spec to satisfy all instructions and constraint feedback above.\n"
+            f"1. Update objects, relations, surface anchors, or containment hierarchies so they conform to registered catalogue names.\n"
+            f"2. Keep all valid unchanged objects, background, and embodiment configurations.\n"
             f"3. Emit the complete valid ArenaEnvGraphSpec JSON matching the schema."
         )
 

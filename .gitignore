@@ -120,3 +120,11 @@ skills-lock.json
 !.agents/skills/isaac-automator/
 !.agents/skills/isaac-installer/
 !.agents/skills/run-tests/
+
+# Evaluation and asset thumbnail outputs
+eval_output/asset_thumbnails/
+eval_output/isolated_thumbnails/
+*asset_thumbnails/
+eval_output/*.png
+eval_output/*.mp4
+

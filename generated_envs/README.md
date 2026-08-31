@@ -82,7 +82,62 @@ docker exec -it \
 
 ---
 
-## 4. Step 3: Test and Validate the Environment
+## 4. Step 3: Iteratively Refine or Edit an Existing Environment
+
+If you are disappointed with a generated scene or want to modify specific assets, poses, or tasks, you have **four mechanisms** to continue from an existing environment:
+
+### Method 1: Conversational Agent Refinement (`--base_spec` & `--feedback`)
+Feed natural language critique directly into the Active Inference agent to modify the existing graph without starting over from scratch:
+
+```bash
+docker exec -it \
+  -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
+  isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+  --mode resolve \
+  --model "anthropic/claude-sonnet-4.5" \
+  --base_spec /workspaces/isaaclab_arena/generated_envs/droid_rubiks_blue_bin/droid_pick_rubiks_cube_to_blue_bin.yaml \
+  --feedback "Replace the blue bin with a wooden bowl and place a banana next to the rubiks cube." \
+  --out_dir /workspaces/isaaclab_arena/generated_envs/droid_rubiks_banana_bowl
+```
+The agent loads the base spec, interprets your modification request against the registered asset vocabulary, re-runs the SHACL and Spatial Geometric oracles, relaxes the factor graph, and syncs the updated graph to Neo4j.
+
+### Method 2: Direct Declarative YAML Editing
+Edit the generated YAML file directly in any editor:
+* **Swap Objects**: Change `registry_name` (e.g. from `blue_sorting_bin` to `wooden_bowl_hot3d_robolab`).
+* **Adjust Coordinates**: Modify `initial_pose.position_xyz` (e.g. change $[0.0, 0.25, 0.75]$).
+* **Edit Relations**: Add/tweak `surface_anchor`, `nominal_height`, or containment relations.
+* **Tweak Tasks**: Update `task.params.destination_location` or thresholds.
+
+Once edited, test immediately with `--mode build`:
+```bash
+docker exec -it \
+  isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+  --mode build \
+  --headless \
+  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/droid_rubiks_blue_bin/droid_pick_rubiks_cube_to_blue_bin.yaml
+```
+
+### Method 3: Programmatic Python API
+Load and mutate the environment graph programmatically:
+```python
+from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec, AssetSpec, SpatialRelationSpec
+
+# Load existing spec
+spec = ArenaEnvGraphSpec.from_yaml("generated_envs/droid_rubiks_blue_bin/droid_pick_rubiks_cube_to_blue_bin.yaml")
+
+# Add a new object and support relation
+spec.objects.append(AssetSpec(id="apple", registry_name="apple_01_objaverse_robolab", role="object"))
+spec.relations.append(SpatialRelationSpec(kind="on", subject="apple", reference="maple_table", params={"surface_anchor": "table_top"}))
+
+# Save updated spec
+spec.write_yaml("generated_envs/droid_rubiks_blue_bin/droid_pick_rubiks_cube_apple.yaml")
+```
+
+---
+
+## 5. Step 4: Test and Validate the Environment
 
 ### A. Fast Headless Rollout (Zero-Action Physics Settling)
 Verify in headless mode that all assets assemble and settle under gravity without collision or drops:

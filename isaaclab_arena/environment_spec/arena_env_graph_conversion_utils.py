@@ -208,4 +208,9 @@ def _attach_spatial_relations_to_assets(
         else:
             reference_asset = assets_by_node_id[relation.reference]
             subject_asset.add_relation(relation_class(reference_asset, **valid_kwargs))
+            if "surface_sector" in valid_kwargs:
+                from isaaclab_arena.relations.relations import RandomAroundSolution, get_relation
+
+                if get_relation(subject_asset, RandomAroundSolution) is None:
+                    subject_asset.add_relation(RandomAroundSolution(x_half_m=0.03, y_half_m=0.03))
 

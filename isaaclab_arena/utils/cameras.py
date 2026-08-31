@@ -18,7 +18,7 @@ from isaaclab.sensors import CameraCfg, TiledCameraCfg  # noqa: F401
 
 from isaaclab_arena.assets.asset import Asset
 from isaaclab_arena.utils.configclass import make_configclass
-from isaaclab_arena.utils.pose import PoseRange
+from isaaclab_arena.utils.pose import Pose, PosePerEnv, PoseRange
 
 
 class ArenaCameraCfg:
@@ -169,6 +169,10 @@ def get_viewer_cfg_look_at_object(lookat_object: Asset, offset: np.ndarray) -> V
 
     if isinstance(initial_pose, PoseRange):
         initial_pose = initial_pose.get_midpoint()
+    elif isinstance(initial_pose, PosePerEnv):
+        initial_pose = initial_pose.poses[0] if initial_pose.poses else None
+        if initial_pose is None:
+            return ViewerCfg()
 
     # TODO(cvolk): Add float coercion to Pose.__post_init__ so this conversion is unnecessary.
     # Ensure we only pass primitive Python floats (not NumPy scalars) into ViewerCfg,
@@ -209,6 +213,8 @@ def compute_robot_relative_viewer_cfg(
         robot_pose = embodiment.get_initial_pose()
         if isinstance(robot_pose, PoseRange):
             robot_pose = robot_pose.get_midpoint()
+        elif isinstance(robot_pose, PosePerEnv):
+            robot_pose = robot_pose.poses[0] if robot_pose.poses else None
 
         if robot_pose is not None:
             r_pos = robot_pose.position_xyz
@@ -231,7 +237,13 @@ def compute_robot_relative_viewer_cfg(
                 t_pose = lookat_target.get_initial_pose()
                 if isinstance(t_pose, PoseRange):
                     t_pose = t_pose.get_midpoint()
-                lookat = np.array(t_pose.position_xyz)
+                elif isinstance(t_pose, PosePerEnv):
+                    t_pose = t_pose.poses[0] if t_pose.poses else None
+
+                if t_pose is not None:
+                    lookat = np.array(t_pose.position_xyz)
+                else:
+                    lookat = r_center + 0.9 * u_fwd - np.array([0.0, 0.0, 0.1])
             else:
                 # Default lookat: 0.9m in front of robot at table height
                 lookat = r_center + 0.9 * u_fwd - np.array([0.0, 0.0, 0.1])

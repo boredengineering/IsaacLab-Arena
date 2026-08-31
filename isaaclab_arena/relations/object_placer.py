@@ -524,16 +524,45 @@ class ObjectPlacer:
         parent_bbox = self._get_on_parent_world_bbox(on_relation.parent, anchor_objects, anchor_bbox, env_bboxes)
         child_bbox = env_bboxes[obj]
 
+        parent_min_x = parent_bbox.min_point[0, 0]
+        parent_max_x = parent_bbox.max_point[0, 0]
+        parent_min_y = parent_bbox.min_point[0, 1]
+        parent_max_y = parent_bbox.max_point[0, 1]
+
+        # Restrict sampling to designated surface sector / section bounds if present
+        if getattr(on_relation, "sector_bounds", None) is not None:
+            sb = on_relation.sector_bounds
+            parent_min_x, parent_max_x = float(sb[0]), float(sb[1])
+            parent_min_y, parent_max_y = float(sb[2]), float(sb[3])
+        elif getattr(on_relation, "surface_sector", None) is not None:
+            from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import get_fixture_sector_bounds
+
+            parent_reg_name = getattr(on_relation.parent, "registry_name", getattr(on_relation.parent, "name", ""))
+            sec_bounds = get_fixture_sector_bounds(parent_reg_name, on_relation.surface_sector)
+            # Offset by parent anchor position if anchor is translated
+            parent_init_pose = (
+                on_relation.parent.get_initial_pose()
+                if hasattr(on_relation.parent, "get_initial_pose")
+                else None
+            )
+            offset_x = float(parent_init_pose.position_xyz[0]) if parent_init_pose is not None else 0.0
+            offset_y = float(parent_init_pose.position_xyz[1]) if parent_init_pose is not None else 0.0
+
+            parent_min_x = sec_bounds[0] + offset_x
+            parent_max_x = sec_bounds[1] + offset_x
+            parent_min_y = sec_bounds[2] + offset_y
+            parent_max_y = sec_bounds[3] + offset_y
+
         x = self._sample_axis_position(
-            parent_bbox.min_point[0, 0],
-            parent_bbox.max_point[0, 0],
+            parent_min_x,
+            parent_max_x,
             child_bbox.min_point[0, 0],
             child_bbox.max_point[0, 0],
             generator,
         )
         y = self._sample_axis_position(
-            parent_bbox.min_point[0, 1],
-            parent_bbox.max_point[0, 1],
+            parent_min_y,
+            parent_max_y,
             child_bbox.min_point[0, 1],
             child_bbox.max_point[0, 1],
             generator,

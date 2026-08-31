@@ -74,7 +74,7 @@ class VisualSceneCritic:
         return VisualCriticResult(conforms=True, visibility_score=10.0, occluded_objects=[], actionable_feedback="")
 
     def _check_geometric_line_of_sight(self, spec: ArenaEnvGraphSpec) -> list[str]:
-        """Check if smaller manipulands are hidden directly behind taller receptacles relative to robot."""
+        """Check if objects are outside camera FOV / reach envelope or hidden behind taller obstacles."""
         issues: list[str] = []
         if not spec.embodiment:
             return issues
@@ -85,6 +85,21 @@ class VisualSceneCritic:
         receptacles = [obj for obj in spec.objects if any(k in f"{obj.id} {obj.registry_name}".lower() for k in ("bin", "crate", "box", "rack", "shelf"))]
         manipulands = [obj for obj in spec.objects if obj not in receptacles]
 
+        # 1. Camera FOV & Distance Standoff Check
+        # For DROID / Franka on stand at [-0.55, 0.0], the primary camera frustum and dexterous reach span d in [0.30m, 0.70m] (world X in [-0.25, 0.15])
+        max_dexterous_dist = 0.70
+        for obj in spec.objects:
+            pos = obj.params.get("initial_pose", {}).get("position_xyz") if obj.params else None
+            if pos:
+                dist = ((pos[0] - emb_p[0]) ** 2 + (pos[1] - emb_p[1]) ** 2) ** 0.5
+                if dist > max_dexterous_dist:
+                    issues.append(
+                        f"Object '{obj.id}' is placed at distance {dist:.2f}m from robot base (X={pos[0]:.2f}m). "
+                        f"This exceeds the camera FOV and dexterous reach envelope (max {max_dexterous_dist:.2f}m). "
+                        f"The VLA policy cannot perceive the object in the camera frustum. Move object closer to robot (X in [-0.25m, 0.0m])."
+                    )
+
+        # 2. Line-of-sight occlusion between containers and manipulands
         for manip in manipulands:
             m_pos = manip.params.get("initial_pose", {}).get("position_xyz") if manip.params else None
             if not m_pos:
@@ -95,7 +110,6 @@ class VisualSceneCritic:
                     continue
 
                 # Check if receptacle is directly between robot (x=-0.55) and manipuland along X-axis
-                # i.e., emb_x < r_pos_x < m_pos_x and abs(r_pos_y - m_pos_y) < 0.08
                 if emb_p[0] < r_pos[0] < m_pos[0] and abs(r_pos[1] - m_pos[1]) < 0.08:
                     issues.append(f"Object '{manip.id}' is visually occluded behind tall container '{recep.id}' from robot perspective")
 

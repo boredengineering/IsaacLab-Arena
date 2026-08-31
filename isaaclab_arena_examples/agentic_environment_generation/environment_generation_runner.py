@@ -53,14 +53,27 @@ def add_agentic_env_gen_runner_cli_args(parser: argparse.ArgumentParser) -> None
     group.add_argument(
         "--mode",
         type=str,
-        choices=("full", "resolve", "build", "schema", "catalog"),
+        choices=("full", "resolve", "build", "schema", "catalog", "auto_heal"),
         default="full",
         help=(
             "Which phases to run: 'schema' (print the spec JSON schema and exit), "
             "'catalog' (print the agent catalog and exit), 'resolve' (prompt -> spec YAML, no Isaac Sim), "
-            "'build' (needs --env_graph_spec_yaml), or 'full' (resolve and build in one process; default). "
+            "'build' (needs --env_graph_spec_yaml), 'auto_heal' (diagnose eval failures & remediate spec/policy), "
+            "or 'full' (resolve and build in one process; default). "
             "'schema' and 'catalog' make no agent call."
         ),
+    )
+    group.add_argument(
+        "--eval_dir",
+        type=Path,
+        default=None,
+        help="Path to an evaluation output directory containing eval_telemetry.ttl / summary_metrics.json.",
+    )
+    group.add_argument(
+        "--policy_config",
+        type=Path,
+        default=None,
+        help="Path to the policy configuration YAML used during evaluation.",
     )
     group.add_argument(
         "--prompt",
@@ -103,6 +116,18 @@ def add_agentic_env_gen_runner_cli_args(parser: argparse.ArgumentParser) -> None
         type=str,
         default=None,
         help="Explicit API key for inference backend (default: NV_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY).",
+    )
+    group.add_argument(
+        "--env_name",
+        type=str,
+        default=None,
+        help="Canonical environment family name for versioned tracking (default: inferred from prompt or spec).",
+    )
+    group.add_argument(
+        "--version",
+        type=int,
+        default=None,
+        help="Explicit version number to load or evaluate (default: latest version).",
     )
     group.add_argument(
         "--base_spec",
@@ -191,8 +216,18 @@ def resolve_env_spec(args_cli: argparse.Namespace) -> Path:
     if agent.telemetry:
         print("\n" + agent.telemetry.render_summary_card() + "\n", flush=True)
 
-    path = write_env_graph_spec(env_graph_spec, args_cli.out_dir)
-    print(f"[runner] wrote environment graph spec → {path}", flush=True)
+    canonical_env_name = args_cli.env_name or env_graph_spec.env_name
+    from isaaclab_arena.agentic_environment_generation.version_manager import EnvironmentVersionManager
+
+    mgr = EnvironmentVersionManager(canonical_env_name)
+    new_v, new_v_dir = mgr.create_version(
+        spec_source=env_graph_spec,
+        trigger="active_inference_refinement" if args_cli.base_spec else "initial_generation",
+        prompt=args_cli.feedback or args_cli.prompt,
+    )
+    path = mgr.get_spec_yaml_path(new_v)
+    print(f"[runner] wrote environment graph spec (version v{new_v}) → {path}", flush=True)
+    print(f"[runner] lineage ledger updated at: {mgr.lineage_file}", flush=True)
 
     # Optional Neo4j LPG synchronization (Phase 4)
     try:
@@ -215,6 +250,137 @@ def resolve_env_spec(args_cli: argparse.Namespace) -> Path:
         pass
 
     return path
+
+
+def run_auto_heal(args_cli: argparse.Namespace) -> Path:
+    """Diagnose evaluation telemetry and apply automated Active Inference self-healing."""
+    from isaaclab_arena.agentic_environment_generation.eval_self_healing import (
+        EvaluationDiagnosticOracle,
+        EvaluationRemediationEngine,
+    )
+    from isaaclab_arena.agentic_environment_generation.version_manager import EnvironmentVersionManager
+    from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+
+    # 1. Resolve base spec and canonical env name
+    spec_path_raw = args_cli.base_spec or args_cli.env_graph_spec_yaml
+    canonical_env_name = args_cli.env_name
+
+    if spec_path_raw is None and canonical_env_name is not None:
+        mgr_probe = EnvironmentVersionManager(canonical_env_name)
+        target_v = args_cli.version or mgr_probe.get_latest_version()
+        if target_v > 0:
+            spec_path_raw = mgr_probe.get_spec_yaml_path(target_v)
+            print(f"[auto_heal] inferred base spec for {canonical_env_name} v{target_v}: {spec_path_raw}", flush=True)
+
+    assert spec_path_raw is not None, "--mode auto_heal requires --base_spec, --env_graph_spec_yaml, or --env_name"
+    spec_path = Path(spec_path_raw)
+    spec = ArenaEnvGraphSpec.from_yaml(spec_path)
+    if not canonical_env_name:
+        canonical_env_name = spec.env_name
+
+    mgr = EnvironmentVersionManager(canonical_env_name)
+
+    # 2. Locate eval dir
+    eval_dir = args_cli.eval_dir
+    if not eval_dir:
+        latest_v = mgr.get_latest_version()
+        candidate_eval = mgr.get_eval_dir(latest_v)
+        if candidate_eval.exists():
+            eval_dir = candidate_eval
+            print(f"[auto_heal] discovered versioned eval run directory: {eval_dir}", flush=True)
+        else:
+            eval_root = Path("eval_output")
+            runs = sorted(eval_root.glob("*/*"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if runs:
+                eval_dir = runs[0]
+                print(f"[auto_heal] discovered most recent eval run directory: {eval_dir}", flush=True)
+            else:
+                raise FileNotFoundError("No eval_output directory found. Provide --eval_dir.")
+    else:
+        eval_dir = Path(eval_dir)
+
+    # 3. Locate policy config
+    policy_config_path = args_cli.policy_config
+    if not policy_config_path:
+        v_policy = mgr.get_policy_config_path()
+        if v_policy and v_policy.exists():
+            policy_config_path = v_policy
+        else:
+            default_policy = Path("isaaclab_arena_gr00t/policy/config/droid_manip_gr00t_closedloop_config.yaml")
+            if default_policy.exists():
+                policy_config_path = default_policy
+        print(f"[auto_heal] using policy config: {policy_config_path}", flush=True)
+
+    oracle = EvaluationDiagnosticOracle()
+    signatures = oracle.diagnose_eval_run(
+        eval_dir=eval_dir,
+        spec=spec,
+        policy_config_path=policy_config_path,
+        num_steps_executed=args_cli.num_steps if args_cli.num_steps > 20 else 500,
+    )
+
+    print("\n" + "=" * 70, flush=True)
+    print(" 🩺 EVALUATION DIAGNOSTIC ORACLE REPORT", flush=True)
+    print("=" * 70, flush=True)
+    for idx, sig in enumerate(signatures, 1):
+        print(f"[{idx}] Defect Type: {sig.defect_type.upper()} (Severity: {sig.severity:.2f})", flush=True)
+        print(f"    Evidence: {sig.evidence}", flush=True)
+        if sig.recommended_policy_patches:
+            print(f"    Policy Patch: {sig.recommended_policy_patches}", flush=True)
+        if sig.recommended_spatial_patches:
+            print(f"    Spatial Patch: {sig.recommended_spatial_patches}", flush=True)
+    print("=" * 70 + "\n", flush=True)
+
+    engine = EvaluationRemediationEngine()
+    healed_spec, healed_policy_path, meta = engine.remediate_and_heal(
+        spec=spec,
+        policy_config_path=policy_config_path,
+        signatures=signatures,
+        out_dir=args_cli.out_dir,
+    )
+
+    # Create next structured version snapshot
+    remediation_summaries = []
+    for s in signatures:
+        if s.recommended_spatial_patches:
+            remediation_summaries.append(f"Spatial: {s.recommended_spatial_patches}")
+        if s.recommended_policy_patches:
+            remediation_summaries.append(f"Policy: {s.recommended_policy_patches}")
+    if not remediation_summaries:
+        remediation_summaries.append("Evaluated and adjusted hyperparameters for next rollout iteration.")
+
+    new_v, new_v_dir = mgr.create_version(
+        spec_source=healed_spec,
+        policy_config_source=healed_policy_path,
+        trigger="active_inference_auto_heal",
+        parent_version=mgr.get_latest_version(),
+        remediations=remediation_summaries,
+        diagnostics=[f"{s.defect_type}: {s.evidence}" for s in signatures],
+    )
+
+    healed_spec_path = mgr.get_spec_yaml_path(new_v)
+    healed_policy_final = mgr.get_policy_config_path(new_v)
+
+    print(f"[auto_heal] ✅ Healed environment spec saved (v{new_v}) → {healed_spec_path}", flush=True)
+    print(f"[auto_heal] ✅ Healed policy config saved (v{new_v})  → {healed_policy_final}", flush=True)
+    print(f"[auto_heal] 🚀 Recommended rollout steps: {meta.get('recommended_steps', 2000)}", flush=True)
+    print(f"[auto_heal] 📜 Lineage ledger updated at: {mgr.lineage_file}", flush=True)
+
+    # Sync lineage derivation to Neo4j if available
+    try:
+        from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
+
+        defect_summary = ", ".join(s.defect_type for s in signatures)
+        sync_spec_to_neo4j(
+            healed_spec,
+            parent_env_name=spec.env_name,
+            derivation_feedback=f"Auto-healed v{new_v} from failure: {defect_summary}",
+        )
+        print("[auto_heal] synced lineage derivation to Neo4j LPG.", flush=True)
+    except Exception:
+        pass
+
+    return healed_spec_path
 
 
 def print_schema() -> None:
@@ -352,6 +518,10 @@ def main() -> int:
 
     if args_cli.mode == "resolve":
         resolve_env_spec(args_cli)
+        return 0
+
+    if args_cli.mode == "auto_heal":
+        run_auto_heal(args_cli)
         return 0
 
     if args_cli.mode == "build":

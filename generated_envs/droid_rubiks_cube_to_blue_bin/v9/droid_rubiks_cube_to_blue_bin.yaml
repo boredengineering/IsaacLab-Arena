@@ -1,0 +1,141 @@
+env_name: droid_rubiks_cube_to_blue_bin
+embodiment:
+  id: droid_robot
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.55
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: maple_table
+  registry_name: maple_table_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.25
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+objects:
+- id: rubiks_cube
+  registry_name: rubiks_cube_hot3d_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.1263
+      - -0.1396
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: blue_bin
+  registry_name: bin_b03_vomp_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.1263
+      - 0.1396
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: maple_table
+  params: {}
+- kind: 'on'
+  subject: rubiks_cube
+  reference: maple_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_right
+- kind: 'on'
+  subject: blue_bin
+  reference: maple_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_left
+reified_relations:
+- reifier_id: reifier_rubiks_cube_table
+  source_id: rubiks_cube
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_top
+  surface_sector: front_right
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.03
+    nominal: 0.01
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+- reifier_id: reifier_blue_bin_table
+  source_id: blue_bin
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_top
+  surface_sector: front_left
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.03
+    nominal: 0.01
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+task:
+  composition: atomic
+  description: Pick up the Rubik's cube from the front right of the maple table and
+    place it into the blue bin located at the front left of the table.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: rubiks_cube
+      destination_location: blue_bin
+      background_scene: maple_table

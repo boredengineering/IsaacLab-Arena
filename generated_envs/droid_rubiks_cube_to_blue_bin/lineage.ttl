@@ -1,0 +1,100 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:droid_rubiks_cube_to_blue_bin a arena:EnvironmentFamily ;
+    arena:currentVersion 9 .
+
+:droid_rubiks_cube_to_blue_bin_v9 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-08-31T22:18:03.611412+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_rubiks_cube_to_blue_bin_v8 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_rubiks_cube_to_blue_bin/2026-08-31_22-19-31"^^xsd:string ;
+    arena:successRate "1.0"^^xsd:float ;
+    arena:trigger "active_inference_refinement"^^xsd:string ;
+    arena:versionNumber 9 .
+
+:droid_rubiks_cube_to_blue_bin_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-08-31T21:29:24.389449+00:00"^^xsd:dateTime ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_rubiks_cube_to_blue_bin/v1"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "initial_active_inference_generation"^^xsd:string ;
+    arena:versionNumber 1 .
+
+:droid_rubiks_cube_to_blue_bin_v2 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-08-31T21:29:24.392286+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_rubiks_cube_to_blue_bin_v1 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_rubiks_cube_to_blue_bin/v2"^^xsd:string ;
+    arena:failureDiagnostic "camera_occlusion (standoff distance 1.28m exceeded camera FOV and reach limit)"^^xsd:string,
+        "horizon_truncation (step count 500 truncated before pick-and-place completed)"^^xsd:string,
+        "unconditioned_vla (missing language_instruction)"^^xsd:string ;
+    arena:remediationAction "Extended evaluation horizon to 2000 steps (40 seconds)"^^xsd:string,
+        "Injected task description into policy YAML language_instruction parameter"^^xsd:string,
+        "Restricted tabletop placement to robot-facing front sector (X in [-0.30, -0.10]) within camera FOV"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "active_inference_auto_heal"^^xsd:string ;
+    arena:versionNumber 2 .
+
+:droid_rubiks_cube_to_blue_bin_v3 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-08-31T21:30:18.752156+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_rubiks_cube_to_blue_bin_v2 ;
+    arena:failureDiagnostic "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."^^xsd:string ;
+    arena:remediationAction "Policy: {'num_steps': 2000}"^^xsd:string ;
+    arena:trigger "active_inference_auto_heal"^^xsd:string ;
+    arena:versionNumber 3 .
+
+:droid_rubiks_cube_to_blue_bin_v4 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-08-31T21:32:18.111756+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_rubiks_cube_to_blue_bin_v3 ;
+    arena:failureDiagnostic "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."^^xsd:string ;
+    arena:remediationAction "Policy: {'num_steps': 2000}"^^xsd:string ;
+    arena:trigger "active_inference_auto_heal"^^xsd:string ;
+    arena:versionNumber 4 .
+
+:droid_rubiks_cube_to_blue_bin_v5 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-08-31T21:33:19.609116+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_rubiks_cube_to_blue_bin_v4 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_rubiks_cube_to_blue_bin/v5/2026-08-31_21-34-34"^^xsd:string ;
+    arena:failureDiagnostic "camera_occlusion: Robot failed to contact or move target object (object_moved_rate=0.00). For VLA policies (e.g. GR00T-DROID, OpenVLA), objects placed without strict near-field constraints (d in [0.25m, 0.45m], X in [-0.30m, -0.10m]) fall outside the downward camera crop and teleoperation training distribution. The VLA cannot pick an object it cannot perceive."^^xsd:string,
+        "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."^^xsd:string ;
+    arena:remediationAction "Policy: {'num_steps': 2000}"^^xsd:string,
+        "Spatial: {'rubiks_cube': {'surface_sector': 'front_center', 'sector_bounds': [-0.3, -0.1, -0.15, 0.15]}, 'blue_bin': {'surface_sector': 'front_left', 'sector_bounds': [-0.3, -0.1, 0.15, 0.35]}}"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "active_inference_auto_heal"^^xsd:string ;
+    arena:versionNumber 5 .
+
+:droid_rubiks_cube_to_blue_bin_v6 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-08-31T21:41:16.300048+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_rubiks_cube_to_blue_bin_v5 ;
+    arena:failureDiagnostic "camera_occlusion: Robot failed to contact or move target object (object_moved_rate=0.00). For VLA policies (e.g. GR00T-DROID, OpenVLA), objects placed without strict near-field constraints (d in [0.25m, 0.45m], X in [-0.30m, -0.10m]) fall outside the downward camera crop and teleoperation training distribution. The table must be shifted closer to the robot base."^^xsd:string,
+        "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."^^xsd:string ;
+    arena:remediationAction "Policy: {'num_steps': 2000}"^^xsd:string,
+        "Spatial: {'maple_table': {'position_xyz': [-0.15, 0.0, 0.0]}, 'rubiks_cube': {'surface_sector': 'front_center', 'sector_bounds': [-0.3, -0.1, -0.15, 0.15]}, 'blue_bin': {'surface_sector': 'front_left', 'sector_bounds': [-0.3, -0.1, 0.15, 0.35]}}"^^xsd:string ;
+    arena:trigger "active_inference_auto_heal"^^xsd:string ;
+    arena:versionNumber 6 .
+
+:droid_rubiks_cube_to_blue_bin_v7 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-08-31T21:47:47.828699+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_rubiks_cube_to_blue_bin_v6 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_rubiks_cube_to_blue_bin/2026-08-31_21-51-07"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "active_inference_refinement"^^xsd:string ;
+    arena:versionNumber 7 .
+
+:droid_rubiks_cube_to_blue_bin_v8 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-08-31T22:06:30.096508+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_rubiks_cube_to_blue_bin_v7 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_rubiks_cube_to_blue_bin/2026-08-31_22-09-28"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "active_inference_refinement"^^xsd:string ;
+    arena:versionNumber 8 .
+

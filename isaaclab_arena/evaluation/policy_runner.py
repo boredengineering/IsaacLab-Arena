@@ -278,6 +278,34 @@ def main():
                         metrics=plain_metrics if isinstance(plain_metrics, dict) else {},
                         policy_name=policy_name,
                     )
+
+                    # Auto-update EnvironmentVersionManager lineage ledger if inside versioned tree
+                    try:
+                        from isaaclab_arena.agentic_environment_generation.version_manager import EnvironmentVersionManager
+
+                        yaml_arg = getattr(args_cli, "env_graph_spec_yaml", None)
+                        if yaml_arg:
+                            from pathlib import Path
+
+                            p = Path(yaml_arg).resolve()
+                            if "generated_envs" in p.parts:
+                                idx = p.parts.index("generated_envs")
+                                if len(p.parts) > idx + 2 and p.parts[idx + 2].startswith("v"):
+                                    e_name = p.parts[idx + 1]
+                                    v_str = p.parts[idx + 2][1:]
+                                    if v_str.isdigit():
+                                        v_num = int(v_str)
+                                        vm = EnvironmentVersionManager(e_name)
+                                        vm.record_evaluation_metrics(
+                                            version=v_num,
+                                            metrics=plain_metrics if isinstance(plain_metrics, dict) else {},
+                                            eval_output_dir=output_dir,
+                                        )
+                                        print(
+                                            f"[policy_runner] 📜 Auto-updated lineage ledger for {e_name} v{v_num} with evaluation metrics."
+                                        )
+                    except Exception as exc:
+                        print(f"Warning: Failed to update EnvironmentVersionManager lineage: {exc}")
                 except Exception as exc:
                     print(f"Warning: Failed to record PROV-O telemetry: {exc}")
 

@@ -194,6 +194,8 @@ class On(Relation):
         relation_loss_weight: float = 1.0,
         clearance_m: float = 0.01,
         edge_margin_m: float = DEFAULT_ON_EDGE_MARGIN_M,
+        surface_sector: str | None = None,
+        sector_bounds: tuple[float, float, float, float] | None = None,
     ):
         """
         Args:
@@ -202,15 +204,17 @@ class On(Relation):
             clearance_m: Safety clearance above parent's surface in meters (default: 1cm).
             edge_margin_m: Inward inset from each X/Y edge of the parent's surface in
                 meters (default: 5cm). The child's whole footprint is kept at least this
-                far from the rim. The solver rejects a margin too large for the surface
-                to honor (``2 * edge_margin_m`` wider than ``parent_extent - child_extent``
-                on either axis).
+                far from the rim.
+            surface_sector: Designated surface section (e.g. 'front_center', 'front_left', 'front_right').
+            sector_bounds: Explicit (min_x, max_x, min_y, max_y) section boundary.
         """
         super().__init__(parent, relation_loss_weight)
         assert clearance_m >= 0.0, f"Clearance must be non-negative, got {clearance_m}"
         assert edge_margin_m >= 0.0, f"edge_margin_m must be non-negative, got {edge_margin_m}"
         self.clearance_m = clearance_m
         self.edge_margin_m = edge_margin_m
+        self.surface_sector = surface_sector
+        self.sector_bounds = sector_bounds
 
 
 @register_object_relation

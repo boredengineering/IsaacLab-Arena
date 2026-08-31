@@ -140,19 +140,32 @@ class EnvironmentGenerationAgent:
             try:
                 from isaaclab_arena.agentic_environment_generation.rdf_lowering import spec_to_rdf_graph
                 from isaaclab_arena.agentic_environment_generation.rdf_validation import validate_rdf_environment_graph
+                from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import validate_spatial_geometry
 
                 rdf_graph = spec_to_rdf_graph(spec)
-                conforms, report = validate_rdf_environment_graph(rdf_graph)
-                if conforms:
+                shacl_conforms, shacl_report = validate_rdf_environment_graph(rdf_graph)
+                geom_conforms, geom_diagnostics = validate_spatial_geometry(spec)
+
+                if shacl_conforms and geom_conforms:
                     self._traces.append(f"SHACL semantic validation passed on iteration {iteration + 1}.")
+                    self._traces.append(f"Spatial Geometric validation passed on iteration {iteration + 1}.")
                     break
                 else:
-                    self._traces.append(f"SHACL constraint violation on iteration {iteration + 1}:\n{report}")
+                    combined_report_parts = []
+                    if not shacl_conforms:
+                        combined_report_parts.append(f"SHACL constraint violation on iteration {iteration + 1}:\n{shacl_report}")
+                        self._traces.append(f"SHACL constraint violation on iteration {iteration + 1}:\n{shacl_report}")
+                    if not geom_conforms:
+                        geom_text = "\n".join(geom_diagnostics)
+                        combined_report_parts.append(f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}")
+                        self._traces.append(f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}")
+
+                    combined_report = "\n\n".join(combined_report_parts)
                     affordances = _discover_candidate_affordances(spec)
                     try:
                         repaired_spec, _ = self.spec_inference.repair_with_feedback(
                             spec,
-                            report,
+                            combined_report,
                             self._traces,
                             original_prompt=prompt,
                             available_affordances=affordances,
@@ -177,7 +190,7 @@ class EnvironmentGenerationAgent:
                 spec = _deterministic_affordance_fallback(spec)
                 break
         else:
-            # If loop finished without conforming to SHACL, apply deterministic fallback
+            # If loop finished without conforming to SHACL/Geometry, apply deterministic fallback
             spec = _deterministic_affordance_fallback(spec)
 
         # Sync validated factor graph to Neo4j LPG
@@ -240,8 +253,9 @@ def _deterministic_affordance_fallback(spec: ArenaEnvGraphSpec) -> ArenaEnvGraph
 
 
 def _ensure_reified_relations_and_grounding(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphSpec:
-    """Ensure spatial grounding, surface anchors, and formal RDF 1.2 reified relation contracts."""
+    """Ensure spatial grounding, surface anchors, formal RDF 1.2 contracts, and dynamic factor graph relaxation."""
     from isaaclab_arena.environment_spec.arena_env_graph_types import ContinuousIntervalSpec, ReifiedRelationSpec
+    from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import relax_spec_spatial_factor_graph
 
     spec = _ground_telescopic_dollhouse_spec(spec)
 
@@ -258,7 +272,7 @@ def _ensure_reified_relations_and_grounding(spec: ArenaEnvGraphSpec) -> ArenaEnv
                         source_id=rel.subject,
                         relation_type=rel_type,
                         target_id=target_id,
-                        surface_anchor=str(rel.params.get("surface_anchor", "shelf_tier_1")),
+                        surface_anchor=str(rel.params.get("surface_anchor", "table_top")),
                         contact_normal=(0.0, 0.0, 1.0),
                         delta_x=ContinuousIntervalSpec(min_val=-0.05, max_val=0.05, nominal=0.0),
                         delta_y=ContinuousIntervalSpec(min_val=-0.05, max_val=0.05, nominal=0.0),
@@ -278,11 +292,17 @@ def _ensure_reified_relations_and_grounding(spec: ArenaEnvGraphSpec) -> ArenaEnv
         if reified_list:
             spec.reified_relations = reified_list
 
+    # Dynamically relax continuous spatial factor graph
+    try:
+        spec, _ = relax_spec_spatial_factor_graph(spec)
+    except Exception:
+        pass
+
     return spec
 
 
 def _ground_telescopic_dollhouse_spec(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphSpec:
-    """Ensure background, furniture, and receptacles are anchored in the workspace to prevent scattered spawns."""
+    """Ensure background, furniture, and receptacles are grounded without overriding relational intent."""
     from isaaclab_arena.environment_spec.arena_env_graph_types import SpatialRelationSpec
 
     furniture_keywords = ("shelf", "shelving", "table", "counter", "desk", "cabinet", "stand")
@@ -306,34 +326,50 @@ def _ground_telescopic_dollhouse_spec(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphS
 
     anchored_subjects = {r.subject for r in spec.relations if r.kind == "is_anchor"}
 
+    primary_furniture_id: str | None = None
     for obj in spec.objects:
         obj_name_lower = f"{obj.id} {obj.registry_name}".lower()
         is_furniture = any(k in obj_name_lower for k in furniture_keywords)
-        is_receptacle = any(k in obj_name_lower for k in receptacle_keywords)
 
         if is_furniture:
+            if primary_furniture_id is None:
+                primary_furniture_id = obj.id
             if "initial_pose" not in obj.params:
                 obj.params["initial_pose"] = {
-                    "position_xyz": [0.0, 1.1, floor_z],
+                    "position_xyz": [0.0, 1.1 if "galileo" in bg_lower else 0.6, floor_z],
                     "rotation_xyzw": [0.0, 0.0, 0.0, 1.0],
                 }
             anchored_subjects.add(obj.id)
 
-        elif is_receptacle:
-            if "initial_pose" not in obj.params:
-                obj.params["initial_pose"] = {
-                    "position_xyz": [0.6, 0.8, floor_z],
-                    "rotation_xyzw": [0.0, 0.0, 0.0, 1.0],
-                }
-            anchored_subjects.add(obj.id)
+    # 2. Receptacles: If ungrounded, connect to primary furniture or background table
+    target_fixture_id = primary_furniture_id or spec.background.id
+    for obj in spec.objects:
+        obj_name_lower = f"{obj.id} {obj.registry_name}".lower()
+        is_receptacle = any(k in obj_name_lower for k in receptacle_keywords)
+        if is_receptacle:
+            has_rel = any(r.subject == obj.id for r in spec.relations if r.kind != "is_anchor")
+            if not has_rel:
+                spec.relations.append(
+                    SpatialRelationSpec(
+                        kind="on",
+                        subject=obj.id,
+                        reference=target_fixture_id,
+                        params={"surface_anchor": "table_top"},
+                    )
+                )
 
-    # 2. Embodiment Grounding
+    # 3. Embodiment Grounding
     if spec.embodiment and "initial_pose" not in spec.embodiment.params:
-        # Position humanoid facing the workspace along the reach manifold
-        spec.embodiment.params["initial_pose"] = {
-            "position_xyz": [0.0, 0.35, floor_z],
-            "rotation_xyzw": [0.0, 0.0, 0.7071, 0.7071],  # Face +Y toward shelving
-        }
+        if "galileo" in bg_lower:
+            spec.embodiment.params["initial_pose"] = {
+                "position_xyz": [0.0, 0.35, floor_z],
+                "rotation_xyzw": [0.0, 0.0, 0.7071, 0.7071],  # Face +Y toward shelving
+            }
+        else:
+            spec.embodiment.params["initial_pose"] = {
+                "position_xyz": [-0.55, 0.0, floor_z],
+                "rotation_xyzw": [0.0, 0.0, 0.0, 1.0],  # Face +X toward tabletop
+            }
 
     # Clean and rebuild relations list without duplicates or redundant placements
     cleaned_relations: list[SpatialRelationSpec] = []

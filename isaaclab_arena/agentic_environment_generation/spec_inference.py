@@ -239,7 +239,9 @@ GUIDANCE:
 - For multiple instances of the same registry asset, use semantic (left/right) or numerical (1/2/3) suffixes in ``id``.
 
 TELESCOPIC DOLLHOUSE SPATIAL PLACEMENT:
-- Robot Stance: Grounded in front of the table/workspace (e.g. [-0.55, 0.0, 0.0]), NOT inside the table volume.
-- Manipulands & Receptacles: Placed with sufficient separation (>= 0.20m) on the primary support surface.
+- Robot Stance: Grounded in front of the table/workspace (e.g. [-0.55, 0.0, 0.0] facing +X, or [0.0, 0.35, floor_z] facing +Y), NOT inside the table volume.
+- Multi-Object & Receptacle Support: For pick-and-place tasks with receptacles (e.g. bin, bowl, tray), BOTH the pickable object(s) AND the destination receptacle must have explicit 'on' relations to the support fixture (e.g. table_top or shelf_tier).
+- Reachability Envelope: All task-relevant objects must be placed within reachable distance of the robot base (r in [0.30, 0.80]m for Franka/Droid, r in [0.45, 0.95]m for G1).
+- Non-Overlap & Headroom: Maintain at least 0.20m separation between objects on the same support surface.
 """
 

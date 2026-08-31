@@ -238,6 +238,42 @@ class TestGenerateSpec:
         cube_rel = next(r for r in spec.relations if r.subject == "rubiks_cube_hot3d_robolab")
         assert cube_rel.reference == "wireshelving"
 
+    def test_active_inference_repair_on_spatial_geometric_violation(self, agent):
+        """Test that spatial geometric violations (e.g. ungrounded object / overhang) trigger active LLM repair."""
+        agent_obj, client = agent
+        # First response: ungrounded bowl with no support relation
+        invalid_spec = minimal_spec_dict()
+        invalid_spec["relations"] = [
+            {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "rubiks_cube_hot3d_robolab", "reference": "maple_table_robolab", "params": {}},
+            # bowl_ycb_robolab has no support relation (ungrounded)
+        ]
+
+        # Repaired response: bowl is grounded on table
+        repaired_spec = minimal_spec_dict()
+        repaired_spec["relations"] = [
+            {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "rubiks_cube_hot3d_robolab", "reference": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "bowl_ycb_robolab", "reference": "maple_table_robolab", "params": {"surface_anchor": "table_top"}},
+        ]
+
+        client.chat.completions.create.side_effect = [
+            chat_response(content=json.dumps(invalid_spec)),
+            chat_response(content=json.dumps(repaired_spec)),
+        ]
+
+        spec, data = agent_obj.generate_spec(
+            "pick up cube from table and place in bowl",
+            asset_catalog=catalog("catalog"),
+            relation_catalog=relation_catalog("RELATIONS"),
+            task_catalog=make_task_catalog("TASKS"),
+        )
+        assert spec is not None
+        assert data is None
+        assert client.chat.completions.create.call_count == 2
+        assert any("Spatial & Geometric Violations" in line for line in agent_obj.traces)
+        assert any("Spatial Geometric validation passed" in line for line in agent_obj.traces)
+
 
 
 # ---------------------------------------------------------------------------

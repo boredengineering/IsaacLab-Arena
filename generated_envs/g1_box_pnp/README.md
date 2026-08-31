@@ -67,7 +67,91 @@ docker exec -it \
 
 ---
 
-### 2. Fast PhysX Build & Simulation Rollout
+### 2. Closed-Loop Policy Inference & Evaluation (GR00T / Remote Policy)
+
+Reference: [IsaacLab-Arena Locomanipulation Evaluation Tutorial](https://isaac-sim.github.io/IsaacLab-Arena/release/0.3.0-prerelease/pages/example_workflows/locomanipulation/step_5_evaluation.html)
+
+#### Prerequisites (Host & Container Setup):
+
+**1. On the Host:**
+```bash
+# Start the IsaacLab Docker Container (if not already running)
+./docker/run_docker.sh
+
+# Export Directories on the Host
+export DATASET_DIR=$HOME/datasets/isaaclab_arena/locomanipulation_tutorial
+export MODELS_DIR=$HOME/models/isaaclab_arena/locomanipulation_tutorial
+
+# Download Pre-Trained GR00T Policy Checkpoint
+hf download \
+  --revision gn1_6 \
+  nvidia/GN1x-Tuned-Arena-G1-Loco-Manipulation \
+  --local-dir $MODELS_DIR/checkpoint-20000
+
+# Launch GR00T Policy Inference Server on the Host
+cd submodules/Isaac-GR00T
+uv run python gr00t/eval/run_gr00t_server.py \
+  --modality-config-path ../../isaaclab_arena_gr00t/embodiments/g1/g1_sim_wbc_data_config.py \
+  --model-path $MODELS_DIR/checkpoint-20000 \
+  --embodiment-tag NEW_EMBODIMENT \
+  --device cuda --host 127.0.0.1 --port 5556
+```
+
+**2. Inside the Container (Verify Mounts):**
+```bash
+export DATASET_DIR=/datasets/isaaclab_arena/locomanipulation_tutorial
+export MODELS_DIR=/models/isaaclab_arena/locomanipulation_tutorial
+
+ls -lh /datasets/isaaclab_arena/locomanipulation_tutorial
+ls -lh /models/isaaclab_arena/locomanipulation_tutorial
+```
+
+---
+
+#### Step 1: Run Single Environment Evaluation
+
+```bash
+docker exec -it \
+  -e DISPLAY="$DISPLAY" \
+  isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena/evaluation/policy_runner.py \
+  --viz kit \
+  --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
+  --policy_config_yaml_path isaaclab_arena_gr00t/policy/config/g1_locomanip_gr00t_closedloop_config.yaml \
+  --remote_host 127.0.0.1 \
+  --remote_port 5556 \
+  --num_steps 5000 \
+  --enable_cameras \
+  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/g1_box_pnp/g1_wireshelving_pick_and_place.yaml \
+  --output_base_dir /workspaces/isaaclab_arena/eval_output/g1_wireshelving_pick_and_place_gr00t_single
+```
+
+---
+
+#### Step 2: Run Parallel Environments Evaluation
+
+```bash
+docker exec -it \
+  -e DISPLAY="$DISPLAY" \
+  isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena/evaluation/policy_runner.py \
+  --viz kit \
+  --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
+  --policy_config_yaml_path isaaclab_arena_gr00t/policy/config/g1_locomanip_gr00t_closedloop_config.yaml \
+  --remote_host 127.0.0.1 \
+  --remote_port 5556 \
+  --num_steps 1200 \
+  --num_envs 5 \
+  --enable_cameras \
+  --device cuda \
+  --policy_device cuda \
+  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/g1_box_pnp/g1_wireshelving_pick_and_place.yaml \
+  --output_base_dir /workspaces/isaaclab_arena/eval_output/g1_wireshelving_pick_and_place_gr00t_parallel
+```
+
+---
+
+### 3. Fast PhysX Build & Simulation Rollout
 
 #### Interactive 3D GUI (Isaac Sim Kit Viewport):
 ```bash
@@ -96,7 +180,7 @@ docker exec -it \
 
 ---
 
-### 3. Refine or Modify this Environment (Active Inference Derivation)
+### 4. Refine or Modify this Environment (Active Inference Derivation)
 
 To derive a new version or modify objects/relations with conversational feedback:
 
@@ -114,7 +198,7 @@ docker exec -it \
 
 ---
 
-### 4. Render Asset Thumbnails
+### 5. Render Asset Thumbnails
 
 To render high-resolution PNG previews for the assets in this scene:
 
@@ -128,7 +212,7 @@ docker exec -it \
 
 ---
 
-### 5. Neo4j LPG Knowledge Graph Lineage Query
+### 6. Neo4j LPG Knowledge Graph Lineage Query
 
 To inspect this environment and its lineage relationships in Neo4j Cypher:
 

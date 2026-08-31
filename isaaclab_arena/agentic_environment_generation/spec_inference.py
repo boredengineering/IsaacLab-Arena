@@ -203,7 +203,7 @@ OUTPUT SCHEMA STRUCTURE:
   ],
   "relations": [
     {"kind": "is_anchor", "subject": "background_id", "params": {}},
-    {"kind": "on", "subject": "object_id", "reference": "background_id", "params": {"surface_anchor": "table_top"}}
+    {"kind": "on", "subject": "object_id", "reference": "background_id", "params": {"surface_anchor": "table_top", "surface_sector": "front_center"}}
   ],
   "reified_relations": [
     {
@@ -212,6 +212,7 @@ OUTPUT SCHEMA STRUCTURE:
       "relation_type": "PLACED_ON",
       "target_id": "background_id",
       "surface_anchor": "table_top",
+      "surface_sector": "front_center",
       "required_headroom": 0.35,
       "required_friction": 0.60,
       "kinematic_manifold": "tabletop_stationary_reach",

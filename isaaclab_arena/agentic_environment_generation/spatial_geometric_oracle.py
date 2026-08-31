@@ -24,6 +24,25 @@ KNOWN_FIXTURE_BOUNDS: dict[str, tuple[float, float, float, float, float]] = {
     "simple_room_background": (-2.0, 2.0, -2.0, 2.0, 0.0),
 }
 
+FIXTURE_SECTOR_BOUNDS: dict[str, dict[str, tuple[float, float, float, float, float]]] = {
+    "maple_table_robolab": {
+        "front_center": (-0.32, -0.08, -0.12, 0.12, 0.75),
+        "front_left": (-0.32, -0.08, 0.10, 0.26, 0.75),
+        "front_right": (-0.32, -0.08, -0.26, -0.10, 0.75),
+        "front_half": (-0.35, -0.05, -0.26, 0.26, 0.75),
+        "robot_front": (-0.35, -0.05, -0.26, 0.26, 0.75),
+        "rear_center": (0.05, 0.35, -0.15, 0.15, 0.75),
+        "rear_left": (0.05, 0.35, 0.10, 0.26, 0.75),
+        "rear_right": (0.05, 0.35, -0.26, -0.10, 0.75),
+        "rear_storage": (0.05, 0.35, -0.26, 0.26, 0.75),
+    },
+    "wireshelving_a01_vomp_robolab": {
+        "shelf_tier_1": (-0.40, 0.40, -0.20, 0.20, 0.76),
+        "shelf_tier_2": (-0.40, 0.40, -0.20, 0.20, 1.15),
+        "shelf_tier_3": (-0.40, 0.40, -0.20, 0.20, 1.55),
+    },
+}
+
 
 def get_known_fixture_bounds(name: str) -> tuple[float, float, float, float, float]:
     """Retrieve approximate support surface boundary [min_x, max_x, min_y, max_y, z_deck]."""
@@ -37,6 +56,29 @@ def get_known_fixture_bounds(name: str) -> tuple[float, float, float, float, flo
         return (-0.45, 0.45, -0.30, 0.30, 0.75)
     # Default generic workspace patch
     return (-0.50, 0.50, -0.35, 0.35, 0.75)
+
+
+def get_fixture_sector_bounds(
+    fixture_name: str,
+    sector_name: str | None = None,
+) -> tuple[float, float, float, float, float]:
+    """Retrieve functional sector bounds [min_x, max_x, min_y, max_y, z_deck] on a fixture."""
+    if not sector_name:
+        return get_known_fixture_bounds(fixture_name)
+
+    fixture_lower = fixture_name.lower()
+    sector_lower = sector_name.lower()
+
+    for fix_key, sectors in FIXTURE_SECTOR_BOUNDS.items():
+        if fix_key in fixture_lower:
+            if sector_lower in sectors:
+                return sectors[sector_lower]
+            for sec_key, sec_bounds in sectors.items():
+                if sec_key in sector_lower or sector_lower in sec_key:
+                    return sec_bounds
+
+    # Default fallback to overall fixture bounds
+    return get_known_fixture_bounds(fixture_name)
 
 
 def validate_support_containment(spec: ArenaEnvGraphSpec) -> list[str]:
@@ -184,9 +226,17 @@ def relax_spec_spatial_factor_graph(spec: ArenaEnvGraphSpec) -> tuple[ArenaEnvGr
     # 5. Connect Factors from Relations
     for rel in spec.relations:
         if rel.kind == "on" and rel.reference:
-            parent_reg = spec.background.registry_name if rel.reference == bg_name else next((o.registry_name for o in spec.objects if o.id == rel.reference), "table")
-            bounds = get_known_fixture_bounds(parent_reg)
-            fg.add_support_factor(rel.subject, rel.reference, bounds, edge_margin=0.06)
+            parent_reg = (
+                spec.background.registry_name
+                if rel.reference == bg_name
+                else next((o.registry_name for o in spec.objects if o.id == rel.reference), "table")
+            )
+            sector = rel.params.get("surface_sector") if rel.params else None
+            # On tabletop environments, default unassigned manipulands to front_center and receptacles to front_left
+            if not sector and ("table" in parent_reg.lower() or "desk" in parent_reg.lower() or "counter" in parent_reg.lower()):
+                sector = "front_left" if rel.subject in receptacle_ids else "front_center"
+            bounds = get_fixture_sector_bounds(parent_reg, sector)
+            fg.add_support_factor(rel.subject, rel.reference, bounds, edge_margin=0.04)
 
     # 6. Add Non-Overlap Clearance between all placed items
     placeable_objs = [o.id for o in spec.objects if o.id not in furniture_ids]

@@ -63,6 +63,77 @@ class TestSpatialFactorGraph:
         assert -0.42 <= poses["grey_bin"][0] <= 0.42
         assert -0.27 <= poses["grey_bin"][1] <= 0.27
 
+    def test_relax_spec_places_objects_in_front_sectors(self):
+        """Test spec relaxation with semantic sectors places objects in the front working sector near the robot."""
+        spec_dict = {
+            "env_name": "test_sectors",
+            "embodiment": {
+                "id": "droid",
+                "registry_name": "droid_abs_joint_pos",
+                "params": {"initial_pose": {"position_xyz": [-0.55, 0.0, 0.0]}},
+            },
+            "background": {
+                "id": "maple_table",
+                "registry_name": "maple_table_robolab",
+                "params": {"initial_pose": {"position_xyz": [0.0, 0.0, 0.0]}},
+            },
+            "objects": [
+                {
+                    "id": "rubiks_cube",
+                    "registry_name": "rubiks_cube_hot3d_robolab",
+                    "params": {"initial_pose": {"position_xyz": [0.0, 0.0, 0.75]}},
+                },
+                {
+                    "id": "bin_b04",
+                    "registry_name": "bin_b04_vomp_robolab",
+                    "params": {"initial_pose": {"position_xyz": [0.0, 0.0, 0.75]}},
+                },
+            ],
+            "relations": [
+                {"kind": "is_anchor", "subject": "maple_table", "params": {}},
+                {
+                    "kind": "on",
+                    "subject": "rubiks_cube",
+                    "reference": "maple_table",
+                    "params": {"surface_anchor": "table_top", "surface_sector": "front_center"},
+                },
+                {
+                    "kind": "on",
+                    "subject": "bin_b04",
+                    "reference": "maple_table",
+                    "params": {"surface_anchor": "table_top", "surface_sector": "front_left"},
+                },
+            ],
+            "task": {
+                "composition": "atomic",
+                "description": "Place rubiks cube into bin",
+                "subtasks": [
+                    {
+                        "kind": "PickAndPlaceTask",
+                        "params": {
+                            "pick_up_object": "rubiks_cube",
+                            "destination_location": "bin_b04",
+                            "background_scene": "maple_table",
+                        },
+                    }
+                ],
+            },
+        }
+
+        spec = ArenaEnvGraphSpec.from_dict(spec_dict)
+        relaxed_spec, diags = relax_spec_spatial_factor_graph(spec)
+
+        cube_pos = relaxed_spec.objects[0].params["initial_pose"]["position_xyz"]
+        bin_pos = relaxed_spec.objects[1].params["initial_pose"]["position_xyz"]
+
+        # Assert both objects are relaxed into the robot-facing front half of the table (X in [-0.35, -0.05])
+        assert -0.35 <= cube_pos[0] <= -0.05
+        assert -0.35 <= bin_pos[0] <= -0.05
+
+        # Assert bin is to the left (Y > 0.05) and cube is centered (Y around 0.0)
+        assert bin_pos[1] > 0.05
+        assert abs(cube_pos[1]) < 0.20
+
 
 class TestSpatialGeometricOracle:
     def test_geometric_oracle_catches_overhang_and_unreachable_objects(self):

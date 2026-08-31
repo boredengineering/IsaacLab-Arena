@@ -336,6 +336,10 @@ class ReifiedRelationSpec(BaseModel):
         default=None,
         description="Introspected USD geometric patch identifier (e.g. 'shelf_patch_2').",
     )
+    surface_sector: str | None = Field(
+        default=None,
+        description="Semantic functional sector (e.g. 'front_center', 'front_left', 'front_right', 'rear_storage').",
+    )
     contact_normal: tuple[float, float, float] = Field(
         default=(0.0, 0.0, 1.0),
         description="Unit contact normal vector in world space.",
@@ -395,7 +399,17 @@ class ReifiedRelationSpec(BaseModel):
             # Extract nested params if LLM put parameters in a 'params' sub-dict
             if "params" in normalized and isinstance(normalized["params"], dict):
                 p = normalized.pop("params")
-                for k in ("surface_anchor", "required_headroom", "required_friction", "kinematic_manifold", "contact_normal", "delta_x", "delta_y", "delta_z"):
+                for k in (
+                    "surface_anchor",
+                    "surface_sector",
+                    "required_headroom",
+                    "required_friction",
+                    "kinematic_manifold",
+                    "contact_normal",
+                    "delta_x",
+                    "delta_y",
+                    "delta_z",
+                ):
                     if k in p and k not in normalized:
                         normalized[k] = p[k]
             if normalized.get("required_friction") is None:

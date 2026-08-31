@@ -170,6 +170,20 @@ class EnvironmentGenerationAgent:
         asset_catalog = asset_catalog or build_asset_catalogue()
         relation_catalog = relation_catalog or build_relation_catalogue()
         task_catalog = task_catalog or build_task_catalogue()
+
+        # Retrieve Graph-RAG priors from Neo4j LPG memory
+        try:
+            from isaaclab_arena.agentic_environment_generation.graph_rag import GraphRAGRetriever
+
+            retriever = GraphRAGRetriever()
+            priors = retriever.retrieve_prior_subgraphs(prompt, limit=2)
+            rag_context = retriever.format_priors_as_context(priors)
+            if rag_context:
+                prompt = f"{prompt}\n\n{rag_context}"
+                self._traces.append(f"[GraphRAG] Injected {len(priors)} verified environment priors from Neo4j.")
+        except Exception as exc:  # pragma: no cover
+            self._traces.append(f"[GraphRAG] Prior retrieval skipped: {exc}")
+
         spec, data = self.spec_inference.infer(
             prompt,
             self._traces,
@@ -224,17 +238,24 @@ class EnvironmentGenerationAgent:
                 from isaaclab_arena.agentic_environment_generation.rdf_lowering import spec_to_rdf_graph
                 from isaaclab_arena.agentic_environment_generation.rdf_validation import validate_rdf_environment_graph
                 from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import validate_spatial_geometry
+                from isaaclab_arena.agentic_environment_generation.visual_critic import PhysXPreflightCritic, VisualSceneCritic
 
                 rdf_graph = spec_to_rdf_graph(spec)
                 shacl_conforms, shacl_report = validate_rdf_environment_graph(rdf_graph)
                 geom_conforms, geom_diagnostics = validate_spatial_geometry(spec)
 
-                if shacl_conforms and geom_conforms:
+                visual_critic = VisualSceneCritic(backend=self.inference_backend)
+                visual_result = visual_critic.evaluate_scene_spec(spec)
+                phys_critic = PhysXPreflightCritic()
+                phys_issues = phys_critic.evaluate_physical_stability(spec)
+
+                if shacl_conforms and geom_conforms and visual_result.conforms and not phys_issues:
                     shacl_passed = True
                     geometry_passed = True
                     converged = True
                     self._traces.append(f"SHACL semantic validation passed on iteration {iteration + 1}.")
                     self._traces.append(f"Spatial Geometric validation passed on iteration {iteration + 1}.")
+                    self._traces.append(f"Visual line-of-sight and dynamic physics validation passed on iteration {iteration + 1}.")
                     break
                 else:
                     repair_iterations += 1
@@ -246,6 +267,13 @@ class EnvironmentGenerationAgent:
                         geom_text = "\n".join(geom_diagnostics)
                         combined_report_parts.append(f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}")
                         self._traces.append(f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}")
+                    if not visual_result.conforms:
+                        combined_report_parts.append(f"Visual Scene Occlusion on iteration {iteration + 1}:\n{visual_result.actionable_feedback}")
+                        self._traces.append(f"Visual Scene Occlusion on iteration {iteration + 1}:\n{visual_result.actionable_feedback}")
+                    if phys_issues:
+                        phys_text = "\n".join(phys_issues)
+                        combined_report_parts.append(f"PhysX Dynamic Stability Issues on iteration {iteration + 1}:\n{phys_text}")
+                        self._traces.append(f"PhysX Dynamic Stability Issues on iteration {iteration + 1}:\n{phys_text}")
 
                     combined_report = "\n\n".join(combined_report_parts)
                     affordances = _discover_candidate_affordances(spec)

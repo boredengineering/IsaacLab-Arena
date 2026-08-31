@@ -10,8 +10,8 @@
         arena:EnvironmentVersion ;
     prov:generatedAtTime "2026-08-31T22:18:03.611412+00:00"^^xsd:dateTime ;
     prov:wasDerivedFrom :droid_rubiks_cube_to_blue_bin_v8 ;
-    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_rubiks_cube_to_blue_bin/2026-08-31_22-19-31"^^xsd:string ;
-    arena:successRate "1.0"^^xsd:float ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_rubiks_cube_to_blue_bin/2026-08-31_22-51-09"^^xsd:string ;
+    arena:successRate "0.6666666666666666"^^xsd:float ;
     arena:trigger "active_inference_refinement"^^xsd:string ;
     arena:versionNumber 9 .
 

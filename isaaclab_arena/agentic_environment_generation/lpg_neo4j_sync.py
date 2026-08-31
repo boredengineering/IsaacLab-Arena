@@ -32,12 +32,14 @@ def get_neo4j_driver(
 def sync_spec_to_neo4j(
     spec: ArenaEnvGraphSpec,
     driver: Optional[neo4j.Driver] = None,
+    telemetry: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Synchronizes an ArenaEnvGraphSpec into Neo4j as a Labeled Property Graph (LPG).
 
     Args:
         spec: The arena environment graph specification.
         driver: Optional active Neo4j driver.
+        telemetry: Optional ActiveInferenceTelemetry metadata.
 
     Returns:
         A dictionary containing summary counts of synced nodes and edges.
@@ -50,16 +52,41 @@ def sync_spec_to_neo4j(
     try:
         with driver.session() as session:
             # 1. Merge Environment Graph Root Node
+            llm_calls = getattr(telemetry, "total_llm_calls", 0) if telemetry else 0
+            repair_iters = getattr(telemetry, "repair_iterations", 0) if telemetry else 0
+            total_toks = getattr(telemetry, "total_tokens", 0) if telemetry else 0
+            prompt_toks = getattr(telemetry, "prompt_tokens", 0) if telemetry else 0
+            comp_toks = getattr(telemetry, "completion_tokens", 0) if telemetry else 0
+            gen_time_s = getattr(telemetry, "duration_s", 0.0) if telemetry else 0.0
+            model_name = getattr(telemetry, "model", "") if telemetry else ""
+            is_converged = getattr(telemetry, "converged", True) if telemetry else True
+
             session.run(
                 """
                 MERGE (e:EnvironmentGraph {name: $name})
                 SET e.task_composition = $task_comp,
                     e.task_description = $task_desc,
+                    e.llm_call_count = $llm_calls,
+                    e.repair_iterations = $repair_iters,
+                    e.total_tokens = $total_toks,
+                    e.prompt_tokens = $prompt_toks,
+                    e.completion_tokens = $comp_toks,
+                    e.generation_time_s = $gen_time_s,
+                    e.model_used = $model_name,
+                    e.converged = $is_converged,
                     e.updated_at = datetime()
                 """,
                 name=spec.env_name,
                 task_comp=spec.task.composition if spec.task else "atomic",
                 task_desc=spec.task.description if spec.task else "",
+                llm_calls=llm_calls,
+                repair_iters=repair_iters,
+                total_toks=total_toks,
+                prompt_toks=prompt_toks,
+                comp_toks=comp_toks,
+                gen_time_s=gen_time_s,
+                model_name=model_name,
+                is_converged=is_converged,
             )
 
             # 2. Merge Embodiment Node
@@ -356,6 +383,92 @@ def query_spatial_hierarchy(
                 env_name=env_name,
             )
             return [record.data() for record in result]
+    finally:
+        if owns_driver:
+            driver.close()
+
+
+def sync_eval_telemetry_to_neo4j(
+    ttl_path: str,
+    driver: Optional[neo4j.Driver] = None,
+) -> Dict[str, Any]:
+    """Ingests a W3C PROV-O eval_telemetry.ttl file into Neo4j."""
+    import rdflib
+    from rdflib import RDF, Namespace
+
+    ARENA = Namespace("https://isaac-sim.github.io/arena/schema#")
+    PROV = Namespace("http://www.w3.org/ns/prov#")
+
+    g = rdflib.Graph()
+    g.parse(ttl_path, format="turtle")
+
+    eval_runs = list(g.subjects(RDF.type, ARENA.EvaluationRun))
+    if not eval_runs:
+        eval_runs = list(g.subjects(RDF.type, PROV.Entity))
+
+    eval_id = str(eval_runs[0]).split("/")[-1] if eval_runs else "eval_run_unknown"
+    env_target = list(g.objects(eval_runs[0], ARENA.evaluatedGraph)) if eval_runs else []
+    env_name = str(env_target[0]).split("/")[-1] if env_target else ""
+
+    success_rate_val = list(g.objects(eval_runs[0], ARENA.metric_success_rate)) if eval_runs else []
+    success_rate = float(success_rate_val[0]) if success_rate_val else 0.0
+
+    num_episodes_val = list(g.objects(eval_runs[0], ARENA.metric_num_episodes)) if eval_runs else []
+    num_episodes = int(num_episodes_val[0]) if num_episodes_val else 0
+
+    payload_val = list(g.objects(eval_runs[0], ARENA.metricsPayload)) if eval_runs else []
+    metrics_payload = str(payload_val[0]) if payload_val else "{}"
+
+    activities = list(g.subjects(RDF.type, PROV.Activity))
+    ended_at = ""
+    policies = []
+    if activities:
+        ended_val = list(g.objects(activities[0], PROV.endedAtTime))
+        ended_at = str(ended_val[0]) if ended_val else ""
+        used_entities = list(g.objects(activities[0], PROV.used))
+        for u in used_entities:
+            u_str = str(u).split("/")[-1]
+            if "policy" in u_str.lower():
+                policies.append(u_str.replace("policy_", ""))
+
+    policy_name = policies[0] if policies else "unknown_policy"
+
+    owns_driver = False
+    if driver is None:
+        driver = get_neo4j_driver()
+        owns_driver = True
+
+    try:
+        with driver.session() as session:
+            session.run(
+                """
+                MERGE (ev:EvaluationRun {id: $eval_id})
+                SET ev.success_rate = $success_rate,
+                    ev.num_episodes = $num_episodes,
+                    ev.metrics_payload = $metrics_payload,
+                    ev.ended_at = $ended_at
+                WITH ev
+                OPTIONAL MATCH (e:EnvironmentGraph {name: $env_name})
+                FOREACH (_ IN CASE WHEN e IS NOT NULL THEN [1] ELSE [] END |
+                    MERGE (ev)-[:EVALUATED_GRAPH]->(e)
+                )
+                MERGE (p:Policy {name: $policy_name})
+                MERGE (ev)-[:USED_POLICY]->(p)
+                """,
+                eval_id=eval_id,
+                success_rate=success_rate,
+                num_episodes=num_episodes,
+                metrics_payload=metrics_payload,
+                ended_at=ended_at,
+                env_name=env_name,
+                policy_name=policy_name,
+            )
+            return {
+                "eval_id": eval_id,
+                "env_name": env_name,
+                "policy_name": policy_name,
+                "success_rate": success_rate,
+            }
     finally:
         if owns_driver:
             driver.close()

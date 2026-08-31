@@ -273,6 +273,12 @@ class TestGenerateSpec:
         assert client.chat.completions.create.call_count == 2
         assert any("Spatial & Geometric Violations" in line for line in agent_obj.traces)
         assert any("Spatial Geometric validation passed" in line for line in agent_obj.traces)
+        assert agent_obj.telemetry is not None
+        assert agent_obj.telemetry.repair_iterations == 1
+        assert agent_obj.telemetry.converged is True
+        summary_card = agent_obj.telemetry.render_summary_card()
+        assert "Active Bayesian Inference" in summary_card
+        assert "Repair Iterations:   1" in summary_card
 
 
 

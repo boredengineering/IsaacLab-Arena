@@ -162,6 +162,9 @@ def resolve_env_spec(args_cli: argparse.Namespace) -> Path:
         f"[runner] generated → {env_graph_spec.summary()}, env_name={env_graph_spec.env_name!r}",
         flush=True,
     )
+    if agent.telemetry:
+        print("\n" + agent.telemetry.render_summary_card() + "\n", flush=True)
+
     path = write_env_graph_spec(env_graph_spec, args_cli.out_dir)
     print(f"[runner] wrote environment graph spec → {path}", flush=True)
 
@@ -169,7 +172,7 @@ def resolve_env_spec(args_cli: argparse.Namespace) -> Path:
     try:
         from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
 
-        lpg_summary = sync_spec_to_neo4j(env_graph_spec)
+        lpg_summary = sync_spec_to_neo4j(env_graph_spec, telemetry=agent.telemetry)
         print(
             f"[runner] synced to Neo4j LPG → {lpg_summary.get('node_count', 0)} nodes, "
             f"{lpg_summary.get('rel_count', 0)} relations",

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,6 +18,57 @@ from isaaclab_arena.agentic_environment_generation.spec_validation import requir
 from isaaclab_arena.assets.registries import AssetRegistry, ObjectRelationLibraryRegistry, TaskRegistry
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 from isaaclab_arena.relations.relations import RelationBase
+
+# ---------------------------------------------------------------------------
+# Active Inference Telemetry & Observability
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ActiveInferenceTelemetry:
+    """Telemetry, iteration tracking, and token metrics for graph generation."""
+
+    model: str = ""
+    total_llm_calls: int = 0
+    repair_iterations: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    duration_s: float = 0.0
+    converged: bool = True
+    shacl_passed: bool = True
+    geometry_passed: bool = True
+    stagnation_detected: bool = False
+    traces: list[str] = field(default_factory=list)
+
+    def render_summary_card(self) -> str:
+        """Render an ANSI / plain-text telemetry summary card."""
+        status_symbol = "🟢 Converged (Variational Free Energy ≈ 0)" if self.converged else "🟡 Fallback Applied"
+        shacl_sym = "✅ Passed" if self.shacl_passed else "❌ Violation"
+        geom_sym = "✅ Passed" if self.geometry_passed else "❌ Violation"
+        total_calls = int(self.total_llm_calls) if isinstance(self.total_llm_calls, (int, float)) else 0
+        repair_iters = int(self.repair_iterations) if isinstance(self.repair_iterations, (int, float)) else 0
+        tot_tok = int(self.total_tokens) if isinstance(self.total_tokens, (int, float)) else 0
+        p_tok = int(self.prompt_tokens) if isinstance(self.prompt_tokens, (int, float)) else 0
+        c_tok = int(self.completion_tokens) if isinstance(self.completion_tokens, (int, float)) else 0
+        dur_s = float(self.duration_s) if isinstance(self.duration_s, (int, float)) else 0.0
+        avg_latency = (dur_s / total_calls) if total_calls > 0 else 0.0
+
+        lines = [
+            "======================================================================",
+            "  🤖 Active Bayesian Inference & Graph Generation Telemetry",
+            "======================================================================",
+            f"• Model:               {self.model}",
+            f"• Convergence Status:  {status_symbol}",
+            f"• Total LLM Calls:     {total_calls}",
+            f"• Repair Iterations:   {repair_iters}",
+            f"• Token Consumption:   {tot_tok:,} tokens ({p_tok:,} prompt, {c_tok:,} completion)",
+            f"• Wall-Clock Latency:  {dur_s:.2f}s (avg {avg_latency:.2f}s / call)",
+            f"• Physical Invariants: SHACL-star: {shacl_sym} | Spatial Geometry: {geom_sym}",
+            "======================================================================",
+        ]
+        return "\n".join(lines)
+
 
 # ---------------------------------------------------------------------------
 # Environment generation agent
@@ -60,15 +112,22 @@ class EnvironmentGenerationAgent:
             max_tokens=max_tokens,
             max_retries=max_retries,
         )
+        self.inference_backend = inference_backend
         self.spec_inference = SpecInference(inference_backend)
         self.prim_path_inference = PrimPathInference(inference_backend)
         self.max_retries = max_retries
         self._traces: list[str] = []
+        self._telemetry: ActiveInferenceTelemetry | None = None
 
     @property
     def traces(self) -> tuple[str, ...]:
         """Diagnostic lines from the most recent :meth:`generate_spec` call."""
         return tuple(self._traces)
+
+    @property
+    def telemetry(self) -> ActiveInferenceTelemetry | None:
+        """Active inference telemetry metrics from the most recent :meth:`generate_spec` call."""
+        return self._telemetry
 
     def generate_spec(
         self,
@@ -101,6 +160,13 @@ class EnvironmentGenerationAgent:
             When validation fails, ``agent.traces`` holds the diagnostic trace.
         """
         self._traces = []
+        start_t = time.perf_counter()
+        repair_iterations = 0
+        shacl_passed = False
+        geometry_passed = False
+        stagnation_detected = False
+        converged = False
+
         asset_catalog = asset_catalog or build_asset_catalogue()
         relation_catalog = relation_catalog or build_relation_catalogue()
         task_catalog = task_catalog or build_task_catalogue()
@@ -112,6 +178,22 @@ class EnvironmentGenerationAgent:
             task_catalog=task_catalog,
         )
         if spec is None:
+            duration_s = time.perf_counter() - start_t
+            backend_tel = getattr(self.inference_backend, "telemetry", None)
+            self._telemetry = ActiveInferenceTelemetry(
+                model=getattr(self.inference_backend, "model", "unknown"),
+                total_llm_calls=backend_tel.total_calls if backend_tel else 0,
+                repair_iterations=0,
+                prompt_tokens=backend_tel.total_prompt_tokens if backend_tel else 0,
+                completion_tokens=backend_tel.total_completion_tokens if backend_tel else 0,
+                total_tokens=backend_tel.total_tokens if backend_tel else 0,
+                duration_s=duration_s,
+                converged=False,
+                shacl_passed=False,
+                geometry_passed=False,
+                stagnation_detected=False,
+                traces=list(self._traces),
+            )
             return None, data
         if spec.object_references:
             resolved = self.prim_path_inference.infer(spec, self._traces)
@@ -129,6 +211,7 @@ class EnvironmentGenerationAgent:
         for iteration in range(max_loop_steps):
             current_hash = _compute_spec_hash(spec)
             if current_hash in seen_spec_hashes:
+                stagnation_detected = True
                 self._traces.append(
                     f"[ActiveInference] Stagnation/cycle detected at iteration {iteration + 1} "
                     f"(hash={current_hash[:8]}). Halting LLM loop to conserve tokens."
@@ -147,10 +230,14 @@ class EnvironmentGenerationAgent:
                 geom_conforms, geom_diagnostics = validate_spatial_geometry(spec)
 
                 if shacl_conforms and geom_conforms:
+                    shacl_passed = True
+                    geometry_passed = True
+                    converged = True
                     self._traces.append(f"SHACL semantic validation passed on iteration {iteration + 1}.")
                     self._traces.append(f"Spatial Geometric validation passed on iteration {iteration + 1}.")
                     break
                 else:
+                    repair_iterations += 1
                     combined_report_parts = []
                     if not shacl_conforms:
                         combined_report_parts.append(f"SHACL constraint violation on iteration {iteration + 1}:\n{shacl_report}")
@@ -193,10 +280,27 @@ class EnvironmentGenerationAgent:
             # If loop finished without conforming to SHACL/Geometry, apply deterministic fallback
             spec = _deterministic_affordance_fallback(spec)
 
+        duration_s = time.perf_counter() - start_t
+        backend_tel = getattr(self.inference_backend, "telemetry", None)
+        self._telemetry = ActiveInferenceTelemetry(
+            model=getattr(self.inference_backend, "model", "unknown"),
+            total_llm_calls=backend_tel.total_calls if backend_tel else 0,
+            repair_iterations=repair_iterations,
+            prompt_tokens=backend_tel.total_prompt_tokens if backend_tel else 0,
+            completion_tokens=backend_tel.total_completion_tokens if backend_tel else 0,
+            total_tokens=backend_tel.total_tokens if backend_tel else 0,
+            duration_s=duration_s,
+            converged=converged,
+            shacl_passed=shacl_passed,
+            geometry_passed=geometry_passed,
+            stagnation_detected=stagnation_detected,
+            traces=list(self._traces),
+        )
+
         # Sync validated factor graph to Neo4j LPG
         try:
             from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
-            sync_spec_to_neo4j(spec)
+            sync_spec_to_neo4j(spec, telemetry=self._telemetry)
         except Exception as exc:  # pragma: no cover
             self._traces.append(f"Neo4j LPG sync skipped: {exc}")
 

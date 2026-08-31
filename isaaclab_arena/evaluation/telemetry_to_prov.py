@@ -199,4 +199,12 @@ def record_eval_telemetry_to_prov(
     g.add((eval_uri, ARENA.metricsPayload, Literal(json.dumps(metrics), datatype=XSD.string)))
 
     g.serialize(destination=str(out_path), format="turtle")
+
+    try:
+        from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_eval_telemetry_to_neo4j
+        sync_eval_telemetry_to_neo4j(str(out_path))
+    except Exception:
+        pass
+
     return out_path
+

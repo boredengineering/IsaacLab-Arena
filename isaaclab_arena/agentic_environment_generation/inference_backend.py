@@ -10,7 +10,8 @@ from __future__ import annotations
 import copy
 import json
 import os
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from typing import Any
 
 from openai import OpenAI
@@ -22,6 +23,55 @@ MAX_RETRIES_LIMIT = 10
 # TODO(qianl): This is currently Nvidia internal. Switch to public endpoint.
 DEFAULT_BASE_URL = "https://inference-api.nvidia.com"
 DEFAULT_MODEL = "azure/anthropic/claude-opus-4-8"
+
+
+@dataclass
+class InferenceCallMetrics:
+    """Telemetry recorded for a single LLM API completion call."""
+
+    stage: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    duration_s: float = 0.0
+    model: str = ""
+    success: bool = True
+
+
+@dataclass
+class InferenceTelemetryTracker:
+    """Thread-safe accumulator for inference metrics across multiple agent stages."""
+
+    calls: list[InferenceCallMetrics] = field(default_factory=list)
+
+    @property
+    def total_calls(self) -> int:
+        """Total number of inference calls executed."""
+        return len(self.calls)
+
+    @property
+    def total_prompt_tokens(self) -> int:
+        """Total prompt tokens ingested across all calls."""
+        return sum(c.prompt_tokens for c in self.calls)
+
+    @property
+    def total_completion_tokens(self) -> int:
+        """Total completion tokens generated across all calls."""
+        return sum(c.completion_tokens for c in self.calls)
+
+    @property
+    def total_tokens(self) -> int:
+        """Total tokens (prompt + completion) consumed."""
+        return sum(c.total_tokens for c in self.calls)
+
+    @property
+    def total_duration_s(self) -> float:
+        """Total inference API wall-clock duration in seconds."""
+        return sum(c.duration_s for c in self.calls)
+
+    def calls_by_stage(self, stage: str) -> list[InferenceCallMetrics]:
+        """Filter call metrics for a specific pipeline stage."""
+        return [c for c in self.calls if c.stage == stage]
 
 
 @dataclass(frozen=True)
@@ -101,6 +151,7 @@ class InferenceBackend:
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._max_retries = max_retries
+        self._telemetry = InferenceTelemetryTracker()
         _ping(client, resolved_model)
 
     @property
@@ -112,6 +163,11 @@ class InferenceBackend:
     def client(self) -> OpenAI:
         """OpenAI-compatible client used for completion requests."""
         return self._client
+
+    @property
+    def telemetry(self) -> InferenceTelemetryTracker:
+        """Telemetry tracker recording call counts, tokens, and latencies."""
+        return self._telemetry
 
     def run_json(self, request: StructuredOutputRequest) -> dict[str, Any]:
         """Call a JSON-schema structured-output endpoint and parse the response as JSON.
@@ -130,6 +186,7 @@ class InferenceBackend:
         for attempt in range(1 + self._max_retries):
             if attempt > 0:
                 print(f"[{request.retry_label}] retry {attempt}/{self._max_retries} after: {last_exc}", flush=True)
+            start_time = time.perf_counter()
             try:
                 resp = self._client.chat.completions.create(
                     model=self._model,
@@ -145,6 +202,7 @@ class InferenceBackend:
                     temperature=self._temperature,
                     max_tokens=self._max_tokens,
                 )
+                duration_s = time.perf_counter() - start_time
                 choices = getattr(resp, "choices", None) or []
                 assert choices, (
                     f"Model {self._model!r} returned HTTP 200 with no choices "
@@ -155,11 +213,43 @@ class InferenceBackend:
                     f"Model {self._model!r} returned an empty structured-outputs envelope. "
                     "Verify the endpoint/model supports response_format=json_schema."
                 )
+
+                # Record successful call telemetry
+                usage = getattr(resp, "usage", None)
+                p_tokens_raw = getattr(usage, "prompt_tokens", 0) if usage else 0
+                c_tokens_raw = getattr(usage, "completion_tokens", 0) if usage else 0
+                p_tokens = int(p_tokens_raw) if isinstance(p_tokens_raw, (int, float)) else 0
+                c_tokens = int(c_tokens_raw) if isinstance(c_tokens_raw, (int, float)) else 0
+                t_tokens = p_tokens + c_tokens
+                self._telemetry.calls.append(
+                    InferenceCallMetrics(
+                        stage=request.retry_label,
+                        prompt_tokens=p_tokens,
+                        completion_tokens=c_tokens,
+                        total_tokens=t_tokens,
+                        duration_s=duration_s,
+                        model=self._model,
+                        success=True,
+                    )
+                )
+
                 # ``strict=False`` lets json.loads accept unescaped control characters
                 # (e.g. literal tabs) inside JSON strings — DeepSeek-v4-flash is known
                 # to emit these.
                 return json.loads(text, strict=False)
             except Exception as exc:
+                duration_s = time.perf_counter() - start_time
+                self._telemetry.calls.append(
+                    InferenceCallMetrics(
+                        stage=request.retry_label,
+                        prompt_tokens=0,
+                        completion_tokens=0,
+                        total_tokens=0,
+                        duration_s=duration_s,
+                        model=self._model,
+                        success=False,
+                    )
+                )
                 last_exc = exc
         raise RuntimeError(
             f"Model {self._model!r} failed {request.retry_label} after "

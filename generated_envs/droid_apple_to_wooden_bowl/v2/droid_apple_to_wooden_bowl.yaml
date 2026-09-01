@@ -1,0 +1,205 @@
+env_name: franka_droid_apple_to_bowl_maple_table
+embodiment:
+  id: droid_robot
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.55
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: maple_table_bg
+  registry_name: maple_table_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.15
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+objects:
+- id: red_apple
+  registry_name: apple_01_objaverse_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.1263
+      - -0.0699
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: wooden_bowl
+  registry_name: wooden_bowl_hot3d_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.1263
+      - 0.1985
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: maple_table_bg
+  params: {}
+- kind: 'on'
+  subject: red_apple
+  reference: maple_table_bg
+  params:
+    surface_anchor: table_top
+    surface_sector: front_center
+- kind: 'on'
+  subject: wooden_bowl
+  reference: maple_table_bg
+  params:
+    surface_anchor: table_top
+    surface_sector: front_left
+- kind: requires_reachability
+  subject: red_apple
+  params: {}
+- kind: requires_reachability
+  subject: wooden_bowl
+  params: {}
+reified_relations:
+- reifier_id: reifier_apple_table
+  source_id: red_apple
+  relation_type: PLACED_ON
+  target_id: maple_table_bg
+  surface_anchor: table_top
+  surface_sector: front_right
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.03
+    nominal: 0.01
+  required_headroom: 0.3
+  required_friction: 0.65
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.8
+  posterior_entropy: 0.08
+  evidence_sources:
+  - tabletop_spatial_planner
+  - front_right_sector_constraint
+- reifier_id: reifier_bowl_table
+  source_id: wooden_bowl
+  relation_type: PLACED_ON
+  target_id: maple_table_bg
+  surface_anchor: table_top
+  surface_sector: front_left
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.03
+    nominal: 0.01
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.8
+  posterior_entropy: 0.08
+  evidence_sources:
+  - tabletop_spatial_planner
+  - front_left_sector_constraint
+- reifier_id: reifier_apple_reachability
+  source_id: red_apple
+  relation_type: REACHABLE_BY
+  target_id: droid_robot
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.03
+    nominal: 0.01
+  required_headroom: 0.4
+  required_friction: 0.6
+  kinematic_manifold: droid_manipulation_workspace
+  prior_entropy: 3.2
+  posterior_entropy: 0.15
+  evidence_sources:
+  - robot_kinematics
+  - workspace_envelope
+- reifier_id: reifier_bowl_reachability
+  source_id: wooden_bowl
+  relation_type: REACHABLE_BY
+  target_id: droid_robot
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.03
+    nominal: 0.01
+  required_headroom: 0.4
+  required_friction: 0.6
+  kinematic_manifold: droid_manipulation_workspace
+  prior_entropy: 3.2
+  posterior_entropy: 0.15
+  evidence_sources:
+  - robot_kinematics
+  - workspace_envelope
+task:
+  composition: atomic
+  description: Pick up the red apple from the front right of the maple table and place
+    it into the wooden bowl on the front left.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: red_apple
+      destination_location: wooden_bowl
+      background_scene: maple_table_bg

@@ -1,0 +1,29 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:droid_apple_to_wooden_bowl a arena:EnvironmentFamily ;
+    arena:currentVersion 2 .
+
+:droid_apple_to_wooden_bowl_v2 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-01T02:13:20.737579+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_apple_to_wooden_bowl_v1 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_apple_to_wooden_bowl/2026-09-01_02-22-23"^^xsd:string ;
+    arena:failureDiagnostic "camera_occlusion: Robot failed to contact or move target object (object_moved_rate=0.00). For VLA policies (e.g. GR00T-DROID, OpenVLA), objects placed without strict near-field constraints (d in [0.25m, 0.45m], X in [-0.30m, -0.10m]) fall outside the downward camera crop and teleoperation training distribution. The table must be shifted closer to the robot base."^^xsd:string,
+        "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."^^xsd:string ;
+    arena:remediationAction "Policy: {'num_steps': 2000}"^^xsd:string,
+        "Spatial: {'maple_table': {'position_xyz': [-0.15, 0.0, 0.0]}, 'red_apple': {'surface_sector': 'front_center', 'sector_bounds': [-0.3, -0.1, -0.15, 0.15]}, 'wooden_bowl': {'surface_sector': 'front_left', 'sector_bounds': [-0.3, -0.1, 0.15, 0.35]}}"^^xsd:string ;
+    arena:successRate "0.12307692307692308"^^xsd:float ;
+    arena:trigger "active_inference_auto_heal"^^xsd:string ;
+    arena:versionNumber 2 .
+
+:droid_apple_to_wooden_bowl_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-01T02:02:50.622417+00:00"^^xsd:dateTime ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_apple_to_wooden_bowl/2026-09-01_02-06-55"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 1 .
+

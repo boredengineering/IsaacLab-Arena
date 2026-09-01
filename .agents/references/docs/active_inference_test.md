@@ -75,21 +75,36 @@ Parses `summary_metrics.json`, `eval_telemetry.ttl`, and policy configs into det
 
 ---
 
-## 4. Multi-Iteration Execution Commands
+## 4. Multi-Iteration Execution Commands & Semantic Versioning
 
-### Step 1: Run Auto-Healing Pipeline
+All iterations and evaluations are tracked cleanly under canonical versioned directory trees:
+* Environment Specs: `/workspaces/isaaclab_arena/generated_envs/droid_rubiks_cube_to_blue_bin/v1, v2, ..., latest`
+* Evaluation Telemetry: `/workspaces/isaaclab_arena/eval_output/droid_rubiks_cube_to_blue_bin/v1, v2, ..., latest`
+* Lineage Ledgers: `lineage.json` and `lineage.ttl`
+
+### Step 1: Run Auto-Healing Pipeline (Autonomous Iteration)
 ```bash
 docker exec -it \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
   --mode auto_heal \
-  --base_spec /workspaces/isaaclab_arena/generated_envs/droid_rubiks_sector_verified/droid_rubiks_cube_to_blue_bin.yaml \
-  --policy_config isaaclab_arena_gr00t/policy/config/droid_manip_gr00t_closedloop_config.yaml \
-  --eval_dir /workspaces/isaaclab_arena/eval_output/droid_rubiks_closedloop_test/2026-08-31_20-30-26 \
-  --out_dir /workspaces/isaaclab_arena/generated_envs/droid_rubiks_auto_healed
+  --env_name droid_rubiks_cube_to_blue_bin
 ```
 
-### Step 2: Run Remediated Evaluation in Omniverse Kit Viewport
+### Step 2: Run Agentic Feedback Refinement (Human-in-the-Loop)
+```bash
+docker exec -it \
+  -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
+  isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+  --mode resolve \
+  --model "anthropic/claude-sonnet-4.5" \
+  --base_spec /workspaces/isaaclab_arena/generated_envs/droid_rubiks_cube_to_blue_bin/latest/droid_rubiks_cube_to_blue_bin.yaml \
+  --feedback "Separate the objects across the workspace: place rubiks_cube in front_right and blue_bin in front_left." \
+  --env_name droid_rubiks_cube_to_blue_bin
+```
+
+### Step 3: Run Remediated Evaluation in Omniverse Kit Viewport
 ```bash
 xhost +local:root 2>/dev/null || xhost +local:docker 2>/dev/null
 
@@ -99,11 +114,51 @@ docker exec -it \
   isaaclab_arena/evaluation/policy_runner.py \
   --viz kit \
   --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
-  --policy_config_yaml_path /workspaces/isaaclab_arena/generated_envs/droid_rubiks_auto_healed/droid_manip_gr00t_closedloop_config.yaml \
+  --policy_config_yaml_path /workspaces/isaaclab_arena/generated_envs/droid_rubiks_cube_to_blue_bin/latest/policy_config.yaml \
   --remote_host 127.0.0.1 \
   --remote_port 5557 \
   --num_steps 2000 \
   --enable_cameras \
-  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/droid_rubiks_auto_healed/droid_rubiks_cube_to_blue_bin.yaml \
-  --output_base_dir /workspaces/isaaclab_arena/eval_output/droid_rubiks_healed_rollout
+  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/droid_rubiks_cube_to_blue_bin/latest/droid_rubiks_cube_to_blue_bin.yaml \
 ```
+
+---
+
+## 5. Beyond Object Placement: Grasp Affordance, Contact Dynamics & Parallel Data Science Flywheel
+
+### A. Empirical Critique: Spatial Reach vs. Grasp Synthesis
+In **Scenario A1 (`droid_apple_to_wooden_bowl`)**, the policy consistently achieved `object_moved_rate > 0.0` (100% in v1, 50% in v2), confirming that:
+1. **Spatial reachability and camera FOV are fully resolved** (table standoff at `[-0.25, 0.0, 0.0]` brings objects within the near-field $25 - 40\text{ cm}$ visual cone).
+2. **Language conditioning is grounded** (robot reaches directly toward the target apple).
+
+However, full pick-and-place success remains gated by **tactile contact physics and grasp synthesis**:
+* **Spherical Mesh Rolling & Friction Slip**: The Franka 2-finger parallel jaw gripper slips against curved/spherical organic surfaces (`apple_01_objaverse_robolab`) during closing without dynamic friction compensation (`physics_material: friction >= 0.8`), grasp yaw alignment, and adaptive finger closure pressure.
+* **Affordance Standoff**: The policy approaches the apple but nudges/rolls it before achieving a stable frictional grasp lock.
+
+### B. Parallel Vectorized Environments (`--num_envs N`)
+Isaac Lab's tensorized PhysX architecture allows simulating $N = 4, 16, 32, 64$ parallel environments concurrently on a single GPU:
+* **High-Throughput Rollout**: `--num_envs 32` records 32 distinct demonstration trajectories with multi-view camera feeds every $40\text{ seconds}$ ($\approx 2,880\text{ episodes / hour}$).
+* **Pocket Domain Randomization**: Every parallel cell samples unique object starting poses within its $\pm 3\text{ cm}$ sector pocket, exposing the policy to diverse approach vectors.
+
+### C. Data Science Diagnostics on Parallel Rollout Datasets
+When local compute is constrained for full foundation model fine-tuning, parallel trajectory generation provides the rich dataset required for diagnostic data science:
+1. **Trajectory Clustering & State-Space Divergence**: Cluster end-effector phase trajectories to pinpoint the exact time step where pre-grasp transitions into slip.
+2. **Grasp Affordance Heatmaps**: Project gripper contact points onto object 3D meshes to identify high-success surface normals vs. slip zones.
+3. **Sub-Goal Classification**: Automatically categorize failure modes into *Approach Error*, *Grasp Slip*, *Transport Collision*, and *Release Miss* for targeted remediation.
+
+### D. Realistic Policy & Controller Remediation (Why NOT Inflate Physics Friction)
+Artificially increasing `physics_material` friction in simulation is a **sim-to-real anti-pattern**: physical apples in the real world cannot be made stickier. Genuine remediation must be applied to **policy execution, inference dynamics, and controller parameters**:
+* **Receding Horizon Control (`action_chunk_length: 16` or `8`)**: Executes high-confidence near-term steps with closed-loop visual replanning at $6–12\text{ Hz}$ to react to micro-slips.
+* **Temporal Action Smoothing (EMA)**: Eliminates chunk boundary acceleration spikes ($\ddot{q}$) and inertial flinging forces ($F = m \cdot a$).
+* **Binary Gripper Squeeze Bias**: Clamps gripper action $> 0.5$ to $1.0$ (full rated motor clamping torque $F_N$).
+* **Diffusion Denoising Steps**: Increases inference steps (16–32) for low-variance grasp planning.
+
+### E. Causal Knowledge Graph Memory (Neo4j LPG + RDF-star)
+Containing evaluation statistics and remediation actions on the graph turns the knowledge graph into a **Causal Active Inference Memory**:
+1. **Statistical Funnel Properties on `EvaluationRun`**:
+   `e.lift_rate = 0.862`, `e.conversion_rate = 0.143`, `e.chi2_pval = 1.22e-14`, `e.num_episodes = 65`.
+2. **Causal Derivation Edges**:
+   `(v3:EnvironmentGraph)-[:WAS_DERIVED_FROM {defect: 'IN_FLIGHT_SLIP_INERTIA', patch: 'action_chunk_length=16'}]->(v2:EnvironmentGraph)`.
+3. **Persistent Empirical Affordance Memory**: The system remembers which controller parameters stabilize grasps for curved/spherical geometries, eliminating repeated trial-and-error across future environments.
+
+

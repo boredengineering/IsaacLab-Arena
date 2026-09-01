@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evaluation Report</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; color: #1a1a1a; background: #fafafa; }
+  h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+  h2 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
+  .summary { color: #555; font-size: 0.9rem; margin-bottom: 1rem; }
+  code { font-family: ui-monospace, monospace; background: #eee; padding: 0 0.25rem; border-radius: 3px; }
+  section { margin-bottom: 2rem; }
+  table { border-collapse: collapse; }
+  th, td { border: 1px solid #ddd; padding: 0.4rem; vertical-align: top; }
+  thead th { position: sticky; top: 0; background: #f0f0f0; z-index: 2; font-size: 0.85rem; }
+  .rowlabel { position: sticky; left: 0; background: #f0f0f0; font-family: ui-monospace, monospace;
+              font-size: 0.8rem; white-space: nowrap; text-align: left; z-index: 1; }
+  .rowlabel.success { background: #e6f4ea; color: #137333; }
+  .rowlabel.failure { background: #fce8e6; color: #c5221f; }
+  .rowlabel .status { font-weight: 700; text-transform: uppercase; font-size: 0.7rem; }
+  video { width: 320px; height: auto; display: block; background: #000; }
+  .missing { color: #bbb; text-align: center; }
+  .meta { font-size: 0.75rem; color: #444; white-space: nowrap; }
+  .meta .k { color: #888; }
+  .meta .subitem { margin-left: 0.75rem; }
+</style>
+</head>
+<body>
+<h1>Evaluation Report</h1>
+<div class="summary">1 job(s) &middot; 2 episode(s)</div>
+<section><table><thead><tr><th class="rowlabel">env / episode</th><th>details</th></tr></thead><tbody>
+<tr><th class="rowlabel failure">env 0<br>episode 0<br><span class="status">failure</span></th><td class="meta"><div><span class="k">seed</span> 42</div><div><span class="k">episode_length</span> 301</div><div><span class="k">language_instruction</span> Pick up the red apple from the front right of the maple table and place it into the wooden bowl on the front left.</div><div><span class="k">timestamp</span> 2026-09-01T02:04:25.622387</div><div><span class="k">progress</span><div class="subitem"><span class="k">overall_score</span> 0.6666666865348816</div><div class="subitem"><span class="k">all_complete</span> False</div><div class="subitem"><span class="k">objectives</span> {&#x27;pick_and_place&#x27;: {&#x27;score&#x27;: 0.6666666865348816, &#x27;is_complete&#x27;: False, &#x27;completed_groups&#x27;: 0, &#x27;total_groups&#x27;: 1, &#x27;active_predicates&#x27;: {&#x27;default_group&#x27;: &#x27;object_on_destination(force_threshold=0.1, velocity_threshold=0.1)&#x27;}}}</div><div class="subitem"><span class="k">events</span> [{&#x27;step&#x27;: 12, &#x27;objective&#x27;: &#x27;pick_and_place&#x27;, &#x27;group&#x27;: &#x27;default_group&#x27;, &#x27;predicate_index&#x27;: 0, &#x27;predicate_name&#x27;: &#x27;objects_settled&#x27;, &#x27;score_delta&#x27;: 0.3333333333333333}, {&#x27;step&#x27;: 180, &#x27;objective&#x27;: &#x27;pick_and_place&#x27;, &#x27;group&#x27;: &#x27;default_group&#x27;, &#x27;predicate_index&#x27;: 1, &#x27;predicate_name&#x27;: &quot;object_is_above_height(object_name=&#x27;red_apple&#x27;, use_settled_state=True)&quot;, &#x27;score_delta&#x27;: 0.3333333333333333}]</div></div></td></tr>
+<tr><th class="rowlabel success">env 0<br>episode 1<br><span class="status">success</span></th><td class="meta"><div><span class="k">seed</span> 42</div><div><span class="k">episode_length</span> 903</div><div><span class="k">language_instruction</span> Pick up the red apple from the front right of the maple table and place it into the wooden bowl on the front left.</div><div><span class="k">timestamp</span> 2026-09-01T02:06:40.196002</div><div><span class="k">progress</span><div class="subitem"><span class="k">overall_score</span> 1.0</div><div class="subitem"><span class="k">all_complete</span> True</div><div class="subitem"><span class="k">objectives</span> {&#x27;pick_and_place&#x27;: {&#x27;score&#x27;: 1.0, &#x27;is_complete&#x27;: True, &#x27;completed_groups&#x27;: 1, &#x27;total_groups&#x27;: 1, &#x27;active_predicates&#x27;: {&#x27;default_group&#x27;: None}}}</div><div class="subitem"><span class="k">events</span> [{&#x27;step&#x27;: 12, &#x27;objective&#x27;: &#x27;pick_and_place&#x27;, &#x27;group&#x27;: &#x27;default_group&#x27;, &#x27;predicate_index&#x27;: 0, &#x27;predicate_name&#x27;: &#x27;objects_settled&#x27;, &#x27;score_delta&#x27;: 0.3333333333333333}, {&#x27;step&#x27;: 848, &#x27;objective&#x27;: &#x27;pick_and_place&#x27;, &#x27;group&#x27;: &#x27;default_group&#x27;, &#x27;predicate_index&#x27;: 1, &#x27;predicate_name&#x27;: &quot;object_is_above_height(object_name=&#x27;red_apple&#x27;, use_settled_state=True)&quot;, &#x27;score_delta&#x27;: 0.3333333333333333}, {&#x27;step&#x27;: 903, &#x27;objective&#x27;: &#x27;pick_and_place&#x27;, &#x27;group&#x27;: &#x27;default_group&#x27;, &#x27;predicate_index&#x27;: 2, &#x27;predicate_name&#x27;: &#x27;object_on_destination(force_threshold=0.1, velocity_threshold=0.1)&#x27;, &#x27;score_delta&#x27;: 0.3333333333333333}]</div></div></td></tr>
+</tbody></table></section>
+</body>
+</html>

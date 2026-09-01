@@ -27,6 +27,7 @@ class FailureSignature:
         "reach_singularity",
         "grasp_instability",
         "camera_occlusion",
+        "in_flight_slip_inertia",
         "unknown",
     ]
     severity: float  # 0.0 to 1.0
@@ -77,6 +78,30 @@ class EvaluationDiagnosticOracle:
         success_rate = float(metrics.get("success_rate", 0.0))
         object_moved_rate = float(metrics.get("object_moved_rate", 0.0))
 
+        # Ingest granular episode results JSONL for statistical stage progression funnel
+        jsonl_files = list(eval_path.glob("**/episode_results_rank*.jsonl"))
+        lifted_count = 0
+        total_episodes_counted = 0
+        placed_count = 0
+        if jsonl_files:
+            for jf in jsonl_files:
+                for line in jf.read_text(encoding="utf-8").splitlines():
+                    if not line.strip():
+                        continue
+                    try:
+                        rec = json.loads(line)
+                        total_episodes_counted += 1
+                        events = rec.get("progress", {}).get("events", [])
+                        if any("object_is_above_height" in e.get("predicate_name", "") for e in events):
+                            lifted_count += 1
+                        if rec.get("success", False):
+                            placed_count += 1
+                    except Exception:
+                        pass
+
+        lift_rate = (lifted_count / total_episodes_counted) if total_episodes_counted > 0 else object_moved_rate
+        conversion_rate = (placed_count / lifted_count) if lifted_count > 0 else 0.0
+
         # Check Defect 1: VLA Training Distribution & Camera Perception Standoff (CRITICAL)
         # If object_moved_rate == 0.0 or success_rate == 0.0, check for tabletop near-field placement
         emb_p = (
@@ -103,7 +128,7 @@ class EvaluationDiagnosticOracle:
                     if rel.subject == manipuland_id:
                         has_near_field_manipuland = True
 
-        if object_moved_rate == 0.0 or not has_near_field_manipuland:
+        if (object_moved_rate == 0.0 and lift_rate == 0.0) or not has_near_field_manipuland:
             signatures.append(
                 FailureSignature(
                     defect_type="camera_occlusion",
@@ -122,7 +147,27 @@ class EvaluationDiagnosticOracle:
                 )
             )
 
-        # Check Defect 2: Unconditioned VLA Model
+        # Check Defect 2: In-Flight Slippage & Open-Loop Inertial Jerk (Statistical Funnel Bottleneck)
+        if total_episodes_counted >= 5 and lift_rate >= 0.50 and conversion_rate < 0.35:
+            signatures.append(
+                FailureSignature(
+                    defect_type="in_flight_slip_inertia",
+                    severity=0.92,
+                    evidence=(
+                        f"Statistical Funnel Bottleneck (N={total_episodes_counted}): "
+                        f"Robot achieved initial reach and lift in {lift_rate * 100:.1f}% of episodes, "
+                        f"but conversion to successful placement was only {conversion_rate * 100:.1f}%. "
+                        f"High-lift with low-placement indicates in-flight rotational slippage, open-loop drift, "
+                        f"or acceleration jerk during transport. Compress execution chunk to enable high-frequency "
+                        f"receding horizon feedback."
+                    ),
+                    recommended_policy_patches={
+                        "action_chunk_length": 16,
+                    },
+                )
+            )
+
+        # Check Defect 3: Unconditioned VLA Model
         lang_instr = policy_cfg_dict.get("language_instruction", "")
         if not lang_instr or str(lang_instr).strip() == "":
             task_desc = spec.task.description if spec.task else "Manipulate target object"
@@ -135,7 +180,7 @@ class EvaluationDiagnosticOracle:
                 )
             )
 
-        # Check Defect 3: Horizon Truncation
+        # Check Defect 4: Horizon Truncation
         if success_rate < 0.5 and num_steps_executed <= 600:
             signatures.append(
                 FailureSignature(

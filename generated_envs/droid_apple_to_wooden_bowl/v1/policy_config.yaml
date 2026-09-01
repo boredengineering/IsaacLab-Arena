@@ -1,0 +1,20 @@
+action_horizon: 32
+embodiment_tag: OXE_DROID
+video_backend: decord
+policy_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/gr00t_8dof_joint_space.yaml
+action_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/8dof_joint_space.yaml
+state_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/13dof_joint_space.yaml
+action_chunk_length: 32
+task_mode_name: droid_manipulation
+pov_cam_name_sim:
+- external_camera_rgb
+- wrist_camera_rgb
+original_image_size:
+- 720
+- 1280
+- 3
+target_image_size:
+- 180
+- 320
+- 3
+language_instruction: Pick up the red apple from the front right of the maple table and place it into the wooden bowl on the front left.

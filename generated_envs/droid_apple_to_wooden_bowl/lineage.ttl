@@ -4,7 +4,28 @@
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 :droid_apple_to_wooden_bowl a arena:EnvironmentFamily ;
-    arena:currentVersion 2 .
+    arena:currentVersion 3 .
+
+:droid_apple_to_wooden_bowl_v3 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-01T04:03:50.531802+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_apple_to_wooden_bowl_v2 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_apple_to_wooden_bowl/2026-09-01_04-15-41"^^xsd:string ;
+    arena:failureDiagnostic "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."^^xsd:string,
+        "in_flight_slip_inertia: Statistical Funnel Bottleneck (N=65): Robot achieved initial reach and lift in 86.2% of episodes, but conversion to successful placement was only 14.3%. High-lift with low-placement indicates in-flight rotational slippage, open-loop drift, or acceleration jerk during transport. Compress execution chunk to enable high-frequency receding horizon feedback."^^xsd:string ;
+    arena:remediationAction "Policy: {'action_chunk_length': 16}"^^xsd:string,
+        "Policy: {'num_steps': 2000}"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "active_inference_auto_heal"^^xsd:string ;
+    arena:versionNumber 3 .
+
+:droid_apple_to_wooden_bowl_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-01T02:02:50.622417+00:00"^^xsd:dateTime ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_apple_to_wooden_bowl/2026-09-01_02-06-55"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 1 .
 
 :droid_apple_to_wooden_bowl_v2 a prov:Entity,
         arena:EnvironmentVersion ;
@@ -18,12 +39,4 @@
     arena:successRate "0.12307692307692308"^^xsd:float ;
     arena:trigger "active_inference_auto_heal"^^xsd:string ;
     arena:versionNumber 2 .
-
-:droid_apple_to_wooden_bowl_v1 a prov:Entity,
-        arena:EnvironmentVersion ;
-    prov:generatedAtTime "2026-09-01T02:02:50.622417+00:00"^^xsd:dateTime ;
-    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_apple_to_wooden_bowl/2026-09-01_02-06-55"^^xsd:string ;
-    arena:successRate "0.0"^^xsd:float ;
-    arena:trigger "initial_generation"^^xsd:string ;
-    arena:versionNumber 1 .
 

@@ -1,0 +1,48 @@
+{
+  "env_name": "droid_tomato_soup_to_blue_bin",
+  "created_at": "2026-09-01T04:41:54.571568+00:00",
+  "versions": [
+    {
+      "version": 1,
+      "created_at": "2026-09-01T04:41:54.571568+00:00",
+      "trigger": "initial_generation",
+      "prompt": "Create an environment for a Franka DROID robot on a maple table where the task is to pick up the red tomato soup can from the front right of the table and place it into the blue sorting bin on the front left. Position the maple_table background at initial_pose position_xyz: [-0.25, 0.0, 0.0], use embodiment droid_abs_joint_pos at [-0.55, 0.0, 0.0], place tomato_soup_can_ycb_robolab in front_right sector, and place bin_b03_vomp_robolab in front_left sector.",
+      "parent_version": null,
+      "remediations": [],
+      "diagnostics": [],
+      "spec_file": "droid_tomato_soup_to_blue_bin/v1/droid_tomato_soup_to_blue_bin.yaml",
+      "policy_file": null,
+      "evaluation": {
+        "timestamp": "2026-09-01T04:58:43.277798+00:00",
+        "eval_dir": "/workspaces/isaaclab_arena/eval_output/droid_tomato_soup_to_blue_bin/2026-09-01_04-52-54",
+        "success_rate": 0.0,
+        "object_moved_rate": 1.0,
+        "num_episodes": 2,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 2,
+          "success_rate": 0.0,
+          "object_moved_rate": 1.0
+        }
+      }
+    },
+    {
+      "version": 2,
+      "created_at": "2026-09-01T04:59:09.223194+00:00",
+      "trigger": "active_inference_auto_heal",
+      "prompt": null,
+      "parent_version": 1,
+      "remediations": [
+        "Policy: {'num_steps': 2000}"
+      ],
+      "diagnostics": [
+        "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."
+      ],
+      "spec_file": "droid_tomato_soup_to_blue_bin/v2/droid_tomato_soup_to_blue_bin.yaml",
+      "policy_file": "droid_tomato_soup_to_blue_bin/v2/policy_config.yaml",
+      "evaluation": null
+    }
+  ],
+  "current_version": 2,
+  "updated_at": "2026-09-01T04:59:09.223194+00:00"
+}

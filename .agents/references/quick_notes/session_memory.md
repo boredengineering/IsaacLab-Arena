@@ -69,5 +69,26 @@
   * Records `EvaluationRun` metrics (`lift_rate`, `conversion_rate`, $\chi^2$ p-value) and links versions via `(v2)-[:REMEDIATED_FROM {defect: 'in_flight_slip_inertia', patch: 'action_chunk_length=16'}]->(v1)`.
   * Forms a persistent empirical memory of which control parameters stabilize grasps for given object geometries.
 
+## 9. False Positive Diagnostics & Codebase Containment Fix
+* **Discrepancy Discovered**: Visual inspection in Omniverse Kit viewport (`--viz kit`) revealed that raw contact sensor telemetry (`object_on_destination`) logged false successes whenever an object grazed or bounced off the *exterior rim/base* of a receptacle.
+* **Architectural Patch**: In `isaaclab_arena/tasks/pick_and_place_task.py`:
+  1. Container auto-guarding sets default `max_separation = [0.12, 0.12, 0.15]` for all receptacle destinations (`bin`, `bowl`, `box`, `basket`).
+  2. `objects_in_proximity` is formally added to `predicate_groups` in `get_progress_objectives`, guaranteeing that success requires both physical contact AND spatial centroid containment inside the cavity volume.
+
+## 10. Scenario B1 (`droid_tomato_soup_to_blue_bin`) State
+* **v1 Generated**: `tomato_soup_can_ycb_robolab` in `front_right`, `bin_b03_vomp_robolab` in `front_left`. 1 iteration, 0 errors.
+* **Initial Visual Findings**:
+  * Fast grasp acquisition ($122\text{ steps}$ vs $417\text{ steps}$ for apple) due to planar jaw surface alignment on vertical cylinder.
+  * Rollouts timed out at 1000 steps ($20.0\text{ s}$) before completing place.
+* **v2 Healed Configuration**:
+  * Added `episode_length_s: 40.0` (2000 steps horizon) to allow full approach-lift-transfer-place execution.
+  * Configured `max_separation: [0.15, 0.15, 0.15]`.
+  * Policy instruction simplified to direct verb form: `"pick up the tomato soup can and place it into the blue bin"`.
+
+## 11. Infrastructure Health & Process Cleanup
+* **Zombie Process Terminated**: Killed PID 8828 inside `isaaclab_arena-latest` (an orphaned headless rendering test loop from Aug 31 that was consuming 401% CPU for 45 hours). Container CPU dropped from 408% to 35%, RAM freed from 6.9 GiB to 1.9 GiB.
+* **Active Ports**: GR00T policy server on port 5557, Neo4j HTTP on 7475, Neo4j Bolt on 7688.
+
+
 
 

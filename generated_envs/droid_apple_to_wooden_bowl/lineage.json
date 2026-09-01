@@ -55,8 +55,38 @@
           "object_moved_rate": 0.7692307692307693
         }
       }
+    },
+    {
+      "version": 3,
+      "created_at": "2026-09-01T04:03:50.531802+00:00",
+      "trigger": "active_inference_auto_heal",
+      "prompt": null,
+      "parent_version": 2,
+      "remediations": [
+        "Policy: {'action_chunk_length': 16}",
+        "Policy: {'num_steps': 2000}"
+      ],
+      "diagnostics": [
+        "in_flight_slip_inertia: Statistical Funnel Bottleneck (N=65): Robot achieved initial reach and lift in 86.2% of episodes, but conversion to successful placement was only 14.3%. High-lift with low-placement indicates in-flight rotational slippage, open-loop drift, or acceleration jerk during transport. Compress execution chunk to enable high-frequency receding horizon feedback.",
+        "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."
+      ],
+      "spec_file": "droid_apple_to_wooden_bowl/v3/droid_apple_to_wooden_bowl.yaml",
+      "policy_file": "droid_apple_to_wooden_bowl/v3/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-09-01T04:21:41.723204+00:00",
+        "eval_dir": "/workspaces/isaaclab_arena/eval_output/droid_apple_to_wooden_bowl/2026-09-01_04-15-41",
+        "success_rate": 0.0,
+        "object_moved_rate": 1.0,
+        "num_episodes": 2,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 2,
+          "success_rate": 0.0,
+          "object_moved_rate": 1.0
+        }
+      }
     }
   ],
-  "current_version": 2,
-  "updated_at": "2026-09-01T02:13:20.737579+00:00"
+  "current_version": 3,
+  "updated_at": "2026-09-01T04:03:50.531802+00:00"
 }

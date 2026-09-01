@@ -1,0 +1,25 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:droid_tomato_soup_to_blue_bin a arena:EnvironmentFamily ;
+    arena:currentVersion 2 .
+
+:droid_tomato_soup_to_blue_bin_v2 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-01T04:59:09.223194+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_tomato_soup_to_blue_bin_v1 ;
+    arena:failureDiagnostic "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."^^xsd:string ;
+    arena:remediationAction "Policy: {'num_steps': 2000}"^^xsd:string ;
+    arena:trigger "active_inference_auto_heal"^^xsd:string ;
+    arena:versionNumber 2 .
+
+:droid_tomato_soup_to_blue_bin_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-01T04:41:54.571568+00:00"^^xsd:dateTime ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_tomato_soup_to_blue_bin/2026-09-01_04-52-54"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 1 .
+

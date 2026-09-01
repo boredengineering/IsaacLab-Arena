@@ -74,6 +74,10 @@ class PickAndPlaceTask(TaskBase):
         self.scene_config = self.make_scene_cfg()
         self.force_threshold = force_threshold
         self.velocity_threshold = velocity_threshold
+        if max_separation is None:
+            dest_name = (getattr(destination_location, "name", "") or "").lower()
+            if any(k in dest_name for k in ("bin", "bowl", "box", "basket", "pail", "crate", "pot")):
+                max_separation = (0.12, 0.12, 0.15)
         if max_separation is not None:
             assert len(max_separation) == 3, f"max_separation must be (x, y, z), got {max_separation!r}"
         self.max_separation = max_separation
@@ -176,27 +180,40 @@ class PickAndPlaceTask(TaskBase):
         return [SuccessRateMetric(), ObjectMovedRateMetric(self.pick_up_object)]
 
     def get_progress_objectives(self) -> list[ProgressObjective]:
+        predicate_groups = [
+            partial(
+                objects_settled,
+                object_names=[self.pick_up_object.name],
+            ),
+            partial(
+                object_is_above_height,
+                object_name=self.pick_up_object.name,
+                use_settled_state=True,
+            ),
+            partial(
+                object_on_destination,
+                object_cfg=SceneEntityCfg(self.pick_up_object.name),
+                contact_sensor_cfg=SceneEntityCfg(self.contact_sensor_name),
+                force_threshold=self.force_threshold,
+                velocity_threshold=self.velocity_threshold,
+            ),
+        ]
+        if self.max_separation is not None:
+            max_x_separation, max_y_separation, max_z_separation = self.max_separation
+            predicate_groups.append(
+                partial(
+                    objects_in_proximity,
+                    object_cfg=SceneEntityCfg(self.pick_up_object.name),
+                    target_object_cfg=SceneEntityCfg(self.destination_location.name),
+                    max_x_separation=max_x_separation,
+                    max_y_separation=max_y_separation,
+                    max_z_separation=max_z_separation,
+                )
+            )
         return [
             ProgressObjective(
                 name="pick_and_place",
-                predicate_groups=[
-                    partial(
-                        objects_settled,
-                        object_names=[self.pick_up_object.name],
-                    ),
-                    partial(
-                        object_is_above_height,
-                        object_name=self.pick_up_object.name,
-                        use_settled_state=True,
-                    ),
-                    partial(
-                        object_on_destination,
-                        object_cfg=SceneEntityCfg(self.pick_up_object.name),
-                        contact_sensor_cfg=SceneEntityCfg(self.contact_sensor_name),
-                        force_threshold=self.force_threshold,
-                        velocity_threshold=self.velocity_threshold,
-                    ),
-                ],
+                predicate_groups=predicate_groups,
             ),
         ]
 

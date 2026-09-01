@@ -161,7 +161,85 @@ Statistical stage funnel testing and policy remediation are integrated into the 
    * Recommends policy patch `action_chunk_length: 16`.
 2. **Causal Knowledge Graph Representation (Neo4j LPG + RDF-star)**:
    * **Evaluation Nodes**: `(e:EnvironmentGraph)-[:HAS_EVALUATION]->(ev:EvaluationRun {lift_rate: 0.862, conversion_rate: 0.143, chi2_pval: 1.22e-14})`.
-   * **Causal Derivation Edges**: `(v2:EnvironmentGraph)-[:WAS_DERIVED_FROM {defect: 'IN_FLIGHT_SLIP_INERTIA', policy_patch: 'action_chunk_length=16'}]->(v1:EnvironmentGraph)`.
+   * **Causal Derivation Edges**: `(v3:EnvironmentGraph)-[:WAS_DERIVED_FROM {defect: 'in_flight_slip_inertia', policy_patch: 'action_chunk_length=16'}]->(v2:EnvironmentGraph)`.
    * **Empirical Memory**: The knowledge graph permanently preserves which control parameters prevent slip for specific object geometric affordances (e.g. spherical vs. prismatic geometries) across all historical rollouts.
+
+```
+┌────────────────────────────────────────┐
+│  (EnvironmentGraph: v2)               │
+│  • lift_rate: 86.2%                   │
+│  • conversion_rate: 14.3%             │
+│  • chi2_pval: 1.22e-14                │
+└──────────────────┬─────────────────────┘
+                   │
+                   │  WAS_DERIVED_FROM {
+                   │    defect: "in_flight_slip_inertia",
+                   │    evidence: "Statistical Funnel Bottleneck",
+                   │    p_value: 1.22e-14,
+                   │    patch_applied: "action_chunk_length = 16"
+                   │  }
+                   ▼
+┌────────────────────────────────────────┐
+│  (EnvironmentGraph: v3)               │
+│  • action_chunk_length: 16            │
+│  • closed_loop_frequency: 12.5 Hz     │
+└────────────────────────────────────────┘
+```
+
+#### Reusable Cross-Task Active Inference Query:
+```cypher
+MATCH (o:RigidObject)-[:HAS_SHAPE_AFFORDANCE]->(:CurvedGeometry)
+MATCH (e:EnvironmentGraph)-[:CONTAINS_OBJECT]->(o)
+MATCH (e)-[:EVALUATED_WITH]->(p:PolicyConfig)
+RETURN p.action_chunk_length, p.gripper_clamping_bias, avg(e.success_rate)
+```
+
+---
+
+## 5. False Positive Diagnostics & Container Spatial Bounding (`max_separation`)
+
+### A. The Discrepancy: Ground-Truth Visual Validation vs. Raw Contact Sensors
+During visual inspection of single-environment rollouts in the Omniverse Kit viewport (`--viz kit`), a critical ground-truth discrepancy was discovered:
+* **The Raw Metric Claim**: The simulation telemetry reported a "success" based on `object_on_destination` firing.
+* **The Physical Reality**: The robot never placed the apple inside the bowl. When the arm approached the apple, the flat parallel fingers pushed or rolled the spherical apple sideways. The arm proceeded along its trajectory empty-handed, and the apple merely rolled against the **outer exterior rim/base of the wooden bowl**.
+* **The Root Cause**: `PickAndPlaceTask` evaluated success strictly via a PhysX contact force sensor between the apple and bowl (`force > 0.1 N, velocity < 0.1 m/s`). Because `max_separation` was `None`, any grazing contact with the **outside** of the container falsely satisfied the termination condition!
+
+### B. The Codebase Fix: Dual-Condition Containment Verification
+To guarantee that `success = True` reflects **genuine physical placement inside the receptacle volume**:
+1. **Container Auto-Guarding in `PickAndPlaceTask.__init__`**:
+   If `destination_location` is a container (`bin`, `bowl`, `box`, `basket`, `pail`, `crate`), `max_separation` automatically defaults to `(0.12, 0.12, 0.15)` meters unless explicitly overridden.
+2. **Proximity Integration in `get_progress_objectives`**:
+   `objects_in_proximity` is formally added to the multi-stage progress tracker. Success now strictly requires:
+   $$\text{Success} \iff (\text{Contact Force } > 0.1\text{ N}) \;\land\; (|x - x_{\text{dest}}| < 0.12\text{ m}) \;\land\; (|y - y_{\text{dest}}| < 0.12\text{ m}) \;\land\; (|z - z_{\text{dest}}| < 0.15\text{ m})$$
+
+### C. Geometric Affordance Transition: Scenario A1 (Spherical) to Scenario B1 (Prismatic)
+* **Spherical Mesh Failure Mode**: The Franka 2-finger parallel jaw gripper contacts a sphere at a single tangent point per finger. Any approach angle offset produces shear torque that rolls the sphere away before grasp closure.
+* **Prismatic Cylinder Affordance (Scenario B1)**: The `tomato_soup_can_ycb_robolab` features vertical, flat parallel sides that align with the planar surface of the Franka parallel jaws, providing distributed surface contact and high passive friction resistance against slip.
+
+---
+
+## 6. Scenario B1 (`droid_tomato_soup_to_blue_bin`) End-to-End Results
+
+### A. Environment Specification & Generation
+* **LLM Engine**: `anthropic/claude-sonnet-4.5` via OpenRouter.
+* **Convergence**: 1 call, 0 repair iterations, 17.5s wall-clock latency. Passed SHACL-star invariants and factor graph spatial reachability.
+* **Assets**:
+  * Robot: `droid_abs_joint_pos` at `[-0.55, 0.0, 0.0]`.
+  * Background: `maple_table_robolab` at `[-0.25, 0.0, 0.0]`.
+  * Manipuland: `tomato_soup_can_ycb_robolab` in `front_right` sector.
+  * Destination: `bin_b03_vomp_robolab` in `front_left` sector.
+* **Task Definition**: `PickAndPlaceTask` guarded by container proximity bounding: `max_separation: [0.12, 0.12, 0.15]`.
+
+### B. Quantitative Parallel Rollout Results ($N=16$ Envs, $20$ Episodes)
+* **Stage 0 (Objects Settled)**: $20 / 20$ ($100.0\%$).
+* **Stage 1 (Can Lifted off Table)**: **$17 / 20$ ($85.0\%$)**.
+* **Stage 2 (Placed in Bin)**: **Verified True Positive Success** (e.g. `env_id: 15` in $392\text{ steps}$).
+* **Grasp Latency vs. Scenario A1**:
+  * Apple (Spherical): Median grasp step = $417\text{ steps}$ (prolonged fumbling against curved surface).
+  * Tomato Soup Can (Prismatic Cylinder): First grasp step = **$122\text{ steps}$** ($3.4\times$ faster grasp acquisition due to planar jaw surface alignment).
+* **Dual-Condition Verification**: Because `max_separation` was enforced, the successful completion verified both contact force $> 0.1\text{ N}$ and position inside the bin's cavity volume.
+
+
+
 
 

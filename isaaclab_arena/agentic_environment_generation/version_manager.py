@@ -201,6 +201,8 @@ class EnvironmentVersionManager:
             policy_file=str(target_policy_file.relative_to(self.gen_root)) if target_policy_file else None,
         )
 
+        self.generate_readme()
+
         return new_v, new_v_dir
 
     def record_evaluation_metrics(
@@ -234,6 +236,7 @@ class EnvironmentVersionManager:
             json.dump(data, f, indent=2)
 
         self._sync_prov_rdf(data)
+        self.generate_readme()
 
     def _update_lineage_ledger(
         self,
@@ -322,3 +325,196 @@ class EnvironmentVersionManager:
             g.serialize(destination=str(self.lineage_ttl_file), format="turtle")
         except Exception:
             pass
+
+    def generate_readme(self) -> Path:
+        """Generate and save an actionable, developer-friendly README.md for this environment.
+
+        Returns:
+            Path to the written README.md file.
+        """
+        current_v = self.get_latest_version()
+        if current_v <= 0:
+            current_v = 1
+
+        lineage_data: dict[str, Any] = {}
+        if self.lineage_file.exists():
+            try:
+                with open(self.lineage_file, "r", encoding="utf-8") as f:
+                    lineage_data = json.load(f)
+            except Exception:
+                pass
+
+        versions = lineage_data.get("versions", [])
+        latest_entry = next((v for v in reversed(versions) if v.get("version") == current_v), versions[-1] if versions else {})
+        prompt = (
+            latest_entry.get("prompt")
+            or (versions[0].get("prompt") if versions else None)
+            or f"Active Inference environment task definition for {self.env_name}."
+        )
+
+        spec_yaml_name = self.get_spec_yaml_path(current_v).name
+        spec_abs_path = f"/workspaces/isaaclab_arena/generated_envs/{self.env_name}/latest/{spec_yaml_name}"
+        policy_config_abs_path = f"/workspaces/isaaclab_arena/generated_envs/{self.env_name}/latest/policy_config.yaml"
+        eval_output_abs_path = f"/workspaces/isaaclab_arena/eval_output/{self.env_name}"
+
+        # Build lineage table rows
+        table_rows = []
+        if versions:
+            for v_info in versions:
+                v_num = f"`v{v_info.get('version', 1)}`"
+                created = (v_info.get("created_at") or "")[:10] or "N/A"
+                trigger = f"`{v_info.get('trigger', 'generation')}`"
+                remediations = ", ".join(v_info.get("remediations") or []) or "Initial synthesis"
+                eval_info = v_info.get("evaluation")
+                if eval_info and "success_rate" in eval_info:
+                    sr = f"{eval_info['success_rate'] * 100:.1f}% ({eval_info.get('num_episodes', 0)} eps)"
+                else:
+                    sr = "*Pending evaluation*"
+                table_rows.append(f"| {v_num} | {created} | {trigger} | {remediations} | {sr} |")
+        else:
+            now_date = datetime.now(timezone.utc).isoformat()[:10]
+            table_rows.append(f"| `v{current_v}` | {now_date} | `generation` | Initial synthesis | *Pending evaluation* |")
+
+        lineage_table_str = "\n".join(table_rows)
+
+        readme_content = f"""# Environment: `{self.env_name}` (Latest: `v{current_v}`)
+
+> **Prompt / Task Description**:
+> "{prompt}"
+
+---
+
+## 1. Quick Info & Artifact Paths
+- **Canonical Environment Name**: `{self.env_name}`
+- **Active Version Directory**: `generated_envs/{self.env_name}/latest/` (symlinked to `v{current_v}`)
+- **Environment Graph Spec**: `{spec_abs_path}`
+- **Policy Configuration**: `{policy_config_abs_path}`
+- **Evaluation Output Directory**: `{eval_output_abs_path}`
+- **Lineage Ledgers**: [`lineage.json`](./lineage.json) | [`lineage.ttl`](./lineage.ttl) (W3C PROV-O)
+
+---
+
+## 2. API Credentials Setup (LLM Generation & Refinement)
+Before invoking the Active Bayesian environment generation agent or refinement tools, export the API key for your preferred LLM provider:
+
+```bash
+# Option A: Google Gemini
+export GEMINI_API_KEY="your-gemini-api-key"
+
+# Option B: OpenAI
+export OPENAI_API_KEY="your-openai-api-key"
+
+# Option C: NVIDIA NIM / NGC API
+export NV_API_KEY="your-nv-api-key"
+
+# Option D: OpenRouter (Claude Sonnet 4.5, Gemini 3.7, GPT-4o)
+export OPENROUTER_API_KEY="your-openrouter-key"
+export OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
+```
+
+---
+
+## 3. Developer Quick-Run Commands
+
+### A. Zero-Action Physics & Scene Verification
+Verify object placement stability, kinematic reach, and contact settling in Omniverse Kit without running policy inference:
+
+```bash
+# Allow host X11 access (run once on host): xhost +local:docker
+docker exec -it \\
+  -e DISPLAY="$DISPLAY" \\
+  isaaclab_arena-latest /isaac-sim/python.sh \\
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \\
+  --mode build \\
+  --env_graph_spec_yaml {spec_abs_path} \\
+  --num_steps 200 \\
+  --viz kit
+```
+
+### B. Interactive GR00T Policy Rollout (Live Viewport)
+Watch the Franka Panda robot arm execute closed-loop pick-and-place trajectories in real time:
+
+```bash
+# Allow host X11 access (run once on host): xhost +local:docker
+docker exec -it \\
+  -e DISPLAY="$DISPLAY" \\
+  isaaclab_arena-latest /isaac-sim/python.sh \\
+  isaaclab_arena/evaluation/policy_runner.py \\
+  --viz kit \\
+  --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \\
+  --policy_config_yaml_path {policy_config_abs_path} \\
+  --remote_host 127.0.0.1 \\
+  --remote_port 5557 \\
+  --num_steps 2000 \\
+  --enable_cameras \\
+  --env_graph_spec_yaml {spec_abs_path} \\
+  --output_base_dir {eval_output_abs_path}
+```
+
+### C. Scaled Headless Benchmark (High-Throughput Parallel Flywheel)
+Run tensorized parallel environments headlessly to measure empirical success and lift rates:
+
+```bash
+docker exec -it \\
+  isaaclab_arena-latest /isaac-sim/python.sh \\
+  isaaclab_arena/evaluation/policy_runner.py \\
+  --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \\
+  --policy_config_yaml_path {policy_config_abs_path} \\
+  --remote_host 127.0.0.1 \\
+  --remote_port 5557 \\
+  --num_envs 32 \\
+  --num_episodes 32 \\
+  --num_steps 2000 \\
+  --enable_cameras \\
+  --env_graph_spec_yaml {spec_abs_path} \\
+  --output_base_dir {eval_output_abs_path}
+```
+
+### D. Active Inference Auto-Healing
+Automatically analyze failure telemetry from evaluation runs and synthesize the next remediated version `v(N+1)`:
+
+```bash
+docker exec -it \\
+  isaaclab_arena-latest /isaac-sim/python.sh \\
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \\
+  --mode auto_heal \\
+  --env_name {self.env_name}
+```
+
+### E. Conversational Refinement & Prompt Synthesis
+Modify this environment with natural language feedback or generate a new sibling variant:
+
+```bash
+# Refine this environment based on feedback:
+docker exec -it \\
+  -e GEMINI_API_KEY="$GEMINI_API_KEY" \\
+  isaaclab_arena-latest /isaac-sim/python.sh \\
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \\
+  --mode resolve \\
+  --base_spec {spec_abs_path} \\
+  --feedback "Move the destination receptacle 5cm to the left and change the table surface material."
+
+# Re-generate from initial prompt:
+docker exec -it \\
+  -e GEMINI_API_KEY="$GEMINI_API_KEY" \\
+  isaaclab_arena-latest /isaac-sim/python.sh \\
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \\
+  --mode resolve \\
+  --prompt "{prompt}" \\
+  --env_name {self.env_name}
+```
+
+---
+
+## 4. Version History & Remediation Lineage
+| Version | Created Date | Trigger | Remediation / Patch Notes | Benchmark Outcome |
+| :--- | :--- | :--- | :--- | :--- |
+{lineage_table_str}
+"""
+
+        readme_file = self.env_dir / "README.md"
+        with open(readme_file, "w", encoding="utf-8") as f:
+            f.write(readme_content)
+
+        return readme_file
+

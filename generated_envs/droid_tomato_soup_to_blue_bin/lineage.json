@@ -40,7 +40,19 @@
       ],
       "spec_file": "droid_tomato_soup_to_blue_bin/v2/droid_tomato_soup_to_blue_bin.yaml",
       "policy_file": "droid_tomato_soup_to_blue_bin/v2/policy_config.yaml",
-      "evaluation": null
+      "evaluation": {
+        "timestamp": "2026-09-01T16:18:11.811268+00:00",
+        "eval_dir": "/workspaces/isaaclab_arena/eval_output/droid_tomato_soup_to_blue_bin/2026-09-01_16-14-46",
+        "success_rate": 1.0,
+        "object_moved_rate": 1.0,
+        "num_episodes": 1,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 1,
+          "success_rate": 1.0,
+          "object_moved_rate": 1.0
+        }
+      }
     }
   ],
   "current_version": 2,

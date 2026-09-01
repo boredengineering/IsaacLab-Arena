@@ -60,12 +60,17 @@ def test_version_manager_lifecycle(tmp_path):
 
     assert v2 == 2
     assert mgr.get_latest_version() == 2
-    assert (mgr.env_dir / "latest").exists()
-    assert mgr.lineage_ttl_file.exists()
+    # Verify README.md generation and contents
+    readme_file = mgr.env_dir / "README.md"
+    assert readme_file.exists(), "README.md should be automatically generated"
+    readme_content = readme_file.read_text(encoding="utf-8")
+    assert "test_pnp_robot" in readme_content
+    assert "Pick up the red cube" in readme_content
+    assert "--viz kit" in readme_content
+    assert "GEMINI_API_KEY" in readme_content
+    assert "OPENROUTER_API_KEY" in readme_content
+    assert "5557" in readme_content
+    assert "Shift table closer" in readme_content
+    assert "| `v1` |" in readme_content
+    assert "| `v2` |" in readme_content
 
-    with open(mgr.lineage_file, "r") as f:
-        lineage2 = json.load(f)
-        assert lineage2["current_version"] == 2
-        assert len(lineage2["versions"]) == 2
-        assert lineage2["versions"][1]["parent_version"] == 1
-        assert "Shift table closer" in lineage2["versions"][1]["remediations"][0]

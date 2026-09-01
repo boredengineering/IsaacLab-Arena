@@ -4,18 +4,20 @@
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 :droid_tomato_soup_to_blue_bin a arena:EnvironmentFamily ;
-    arena:currentVersion 2 .
+    arena:currentVersion 3 .
 
-:droid_tomato_soup_to_blue_bin_v2 a prov:Entity,
+:droid_tomato_soup_to_blue_bin_v4 a prov:Entity,
         arena:EnvironmentVersion ;
-    prov:generatedAtTime "2026-09-01T04:59:09.223194+00:00"^^xsd:dateTime ;
-    prov:wasDerivedFrom :droid_tomato_soup_to_blue_bin_v1 ;
-    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_tomato_soup_to_blue_bin/2026-09-01_16-14-46"^^xsd:string ;
-    arena:failureDiagnostic "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."^^xsd:string ;
-    arena:remediationAction "Policy: {'num_steps': 2000}"^^xsd:string ;
-    arena:successRate "1.0"^^xsd:float ;
+    prov:generatedAtTime "2026-09-01T18:37:31.897797+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_tomato_soup_to_blue_bin_v3 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_tomato_soup_to_blue_bin/2026-09-01_18-40-38"^^xsd:string ;
+    arena:failureDiagnostic "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."^^xsd:string,
+        "in_flight_slip_inertia: Statistical Funnel Bottleneck (N=52): Robot achieved initial reach and lift in 84.6% of episodes, but conversion to successful placement was only 56.8%. High-lift with incomplete placement indicates in-flight rotational slippage, open-loop drift, or acceleration jerk during transport. Compress execution chunk (from 16 to 8) to enable high-frequency receding horizon feedback."^^xsd:string ;
+    arena:remediationAction "Policy: {'action_chunk_length': 8}"^^xsd:string,
+        "Policy: {'num_steps': 2000}"^^xsd:string ;
+    arena:successRate "0.14285714285714285"^^xsd:float ;
     arena:trigger "active_inference_auto_heal"^^xsd:string ;
-    arena:versionNumber 2 .
+    arena:versionNumber 4 .
 
 :droid_tomato_soup_to_blue_bin_v1 a prov:Entity,
         arena:EnvironmentVersion ;
@@ -24,4 +26,26 @@
     arena:successRate "0.0"^^xsd:float ;
     arena:trigger "initial_generation"^^xsd:string ;
     arena:versionNumber 1 .
+
+:droid_tomato_soup_to_blue_bin_v2 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-01T04:59:09.223194+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_tomato_soup_to_blue_bin_v1 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_tomato_soup_to_blue_bin/2026-09-01_16-34-46"^^xsd:string ;
+    arena:failureDiagnostic "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."^^xsd:string ;
+    arena:remediationAction "Policy: {'num_steps': 2000}"^^xsd:string ;
+    arena:successRate "0.46"^^xsd:float ;
+    arena:trigger "active_inference_auto_heal"^^xsd:string ;
+    arena:versionNumber 2 .
+
+:droid_tomato_soup_to_blue_bin_v3 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-01T17:24:40.105117+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_tomato_soup_to_blue_bin_v2 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_tomato_soup_to_blue_bin/2026-09-01_18-23-40"^^xsd:string ;
+    arena:failureDiagnostic "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."^^xsd:string ;
+    arena:remediationAction "Policy: {'num_steps': 2000}"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "active_inference_auto_heal"^^xsd:string ;
+    arena:versionNumber 3 .
 

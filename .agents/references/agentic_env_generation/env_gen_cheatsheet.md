@@ -148,36 +148,49 @@ docker exec -it isaaclab_arena-latest /isaac-sim/python.sh \
 
 ## 6. Interactive Neo4j Web Browser
 
-* **Web UI URL**: [http://localhost:7475](http://localhost:7475) (or `http://localhost:7474` if standard port)
+* **Web UI URL**: [http://localhost:7475](http://localhost:7475)
 * **Bolt URL**: `bolt://localhost:7688` (host) / `bolt://172.17.0.2:7687` (internal container)
 * **Username**: `neo4j`
 * **Password**: `isaaclab_arena_password`
 
 ### Useful Cypher Visualizer Queries
 
-#### View Entire Environment Scene Graph
+#### 1. View All Environment Graphs & Connected Entities (Objects, Robots, Cameras)
+```cypher
+MATCH (g:EnvironmentGraph)
+OPTIONAL MATCH (g)-[r]-(node)
+RETURN g, r, node LIMIT 100;
+```
+
+#### 2. View Evaluation Runs, Policies & Benchmark Success Rates
+```cypher
+MATCH (e:EvaluationRun)-[r1:EVALUATED_GRAPH]->(g:EnvironmentGraph)
+OPTIONAL MATCH (e)-[r2:USED_POLICY]->(p:Policy)
+RETURN e, r1, g, r2, p;
+```
+
+#### 3. View Environment Derivation Lineage (`v3` ➔ `v2` ➔ `v1`)
+```cypher
+MATCH (v:EnvironmentGraph)-[r:WAS_DERIVED_FROM]->(parent:EnvironmentGraph)
+RETURN v, r, parent;
+```
+
+#### 4. View Spatial Placements, Receptacles & Tabletop Sectors
+```cypher
+MATCH (obj:RigidObject)-[r:PLACED_ON|PLACED_ON_SUB_SURFACE|NEXT_TO|CONTAINS_OBJECT]-(target)
+RETURN obj, r, target;
+```
+
+#### 5. Query Robot Embodiment Stand-off & Kinematic Reach
+```cypher
+MATCH (emb:Embodiment)-[r:STANDS_AT_AFFORDANCE|HAS_EMBODIMENT]-(target)
+RETURN emb, r, target;
+```
+
+#### 6. Global Database Overview (Explore Everything)
 ```cypher
 MATCH (n)-[r]->(m) 
-RETURN n, r, m
-```
-
-#### View Spatial Relations and Continuous Metric Properties
-```cypher
-MATCH (s)-[r:PLACED_ON|INSIDE|STANDS_NEAR]->(t)
-RETURN s, r, t
-```
-
-#### Query Reachability from Unitree G1 to Pick & Place Targets
-```cypher
-MATCH (emb:Embodiment)-[:STANDS_NEAR]->(fixture:Fixture)<-[:PLACED_ON]-(target:RigidObject)
-RETURN emb, fixture, target
-```
-
-#### Check Grounding & Floor Containment
-```cypher
-MATCH (e:EnvironmentGraph)-[:HAS_TERRAIN]->(terrain:Fixture)
-MATCH (obj:RigidObject)-[:PLACED_ON]->(shelf:Fixture)
-RETURN e, terrain, shelf, obj
+RETURN n, r, m LIMIT 150;
 ```
 
 ---

@@ -1,0 +1,30 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:droid_spam_can_to_grey_bin a arena:EnvironmentFamily ;
+    arena:currentVersion 1 .
+
+:droid_spam_can_to_grey_bin_v2 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-01T19:27:53.551156+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_spam_can_to_grey_bin_v1 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_spam_can_to_grey_bin/2026-09-01_19-29-40"^^xsd:string ;
+    arena:failureDiagnostic "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."^^xsd:string,
+        "in_flight_slip_inertia: Statistical Funnel Bottleneck (N=70): Robot achieved initial reach and lift in 97.1% of episodes, but conversion to successful placement was only 26.5%. High-lift with incomplete placement indicates in-flight rotational slippage, open-loop drift, or acceleration jerk during transport. Compress execution chunk (from 16 to 8) to enable high-frequency receding horizon feedback."^^xsd:string ;
+    arena:remediationAction "Policy: {'action_chunk_length': 8}"^^xsd:string,
+        "Policy: {'num_steps': 2000}"^^xsd:string ;
+    arena:successRate "0.19402985074626866"^^xsd:float ;
+    arena:trigger "active_inference_auto_heal"^^xsd:string ;
+    arena:versionNumber 2 .
+
+:droid_spam_can_to_grey_bin_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-01T19:09:17.638315+00:00"^^xsd:dateTime ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_spam_can_to_grey_bin/2026-09-01_19-53-15"^^xsd:string ;
+    arena:remediationAction "Initial synthesis for Scenario B4 with empirical optimal action_chunk_length=16 and container bounding max_separation=[0.12, 0.12, 0.15]."^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 1 .
+

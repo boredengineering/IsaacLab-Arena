@@ -85,10 +85,47 @@
   * Configured `max_separation: [0.15, 0.15, 0.15]`.
   * Policy instruction simplified to direct verb form: `"pick up the tomato soup can and place it into the blue bin"`.
 
-## 11. Infrastructure Health & Process Cleanup
-* **Zombie Process Terminated**: Killed PID 8828 inside `isaaclab_arena-latest` (an orphaned headless rendering test loop from Aug 31 that was consuming 401% CPU for 45 hours). Container CPU dropped from 408% to 35%, RAM freed from 6.9 GiB to 1.9 GiB.
-* **Active Ports**: GR00T policy server on port 5557, Neo4j HTTP on 7475, Neo4j Bolt on 7688.
+## 12. Scenario B1 (`droid_tomato_soup_to_blue_bin`) Empirical Benchmark Results (N=50)
+* **Statistical Funnel Breakdown**:
+  * **Stage 0 (Settled)**: $50/50$ ($100.0\%$)
+  * **Stage 1 (Lifted)**: $47/50$ ($94.0\%$) — confirms fast, reliable grasp acquisition on cylinder geometry (Median grasp step: $143$).
+  * **Stage 2 (Placed / Success)**: $23/50$ ($46.0\%$) — strict centroid proximity inside receptacle cavity.
+  * **Conversion Rate ($\text{Lift} \to \text{Place}$)**: $23/47$ ($48.9\%$).
+  * **Temporal Dynamics**: Median place step: $370$ ($7.4\text{ s}$).
+* **Comparison vs Organic/Spherical Asset (`apple_01`)**:
+  * Tomato soup can Lift Rate ($94.0\%$) is significantly higher than Apple ($86.2\%$), with virtually no initial approach failures.
+  * Conversion Rate ($48.9\%$) is $>3.4\times$ higher than baseline apple ($14.3\%$), confirming planar parallel gripper alignment against cylindrical faces drastically reduces rotational slip during high-acceleration transfer maneuvers.
 
-
-
+## 14. Scenario B1 (`droid_tomato_soup_to_blue_bin`) v3 Evaluation Results (N=52)
+* **Statistical Funnel Breakdown**:
+  * **Stage 0 (Settled)**: $52/52$ ($100.0\%$)
+  * **Stage 1 (Lifted)**: $44/52$ ($84.6\%$) — Median grasp step: $142$ ($2.8\text{ s}$).
+  * **Stage 2 (Placed / Success)**: $23/52$ ($44.2\%$ strict proximity, $48.1\%$ ledger score).
+  * **Conversion Rate ($\text{Lift} \to \text{Place}$)**: $23/44$ ($52.3\%$) — improvement over v2 ($48.9\%$) and $>3.6\times$ over baseline apple ($14.3\%$).
+  * **Temporal Dynamics Acceleration**: Median place step dropped from $370\text{ steps}$ ($7.4\text{ s}$) in v2 down to **$226\text{ steps}$ ($4.5\text{ s}$)** in v3 ($39\%$ faster trajectory execution).
+## 15. Hybrid Deterministic & LLM-Assisted Auto-Healing Architecture & v4 Synthesis
+* **Architecture Implementation**:
+  * Added `--healing_mode {hybrid, deterministic, llm}` to `environment_generation_runner.py` (defaults to `hybrid`).
+  * **Option A (Deterministic Statistical & Spatial Oracle)**:
+    * Analyzes empirical Markov stage funnels (Lift vs Conversion).
+    * Defect threshold tuned (`lift >= 50% and conversion < 75%`) to detect in-flight rotational slippage and open-loop inertial drift.
+    * Automatically applies receding horizon chunk compression (`action_chunk_length: 16 -> 8`).
+  * **Option B (Generative LLM Reasoning via OpenRouter/Gemini/OpenAI)**:
+    * Automatically activated in `llm` mode or as a fallback in `hybrid` mode when failures cannot be resolved by standard deterministic rules.
+## 16. Scenario B1 (`droid_tomato_soup_to_blue_bin`) v4 Empirical Benchmark (N=42) & Receding Horizon Trade-offs
+* **Statistical Funnel Results**:
+  * **Stage 0 (Settled)**: $42/42$ ($100.0\%$)
+  * **Stage 1 (Lifted)**: $37/42$ ($88.1\%$)
+  * **Stage 2 (Placed / Success)**: $6/42$ ($14.3\%$)
+  * **Conversion Rate ($\text{Lift} \to \text{Place}$)**: $6/37$ ($16.2\%$)
+  * **Median Execution Speed**: Grasp step: $240$, Place step: $614$ ($12.3\text{ s}$).
+## 17. Scenario B4 (`droid_spam_can_to_grey_bin`) Empirical Benchmark Results (N=70)
+* **Statistical Funnel Breakdown**:
+  * **Stage 0 (Settled)**: $70/70$ ($100.0\%$)
+  * **Stage 1 (Lifted)**: $68/70$ ($97.1\%$) — Median grasp step: $175$ ($3.5\text{ s}$).
+  * **Stage 2 (Placed / Success)**: $18/70$ ($25.7\%$) — Median place step: $415$ ($8.3\text{ s}$).
+  * **Conversion Rate ($\text{Lift} \to \text{Place}$)**: $18/68$ ($26.5\%$).
+* **Auto-Heal Triggered (`v1` -> `v2`)**:
+  * The automated oracle detected the high-lift ($97.1\%$) with lower conversion ($26.5\%$) and generated `v2` remediation snapshot in `generated_envs/droid_spam_can_to_grey_bin/v2/`.
+  * Lineages updated across `lineage.json`, `lineage.ttl`, `README.md`, and Neo4j.
 

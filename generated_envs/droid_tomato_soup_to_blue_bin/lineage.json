@@ -41,20 +41,78 @@
       "spec_file": "droid_tomato_soup_to_blue_bin/v2/droid_tomato_soup_to_blue_bin.yaml",
       "policy_file": "droid_tomato_soup_to_blue_bin/v2/policy_config.yaml",
       "evaluation": {
-        "timestamp": "2026-09-01T16:18:11.811268+00:00",
-        "eval_dir": "/workspaces/isaaclab_arena/eval_output/droid_tomato_soup_to_blue_bin/2026-09-01_16-14-46",
-        "success_rate": 1.0,
+        "timestamp": "2026-09-01T16:52:46.024225+00:00",
+        "eval_dir": "/workspaces/isaaclab_arena/eval_output/droid_tomato_soup_to_blue_bin/2026-09-01_16-34-46",
+        "success_rate": 0.46,
+        "object_moved_rate": 0.98,
+        "num_episodes": 50,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 50,
+          "success_rate": 0.46,
+          "object_moved_rate": 0.98
+        }
+      }
+    },
+    {
+      "version": 3,
+      "created_at": "2026-09-01T17:24:40.105117+00:00",
+      "trigger": "active_inference_auto_heal",
+      "prompt": null,
+      "parent_version": 2,
+      "remediations": [
+        "Policy: {'num_steps': 2000}"
+      ],
+      "diagnostics": [
+        "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."
+      ],
+      "spec_file": "droid_tomato_soup_to_blue_bin/v3/droid_tomato_soup_to_blue_bin.yaml",
+      "policy_file": "droid_tomato_soup_to_blue_bin/v3/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-09-01T18:27:27.209533+00:00",
+        "eval_dir": "/workspaces/isaaclab_arena/eval_output/droid_tomato_soup_to_blue_bin/2026-09-01_18-23-40",
+        "success_rate": 0.0,
         "object_moved_rate": 1.0,
         "num_episodes": 1,
         "progress_score": 0.0,
         "raw_metrics": {
           "num_episodes": 1,
-          "success_rate": 1.0,
+          "success_rate": 0.0,
           "object_moved_rate": 1.0
+        }
+      }
+    },
+    {
+      "version": 4,
+      "created_at": "2026-09-01T18:37:31.897797+00:00",
+      "trigger": "active_inference_auto_heal",
+      "prompt": null,
+      "parent_version": 3,
+      "remediations": [
+        "Policy: {'action_chunk_length': 8}",
+        "Policy: {'num_steps': 2000}"
+      ],
+      "diagnostics": [
+        "in_flight_slip_inertia: Statistical Funnel Bottleneck (N=52): Robot achieved initial reach and lift in 84.6% of episodes, but conversion to successful placement was only 56.8%. High-lift with incomplete placement indicates in-flight rotational slippage, open-loop drift, or acceleration jerk during transport. Compress execution chunk (from 16 to 8) to enable high-frequency receding horizon feedback.",
+        "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."
+      ],
+      "spec_file": "droid_tomato_soup_to_blue_bin/v4/droid_tomato_soup_to_blue_bin.yaml",
+      "policy_file": "droid_tomato_soup_to_blue_bin/v4/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-09-01T19:02:51.398910+00:00",
+        "eval_dir": "/workspaces/isaaclab_arena/eval_output/droid_tomato_soup_to_blue_bin/2026-09-01_18-40-38",
+        "success_rate": 0.14285714285714285,
+        "object_moved_rate": 0.9761904761904762,
+        "num_episodes": 42,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 42,
+          "success_rate": 0.14285714285714285,
+          "object_moved_rate": 0.9761904761904762
         }
       }
     }
   ],
-  "current_version": 2,
-  "updated_at": "2026-09-01T04:59:09.223194+00:00"
+  "current_version": 3,
+  "updated_at": "2026-09-01T18:37:31.897797+00:00"
 }

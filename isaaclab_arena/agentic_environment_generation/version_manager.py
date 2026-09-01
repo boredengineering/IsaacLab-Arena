@@ -148,10 +148,14 @@ class EnvironmentVersionManager:
         new_v = current_v + 1
         new_v_dir = self.env_dir / f"v{new_v}"
         new_v_dir.mkdir(parents=True, exist_ok=True)
-
         target_spec_file = new_v_dir / f"{self.env_name}.yaml"
         if hasattr(spec_source, "write_yaml"):
             spec_source.write_yaml(target_spec_file)
+        elif hasattr(spec_source, "model_dump"):
+            import yaml
+
+            with open(target_spec_file, "w", encoding="utf-8") as f:
+                yaml.safe_dump(spec_source.model_dump(mode="json", exclude_none=True), f, sort_keys=False)
         elif isinstance(spec_source, (str, Path)) and Path(spec_source).exists():
             shutil.copy(Path(spec_source), target_spec_file)
         elif isinstance(spec_source, dict):

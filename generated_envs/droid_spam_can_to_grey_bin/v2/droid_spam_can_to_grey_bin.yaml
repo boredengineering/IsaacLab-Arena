@@ -1,0 +1,92 @@
+env_name: franka_droid_spam_can_to_grey_bin
+embodiment:
+  id: droid_robot
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.55
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: maple_table
+  registry_name: maple_table_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.25
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+objects:
+- id: spam_can
+  registry_name: spam_can_ycb_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.1263
+      - -0.1396
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: grey_bin
+  registry_name: grey_bin_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.1263
+      - 0.1396
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: maple_table
+  params: {}
+- kind: 'on'
+  subject: spam_can
+  reference: maple_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_right
+- kind: 'on'
+  subject: grey_bin
+  reference: maple_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_left
+- kind: requires_reachability
+  subject: spam_can
+  params: {}
+- kind: requires_reachability
+  subject: grey_bin
+  params: {}
+task:
+  composition: atomic
+  description: Pick up the blue spam can from the front right of the maple table and
+    place it into the grey bin on the front left.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: spam_can
+      destination_location: grey_bin
+      background_scene: maple_table
+      max_separation:
+      - 0.12
+      - 0.12
+      - 0.15

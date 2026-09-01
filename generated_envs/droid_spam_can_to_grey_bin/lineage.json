@@ -1,0 +1,64 @@
+{
+  "env_name": "droid_spam_can_to_grey_bin",
+  "created_at": "2026-09-01T19:09:17.638315+00:00",
+  "versions": [
+    {
+      "version": 1,
+      "created_at": "2026-09-01T19:09:17.638315+00:00",
+      "trigger": "initial_generation",
+      "prompt": "Pick up the blue spam can from the front right of the maple table and place it into the grey bin on the front left.",
+      "parent_version": null,
+      "remediations": [
+        "Initial synthesis for Scenario B4 with empirical optimal action_chunk_length=16 and container bounding max_separation=[0.12, 0.12, 0.15]."
+      ],
+      "diagnostics": [],
+      "spec_file": "droid_spam_can_to_grey_bin/v1/droid_spam_can_to_grey_bin.yaml",
+      "policy_file": "droid_spam_can_to_grey_bin/v1/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-09-01T19:56:48.210089+00:00",
+        "eval_dir": "/workspaces/isaaclab_arena/eval_output/droid_spam_can_to_grey_bin/2026-09-01_19-53-15",
+        "success_rate": 0.0,
+        "object_moved_rate": 0.5,
+        "num_episodes": 2,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 2,
+          "success_rate": 0.0,
+          "object_moved_rate": 0.5
+        }
+      }
+    },
+    {
+      "version": 2,
+      "created_at": "2026-09-01T19:27:53.551156+00:00",
+      "trigger": "active_inference_auto_heal",
+      "prompt": null,
+      "parent_version": 1,
+      "remediations": [
+        "Policy: {'action_chunk_length': 8}",
+        "Policy: {'num_steps': 2000}"
+      ],
+      "diagnostics": [
+        "in_flight_slip_inertia: Statistical Funnel Bottleneck (N=70): Robot achieved initial reach and lift in 97.1% of episodes, but conversion to successful placement was only 26.5%. High-lift with incomplete placement indicates in-flight rotational slippage, open-loop drift, or acceleration jerk during transport. Compress execution chunk (from 16 to 8) to enable high-frequency receding horizon feedback.",
+        "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."
+      ],
+      "spec_file": "droid_spam_can_to_grey_bin/v2/droid_spam_can_to_grey_bin.yaml",
+      "policy_file": "droid_spam_can_to_grey_bin/v2/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-09-01T19:51:00.175960+00:00",
+        "eval_dir": "/workspaces/isaaclab_arena/eval_output/droid_spam_can_to_grey_bin/2026-09-01_19-29-40",
+        "success_rate": 0.19402985074626866,
+        "object_moved_rate": 0.5970149253731343,
+        "num_episodes": 67,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 67,
+          "success_rate": 0.19402985074626866,
+          "object_moved_rate": 0.5970149253731343
+        }
+      }
+    }
+  ],
+  "current_version": 1,
+  "updated_at": "2026-09-01T19:27:53.551156+00:00"
+}

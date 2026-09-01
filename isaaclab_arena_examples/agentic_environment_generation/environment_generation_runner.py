@@ -136,6 +136,17 @@ def add_agentic_env_gen_runner_cli_args(parser: argparse.ArgumentParser) -> None
         help="Path to an existing ArenaEnvGraphSpec YAML to refine or continue from.",
     )
     group.add_argument(
+        "--healing_mode",
+        type=str,
+        choices=("hybrid", "deterministic", "llm"),
+        default="hybrid",
+        help=(
+            "Active Inference self-healing mode: 'deterministic' (Option A: rule-based/spatial factor graph oracle), "
+            "'llm' (Option B: generative LLM reasoning via OpenRouter/Gemini), or "
+            "'hybrid' (Option A first with automatic Option B LLM fallback; default)."
+        ),
+    )
+    group.add_argument(
         "--feedback",
         type=str,
         default=None,
@@ -317,6 +328,11 @@ def run_auto_heal(args_cli: argparse.Namespace) -> Path:
         spec=spec,
         policy_config_path=policy_config_path,
         num_steps_executed=args_cli.num_steps if args_cli.num_steps > 20 else 500,
+        healing_mode=getattr(args_cli, "healing_mode", "hybrid"),
+        api_key=args_cli.api_key,
+        model=args_cli.model,
+        base_url=args_cli.base_url,
+        temperature=args_cli.temperature,
     )
 
     print("\n" + "=" * 70, flush=True)

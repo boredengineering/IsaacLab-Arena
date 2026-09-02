@@ -19,7 +19,21 @@
   * Source manipulands and destination receptacles are placed in opposite sectors (`front_right` vs. `front_left`), maintaining $\ge 28\text{ cm} - 36\text{ cm}$ lateral clearance.
   * This avoids visual feature overlap in wrist/exterior cameras and eliminates gripper-receptacle collisions during pre-grasp.
 
-## 3. Unified Environment & Evaluation Semantic Versioning
+## 3. Environment & Container Setup
+* **Host vs Container Storage Mount Conventions**:
+  * **On the Host**:
+    * Datasets: `$HOME/datasets/isaaclab_arena/<tutorial_name>` (e.g. `$HOME/datasets/isaaclab_arena/locomanipulation_tutorial`, `$HOME/datasets/isaaclab_arena/static_apple_tutorial`)
+    * Models: `$HOME/models/isaaclab_arena/<tutorial_name>` (e.g. `$HOME/models/isaaclab_arena/locomanipulation_tutorial`, `$HOME/models/isaaclab_arena/static_apple_tutorial`)
+  * **Inside the Container**:
+    * Datasets: `/datasets/isaaclab_arena/<tutorial_name>`
+    * Models: `/models/isaaclab_arena/<tutorial_name>`
+    * Workspace / Repo: `/workspaces/IsaacLab-Arena` (or `/workspaces/isaaclab_arena` in sim container)
+* **Devcontainer Persistent State**:
+  * Development container: `isaaclab_arena-latest`
+  * Submodules present: `IsaacLab`, `Isaac-GR00T`
+  * System tools: `uv`, `rerun`, `huggingface_hub`
+
+## 4. Unified Environment & Evaluation Semantic Versioning
 * **Canonical Directory Hierarchy**:
   * Graph specs: `/workspaces/isaaclab_arena/generated_envs/<env_name>/v1, v2, v3, ...` with `latest` symlink pointer.
   * Evaluation runs: `/workspaces/isaaclab_arena/eval_output/<env_name>/v1, v2, v3, ...` with `latest` symlink pointer.
@@ -29,7 +43,7 @@
 * **Automated Telemetry Sync**:
   * `policy_runner.py` automatically synchronizes evaluation metrics (`success_rate`, `object_moved_rate`, `episode_count`) into `lineage.json` and `lineage.ttl` upon rollout completion.
 
-## 4. Foundation Policy Server (Isaac-GR00T)
+## 5. Foundation Policy Server (Isaac-GR00T)
 * **Architecture**: `nvidia/GR00T-N1.6-DROID` with `AlternateVLDiT` diffusion action chunking.
 * **Embodiment Specification**: Must use `droid_abs_joint_pos` with DROID camera and joint space.
 * **Protocol**: ZeroMQ RPC on port `5557` (default port `5556` may be in use by other services).
@@ -128,4 +142,25 @@
 * **Auto-Heal Triggered (`v1` -> `v2`)**:
   * The automated oracle detected the high-lift ($97.1\%$) with lower conversion ($26.5\%$) and generated `v2` remediation snapshot in `generated_envs/droid_spam_can_to_grey_bin/v2/`.
   * Lineages updated across `lineage.json`, `lineage.ttl`, `README.md`, and Neo4j.
+
+
+## 18. Unitree G1 Humanoid Tabletop Manipulation (`GN1x-Tuned-Arena-G1-Static-PickNPlace`) & VLM-in-the-Loop Failure Autopsy
+* **Headless-First Diagnostic Principle**:
+  * Run simulation evaluation completely headless across parallel GPU environments (`--num_envs 4`, `--num_steps 2000`) for maximum throughput (~15–20 steps/s).
+  * Do not rely on persistent GUI viewports. If a milestone stalls or drops to 0%, trigger a multi-frame trajectory rollout (`render_policy_trajectory.py`) and submit keyframes to an LLM/VLM reasoning engine (Anthropic Claude 3.5 Sonnet / Claude 4.5 via OpenRouter).
+* **Embodiment & Action Space Contract**:
+  * The pre-trained checkpoint `nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace` produces **50-dimensional joint actions** (`action_dim: 50`).
+  * Testing `g1_wbc_agile_pink` fails (`ValueError: Invalid action shape, expected: 23, received: 50` and `assert self.num_envs == 1`).
+  * The correct embodiment is **`g1_wbc_agile_joint`** (paired with AGILE lower-body WBC balancing and upper-body joint commands).
+  * Mandatory parameters: `initial_joint_pos: G1_STATIC_OPEN_ARM_JOINT_POS` (pre-clearing arms away from torso), high-friction finger physics (`static_friction=6.0`, `dynamic_friction=5.0`), and `action_chunk_length: 40`.
+* **Empirical Proof on Reference Training Setup**:
+  * Evaluating `galileo_g1_static_pick_and_place` on the exact same policy server (`127.0.0.1:5557`) achieved **100% success (`success_rate: 1.0, object_moved_rate: 1.0`)**, proving server health, joint mapping, and execution fidelity.
+* **Root-Cause of High Tabletop Failure (`v6`)**:
+  * **Vertical Out-Of-Distribution Gap**: In training, the apple was on a low warehouse shelf at $Z = -0.8015\text{ m}$ below the pelvis. On `maple_table`, the tabletop is at $Z = -0.0126\text{ m}$ below the pelvis ($\Delta Z = 80\text{ cm}$ mismatch).
+  * **Kinematic Trajectory Tracking**: The policy reaches forward between steps 0–30, then attempts to plunge downward toward knee level ($Z \approx 0.69\text{ m}$), where it encounters the table plane and aborts/retreats.
+  * **Visual Domain Shift**: Head camera views light-colored wood grain filling the viewport instead of dark metal warehouse racks.
+* **Strategic Roadmap**:
+  * Plan 1 (Production Tabletop): Collect 50–100 teleoperated demonstrations on `maple_table` at chest height and fine-tune GR00T N1.7.
+  * Plan 2 (Zero-Shot Baseline): Lower the table/support surface so $\Delta Z \approx -0.80\text{ m}$ relative to the pelvis.
+  * Plan 3 (Algorithmic Bridge): Implement vertical Cartesian delta compensation in the policy wrapper.
 

@@ -34,28 +34,28 @@ KNOWN_FIXTURE_BOUNDS: dict[str, tuple[float, float, float, float, float]] = {
 
 FIXTURE_SECTOR_BOUNDS: dict[str, dict[str, tuple[float, float, float, float, float]]] = {
     "maple_table_robolab": {
-        "front_center": (0.05, 0.25, -0.10, 0.10, 0.75),
-        "front_left": (0.05, 0.25, -0.35, -0.10, 0.75),
-        "front_right": (0.05, 0.25, 0.05, 0.25, 0.75),
-        "front_half": (0.05, 0.25, -0.35, 0.35, 0.75),
-        "robot_front": (0.05, 0.25, -0.35, 0.35, 0.75),
-        "rear_center": (-0.25, -0.05, -0.10, 0.10, 0.75),
-        "rear_left": (-0.25, -0.05, -0.35, -0.10, 0.75),
-        "rear_right": (-0.25, -0.05, 0.05, 0.25, 0.75),
-        "rear_storage": (-0.25, -0.05, -0.35, 0.35, 0.75),
-        "table_top": (-0.35, 0.35, -0.25, 0.25, 0.75),
+        "front_center": (-0.25, -0.05, -0.08, 0.08, 0.75),
+        "front_left": (-0.25, -0.05, 0.05, 0.24, 0.75),
+        "front_right": (-0.25, -0.05, -0.24, -0.05, 0.75),
+        "front_half": (-0.25, -0.05, -0.24, 0.24, 0.75),
+        "robot_front": (-0.25, -0.05, -0.24, 0.24, 0.75),
+        "rear_center": (0.05, 0.25, -0.08, 0.08, 0.75),
+        "rear_left": (0.05, 0.25, 0.05, 0.24, 0.75),
+        "rear_right": (0.05, 0.25, -0.24, -0.05, 0.75),
+        "rear_storage": (0.05, 0.25, -0.24, 0.24, 0.75),
+        "table_top": (-0.35, 0.35, -0.24, 0.24, 0.75),
     },
     "table": {
-        "front_center": (0.05, 0.25, -0.10, 0.10, 0.75),
-        "front_left": (0.05, 0.25, -0.35, -0.10, 0.75),
-        "front_right": (0.05, 0.25, 0.05, 0.25, 0.75),
-        "front_half": (0.05, 0.25, -0.35, 0.35, 0.75),
-        "robot_front": (0.05, 0.25, -0.35, 0.35, 0.75),
-        "rear_center": (-0.25, -0.05, -0.10, 0.10, 0.75),
-        "rear_left": (-0.25, -0.05, -0.35, -0.10, 0.75),
-        "rear_right": (-0.25, -0.05, 0.05, 0.25, 0.75),
-        "rear_storage": (-0.25, -0.05, -0.35, 0.35, 0.75),
-        "table_top": (-0.35, 0.35, -0.25, 0.25, 0.75),
+        "front_center": (-0.25, -0.05, -0.08, 0.08, 0.75),
+        "front_left": (-0.25, -0.05, 0.05, 0.24, 0.75),
+        "front_right": (-0.25, -0.05, -0.24, -0.05, 0.75),
+        "front_half": (-0.25, -0.05, -0.24, 0.24, 0.75),
+        "robot_front": (-0.25, -0.05, -0.24, 0.24, 0.75),
+        "rear_center": (0.05, 0.25, -0.08, 0.08, 0.75),
+        "rear_left": (0.05, 0.25, 0.05, 0.24, 0.75),
+        "rear_right": (0.05, 0.25, -0.24, -0.05, 0.75),
+        "rear_storage": (0.05, 0.25, -0.24, 0.24, 0.75),
+        "table_top": (-0.35, 0.35, -0.24, 0.24, 0.75),
     },
     "kitchen": {
         "front_center": (-0.15, 0.05, -0.10, 0.10, 0.78),
@@ -209,10 +209,11 @@ def validate_kinematic_reachability(spec: ArenaEnvGraphSpec) -> list[str]:
                     f"Maintain minimum distance of {min_reach:.2f}m."
                 )
             if is_humanoid and len(emb_pos) >= 3 and len(obj_pos) >= 3:
-                rel_z = obj_pos[2] - emb_pos[2]
+                pelvis_z = emb_pos[2] + 0.75 if emb_pos[2] < 0.2 else emb_pos[2]
+                rel_z = obj_pos[2] - pelvis_z
                 if rel_z > 0.45 or rel_z < -0.35:
                     errors.append(
-                        f"[KinematicOracle] Humanoid '{spec.embodiment.id}' pelvis height Z={emb_pos[2]:.2f}m is misaligned "
+                        f"[KinematicOracle] Humanoid '{spec.embodiment.id}' pelvis height Z={pelvis_z:.2f}m is misaligned "
                         f"with object '{obj.id}' at Z={obj_pos[2]:.2f}m (relative delta {rel_z:.2f}m outside reachable range [-0.35m, +0.45m]). "
                         f"Adjust robot standing elevation or workstation surface height."
                     )

@@ -1,0 +1,48 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:g1_tabletop_apple_to_plate a arena:EnvironmentFamily ;
+    arena:currentVersion 4 .
+
+:g1_tabletop_apple_to_plate_v3 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-02T15:35:16.871260+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :g1_tabletop_apple_to_plate_v2 ;
+    arena:failureDiagnostic "vlm_inverted_placement: VLM Critic observed clay plate on the right and apple on the left, contradicting the right-arm task specification."^^xsd:string ;
+    arena:remediationAction "Embodiment: Maintained 50-D g1_wbc_agile_joint with action_horizon=40, action_chunk_length=20."^^xsd:string,
+        "Spatial: Rectified front_right and front_left table sector bounds to REP-103 robot coordinate frame (-Y right, +Y left) as diagnosed by VLM Critic."^^xsd:string ;
+    arena:trigger "vlm_critic_closed_loop_remediation"^^xsd:string ;
+    arena:versionNumber 3 .
+
+:g1_tabletop_apple_to_plate_v4 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-02T15:36:23.821975+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :g1_tabletop_apple_to_plate_v2 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/g1_tabletop_apple_to_plate/2026-09-02_16-41-51"^^xsd:string ;
+    arena:failureDiagnostic "vlm_inverted_placement: VLM Critic observed clay plate on the right and apple on the left, contradicting the right-arm task specification."^^xsd:string ;
+    arena:remediationAction "Embodiment: Maintained 50-D g1_wbc_agile_joint with action_horizon=40, action_chunk_length=20."^^xsd:string,
+        "Spatial: Rectified front_right and front_left table sector bounds to REP-103 robot coordinate frame (-Y right, +Y left) as diagnosed by VLM Critic."^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "vlm_critic_closed_loop_remediation"^^xsd:string ;
+    arena:versionNumber 4 .
+
+:g1_tabletop_apple_to_plate_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-02T15:22:30.414018+00:00"^^xsd:dateTime ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 1 .
+
+:g1_tabletop_apple_to_plate_v2 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-02T15:25:34.185319+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :g1_tabletop_apple_to_plate_v1 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/g1_tabletop_apple_to_plate/diagnostic_render/2026-09-02_15-32-43"^^xsd:string ;
+    arena:failureDiagnostic "action_space_mismatch: Policy server emits 50-D actions, requiring g1_wbc_agile_joint."^^xsd:string ;
+    arena:remediationAction "Embodiment: switch from g1_wbc_agile_pink (23-D PinkIK) to g1_wbc_agile_joint (50-D direct joint targets) for closed-loop GR00T foundation policy evaluation."^^xsd:string,
+        "Policy: action_chunk_length=16, action_horizon=32"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "embodiment_joint_space_alignment"^^xsd:string ;
+    arena:versionNumber 2 .
+

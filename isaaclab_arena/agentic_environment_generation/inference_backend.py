@@ -7,9 +7,11 @@
 
 from __future__ import annotations
 
+import base64
 import copy
 import json
 import os
+from pathlib import Path
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -18,11 +20,66 @@ from openai import OpenAI
 from openai.types.chat import ChatCompletionMessage
 from pydantic import BaseModel
 
+
+def _load_dotenv_if_present() -> None:
+    """Load environment variables from local untracked .env files if present."""
+    search_paths = [
+        Path(".env"),
+        Path("/workspaces/isaaclab_arena/.env"),
+        Path("/workspaces/IsaacLab-Arena/.env"),
+        Path.home() / ".env",
+    ]
+    for p in search_paths:
+        if p.exists():
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            key, val = line.split("=", 1)
+                            key = key.strip()
+                            val = val.strip().strip("\"'")
+                            if key not in os.environ:
+                                os.environ[key] = val
+            except Exception:
+                pass
+
+
 MAX_RETRIES_LIMIT = 10
 
 # TODO(qianl): This is currently Nvidia internal. Switch to public endpoint.
 DEFAULT_BASE_URL = "https://inference-api.nvidia.com"
 DEFAULT_MODEL = "azure/anthropic/claude-opus-4-8"
+
+DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.5"
+
+# Complete Anthropic models catalog supported via OpenRouter
+ANTHROPIC_MODELS: dict[str, str] = {
+    # Flagship Sonnet Models (1M Context)
+    "claude-sonnet-4.5": "anthropic/claude-sonnet-4.5",
+    "claude-sonnet-4.6": "anthropic/claude-sonnet-4.6",
+    "claude-sonnet-5": "anthropic/claude-sonnet-5",
+    "claude-sonnet-4": "anthropic/claude-sonnet-4",
+    # Flagship Opus Reasoning Models (1M Context)
+    "claude-opus-4.5": "anthropic/claude-opus-4.5",
+    "claude-opus-4.6": "anthropic/claude-opus-4.6",
+    "claude-opus-4.7": "anthropic/claude-opus-4.7",
+    "claude-opus-4.8": "anthropic/claude-opus-4.8",
+    "claude-opus-5": "anthropic/claude-opus-5",
+    "claude-opus-4": "anthropic/claude-opus-4",
+    "claude-opus-4.1": "anthropic/claude-opus-4.1",
+    # High-Efficiency Haiku Models (200k Context)
+    "claude-haiku-4.5": "anthropic/claude-haiku-4.5",
+    "claude-3-haiku": "anthropic/claude-3-haiku",
+    # Research / Fable Architectures
+    "claude-fable-5": "anthropic/claude-fable-5",
+    "claude-fable-5.1": "anthropic/claude-fable-5.1",
+    # Floating Latest Pointer Aliases
+    "claude-sonnet-latest": "~anthropic/claude-sonnet-latest",
+    "claude-opus-latest": "~anthropic/claude-opus-latest",
+    "claude-haiku-latest": "~anthropic/claude-haiku-latest",
+    "claude-fable-latest": "~anthropic/claude-fable-latest",
+}
 
 
 @dataclass
@@ -112,6 +169,7 @@ class InferenceBackend:
         assert (
             0 <= max_retries < MAX_RETRIES_LIMIT
         ), f"max_retries must be in [0, {MAX_RETRIES_LIMIT}), got {max_retries}"
+        _load_dotenv_if_present()
         resolved_api_key = (
             api_key
             or os.getenv("OPENROUTER_API_KEY")
@@ -128,7 +186,7 @@ class InferenceBackend:
             or bool(os.getenv("OPENROUTER_BASE_URL"))
         )
         default_endpoint = "https://openrouter.ai/api/v1" if is_openrouter else DEFAULT_BASE_URL
-        default_model_id = (os.getenv("OPENROUTER_MODEL") or "google/gemini-3.7-flash") if is_openrouter else DEFAULT_MODEL
+        default_model_id = (os.getenv("OPENROUTER_MODEL") or DEFAULT_OPENROUTER_MODEL) if is_openrouter else DEFAULT_MODEL
 
         resolved_base_url = (
             base_url
@@ -138,13 +196,19 @@ class InferenceBackend:
             or os.getenv("BASE_URL")
             or default_endpoint
         )
-        resolved_model = (
+        raw_model = (
             model
             or (os.getenv("OPENROUTER_MODEL") if is_openrouter else None)
             or os.getenv("OPENAI_MODEL")
             or os.getenv("NV_MODEL")
             or default_model_id
         )
+        if is_openrouter and raw_model in ANTHROPIC_MODELS:
+            resolved_model = ANTHROPIC_MODELS[raw_model]
+        elif is_openrouter and raw_model.startswith("claude-") and not raw_model.startswith("anthropic/"):
+            resolved_model = f"anthropic/{raw_model}"
+        else:
+            resolved_model = raw_model
         client = OpenAI(api_key=resolved_api_key, base_url=resolved_base_url)
         self._client: OpenAI = client
         self._model = resolved_model
@@ -255,6 +319,52 @@ class InferenceBackend:
             f"Model {self._model!r} failed {request.retry_label} after "
             f"{1 + self._max_retries} attempts. Last error: {last_exc}"
         ) from last_exc
+
+    def multimodal_chat(
+        self, prompt: str, images: dict[str, Any]
+    ) -> str:
+        """Call multimodal LLM with text prompt and images.
+
+        Args:
+            prompt: Inspection / critique instructions.
+            images: Mapping of camera name to raw bytes or file path.
+
+        Returns:
+            Raw text/JSON completion from the model.
+        """
+        content_payload: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+        for cam_name, img_data in images.items():
+            if isinstance(img_data, bytes):
+                b64_str = base64.b64encode(img_data).decode("utf-8")
+                content_payload.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{b64_str}"},
+                })
+            elif isinstance(img_data, (str, os.PathLike)):
+                with open(img_data, "rb") as f:
+                    b64_str = base64.b64encode(f.read()).decode("utf-8")
+                content_payload.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{b64_str}"},
+                })
+
+        resp = self._client.chat.completions.create(
+            model=self._model,
+            messages=[{"role": "user", "content": content_payload}],
+            response_format={"type": "json_object"},
+            temperature=self._temperature,
+            max_tokens=self._max_tokens,
+        )
+        choice = resp.choices[0] if resp.choices else None
+        text = (choice.message.content if choice and choice.message else "") or ""
+        text = text.strip()
+        if text.startswith("```json"):
+            text = text[len("```json") :].strip()
+        elif text.startswith("```"):
+            text = text[len("```") :].strip()
+        if text.endswith("```"):
+            text = text[:-3].strip()
+        return text
 
 
 def build_strict_schema(model_cls: type[BaseModel]) -> dict[str, Any]:

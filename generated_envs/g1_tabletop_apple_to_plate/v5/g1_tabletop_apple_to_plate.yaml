@@ -1,0 +1,178 @@
+env_name: g1_maple_table_apple_to_plate
+embodiment:
+  id: g1_robot
+  registry_name: g1_wbc_agile_joint
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.5406
+      - -0.0757
+      - 0.0014
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: maple_table
+  registry_name: maple_table_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.0
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+objects:
+- id: red_apple
+  registry_name: apple_01_objaverse_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.1045
+      - 0.1994
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: clay_plate
+  registry_name: clay_plates_hot3d_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.1023
+      - -0.0364
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: maple_table
+  params: {}
+- kind: 'on'
+  subject: red_apple
+  reference: maple_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_left
+- kind: 'on'
+  subject: clay_plate
+  reference: maple_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_center
+- kind: requires_reachability
+  subject: red_apple
+  params: {}
+- kind: requires_reachability
+  subject: clay_plate
+  params: {}
+reified_relations:
+- reifier_id: reifier_apple_table
+  source_id: red_apple
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_top
+  surface_sector: front_left
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.03
+    nominal: 0.01
+  required_headroom: 0.3
+  required_friction: 0.65
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.8
+  posterior_entropy: 0.08
+  evidence_sources:
+  - tabletop_spatial_planner
+  - right_arm_reachability
+- reifier_id: reifier_plate_table
+  source_id: clay_plate
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_top
+  surface_sector: front_center
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.03
+    nominal: 0.01
+  required_headroom: 0.25
+  required_friction: 0.7
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.8
+  posterior_entropy: 0.08
+  evidence_sources:
+  - tabletop_spatial_planner
+  - right_arm_reachability
+- reifier_id: reifier_apple_plate_placement
+  source_id: red_apple
+  relation_type: DESTINATION_FOR
+  target_id: clay_plate
+  surface_anchor: plate_center
+  surface_sector: center
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.03
+    nominal: 0.01
+  required_headroom: 0.15
+  required_friction: 0.6
+  kinematic_manifold: pick_and_place_trajectory
+  prior_entropy: 3.2
+  posterior_entropy: 0.05
+  evidence_sources:
+  - task_specification
+  - right_arm_reachability
+task:
+  composition: atomic
+  description: move the apple to the plate
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: red_apple
+      destination_location: clay_plate
+      background_scene: maple_table

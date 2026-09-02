@@ -14,9 +14,18 @@ To ensure high transferability, visual grounding, and execution success in simul
   * Table Standoff: Table origin shifted to `[-0.25, 0.0, 0.0]` so the front edge sits flush with the Franka stand.
   * Near-Field Sweet Spot: All manipulands and receptacles must reside within $d \in [0.25, 0.45]\text{ m}$ ($X_{\text{world}} \in [-0.30, -0.10]\text{ m}, Y_{\text{world}} \in [-0.26, 0.26]\text{ m}$).
   * Downward Camera Frustum: Exterior camera ($45^\circ$ downward tilt) only sees $X_{\text{world}} \in [-0.35, 0.05]\text{ m}$. Anything deeper is out of view.
-* **Humanoids (Unitree G1 / Fourier GR1)**:
-  * Torso/Pelvis Origin: `[0.0, 0.0, 0.0]` standing.
-  * Table Surface: $Z \approx 0.75 - 0.85\text{ m}$ at horizontal standoff $X \in [0.35, 0.60]\text{ m}$.
+* **Unitree G1 Tabletop Humanoid (Static Manipulation)**:
+  * **Robot Base & Stance**: Standing on ground plane at `[-0.45, 0.0, 0.0]` facing $+X$ (`rotation_xyzw: [0.0, 0.0, 0.0, 1.0]`) relative to table centered at `[0.0, 0.0, 0.0]`.
+  * **Table Fixture**: Dedicated tabletop fixture (`maple_table_robolab` or `table_oak_robolab`) with surface deck at $Z_{\text{deck}} = 0.75\text{ m}$. Avoids composite USD room traps (room ceilings at $Z=2.12\text{m}$, multi-meter room offsets, or background prim clutter).
+  * **Ergonomic Pelvis-to-Deck Invariant**: Standing G1 pelvis elevation is $Z \approx 0.75\text{ m}$. Surface deck at $Z = 0.75\text{ m} \implies \Delta Z = (Z_{\text{surface}} - Z_{\text{pelvis}}) \approx 0.0\text{ m}$, cleanly centered in the ergonomic $[-0.15\text{ m}, +0.10\text{ m}]$ manipulation envelope.
+  * **Near-Field Manipulation Sweet Spot**: $X_{\text{table}} \in [-0.15, 0.15]\text{ m}$, $Y_{\text{table}} \in [-0.35, 0.35]\text{ m}$. Bilateral clearance $\ge 25\text{ cm}$ between source and destination targets.
+  * **Head POV Camera Frustum (`robot_head_cam_rgb`)**: Head-mounted $640 \times 480$ RGB camera with downward pitch ($\approx 35^\circ - 45^\circ$). Guarantees both `front_right` and `front_left` sectors project completely within the camera viewport without bottom margin clipping.
+  * **Whole-Body Controller & Embodiment Twins**:
+    * `g1_wbc_agile_pink`: PinkIK kinematics + AGILE balance; used for teleop recording, kinematic reachability, and zero-action visual preflight.
+    * `g1_wbc_agile_joint`: 50-D joint action space + AGILE balance; used for closed-loop foundation policy evaluation (`nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace`).
+  * **Inspire Hand Contact Dynamics**: High-friction overrides (`dynamic_friction = 5.0`, `static_friction = 5.0`) on finger contact pads to prevent grasp slippage during multi-finger lift and transfer.
+* **Fourier GR1 Upper-Body Humanoid**:
+  * Torso/Pelvis Origin: `[0.0, 0.0, 0.0]` standing at table standoff $X \in [0.35, 0.55]\text{ m}$.
   * Bimanual Workspace: Left arm covers $Y \in [0.0, +0.35]\text{ m}$, Right arm covers $Y \in [-0.35, 0.0]\text{ m}$.
 
 ### B. Bilateral Object Clearance & Sector Randomization
@@ -61,17 +70,26 @@ To ensure high transferability, visual grounding, and execution success in simul
 
 ---
 
-### 🤖 Category C: Bimanual & Humanoid Manipulation (Unitree G1)
-* **Embodiment**: `g1_wbc_pink` / `g1_wbc_joint` (Head POV Camera: `robot_head_cam_rgb`)
-* **Background**: `lightwheel_robocasa_kitchen` or `galileo`
-* **Policy Server**: `nvidia/GR00T-N1.7-3B` (Port 5557)
+### 🤖 Category C: Bimanual & Humanoid Manipulation (Unitree G1 Tabletop Suite)
+* **Embodiment Twins**:
+  * `g1_wbc_agile_pink`: Kinematic PinkIK + AGILE balance; used for teleop recording, kinematic reachability, and preflight sanity.
+  * `g1_wbc_agile_joint`: 50-D joint action space + AGILE balance; used for closed-loop foundation policy evaluation.
+* **Background**: `maple_table_robolab` (Pose: `[0.0, 0.0, 0.0]`, Surface Deck $Z = 0.75\text{ m}$)
+* **Robot Base Stance**: Position `[-0.45, 0.0, 0.0]`, Orientation `[0.0, 0.0, 0.0, 1.0]` (facing $+X$ towards table)
+* **Head POV Camera**: `robot_head_cam_rgb` ($640 \times 480$, head-mounted downward pitch $\approx 35^\circ-45^\circ$)
+* **Policy Server**: `nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace` (Port 5557)
+* **Preflight Baseline**: `isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy` (for visual grounding & frustum verification)
 
-| Scenario ID | Test Name | Source Object | Target Container | Source Sector | Target Sector | Prompt / Language Instruction |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **C1** | **G1 Static Apple to Plate** | `apple_02_objaverse_robolab` | `plate_large_vomp_robolab` | `front_right` | `front_left` | *"Reach with the right arm to grasp the apple from the kitchen counter and place it onto the plate."* |
-| **C2** | **G1 Ceramic Mug to Tray** | `ceramic_mug_hot3d_robolab` | `plate_large_vomp_robolab` | `front_right` | `front_left` | *"Pick up the coffee mug by the handle from the counter and place it onto the serving tray."* |
-| **C3** | **G1 Sugar Box Clearing** | `sugar_box_ycb_robolab` | `bin_a06_vomp_robolab` | `front_right` | `front_left` | *"Grasp the sugar box from the front right of the kitchen island and place it into the storage bin."* |
-| **C4** | **G1 Snack Bar to Pail** | `snickers_bar_objaverse_robolab` | `plasticpail_a02_vomp_robolab` | `front_right` | `front_left` | *"Pick up the snack bar from the countertop and drop it into the plastic pail."* |
+| Scenario ID | Test Name | Source Object | Target Container | Source Sector | Target Sector | Primary Affordance | Prompt / Language Instruction |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **C1** | **G1 Tabletop Apple to Plate** | `apple_01_objaverse_robolab` | `clay_plates_hot3d_robolab` | `front_right` | `front_left` | Spherical Fruit (Canonical Baseline) | *"Reach with the right arm to grasp the red apple from the front right of the maple table and place it onto the clay plate on the front left."* |
+| **C2** | **G1 Tabletop Tomato Soup Can to Blue Bin** | `tomato_soup_can_ycb_robolab` | `bin_b03_vomp_robolab` | `front_right` | `front_left` | Prismatic Cylinder (Vertical parallel faces) | *"Use the right arm to grasp the tomato soup can from the front right of the table and place it into the blue bin on the front left."* |
+| **C3** | **G1 Tabletop Spam Can to Grey Bin** | `spam_can_ycb_robolab` | `grey_bin_robolab` | `front_right` | `front_left` | Rectangular Prism (Flat planar faces) | *"Pick up the blue Spam can from the right side of the table with the right hand and deposit it into the grey bin on the left."* |
+| **C4** | **G1 Tabletop Ceramic Mug to Large Plate** | `ceramic_mug_hot3d_robolab` | `plate_large_vomp_robolab` | `front_right` | `front_left` | Asymmetric Cylinder (Handle & rim geometry) | *"Pick up the ceramic coffee mug from the front right of the maple table and set it onto the large plate on the front left."* |
+| **C5** | **G1 Tabletop Mustard Bottle to Storage Bin** | `mustard_bottle_hot3d_robolab` | `bin_b03_vomp_robolab` | `front_right` | `front_left` | Tall Tapered Cylinder (High vertical CoM) | *"Grasp the yellow mustard bottle from the front right section of the table and place it upright into the blue bin on the front left."* |
+| **C6** | **G1 Tabletop Sugar Box to Wooden Bowl** | `sugar_box_ycb_robolab` | `wooden_bowl_hot3d_robolab` | `front_right` | `front_left` | Broad Cuboid (Large palm-wrap envelope) | *"Pick up the yellow sugar box from the right side of the table and place it into the wooden bowl on the left."* |
+| **C7** | **G1 Tabletop Banana to Large Plate** | `banana_ycb_robolab` | `plate_large_vomp_robolab` | `front_right` | `front_left` | Curved Organic (Non-axis-aligned shape) | *"Grasp the yellow banana from the right side of the table and place it onto the large plate on the left."* |
+| **C8** | **G1 Tabletop Left-Arm Mirrored Sorting** | `spam_can_ycb_robolab` | `grey_bin_robolab` | `front_left` | `front_right` | Bilateral Left-Arm Verification | *"Reach with the left arm to grasp the Spam can from the front left of the table and place it into the grey bin on the front right."* |
 
 ---
 
@@ -94,21 +112,75 @@ To ensure high transferability, visual grounding, and execution success in simul
 ### Step 1: Generate Environment Specification via Agentic Active Inference
 To instantiate any scenario from the catalog, run `--mode generate` with semantic versioning:
 
+#### A. Franka DROID Tabletop (Single-Arm):
 ```bash
-docker exec -it   -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY"   isaaclab_arena-latest /isaac-sim/python.sh   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py   --mode generate   --model "anthropic/claude-sonnet-4.5"   --prompt "Create an environment for a Franka robot on a maple table where the task is to pick up the red apple from the front right and place it into the wooden bowl on the front left. Position the maple table at [-0.25, 0.0, 0.0] and use droid_abs_joint_pos at [-0.55, 0.0, 0.0]."   --env_name droid_apple_to_wooden_bowl
+docker exec -it \
+  -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
+  isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+  --mode generate \
+  --model "anthropic/claude-sonnet-4.5" \
+  --prompt "Create an environment for a Franka robot on a maple table where the task is to pick up the red apple from the front right and place it into the wooden bowl on the front left. Position the maple table at [-0.25, 0.0, 0.0] and use droid_abs_joint_pos at [-0.55, 0.0, 0.0]." \
+  --env_name droid_apple_to_wooden_bowl
 ```
 
-### Step 2: Launch Interactive Omniverse Kit Evaluation
-Evaluate the generated versioned environment in closed-loop with the policy server:
+#### B. Unitree G1 Tabletop Static Manipulation (Category C):
+```bash
+docker exec -it \
+  -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
+  isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+  --mode generate \
+  --model "anthropic/claude-sonnet-4.5" \
+  --prompt "Create an environment for a Unitree G1 humanoid robot on a maple table where the task is to reach with the right arm to grasp the red apple from the front right of the table and place it onto the clay plate on the front left. Use embodiment g1_wbc_agile_pink standing at [-0.45, 0.0, 0.0] facing the table at [0.0, 0.0, 0.0], with head camera robot_head_cam_rgb." \
+  --env_name g1_tabletop_apple_to_plate
+```
+
+### Step 2: Preflight Visual Grounding & Frustum Verification (`ZeroActionPolicy`)
+Prior to full rollout, run a rapid visual sanity check using `--viz kit` to inspect the robot's head camera POV (`robot_head_cam_rgb`) and confirm that target objects rest securely on the tabletop ($Z = 0.75\text{ m}$) within line-of-sight:
 
 ```bash
 xhost +local:root 2>/dev/null || xhost +local:docker 2>/dev/null
 
-docker exec -it   -e DISPLAY="$DISPLAY"   isaaclab_arena-latest /isaac-sim/python.sh   isaaclab_arena/evaluation/policy_runner.py   --viz kit   --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy   --policy_config_yaml_path /workspaces/isaaclab_arena/generated_envs/droid_apple_to_wooden_bowl/latest/policy_config.yaml   --remote_host 127.0.0.1   --remote_port 5557   --num_steps 2000   --enable_cameras   --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/droid_apple_to_wooden_bowl/latest/droid_apple_to_wooden_bowl.yaml   --output_base_dir /workspaces/isaaclab_arena/eval_output/droid_apple_to_wooden_bowl
+docker exec -it \
+  -e DISPLAY="$DISPLAY" \
+  isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena/evaluation/policy_runner.py \
+  --viz kit \
+  --policy_type isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy \
+  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/g1_tabletop_apple_to_plate/latest/g1_tabletop_apple_to_plate.yaml \
+  --num_envs 1 \
+  --num_steps 500 \
+  --enable_cameras \
+  --output_base_dir /workspaces/isaaclab_arena/eval_output/g1_tabletop_apple_to_plate/preflight
 ```
 
+### Step 3: Closed-Loop Foundation Policy Evaluation (`Isaac-GR00T`)
+Evaluate the generated versioned environment in closed-loop against the static manipulation checkpoint:
+
 ```bash
-docker exec -it   isaaclab_arena-latest /isaac-sim/python.sh   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py   --mode auto_heal   --env_name droid_apple_to_wooden_bowl
+docker exec -it \
+  -e DISPLAY="$DISPLAY" \
+  isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena/evaluation/policy_runner.py \
+  --viz kit \
+  --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
+  --policy_config_yaml_path /workspaces/isaaclab_arena/generated_envs/g1_tabletop_apple_to_plate/latest/policy_config.yaml \
+  --remote_host 127.0.0.1 \
+  --remote_port 5557 \
+  --num_steps 2000 \
+  --enable_cameras \
+  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/g1_tabletop_apple_to_plate/latest/g1_tabletop_apple_to_plate.yaml \
+  --output_base_dir /workspaces/isaaclab_arena/eval_output/g1_tabletop_apple_to_plate/eval
+```
+
+### Step 4: Active Inference Auto-Healing Flywheel
+```bash
+docker exec -it \
+  isaaclab_arena-latest /isaac-sim/python.sh \
+  isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+  --mode auto_heal \
+  --env_name g1_tabletop_apple_to_plate
 ```
 
 ---

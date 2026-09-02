@@ -128,3 +128,8 @@ eval_output/isolated_thumbnails/
 eval_output/*.png
 eval_output/*.mp4
 
+# Local environment variables & secrets
+.env
+.env.*
+
+

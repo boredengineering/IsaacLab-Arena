@@ -127,9 +127,16 @@ def instantiate_assets_from_spec(
         parsed_emb_pose = _parse_pose_data(emb_pose_data)
         if parsed_emb_pose is not None:
             embodiment_params["initial_pose"] = parsed_emb_pose
-    assets_by_node_id[graph_spec.embodiment.id] = asset_registry.get_asset_by_name(graph_spec.embodiment.registry_name)(
+    initial_joint_pos = embodiment_params.pop("initial_joint_pos", None)
+    finger_friction_params = embodiment_params.pop("finger_contact_friction", None)
+    embodiment_instance = asset_registry.get_asset_by_name(graph_spec.embodiment.registry_name)(
         **embodiment_params
     )
+    if initial_joint_pos is not None and hasattr(embodiment_instance, "set_joint_initial_pos"):
+        embodiment_instance.set_joint_initial_pos(initial_joint_pos)
+    if finger_friction_params is not None and hasattr(embodiment_instance, "set_finger_contact_friction"):
+        embodiment_instance.set_finger_contact_friction(**finger_friction_params)
+    assets_by_node_id[graph_spec.embodiment.id] = embodiment_instance
 
     bg_params = dict(graph_spec.background.params)
     bg_pose_data = bg_params.pop("initial_pose", None)

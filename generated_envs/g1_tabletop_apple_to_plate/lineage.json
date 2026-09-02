@@ -1,0 +1,95 @@
+{
+  "env_name": "g1_tabletop_apple_to_plate",
+  "created_at": "2026-09-02T15:22:30.414018+00:00",
+  "versions": [
+    {
+      "version": 1,
+      "created_at": "2026-09-02T15:22:30.414018+00:00",
+      "trigger": "initial_generation",
+      "prompt": "Create an environment for a Unitree G1 humanoid robot on a maple table where the task is to reach with the right arm to grasp the red apple from the front right of the table and place it onto the clay plate on the front left. Position the maple table at [0.0, 0.0, 0.0] and use embodiment g1_wbc_agile_pink standing at [-0.45, 0.0, 0.0] facing the table, with head camera robot_head_cam_rgb.",
+      "parent_version": null,
+      "remediations": [],
+      "diagnostics": [],
+      "spec_file": "g1_tabletop_apple_to_plate/v1/g1_tabletop_apple_to_plate.yaml",
+      "policy_file": "g1_tabletop_apple_to_plate/v1/policy_config.yaml",
+      "evaluation": null
+    },
+    {
+      "version": 2,
+      "created_at": "2026-09-02T15:25:34.185319+00:00",
+      "trigger": "embodiment_joint_space_alignment",
+      "prompt": null,
+      "parent_version": 1,
+      "remediations": [
+        "Embodiment: switch from g1_wbc_agile_pink (23-D PinkIK) to g1_wbc_agile_joint (50-D direct joint targets) for closed-loop GR00T foundation policy evaluation.",
+        "Policy: action_chunk_length=16, action_horizon=32"
+      ],
+      "diagnostics": [
+        "action_space_mismatch: Policy server emits 50-D actions, requiring g1_wbc_agile_joint."
+      ],
+      "spec_file": "g1_tabletop_apple_to_plate/v2/g1_tabletop_apple_to_plate.yaml",
+      "policy_file": "g1_tabletop_apple_to_plate/v2/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-09-02T15:33:00.019660+00:00",
+        "eval_dir": "/workspaces/isaaclab_arena/eval_output/g1_tabletop_apple_to_plate/diagnostic_render/2026-09-02_15-32-43",
+        "success_rate": 0.0,
+        "object_moved_rate": NaN,
+        "num_episodes": 0,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 0,
+          "success_rate": 0.0,
+          "object_moved_rate": NaN
+        }
+      }
+    },
+    {
+      "version": 3,
+      "created_at": "2026-09-02T15:35:16.871260+00:00",
+      "trigger": "vlm_critic_closed_loop_remediation",
+      "prompt": null,
+      "parent_version": 2,
+      "remediations": [
+        "Spatial: Rectified front_right and front_left table sector bounds to REP-103 robot coordinate frame (-Y right, +Y left) as diagnosed by VLM Critic.",
+        "Embodiment: Maintained 50-D g1_wbc_agile_joint with action_horizon=40, action_chunk_length=20."
+      ],
+      "diagnostics": [
+        "vlm_inverted_placement: VLM Critic observed clay plate on the right and apple on the left, contradicting the right-arm task specification."
+      ],
+      "spec_file": "g1_tabletop_apple_to_plate/v3/g1_tabletop_apple_to_plate.yaml",
+      "policy_file": "g1_tabletop_apple_to_plate/v3/policy_config.yaml",
+      "evaluation": null
+    },
+    {
+      "version": 4,
+      "created_at": "2026-09-02T15:36:23.821975+00:00",
+      "trigger": "vlm_critic_closed_loop_remediation",
+      "prompt": null,
+      "parent_version": 2,
+      "remediations": [
+        "Spatial: Rectified front_right and front_left table sector bounds to REP-103 robot coordinate frame (-Y right, +Y left) as diagnosed by VLM Critic.",
+        "Embodiment: Maintained 50-D g1_wbc_agile_joint with action_horizon=40, action_chunk_length=20."
+      ],
+      "diagnostics": [
+        "vlm_inverted_placement: VLM Critic observed clay plate on the right and apple on the left, contradicting the right-arm task specification."
+      ],
+      "spec_file": "g1_tabletop_apple_to_plate/v4/g1_tabletop_apple_to_plate.yaml",
+      "policy_file": "g1_tabletop_apple_to_plate/v4/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-09-02T16:44:25.465088+00:00",
+        "eval_dir": "/workspaces/isaaclab_arena/eval_output/g1_tabletop_apple_to_plate/2026-09-02_16-41-51",
+        "success_rate": 0.0,
+        "object_moved_rate": 0.0,
+        "num_episodes": 2,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 2,
+          "success_rate": 0.0,
+          "object_moved_rate": 0.0
+        }
+      }
+    }
+  ],
+  "current_version": 4,
+  "updated_at": "2026-09-02T15:36:23.821975+00:00"
+}

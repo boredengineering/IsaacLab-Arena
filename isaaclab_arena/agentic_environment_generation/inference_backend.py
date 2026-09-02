@@ -185,7 +185,7 @@ class InferenceBackend:
         last_exc: Exception | None = None
         for attempt in range(1 + self._max_retries):
             if attempt > 0:
-                print(f"[{request.retry_label}] retry {attempt}/{self._max_retries} after: {last_exc}", flush=True)
+                print(f"[{request.retry_label}] retry {attempt}/{self._max_retries} after: {type(last_exc).__name__}: {last_exc}", flush=True)
             start_time = time.perf_counter()
             try:
                 resp = self._client.chat.completions.create(

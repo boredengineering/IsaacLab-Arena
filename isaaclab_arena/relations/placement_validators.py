@@ -170,19 +170,54 @@ class OnRelationValidator(PlacementValidator):
                                 )
                             return False
                 # 2) Checking that the child lies within the parent's xy
-                if (
-                    child_world.min_point[0, 0] < parent_world.min_point[0, 0] + m
-                    or child_world.max_point[0, 0] > parent_world.max_point[0, 0] - m
-                    or child_world.min_point[0, 1] < parent_world.min_point[0, 1] + m
-                    or child_world.max_point[0, 1] > parent_world.max_point[0, 1] - m
-                ):
-                    if self._params.verbose:
-                        print(f"On relation: '{obj.name}' XY outside parent (retrying)")
-                    return False
+                sec_name = getattr(rel, "surface_sector", None) or getattr(rel, "surface_anchor", None)
+                if sec_name is not None:
+                    from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import get_fixture_sector_bounds
+
+                    parent_reg_name = getattr(parent, "registry_name", getattr(parent, "name", ""))
+                    sec_bounds = get_fixture_sector_bounds(parent_reg_name, sec_name)
+                    sec_min_x = sec_bounds[0] + positions[parent][0]
+                    sec_max_x = sec_bounds[1] + positions[parent][0]
+                    sec_min_y = sec_bounds[2] + positions[parent][1]
+                    sec_max_y = sec_bounds[3] + positions[parent][1]
+                    if (
+                        child_world.min_point[0, 0] < sec_min_x - m
+                        or child_world.max_point[0, 0] > sec_max_x + m
+                        or child_world.min_point[0, 1] < sec_min_y - m
+                        or child_world.max_point[0, 1] > sec_max_y + m
+                    ):
+                        if self._params.verbose:
+                            print(f"On relation: '{obj.name}' XY outside sector '{sec_name}' (retrying)")
+                        return False
+                else:
+                    if (
+                        child_world.min_point[0, 0] < parent_world.min_point[0, 0] + m
+                        or child_world.max_point[0, 0] > parent_world.max_point[0, 0] - m
+                        or child_world.min_point[0, 1] < parent_world.min_point[0, 1] + m
+                        or child_world.max_point[0, 1] > parent_world.max_point[0, 1] - m
+                    ):
+                        if self._params.verbose:
+                            print(f"On relation: '{obj.name}' XY outside parent (retrying)")
+                        return False
+
                 # 3) Checking that the child lies within an acceptable z-range.
                 parent_local_top_z: float = parent_bbox.max_point[0, 2].item()
                 child_local_bottom_z: float = child_bbox.min_point[0, 2].item()
-                parent_top_z = parent_local_top_z + positions[parent][2]
+
+                if getattr(rel, "nominal_height", None) is not None:
+                    parent_top_z = float(rel.nominal_height)
+                elif sec_name is not None:
+                    from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import get_fixture_sector_bounds
+
+                    parent_reg_name = getattr(parent, "registry_name", getattr(parent, "name", ""))
+                    sec_bounds = get_fixture_sector_bounds(parent_reg_name, sec_name)
+                    if sec_bounds[4] != 0.0:
+                        parent_top_z = sec_bounds[4] + positions[parent][2]
+                    else:
+                        parent_top_z = parent_local_top_z + positions[parent][2]
+                else:
+                    parent_top_z = parent_local_top_z + positions[parent][2]
+
                 clearance_m = rel.clearance_m
                 child_bottom_z = child_local_bottom_z + positions[obj][2]
                 eps_z = self._params.on_relation_z_tolerance_m

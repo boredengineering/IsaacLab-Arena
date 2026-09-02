@@ -1,0 +1,142 @@
+env_name: g1_kitchen_apple_to_plate
+embodiment:
+  id: g1_robot
+  registry_name: g1_wbc_agile_pink
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.60
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: kitchen_island
+  registry_name: kitchen
+  params: {}
+objects:
+- id: red_apple
+  registry_name: apple_01_objaverse_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.05
+      - 0.0
+      - 0.78
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: destination_plate
+  registry_name: clay_plates_hot3d_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.05
+      - 0.20
+      - 0.78
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: kitchen_island
+  params: {}
+- kind: 'on'
+  subject: red_apple
+  reference: kitchen_island
+  params:
+    surface_anchor: counter_top
+    surface_sector: front_center
+    nominal_height: 0.78
+- kind: 'on'
+  subject: destination_plate
+  reference: kitchen_island
+  params:
+    surface_anchor: counter_top
+    surface_sector: front_left
+    nominal_height: 0.78
+- kind: requires_reachability
+  subject: red_apple
+  params: {}
+- kind: requires_reachability
+  subject: destination_plate
+  params: {}
+reified_relations:
+- reifier_id: reifier_apple_counter
+  source_id: red_apple
+  relation_type: PLACED_ON
+  target_id: kitchen_island
+  surface_anchor: counter_top
+  surface_sector: front_center
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.03
+    nominal: 0.01
+  required_headroom: 0.25
+  required_friction: 0.65
+  kinematic_manifold: countertop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - countertop_spatial_planner
+  - right_arm_reachability
+  - head_camera_fov
+- reifier_id: reifier_plate_counter
+  source_id: destination_plate
+  relation_type: PLACED_ON
+  target_id: kitchen_island
+  surface_anchor: counter_top
+  surface_sector: front_left
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.03
+    nominal: 0.01
+  required_headroom: 0.2
+  required_friction: 0.7
+  kinematic_manifold: countertop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - countertop_spatial_planner
+  - right_arm_reachability
+  - head_camera_fov
+task:
+  composition: atomic
+  description: Unitree G1 humanoid robot grasps the red apple from the kitchen counter top and places it onto the clay plate.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: red_apple
+      destination_location: destination_plate
+      background_scene: kitchen_island

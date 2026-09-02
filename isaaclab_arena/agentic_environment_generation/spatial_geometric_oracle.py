@@ -34,33 +34,36 @@ KNOWN_FIXTURE_BOUNDS: dict[str, tuple[float, float, float, float, float]] = {
 
 FIXTURE_SECTOR_BOUNDS: dict[str, dict[str, tuple[float, float, float, float, float]]] = {
     "maple_table_robolab": {
-        "front_center": (0.05, 0.25, -0.10, 0.10, 0.0),
-        "front_left": (0.05, 0.25, -0.35, -0.10, 0.0),
-        "front_right": (0.05, 0.25, 0.05, 0.25, 0.0),
-        "front_half": (0.05, 0.25, -0.35, 0.35, 0.0),
-        "robot_front": (0.05, 0.25, -0.35, 0.35, 0.0),
-        "rear_center": (-0.25, -0.05, -0.10, 0.10, 0.0),
-        "rear_left": (-0.25, -0.05, -0.35, -0.10, 0.0),
-        "rear_right": (-0.25, -0.05, 0.05, 0.25, 0.0),
-        "rear_storage": (-0.25, -0.05, -0.35, 0.35, 0.0),
+        "front_center": (0.05, 0.25, -0.10, 0.10, 0.75),
+        "front_left": (0.05, 0.25, -0.35, -0.10, 0.75),
+        "front_right": (0.05, 0.25, 0.05, 0.25, 0.75),
+        "front_half": (0.05, 0.25, -0.35, 0.35, 0.75),
+        "robot_front": (0.05, 0.25, -0.35, 0.35, 0.75),
+        "rear_center": (-0.25, -0.05, -0.10, 0.10, 0.75),
+        "rear_left": (-0.25, -0.05, -0.35, -0.10, 0.75),
+        "rear_right": (-0.25, -0.05, 0.05, 0.25, 0.75),
+        "rear_storage": (-0.25, -0.05, -0.35, 0.35, 0.75),
+        "table_top": (-0.35, 0.35, -0.25, 0.25, 0.75),
     },
     "table": {
-        "front_center": (0.05, 0.25, -0.10, 0.10, 0.0),
-        "front_left": (0.05, 0.25, -0.35, -0.10, 0.0),
-        "front_right": (0.05, 0.25, 0.05, 0.25, 0.0),
-        "front_half": (0.05, 0.25, -0.35, 0.35, 0.0),
-        "robot_front": (0.05, 0.25, -0.35, 0.35, 0.0),
-        "rear_center": (-0.25, -0.05, -0.10, 0.10, 0.0),
-        "rear_left": (-0.25, -0.05, -0.35, -0.10, 0.0),
-        "rear_right": (-0.25, -0.05, 0.05, 0.25, 0.0),
-        "rear_storage": (-0.25, -0.05, -0.35, 0.35, 0.0),
+        "front_center": (0.05, 0.25, -0.10, 0.10, 0.75),
+        "front_left": (0.05, 0.25, -0.35, -0.10, 0.75),
+        "front_right": (0.05, 0.25, 0.05, 0.25, 0.75),
+        "front_half": (0.05, 0.25, -0.35, 0.35, 0.75),
+        "robot_front": (0.05, 0.25, -0.35, 0.35, 0.75),
+        "rear_center": (-0.25, -0.05, -0.10, 0.10, 0.75),
+        "rear_left": (-0.25, -0.05, -0.35, -0.10, 0.75),
+        "rear_right": (-0.25, -0.05, 0.05, 0.25, 0.75),
+        "rear_storage": (-0.25, -0.05, -0.35, 0.35, 0.75),
+        "table_top": (-0.35, 0.35, -0.25, 0.25, 0.75),
     },
     "kitchen": {
-        "front_center": (-0.15, 0.15, -0.15, 0.15, 0.75),
-        "front_left": (-0.35, -0.10, 0.05, 0.25, 0.75),
-        "front_right": (0.10, 0.35, -0.25, -0.05, 0.75),
-        "counter_top": (-0.35, 0.35, -0.25, 0.25, 0.75),
-        "island": (-0.35, 0.35, -0.25, 0.25, 0.75),
+        "front_center": (-0.15, 0.05, -0.10, 0.10, 0.78),
+        "front_left": (-0.15, 0.05, 0.10, 0.30, 0.78),
+        "front_right": (-0.15, 0.05, -0.30, -0.10, 0.78),
+        "center": (-0.15, 0.15, -0.15, 0.15, 0.78),
+        "counter_top": (-0.35, 0.35, -0.35, 0.35, 0.78),
+        "island": (-0.35, 0.35, -0.35, 0.35, 0.78),
     },
     "galileo_locomanip": {
         "front_center": (0.50, 0.65, 0.05, 0.25, -0.03),
@@ -97,22 +100,30 @@ def get_fixture_sector_bounds(
     sector_name: str | None = None,
 ) -> tuple[float, float, float, float, float]:
     """Retrieve functional sector bounds [min_x, max_x, min_y, max_y, z_deck] on a fixture."""
+    known = get_known_fixture_bounds(fixture_name)
     if not sector_name:
-        return get_known_fixture_bounds(fixture_name)
+        return known
 
     fixture_lower = fixture_name.lower()
     sector_lower = sector_name.lower()
 
     for fix_key, sectors in FIXTURE_SECTOR_BOUNDS.items():
         if fix_key in fixture_lower:
+            matched_bounds = None
             if sector_lower in sectors:
-                return sectors[sector_lower]
-            for sec_key, sec_bounds in sectors.items():
-                if sec_key in sector_lower or sector_lower in sec_key:
-                    return sec_bounds
+                matched_bounds = sectors[sector_lower]
+            else:
+                for sec_key, sec_bounds in sectors.items():
+                    if sec_key in sector_lower or sector_lower in sec_key:
+                        matched_bounds = sec_bounds
+                        break
+            if matched_bounds:
+                if matched_bounds[4] == 0.0 and known[4] != 0.0:
+                    return (matched_bounds[0], matched_bounds[1], matched_bounds[2], matched_bounds[3], known[4])
+                return matched_bounds
 
     # Default fallback to overall fixture bounds
-    return get_known_fixture_bounds(fixture_name)
+    return known
 
 
 def validate_support_containment(spec: ArenaEnvGraphSpec) -> list[str]:

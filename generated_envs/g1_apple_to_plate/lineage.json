@@ -90,8 +90,13 @@
         "eval_dir": "eval_output/g1_apple_to_plate/2026-09-02_02-52-20",
         "success_rate": 0.0,
         "object_moved_rate": 1.0,
-        "num_episodes": 2,
         "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 2,
+          "success_rate": 0.0,
+          "object_moved_rate": 1.0
+        }
+      }
     },
     {
       "version": 5,

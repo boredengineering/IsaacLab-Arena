@@ -196,6 +196,8 @@ class On(Relation):
         edge_margin_m: float = DEFAULT_ON_EDGE_MARGIN_M,
         surface_sector: str | None = None,
         sector_bounds: tuple[float, float, float, float] | None = None,
+        surface_anchor: str | None = None,
+        nominal_height: float | None = None,
     ):
         """
         Args:
@@ -207,6 +209,8 @@ class On(Relation):
                 far from the rim.
             surface_sector: Designated surface section (e.g. 'front_center', 'front_left', 'front_right').
             sector_bounds: Explicit (min_x, max_x, min_y, max_y) section boundary.
+            surface_anchor: Semantic fixture anchor on composite parent (e.g. 'counter_top', 'island').
+            nominal_height: Explicit surface deck Z height in parent/world frame.
         """
         super().__init__(parent, relation_loss_weight)
         assert clearance_m >= 0.0, f"Clearance must be non-negative, got {clearance_m}"
@@ -215,6 +219,8 @@ class On(Relation):
         self.edge_margin_m = edge_margin_m
         self.surface_sector = surface_sector
         self.sector_bounds = sector_bounds
+        self.surface_anchor = surface_anchor
+        self.nominal_height = nominal_height
 
 
 @register_object_relation

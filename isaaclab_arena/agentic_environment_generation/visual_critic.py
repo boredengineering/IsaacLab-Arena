@@ -200,7 +200,10 @@ class VisualSceneCritic:
             if any(k in obj_lower for k in ("shelf", "shelving", "shelv", "table", "counter", "desk", "rack", "cabinet", "stand")):
                 continue
 
-            pos = obj.params.get("initial_pose", {}).get("position_xyz") if obj.params else None
+            if not obj.params or "initial_pose" not in obj.params:
+                continue
+
+            pos = obj.params.get("initial_pose", {}).get("position_xyz")
             if not pos or len(pos) < 3:
                 continue
 
@@ -308,7 +311,10 @@ class PhysXPreflightCritic:
             if is_furniture:
                 continue
 
-            pos = obj.params.get("initial_pose", {}).get("position_xyz") if obj.params else None
+            if not obj.params or "initial_pose" not in obj.params:
+                continue
+
+            pos = obj.params.get("initial_pose", {}).get("position_xyz")
             if pos and len(pos) >= 3:
                 _, _, _, nominal_z = resolve_surface_anchor_bounding_box(bg_reg)
                 if pos[2] > nominal_z + 0.30:

@@ -529,29 +529,32 @@ class ObjectPlacer:
         parent_min_y = parent_bbox.min_point[0, 1]
         parent_max_y = parent_bbox.max_point[0, 1]
 
+        sec_name = getattr(on_relation, "surface_sector", None) or getattr(on_relation, "surface_anchor", None)
+        surface_z = float(parent_bbox.max_point[0, 2])
+
         # Restrict sampling to designated surface sector / section bounds if present
         if getattr(on_relation, "sector_bounds", None) is not None:
             sb = on_relation.sector_bounds
             parent_min_x, parent_max_x = float(sb[0]), float(sb[1])
             parent_min_y, parent_max_y = float(sb[2]), float(sb[3])
-        elif getattr(on_relation, "surface_sector", None) is not None:
+        elif sec_name is not None:
             from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import get_fixture_sector_bounds
 
             parent_reg_name = getattr(on_relation.parent, "registry_name", getattr(on_relation.parent, "name", ""))
-            sec_bounds = get_fixture_sector_bounds(parent_reg_name, on_relation.surface_sector)
-            # Offset by parent anchor position if anchor is translated
-            parent_init_pose = (
-                on_relation.parent.get_initial_pose()
-                if hasattr(on_relation.parent, "get_initial_pose")
-                else None
-            )
-            offset_x = float(parent_init_pose.position_xyz[0]) if parent_init_pose is not None else 0.0
-            offset_y = float(parent_init_pose.position_xyz[1]) if parent_init_pose is not None else 0.0
+            sec_bounds = get_fixture_sector_bounds(parent_reg_name, sec_name)
+            parent_center_x = float((parent_bbox.min_point[0, 0] + parent_bbox.max_point[0, 0]) / 2)
+            parent_center_y = float((parent_bbox.min_point[0, 1] + parent_bbox.max_point[0, 1]) / 2)
+            offset_z = float(parent_bbox.min_point[0, 2])
 
-            parent_min_x = sec_bounds[0] + offset_x
-            parent_max_x = sec_bounds[1] + offset_x
-            parent_min_y = sec_bounds[2] + offset_y
-            parent_max_y = sec_bounds[3] + offset_y
+            parent_min_x = sec_bounds[0] + parent_center_x
+            parent_max_x = sec_bounds[1] + parent_center_x
+            parent_min_y = sec_bounds[2] + parent_center_y
+            parent_max_y = sec_bounds[3] + parent_center_y
+            if sec_bounds[4] != 0.0:
+                surface_z = sec_bounds[4] + offset_z
+
+        if getattr(on_relation, "nominal_height", None) is not None:
+            surface_z = float(on_relation.nominal_height)
 
         x = self._sample_axis_position(
             parent_min_x,
@@ -569,7 +572,7 @@ class ObjectPlacer:
         )
 
         # Convert from child-origin Z to child-bottom Z so the bottom face lands on the parent top.
-        z = float(parent_bbox.max_point[0, 2] + on_relation.clearance_m - child_bbox.min_point[0, 2])
+        z = float(surface_z + on_relation.clearance_m - child_bbox.min_point[0, 2])
 
         return (x, y, z)
 

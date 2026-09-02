@@ -291,7 +291,7 @@ Identify any physical, kinematic, perceptual, or controller defects and provide 
         )
 
         try:
-            res = backend.structured_completion(req)
+            res = backend.run_json(req)
             raw_sigs = res.get("signatures", [])
             llm_signatures = []
             for s in raw_sigs:

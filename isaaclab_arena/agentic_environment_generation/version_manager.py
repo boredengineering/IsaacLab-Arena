@@ -180,6 +180,45 @@ class EnvironmentVersionManager:
             elif isinstance(policy_config_source, str):
                 with open(target_policy_file, "w", encoding="utf-8") as f:
                     f.write(policy_config_source)
+        else:
+            # Auto-scaffold canonical policy config based on embodiment
+            emb_name = ""
+            if hasattr(spec_source, "embodiment") and spec_source.embodiment:
+                emb_name = getattr(spec_source.embodiment, "registry_name", "") or ""
+            elif isinstance(spec_source, dict):
+                emb_name = spec_source.get("embodiment", {}).get("registry_name", "")
+
+            import yaml
+            target_policy_file = new_v_dir / "policy_config.yaml"
+            if "g1" in emb_name.lower():
+                default_cfg = {
+                    "language_instruction": prompt or "move the apple to the plate",
+                    "action_horizon": 40,
+                    "action_chunk_length": 20,
+                    "embodiment_tag": "NEW_EMBODIMENT",
+                    "video_backend": "decord",
+                    "modality_config_path": "isaaclab_arena_gr00t/embodiments/g1/g1_sim_wbc_data_gr00t_n_1_7_config.py",
+                    "policy_joints_config_path": "isaaclab_arena_gr00t/embodiments/g1/gr00t_43dof_joint_space.yaml",
+                    "action_joints_config_path": "isaaclab_arena_gr00t/embodiments/g1/43dof_joint_space.yaml",
+                    "state_joints_config_path": "isaaclab_arena_gr00t/embodiments/g1/43dof_joint_space.yaml",
+                    "pov_cam_name_sim": "robot_head_cam_rgb",
+                    "task_mode_name": "g1_locomanipulation",
+                }
+                with open(target_policy_file, "w", encoding="utf-8") as f:
+                    yaml.safe_dump(default_cfg, f, sort_keys=False)
+            else:
+                default_cfg = {
+                    "language_instruction": prompt or "pick up the object and place it into the container",
+                    "action_horizon": 32,
+                    "action_chunk_length": 16,
+                    "embodiment_tag": "OXE_DROID",
+                    "video_backend": "decord",
+                    "modality_config_path": "isaaclab_arena_gr00t/embodiments/droid/droid_sim_data_config.py",
+                    "pov_cam_name_sim": "external_camera_rgb",
+                    "wrist_cam_name_sim": "wrist_camera_rgb",
+                }
+                with open(target_policy_file, "w", encoding="utf-8") as f:
+                    yaml.safe_dump(default_cfg, f, sort_keys=False)
 
         # Update symlink / latest pointer
         latest_dir = self.env_dir / "latest"

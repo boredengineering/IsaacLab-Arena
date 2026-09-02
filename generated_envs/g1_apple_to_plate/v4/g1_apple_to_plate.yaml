@@ -1,0 +1,79 @@
+env_name: g1_kitchen_apple_to_plate
+embodiment:
+  id: g1_robot
+  registry_name: g1_wbc_agile_joint
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.4
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: kitchen_island
+  registry_name: table
+  params: {}
+objects:
+- id: red_apple
+  registry_name: apple_01_objaverse_robolab
+  params:
+    scale:
+    - 0.009
+    - 0.009
+    - 0.009
+    initial_pose:
+      position_xyz:
+      - 0.15
+      - 0.15
+      - 0.05
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: plate
+  registry_name: clay_plates_hot3d_robolab
+  params:
+    scale:
+    - 0.5
+    - 0.5
+    - 0.5
+    initial_pose:
+      position_xyz:
+      - 0.15
+      - -0.30
+      - 0.02
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: kitchen_island
+  params: {}
+- kind: is_anchor
+  subject: red_apple
+  params: {}
+- kind: is_anchor
+  subject: plate
+  params: {}
+- kind: requires_reachability
+  subject: red_apple
+  params: {}
+- kind: requires_reachability
+  subject: plate
+  params: {}
+task:
+  composition: atomic
+  description: Unitree G1 reaches with the right arm to grasp the red apple from the table and place it onto the plate
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: red_apple
+      destination_location: plate
+      background_scene: kitchen_island

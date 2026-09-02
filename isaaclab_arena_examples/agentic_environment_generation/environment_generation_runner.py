@@ -481,6 +481,32 @@ def build_env_from_env_graph_spec(env_graph_spec_path: Path, args_cli: argparse.
         f"[runner] built env {arena_env.name!r} from environment graph spec {env_graph_spec_path}",
         flush=True,
     )
+
+    # Preflight visual verification pass across cascading perception tiers
+    try:
+        from isaaclab_arena.agentic_environment_generation.visual_critic import VisualSceneCritic
+
+        critic = VisualSceneCritic()
+        critic_result = critic.evaluate_scene_spec(loaded_env_graph_spec)
+        print(f"\n======================================================================", flush=True)
+        print(f"  👁️  Preflight Visual Critic Inspection (Tier: {critic_result.tier_used})", flush=True)
+        print(f"======================================================================", flush=True)
+        print(f"• Conforms:         {'✅ PASS' if critic_result.conforms else '⚠️ ANOMALIES DETECTED'}", flush=True)
+        print(f"• Visibility Score: {critic_result.visibility_score:.1f} / 10.0", flush=True)
+        if critic_result.occluded_objects:
+            print(f"• Occluded Objects: {', '.join(critic_result.occluded_objects)}", flush=True)
+        if critic_result.floating_objects:
+            print(f"• Floating Objects: {', '.join(critic_result.floating_objects)}", flush=True)
+        if critic_result.anomalies:
+            print("• Detected Anomalies:", flush=True)
+            for anom in critic_result.anomalies:
+                print(f"  - {anom}", flush=True)
+        if critic_result.actionable_feedback and not critic_result.conforms:
+            print(f"• Actionable Advice: {critic_result.actionable_feedback}", flush=True)
+        print(f"======================================================================\n", flush=True)
+    except Exception as exc:
+        print(f"[runner] Preflight visual critic check skipped: {exc}", flush=True)
+
     return env
 
 

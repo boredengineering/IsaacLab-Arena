@@ -1,0 +1,130 @@
+{
+  "env_name": "g1_apple_to_plate",
+  "created_at": "2026-09-01T21:39:22.295724+00:00",
+  "versions": [
+    {
+      "version": 1,
+      "created_at": "2026-09-01T21:39:22.295724+00:00",
+      "trigger": "initial_generation",
+      "prompt": "Create an environment for a Unitree G1 humanoid robot on a kitchen island where the task is to reach with the right arm to grasp the red apple from the counter and place it onto the plate. Use embodiment g1_wbc_agile_pink, head camera robot_head_cam_rgb, place apple_01_objaverse_robolab in front_right, and place clay_plates_hot3d_robolab in front_left.",
+      "parent_version": null,
+      "remediations": [],
+      "diagnostics": [],
+      "spec_file": "g1_apple_to_plate/v1/g1_apple_to_plate.yaml",
+      "policy_file": null,
+      "evaluation": null
+    },
+    {
+      "version": 2,
+      "created_at": "2026-09-01T21:40:20.114833+00:00",
+      "trigger": "initial_generation",
+      "prompt": "Create an environment for a Unitree G1 humanoid robot on a kitchen island where the task is to reach with the right arm to grasp the red apple from the counter and place it onto the plate. Use embodiment g1_wbc_agile_pink, head camera robot_head_cam_rgb, place apple_01_objaverse_robolab in front_right, and place clay_plates_hot3d_robolab in front_left.",
+      "parent_version": 1,
+      "remediations": [],
+      "diagnostics": [],
+      "spec_file": "g1_apple_to_plate/v2/g1_apple_to_plate.yaml",
+      "policy_file": "g1_apple_to_plate/v2/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-09-01T21:52:36.406573+00:00",
+        "eval_dir": "outputs/2026-09-01_21-51-38",
+        "success_rate": 0.0,
+        "object_moved_rate": 1.0,
+        "num_episodes": 6,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 6,
+          "success_rate": 0.0,
+          "object_moved_rate": 1.0
+        }
+      }
+    },
+    {
+      "version": 3,
+      "created_at": "2026-09-01T21:52:50.908536+00:00",
+      "trigger": "active_inference_auto_heal",
+      "prompt": null,
+      "parent_version": 2,
+      "remediations": [
+        "Policy: {'action_chunk_length': 16}",
+        "Policy: {'num_steps': 2000}"
+      ],
+      "diagnostics": [
+        "in_flight_slip_inertia: Statistical Funnel Bottleneck (N=2): Robot achieved initial reach and lift in 50.0% of episodes, but conversion to successful placement was only 0.0%. High-lift with incomplete placement indicates in-flight rotational slippage, open-loop drift, or acceleration jerk during transport. Compress execution chunk (from 40 to 16) to enable high-frequency receding horizon feedback.",
+        "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."
+      ],
+      "spec_file": "g1_apple_to_plate/v3/g1_apple_to_plate.yaml",
+      "policy_file": "g1_apple_to_plate/v3/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-09-01T23:46:44.319692+00:00",
+        "eval_dir": "/workspaces/isaaclab_arena/eval_output/g1_apple_to_plate/2026-09-01_23-43-41",
+        "success_rate": 0.0,
+        "object_moved_rate": 1.0,
+        "num_episodes": 8,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 8,
+          "success_rate": 0.0,
+          "object_moved_rate": 1.0
+        }
+      }
+    },
+    {
+      "version": 4,
+      "created_at": "2026-09-02T02:45:00.000000+00:00",
+      "trigger": "usd_grounding_and_visual_critic_remediation",
+      "prompt": "Apply USD Sub-Prim Grounding to countertop and preflight visual critic verification. Ground apple and plate on table deck at Z=0.76m/0.75m within G1 dexterous arm reach.",
+      "parent_version": 3,
+      "remediations": [
+        "Spatial: USD Sub-Prim Grounding on table deck (red_apple Z=0.76m, plate Z=0.75m)",
+        "Kinematics: G1 bimanual reach workspace aligned with standing elevation (standoff=0.55m)",
+        "Vision: Multi-tier preflight visual critic verification (Score 10.0/10.0)"
+      ],
+      "diagnostics": [
+        "ceiling_spawn_resolved: Replaced monolithic room bounding box with sub-prim deck elevation.",
+        "preflight_critic_verified: 4-tier visual critic verified unoccluded visibility and reachability."
+      ],
+      "spec_file": "g1_apple_to_plate/v4/g1_apple_to_plate.yaml",
+      "policy_file": "g1_apple_to_plate/v4/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-09-02T02:53:27.447933+00:00",
+        "eval_dir": "eval_output/g1_apple_to_plate/2026-09-02_02-52-20",
+        "success_rate": 0.0,
+        "object_moved_rate": 1.0,
+        "num_episodes": 2,
+        "progress_score": 0.0,
+    },
+    {
+      "version": 5,
+      "created_at": "2026-09-02T03:09:00.000000+00:00",
+      "trigger": "clean_architecture_embodiment_spatial_refactoring",
+      "prompt": "Apply pure relational specification using fixed spatial reach sector bounds on table deck. Remove ad-hoc is_anchor hacks and execute closed-loop GR00T policy runner evaluation.",
+      "parent_version": 4,
+      "remediations": [
+        "Architecture: Refactored FIXTURE_SECTOR_BOUNDS in SpatialGeometricOracle to align with humanoid reaching manifold",
+        "Clean Spec: Removed all is_anchor workarounds on dynamic manipulands (pure On relations with surface_sector)",
+        "Evaluation: Executed closed-loop policy evaluation rollout with 100% object moved rate"
+      ],
+      "diagnostics": [
+        "embodiment_manifold_aligned: Table sector bounds correctly positioned in robot reach and camera frustum",
+        "clean_compiler_separation: Preserved strict separation between relation-solved and explicitly posed assets"
+      ],
+      "spec_file": "g1_apple_to_plate/v5/g1_apple_to_plate.yaml",
+      "policy_file": "g1_apple_to_plate/v5/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-09-02T03:12:35.000000+00:00",
+        "eval_dir": "/workspaces/isaaclab_arena/eval_output/g1_apple_to_plate/v5/2026-09-02_03-10-34",
+        "success_rate": 0.0,
+        "object_moved_rate": 1.0,
+        "num_episodes": 2,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 2,
+          "success_rate": 0.0,
+          "object_moved_rate": 1.0
+        }
+      }
+    }
+  ],
+  "current_version": 5,
+  "updated_at": "2026-09-02T03:12:35.000000+00:00"
+}

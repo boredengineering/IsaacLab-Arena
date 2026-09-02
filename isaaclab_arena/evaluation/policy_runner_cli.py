@@ -128,3 +128,27 @@ def add_policy_runner_arguments(parser: argparse.ArgumentParser) -> None:
         default=8000,
         help="Port to serve the evaluation report on when --serve_evaluation_report is set. Defaults to 8000.",
     )
+    parser.add_argument(
+        "--check_settling",
+        action="store_true",
+        default=True,
+        help="Check that all movable scene objects physically settle before/during policy inference.",
+    )
+    parser.add_argument(
+        "--settle_steps",
+        type=int,
+        default=10,
+        help="Number of initial simulation steps to allow objects to settle onto surfaces before policy rollout.",
+    )
+    parser.add_argument(
+        "--settle_lin_vel_thresh",
+        type=float,
+        default=0.1,
+        help="Max per-object linear speed (m/s) for an object to be considered settled.",
+    )
+    parser.add_argument(
+        "--settle_ang_vel_thresh",
+        type=float,
+        default=1.0,
+        help="Max per-object angular speed (rad/s) for an object to be considered settled.",
+    )

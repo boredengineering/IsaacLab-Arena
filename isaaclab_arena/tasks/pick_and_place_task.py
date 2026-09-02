@@ -180,10 +180,16 @@ class PickAndPlaceTask(TaskBase):
         return [SuccessRateMetric(), ObjectMovedRateMetric(self.pick_up_object)]
 
     def get_progress_objectives(self) -> list[ProgressObjective]:
+        settle_object_names = [self.pick_up_object.name]
+        dest_name = getattr(self.destination_object, "name", None)
+        bg_name = getattr(self.background_scene, "name", None)
+        if dest_name and dest_name != bg_name:
+            settle_object_names.append(dest_name)
+
         predicate_groups = [
             partial(
                 objects_settled,
-                object_names=[self.pick_up_object.name],
+                object_names=settle_object_names,
             ),
             partial(
                 object_is_above_height,

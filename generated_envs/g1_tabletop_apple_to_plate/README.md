@@ -1,4 +1,4 @@
-# Environment: `g1_tabletop_apple_to_plate` (Latest: `v4`)
+# Environment: `g1_tabletop_apple_to_plate` (Latest: `v5`)
 
 > **Prompt / Task Description**:
 > "Create an environment for a Unitree G1 humanoid robot on a maple table where the task is to reach with the right arm to grasp the red apple from the front right of the table and place it onto the clay plate on the front left. Position the maple table at [0.0, 0.0, 0.0] and use embodiment g1_wbc_agile_pink standing at [-0.45, 0.0, 0.0] facing the table, with head camera robot_head_cam_rgb."
@@ -7,7 +7,7 @@
 
 ## 1. Quick Info & Artifact Paths
 - **Canonical Environment Name**: `g1_tabletop_apple_to_plate`
-- **Active Version Directory**: `generated_envs/g1_tabletop_apple_to_plate/latest/` (symlinked to `v4`)
+- **Active Version Directory**: `generated_envs/g1_tabletop_apple_to_plate/latest/` (symlinked to `v5`)
 - **Environment Graph Spec**: `/workspaces/isaaclab_arena/generated_envs/g1_tabletop_apple_to_plate/latest/g1_tabletop_apple_to_plate.yaml`
 - **Policy Configuration**: `/workspaces/isaaclab_arena/generated_envs/g1_tabletop_apple_to_plate/latest/policy_config.yaml`
 - **Evaluation Output Directory**: `/workspaces/isaaclab_arena/eval_output/g1_tabletop_apple_to_plate`
@@ -134,3 +134,4 @@ docker exec -it \
 | `v2` | 2026-09-02 | `embodiment_joint_space_alignment` | Embodiment: switch from g1_wbc_agile_pink (23-D PinkIK) to g1_wbc_agile_joint (50-D direct joint targets) for closed-loop GR00T foundation policy evaluation., Policy: action_chunk_length=16, action_horizon=32 | 0.0% (0 eps) |
 | `v3` | 2026-09-02 | `vlm_critic_closed_loop_remediation` | Spatial: Rectified front_right and front_left table sector bounds to REP-103 robot coordinate frame (-Y right, +Y left) as diagnosed by VLM Critic., Embodiment: Maintained 50-D g1_wbc_agile_joint with action_horizon=40, action_chunk_length=20. | *Pending evaluation* |
 | `v4` | 2026-09-02 | `vlm_critic_closed_loop_remediation` | Spatial: Rectified front_right and front_left table sector bounds to REP-103 robot coordinate frame (-Y right, +Y left) as diagnosed by VLM Critic., Embodiment: Maintained 50-D g1_wbc_agile_joint with action_horizon=40, action_chunk_length=20. | 0.0% (2 eps) |
+| `v5` | 2026-09-02 | `active_inference_auto_heal` | Spatial: {'maple_table': {'position_xyz': [-0.15, 0.0, 0.0]}, 'red_apple': {'surface_sector': 'front_center', 'sector_bounds': [-0.3, -0.1, -0.15, 0.15]}, 'clay_plate': {'surface_sector': 'front_left', 'sector_bounds': [-0.3, -0.1, 0.15, 0.35]}}, Policy: {'num_steps': 2000}, Spatial: {'maple_table': {'position_xyz': [-0.14, 0.0, 0.0]}, 'red_apple': {'surface_sector': 'front_center'}, 'clay_plate': {'surface_sector': 'front_left'}} | *Pending evaluation* |

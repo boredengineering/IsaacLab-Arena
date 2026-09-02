@@ -63,11 +63,82 @@ def is_distributed(args_cli: argparse.Namespace) -> bool:
     )
 
 
+def verify_and_settle_scene(
+    env,
+    settle_steps: int = 12,
+    lin_vel_thresh: float = 0.1,
+    ang_vel_thresh: float = 1.0,
+) -> tuple[dict[str, Any], Any]:
+    """Verify that all movable scene objects physically settle before policy inference.
+
+    Steps the environment with zero/neutral posture-holding actions to allow normal-force contact
+    resolution and settle transients, then reads back linear and angular velocities to verify
+    that every object is sitting still.
+    """
+    base_env = env.unwrapped
+    scene = base_env.scene
+
+    movable_objects = []
+    for name in scene.keys():
+        if name in ("robot", "terrain", "ground", "maple_table", "table") or "robot" in name:
+            continue
+        asset = scene[name]
+        if hasattr(asset, "data") and hasattr(asset.data, "root_lin_vel_w"):
+            movable_objects.append(name)
+
+    obs = None
+    if settle_steps > 0:
+        num_envs = base_env.num_envs
+        action_dim = base_env.action_manager.total_action_dim
+        hold_action = torch.zeros((num_envs, action_dim), device=base_env.device)
+        for _ in range(settle_steps):
+            obs, _, _, _, _ = env.step(hold_action)
+
+    settle_status = {}
+    all_settled = True
+    print(f"[policy_runner] 🔍 Phase 1 Settle Verification: Checking {len(movable_objects)} scene objects for stationarity...")
+    for name in movable_objects:
+        asset = scene[name]
+        lin_vel = asset.data.root_lin_vel_w.norm(dim=-1).mean().item()
+        ang_vel = asset.data.root_ang_vel_w.norm(dim=-1).mean().item()
+        is_settled = bool((lin_vel <= lin_vel_thresh) and (ang_vel <= ang_vel_thresh))
+        settle_status[name] = {
+            "lin_vel_m_s": round(lin_vel, 4),
+            "ang_vel_rad_s": round(ang_vel, 4),
+            "settled": is_settled,
+        }
+        if is_settled:
+            status_tag = "✅ SETTLED"
+        else:
+            reasons = []
+            if lin_vel > lin_vel_thresh:
+                reasons.append(f"lin_vel={lin_vel:.4f} > {lin_vel_thresh}")
+            if ang_vel > ang_vel_thresh:
+                reasons.append(f"ang_vel={ang_vel:.4f} > {ang_vel_thresh}")
+            status_tag = f"⚠️ UNSETTLED ({', '.join(reasons)})"
+        print(f"  - '{name}': lin_vel={lin_vel:.4f} m/s, ang_vel={ang_vel:.4f} rad/s -> {status_tag}")
+        if not is_settled:
+            all_settled = False
+
+    if all_settled:
+        print("[policy_runner] ✅ All scene objects are physically settled. Proceeding to policy inference.")
+    else:
+        print("[policy_runner] ⚠️ Warning: One or more objects are NOT sitting still at inference start!")
+
+    report = {"all_objects_settled": all_settled, "object_settle_status": settle_status}
+    base_env.settle_report = report
+    return report, obs
+
+
 def rollout_policy(
     env,
     policy: PolicyBase,
     num_steps: int | None,
     num_episodes: int | None,
+    check_settling: bool = True,
+    settle_steps: int = 12,
+    lin_vel_thresh: float = 0.1,
+    ang_vel_thresh: float = 1.0,
 ) -> MetricsDataCollection | None:
     assert num_steps is not None or num_episodes is not None, "Either num_steps or num_episodes must be provided"
     assert num_steps is None or num_episodes is None, "Only one of num_steps or num_episodes must be provided"
@@ -75,6 +146,18 @@ def rollout_policy(
     pbar = None
     try:
         obs, _ = env.reset()
+
+        # Check and verify object settling at start of inference
+        if check_settling:
+            _, settle_obs = verify_and_settle_scene(
+                env,
+                settle_steps=settle_steps,
+                lin_vel_thresh=lin_vel_thresh,
+                ang_vel_thresh=ang_vel_thresh,
+            )
+            if settle_obs is not None:
+                obs = settle_obs
+
         policy.reset()
         policy.set_task_description(env.unwrapped.get_language_instruction())
 
@@ -99,6 +182,16 @@ def rollout_policy(
                         f" and truncated env_ids: {truncated.nonzero().flatten()}"
                     )
                     env_ids = (terminated | truncated).nonzero().flatten()
+                    if check_settling:
+                        verify_and_settle_scene(
+                            env,
+                            settle_steps=settle_steps,
+                            lin_vel_thresh=lin_vel_thresh,
+                            ang_vel_thresh=ang_vel_thresh,
+                        )
+                        if hasattr(env.unwrapped, "observation_manager"):
+                            obs = env.unwrapped.observation_manager.compute()
+
                     policy.reset(env_ids=env_ids)
                     # Break if number of episodes is reached
                     completed_episodes = env_ids.shape[0]
@@ -240,7 +333,16 @@ def main():
 
         steps_str = f"{num_steps} steps" if num_steps is not None else f"{num_episodes} episodes"
         print(f"[Rank {local_rank}/{world_size}] Starting rollout ({steps_str})")
-        metrics = rollout_policy(env, policy, num_steps, num_episodes)
+        metrics = rollout_policy(
+            env,
+            policy,
+            num_steps,
+            num_episodes,
+            check_settling=getattr(args_cli, "check_settling", True),
+            settle_steps=getattr(args_cli, "settle_steps", 12),
+            lin_vel_thresh=getattr(args_cli, "settle_lin_vel_thresh", 0.1),
+            ang_vel_thresh=getattr(args_cli, "settle_ang_vel_thresh", 1.0),
+        )
 
         if metrics is not None:
             print(f"[Rank {local_rank}/{world_size}] Metrics: {metrics_to_plain_python_types(metrics)}")

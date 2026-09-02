@@ -4,7 +4,7 @@
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 :g1_tabletop_apple_to_plate a arena:EnvironmentFamily ;
-    arena:currentVersion 4 .
+    arena:currentVersion 5 .
 
 :g1_tabletop_apple_to_plate_v3 a prov:Entity,
         arena:EnvironmentVersion ;
@@ -15,6 +15,25 @@
         "Spatial: Rectified front_right and front_left table sector bounds to REP-103 robot coordinate frame (-Y right, +Y left) as diagnosed by VLM Critic."^^xsd:string ;
     arena:trigger "vlm_critic_closed_loop_remediation"^^xsd:string ;
     arena:versionNumber 3 .
+
+:g1_tabletop_apple_to_plate_v5 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-02T21:23:08.714820+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :g1_tabletop_apple_to_plate_v4 ;
+    arena:failureDiagnostic "camera_occlusion: Robot failed to contact or move target object (object_moved_rate=0.00). For VLA policies (e.g. GR00T-DROID, OpenVLA), objects placed without strict near-field constraints (d in [0.25m, 0.45m], X in [-0.30m, -0.10m]) fall outside the downward camera crop and teleoperation training distribution. The table must be shifted closer to the robot base."^^xsd:string,
+        "depth_alignment_mismatch: Depth Anything V2 spatial audit: slope_ratio=0.686, sign_flip=False, apple_y_delta=-0.044, depth_delta=-0.449. Target object is significantly FURTHER away in simulation (depth delta: -0.449). Support surface pitch is aligned with demonstration dataset."^^xsd:string,
+        "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed."^^xsd:string ;
+    arena:remediationAction "Policy: {'num_steps': 2000}"^^xsd:string,
+        "Spatial: {'maple_table': {'position_xyz': [-0.14, 0.0, 0.0]}, 'red_apple': {'surface_sector': 'front_center'}, 'clay_plate': {'surface_sector': 'front_left'}}"^^xsd:string,
+        "Spatial: {'maple_table': {'position_xyz': [-0.15, 0.0, 0.0]}, 'red_apple': {'surface_sector': 'front_center', 'sector_bounds': [-0.3, -0.1, -0.15, 0.15]}, 'clay_plate': {'surface_sector': 'front_left', 'sector_bounds': [-0.3, -0.1, 0.15, 0.35]}}"^^xsd:string ;
+    arena:trigger "active_inference_auto_heal"^^xsd:string ;
+    arena:versionNumber 5 .
+
+:g1_tabletop_apple_to_plate_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-02T15:22:30.414018+00:00"^^xsd:dateTime ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 1 .
 
 :g1_tabletop_apple_to_plate_v4 a prov:Entity,
         arena:EnvironmentVersion ;
@@ -27,12 +46,6 @@
     arena:successRate "0.0"^^xsd:float ;
     arena:trigger "vlm_critic_closed_loop_remediation"^^xsd:string ;
     arena:versionNumber 4 .
-
-:g1_tabletop_apple_to_plate_v1 a prov:Entity,
-        arena:EnvironmentVersion ;
-    prov:generatedAtTime "2026-09-02T15:22:30.414018+00:00"^^xsd:dateTime ;
-    arena:trigger "initial_generation"^^xsd:string ;
-    arena:versionNumber 1 .
 
 :g1_tabletop_apple_to_plate_v2 a prov:Entity,
         arena:EnvironmentVersion ;

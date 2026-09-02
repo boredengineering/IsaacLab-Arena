@@ -16,8 +16,9 @@ from isaaclab_arena.relations.spatial_factor_graph import SpatialFactorGraph
 
 
 KNOWN_FIXTURE_BOUNDS: dict[str, tuple[float, float, float, float, float]] = {
-    # [min_x, max_x, min_y, max_y, z_surface]
-    "maple_table_robolab": (-0.45, 0.45, -0.30, 0.30, 0.75),
+    # Note: maple_table / maple_table_robolab USD mesh is offset from its prim origin: X in [0.20, 0.90], Y in [-0.50, 0.50], Z_deck=0.0
+    "maple_table_robolab": (0.20, 0.90, -0.50, 0.50, 0.0),
+    "maple_table": (0.20, 0.90, -0.50, 0.50, 0.0),
     "table_oak_robolab": (-0.45, 0.45, -0.30, 0.30, 0.75),
     "table": (-0.45, 0.45, -0.30, 0.30, 0.75),
     "office_table_background": (-0.45, 0.45, -0.30, 0.30, 0.75),
@@ -33,17 +34,29 @@ KNOWN_FIXTURE_BOUNDS: dict[str, tuple[float, float, float, float, float]] = {
 }
 
 FIXTURE_SECTOR_BOUNDS: dict[str, dict[str, tuple[float, float, float, float, float]]] = {
+    "maple_table": {
+        "front_center": (0.45, 0.85, -0.15, 0.15, 0.0),
+        "front_left": (0.48, 0.88, 0.05, 0.48, 0.0),
+        "front_right": (0.48, 0.85, -0.45, -0.08, 0.0),
+        "front_half": (0.45, 0.88, -0.48, 0.48, 0.0),
+        "robot_front": (0.45, 0.88, -0.48, 0.48, 0.0),
+        "rear_center": (0.55, 0.88, -0.15, 0.15, 0.0),
+        "rear_left": (0.55, 0.88, 0.05, 0.48, 0.0),
+        "rear_right": (0.55, 0.88, -0.48, -0.05, 0.0),
+        "rear_storage": (0.55, 0.88, -0.48, 0.48, 0.0),
+        "table_top": (0.45, 0.88, -0.48, 0.48, 0.0),
+    },
     "maple_table_robolab": {
-        "front_center": (-0.25, -0.05, -0.08, 0.08, 0.75),
-        "front_left": (-0.25, -0.05, 0.05, 0.24, 0.75),
-        "front_right": (-0.25, -0.05, -0.24, -0.05, 0.75),
-        "front_half": (-0.25, -0.05, -0.24, 0.24, 0.75),
-        "robot_front": (-0.25, -0.05, -0.24, 0.24, 0.75),
-        "rear_center": (0.05, 0.25, -0.08, 0.08, 0.75),
-        "rear_left": (0.05, 0.25, 0.05, 0.24, 0.75),
-        "rear_right": (0.05, 0.25, -0.24, -0.05, 0.75),
-        "rear_storage": (0.05, 0.25, -0.24, 0.24, 0.75),
-        "table_top": (-0.35, 0.35, -0.24, 0.24, 0.75),
+        "front_center": (0.45, 0.85, -0.15, 0.15, 0.0),
+        "front_left": (0.48, 0.88, 0.05, 0.48, 0.0),
+        "front_right": (0.48, 0.85, -0.45, -0.08, 0.0),
+        "front_half": (0.45, 0.88, -0.48, 0.48, 0.0),
+        "robot_front": (0.45, 0.88, -0.48, 0.48, 0.0),
+        "rear_center": (0.55, 0.88, -0.15, 0.15, 0.0),
+        "rear_left": (0.55, 0.88, 0.05, 0.48, 0.0),
+        "rear_right": (0.55, 0.88, -0.48, -0.05, 0.0),
+        "rear_storage": (0.55, 0.88, -0.48, 0.48, 0.0),
+        "table_top": (0.45, 0.88, -0.48, 0.48, 0.0),
     },
     "table": {
         "front_center": (-0.25, -0.05, -0.08, 0.08, 0.75),
@@ -113,8 +126,8 @@ _G1_HEAD_CAM = {
     # Camera offset on head_link (position in head-link frame, ROS convention)
     "offset_xyz": (0.04485, 0.0, 0.35325),
     "offset_quat_xyzw": (-0.62721, 0.62721, -0.32651, 0.32651),
-    # G1 head_link sits at approximately pelvis_z + 0.65 m above ground
-    "head_link_height_above_base": 0.65,
+    # G1 head_link + camera offset sits at ~1.22m above ground (pelvis 0.72m + 0.15m + 0.353m)
+    "head_link_height_above_base": 0.15,
 }
 
 
@@ -186,7 +199,8 @@ def validate_depth_alignment(
 
     # --- Estimate camera world position ---
     cam = _G1_HEAD_CAM
-    base_z = emb_pos[2] if emb_pos[2] > 0.2 else 0.0
+    # For humanoid embodiments with WBC, pelvis height at runtime stands at ~0.72m
+    base_z = emb_pos[2] if emb_pos[2] > 0.2 else 0.72
     cam_world = (
         emb_pos[0] + cam["offset_xyz"][0],
         emb_pos[1] + cam["offset_xyz"][1],

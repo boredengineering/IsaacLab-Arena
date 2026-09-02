@@ -81,6 +81,10 @@ class Gr00tClosedloopPolicyCfg:
             "description": "Number of actions to execute per inference rollout (can be less than action_horizon)."
         },
     )
+    bilateral_mirror: bool = field(
+        default=False,
+        metadata={"description": "Reflect camera images horizontally and remap left/right arms for mirrored tasks."},
+    )
     seed: int = field(default=10, metadata={"description": "Random seed for reproducibility."})
 
     def __post_init__(self):

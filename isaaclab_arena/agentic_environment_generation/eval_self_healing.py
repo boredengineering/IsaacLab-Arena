@@ -205,6 +205,23 @@ class EvaluationDiagnosticOracle:
             # Compares actual rollout camera frames against training dataset using
             # monocular depth estimation to quantify spatial misalignment.
             trajectory_frames = sorted(eval_path.glob("**/trajectory*/step_*.png"))
+            if not trajectory_frames:
+                trajectory_frames = sorted(eval_path.glob("**/*robot_head_cam*.png")) + sorted(eval_path.glob("**/frames/*.png"))
+            if not trajectory_frames:
+                mp4_files = sorted(eval_path.glob("**/*robot*cam*.mp4"))
+                if mp4_files:
+                    try:
+                        import cv2
+                        cap = cv2.VideoCapture(str(mp4_files[0]))
+                        ret, f_bgr = cap.read()
+                        cap.release()
+                        if ret:
+                            extracted_p = eval_path / "extracted_eval_frame_0.png"
+                            cv2.imwrite(str(extracted_p), f_bgr)
+                            trajectory_frames = [extracted_p]
+                    except Exception:
+                        pass
+
             dataset_video = self._find_reference_dataset_video(spec)
             if (
                 trajectory_frames

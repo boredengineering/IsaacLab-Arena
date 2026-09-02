@@ -340,6 +340,24 @@ class OnLossStrategy(RelationLossStrategy):
         parent_y_max = parent_world_bbox.max_point[:, 1]
         parent_z_max = parent_world_bbox.max_point[:, 2]  # Top surface
 
+        sec_name = getattr(relation, "surface_sector", None) or getattr(relation, "surface_anchor", None)
+        if sec_name is not None:
+            from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import get_fixture_sector_bounds
+
+            parent_reg_name = getattr(relation.parent, "registry_name", getattr(relation.parent, "name", ""))
+            sec_bounds = get_fixture_sector_bounds(parent_reg_name, sec_name)
+            parent_pose = relation.parent.get_initial_pose() if hasattr(relation.parent, "get_initial_pose") else None
+            p_x = parent_pose.position_xyz[0] if parent_pose is not None else 0.0
+            p_y = parent_pose.position_xyz[1] if parent_pose is not None else 0.0
+            sec_x_min = torch.as_tensor(sec_bounds[0] + p_x, device=child_pos.device, dtype=child_pos.dtype)
+            sec_x_max = torch.as_tensor(sec_bounds[1] + p_x, device=child_pos.device, dtype=child_pos.dtype)
+            sec_y_min = torch.as_tensor(sec_bounds[2] + p_y, device=child_pos.device, dtype=child_pos.dtype)
+            sec_y_max = torch.as_tensor(sec_bounds[3] + p_y, device=child_pos.device, dtype=child_pos.dtype)
+            parent_x_min = torch.maximum(parent_x_min, sec_x_min)
+            parent_x_max = torch.minimum(parent_x_max, sec_x_max)
+            parent_y_min = torch.maximum(parent_y_min, sec_y_min)
+            parent_y_max = torch.minimum(parent_y_max, sec_y_max)
+
         # Compute valid position ranges such that child's entire footprint is within parent,
         # with the parent's extent inset by edge_margin_m so the footprint stays off the rim.
         m = relation.edge_margin_m

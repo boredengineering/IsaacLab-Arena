@@ -88,8 +88,28 @@
           "object_moved_rate": 0.0
         }
       }
+    },
+    {
+      "version": 5,
+      "created_at": "2026-09-02T21:23:08.714820+00:00",
+      "trigger": "active_inference_auto_heal",
+      "prompt": null,
+      "parent_version": 4,
+      "remediations": [
+        "Spatial: {'maple_table': {'position_xyz': [-0.15, 0.0, 0.0]}, 'red_apple': {'surface_sector': 'front_center', 'sector_bounds': [-0.3, -0.1, -0.15, 0.15]}, 'clay_plate': {'surface_sector': 'front_left', 'sector_bounds': [-0.3, -0.1, 0.15, 0.35]}}",
+        "Policy: {'num_steps': 2000}",
+        "Spatial: {'maple_table': {'position_xyz': [-0.14, 0.0, 0.0]}, 'red_apple': {'surface_sector': 'front_center'}, 'clay_plate': {'surface_sector': 'front_left'}}"
+      ],
+      "diagnostics": [
+        "camera_occlusion: Robot failed to contact or move target object (object_moved_rate=0.00). For VLA policies (e.g. GR00T-DROID, OpenVLA), objects placed without strict near-field constraints (d in [0.25m, 0.45m], X in [-0.30m, -0.10m]) fall outside the downward camera crop and teleoperation training distribution. The table must be shifted closer to the robot base.",
+        "horizon_truncation: Rollout was limited to 500 steps (10.0s), terminating before multi-stage pick-and-place completed.",
+        "depth_alignment_mismatch: Depth Anything V2 spatial audit: slope_ratio=0.686, sign_flip=False, apple_y_delta=-0.044, depth_delta=-0.449. Target object is significantly FURTHER away in simulation (depth delta: -0.449). Support surface pitch is aligned with demonstration dataset."
+      ],
+      "spec_file": "g1_tabletop_apple_to_plate/v5/g1_tabletop_apple_to_plate.yaml",
+      "policy_file": "g1_tabletop_apple_to_plate/v5/policy_config.yaml",
+      "evaluation": null
     }
   ],
-  "current_version": 4,
-  "updated_at": "2026-09-02T15:36:23.821975+00:00"
+  "current_version": 5,
+  "updated_at": "2026-09-02T21:23:08.714820+00:00"
 }

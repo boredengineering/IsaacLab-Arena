@@ -1,25 +1,40 @@
-env_name: g1_maple_table_apple_to_plate
+env_name: g1_tabletop_apple_to_plate
 embodiment:
   id: g1_robot
   registry_name: g1_wbc_agile_joint
   params:
     initial_pose:
       position_xyz:
-      - -0.5406
-      - -0.0757
-      - 0.0014
+      - -0.5239
+      - 0.1187
+      - 0.0007
       rotation_xyzw:
       - 0.0
       - 0.0
       - 0.0
       - 1.0
+    initial_joint_pos:
+      left_shoulder_roll_joint: 0.25
+      right_shoulder_roll_joint: -0.25
+      left_shoulder_yaw_joint: 0.5
+      right_shoulder_yaw_joint: -0.5
+      waist_pitch_joint: 0.2
+    finger_contact_friction:
+      material_path: /World/Materials/g1_static_pick_place_high_friction_fingers
+      static_friction: 6.0
+      dynamic_friction: 5.0
+      prim_name_markers:
+      - hand
+      - thumb
+      - index
+      - middle
 background:
   id: maple_table
   registry_name: maple_table_robolab
   params:
     initial_pose:
       position_xyz:
-      - 0.0
+      - -0.14
       - 0.0
       - 0.0
       rotation_xyzw:
@@ -33,8 +48,8 @@ objects:
   params:
     initial_pose:
       position_xyz:
-      - -0.1045
-      - 0.1994
+      - -0.0956
+      - -0.0277
       - 0.75
       rotation_xyzw:
       - 0.0
@@ -46,8 +61,8 @@ objects:
   params:
     initial_pose:
       position_xyz:
-      - -0.1023
-      - -0.0364
+      - -0.1054
+      - 0.1939
       - 0.75
       rotation_xyzw:
       - 0.0
@@ -63,13 +78,13 @@ relations:
   reference: maple_table
   params:
     surface_anchor: table_top
-    surface_sector: front_left
+    surface_sector: front_center
 - kind: 'on'
   subject: clay_plate
   reference: maple_table
   params:
     surface_anchor: table_top
-    surface_sector: front_center
+    surface_sector: front_left
 - kind: requires_reachability
   subject: red_apple
   params: {}
@@ -82,7 +97,7 @@ reified_relations:
   relation_type: PLACED_ON
   target_id: maple_table
   surface_anchor: table_top
-  surface_sector: front_left
+  surface_sector: front_right
   contact_normal:
   - 0.0
   - 0.0
@@ -112,7 +127,7 @@ reified_relations:
   relation_type: PLACED_ON
   target_id: maple_table
   surface_anchor: table_top
-  surface_sector: front_center
+  surface_sector: front_left
   contact_normal:
   - 0.0
   - 0.0
@@ -169,7 +184,8 @@ reified_relations:
   - right_arm_reachability
 task:
   composition: atomic
-  description: move the apple to the plate
+  description: Reach with the right arm to grasp the red apple from the front right
+    of the maple table and place it onto the clay plate on the front left.
   subtasks:
   - kind: PickAndPlaceTask
     params:

@@ -12,6 +12,7 @@ This policy connects to a GR00T policy server (launched via
 from __future__ import annotations
 
 import gymnasium as gym
+import numpy as np
 import torch
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -174,6 +175,11 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
         assert self.task_description is not None, "Task description is not set"
         assert self._client is not None, "GR00T remote policy has been closed"
         rgb_list_np, joint_pos_sim_np = extract_obs_numpy_from_torch(nested_obs=observation, camera_names=camera_names)
+
+        if getattr(self.policy_config, "bilateral_mirror", False):
+            # Horizontally flip RGB observations: shape (N, H, W, C) -> width is axis 2
+            rgb_list_np = [np.ascontiguousarray(img[:, :, ::-1, :]) for img in rgb_list_np]
+
         policy_observations = build_gr00t_policy_observations(
             rgb_list_np=rgb_list_np,
             joint_pos_sim_np=joint_pos_sim_np,
@@ -184,8 +190,37 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
             modality_configs=self.modality_configs,
         )
 
+        if getattr(self.policy_config, "bilateral_mirror", False):
+            # Mirror input state: swap left and right arm/hand states presented to policy
+            state_dict = policy_observations.get("state", {})
+            arm_signs = np.array([1.0, -1.0, -1.0, 1.0, -1.0, 1.0, -1.0], dtype=np.float32)
+            if "left_arm" in state_dict and "right_arm" in state_dict:
+                l_arm = state_dict["left_arm"].copy()
+                r_arm = state_dict["right_arm"].copy()
+                state_dict["left_arm"] = r_arm * arm_signs
+                state_dict["right_arm"] = l_arm * arm_signs
+            if "left_hand" in state_dict and "right_hand" in state_dict:
+                l_hand = state_dict["left_hand"].copy()
+                r_hand = state_dict["right_hand"].copy()
+                state_dict["left_hand"] = r_hand
+                state_dict["right_hand"] = l_hand
+
         # 2. Call GR00T's own client
         robot_action_policy, _ = self._client.get_action(policy_observations)
+
+        if getattr(self.policy_config, "bilateral_mirror", False):
+            # Remap predicted left-arm action to physical right-arm action on the robot
+            arm_signs = np.array([1.0, -1.0, -1.0, 1.0, -1.0, 1.0, -1.0], dtype=np.float32)
+            if "left_arm" in robot_action_policy and "right_arm" in robot_action_policy:
+                pred_l_arm = robot_action_policy["left_arm"].copy()
+                pred_r_arm = robot_action_policy["right_arm"].copy()
+                robot_action_policy["right_arm"] = pred_l_arm * arm_signs
+                robot_action_policy["left_arm"] = pred_r_arm * arm_signs
+            if "left_hand" in robot_action_policy and "right_hand" in robot_action_policy:
+                pred_l_hand = robot_action_policy["left_hand"].copy()
+                pred_r_hand = robot_action_policy["right_hand"].copy()
+                robot_action_policy["right_hand"] = pred_l_hand
+                robot_action_policy["left_hand"] = pred_r_hand
 
         # 3. Action translation from policy output to sim action tensor
         action_tensor = build_gr00t_action_tensor(

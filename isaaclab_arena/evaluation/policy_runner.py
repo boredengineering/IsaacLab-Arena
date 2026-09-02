@@ -65,15 +65,15 @@ def is_distributed(args_cli: argparse.Namespace) -> bool:
 
 def verify_and_settle_scene(
     env,
-    settle_steps: int = 12,
+    settle_steps: int = 25,
     lin_vel_thresh: float = 0.1,
     ang_vel_thresh: float = 1.0,
 ) -> tuple[dict[str, Any], Any]:
     """Verify that all movable scene objects physically settle before policy inference.
 
     Steps the environment with zero/neutral posture-holding actions to allow normal-force contact
-    resolution and settle transients, then reads back linear and angular velocities to verify
-    that every object is sitting still.
+    resolution and settle transients, dynamically monitoring linear and angular velocities until
+    every object is sitting still.
     """
     base_env = env.unwrapped
     scene = base_env.scene
@@ -87,12 +87,24 @@ def verify_and_settle_scene(
             movable_objects.append(name)
 
     obs = None
-    if settle_steps > 0:
+    max_steps = max(settle_steps, 25)
+    if max_steps > 0:
         num_envs = base_env.num_envs
         action_dim = base_env.action_manager.total_action_dim
         hold_action = torch.zeros((num_envs, action_dim), device=base_env.device)
-        for _ in range(settle_steps):
+        for step_idx in range(max_steps):
             obs, _, _, _, _ = env.step(hold_action)
+            if step_idx >= 15:
+                curr_settled = True
+                for name in movable_objects:
+                    asset = scene[name]
+                    lin_v = asset.data.root_lin_vel_w.norm(dim=-1).mean().item()
+                    ang_v = asset.data.root_ang_vel_w.norm(dim=-1).mean().item()
+                    if lin_v > lin_vel_thresh or ang_v > ang_vel_thresh:
+                        curr_settled = False
+                        break
+                if curr_settled:
+                    break
 
     settle_status = {}
     all_settled = True

@@ -81,6 +81,203 @@ FIXTURE_SECTOR_BOUNDS: dict[str, dict[str, tuple[float, float, float, float, flo
 }
 
 
+# ---------------------------------------------------------------------------
+# Depth Alignment: Pre-computed training dataset fingerprints
+# ---------------------------------------------------------------------------
+# Each entry captures the monocular depth statistics measured from the training
+# demonstration video using Depth Anything V2.  The oracle compares a candidate
+# scene's *predicted* image-plane object position (via pinhole projection) against
+# these reference values to flag spatial misalignment before launching simulation.
+
+DATASET_DEPTH_FINGERPRINTS: dict[str, dict[str, float]] = {
+    "g1_static_pick_and_place": {
+        # Measured from episode_000000.mp4 via Depth Anything V2 Small
+        "apple_y_norm": 0.717,
+        "apple_x_norm": 0.144,
+        "apple_depth_norm": 0.777,
+        "surface_slope": 0.0029,
+        "camera_pitch_deg": -38.0,
+        # Acceptable tolerance bands
+        "y_norm_tol": 0.20,
+        "x_norm_tol": 0.25,
+        "depth_norm_tol": 0.25,
+    },
+}
+
+# G1 head camera intrinsics (from g1.py PinholeCameraCfg)
+_G1_HEAD_CAM = {
+    "focal_length_mm": 15.0,
+    "width": 640,
+    "height": 480,
+    "sensor_width_mm": 36.0,  # default horizontal aperture
+    # Camera offset on head_link (position in head-link frame, ROS convention)
+    "offset_xyz": (0.04485, 0.0, 0.35325),
+    "offset_quat_xyzw": (-0.62721, 0.62721, -0.32651, 0.32651),
+    # G1 head_link sits at approximately pelvis_z + 0.65 m above ground
+    "head_link_height_above_base": 0.65,
+}
+
+
+def _quat_to_rotation_matrix(qx: float, qy: float, qz: float, qw: float) -> np.ndarray:
+    """Convert quaternion (x, y, z, w) to 3x3 rotation matrix."""
+    return np.array([
+        [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
+        [2 * (qx * qy + qz * qw), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw)],
+        [2 * (qx * qz - qy * qw), 2 * (qy * qz + qx * qw), 1 - 2 * (qx * qx + qy * qy)],
+    ])
+
+
+def _project_to_image_plane(
+    obj_world_xyz: tuple[float, float, float],
+    cam_world_xyz: tuple[float, float, float],
+    cam_quat_xyzw: tuple[float, float, float, float],
+    focal_px: float,
+    cx: float,
+    cy: float,
+) -> tuple[float, float, float] | None:
+    """Project a 3D world point onto a camera's image plane.
+
+    Returns:
+        (u_norm, v_norm, depth) normalized image coordinates and depth, or None if behind camera.
+    """
+    r_mat = _quat_to_rotation_matrix(*cam_quat_xyzw)
+    # World-to-camera transform: p_cam = R^T @ (p_world - t_cam)
+    delta = np.array(obj_world_xyz) - np.array(cam_world_xyz)
+    p_cam = r_mat.T @ delta
+
+    # ROS convention: Z forward, X right, Y down
+    if p_cam[2] <= 0.01:
+        return None  # Behind camera
+
+    u = focal_px * p_cam[0] / p_cam[2] + cx
+    v = focal_px * p_cam[1] / p_cam[2] + cy
+    depth = float(p_cam[2])
+
+    u_norm = u / (2 * cx)  # normalize to [0, 1]
+    v_norm = v / (2 * cy)
+    return (float(u_norm), float(v_norm), depth)
+
+
+def validate_depth_alignment(
+    spec: ArenaEnvGraphSpec,
+    dataset_key: str = "g1_static_pick_and_place",
+) -> list[str]:
+    """Predict object image-plane position from spec geometry and compare to dataset fingerprint.
+
+    Uses pinhole camera projection from the robot's head-cam pose and the object's world
+    position to estimate where the manipuland will appear in the frame. Compares against
+    the precomputed training dataset fingerprint to flag spatial misalignment before
+    running any simulation.  No GPU required.
+
+    Args:
+        spec: The environment graph specification.
+        dataset_key: Key into DATASET_DEPTH_FINGERPRINTS for the reference training distribution.
+    """
+    errors: list[str] = []
+    ref = DATASET_DEPTH_FINGERPRINTS.get(dataset_key)
+    if not ref or not spec.embodiment:
+        return errors
+
+    # --- Resolve robot base position ---
+    emb_pose = spec.embodiment.params.get("initial_pose", {}) if spec.embodiment.params else {}
+    emb_pos = emb_pose.get("position_xyz")
+    if not emb_pos or len(emb_pos) < 3:
+        return errors
+
+    # --- Estimate camera world position ---
+    cam = _G1_HEAD_CAM
+    base_z = emb_pos[2] if emb_pos[2] > 0.2 else 0.0
+    cam_world = (
+        emb_pos[0] + cam["offset_xyz"][0],
+        emb_pos[1] + cam["offset_xyz"][1],
+        base_z + cam["head_link_height_above_base"] + cam["offset_xyz"][2],
+    )
+
+    # --- Compute focal length in pixels ---
+    fx_px = cam["focal_length_mm"] * cam["width"] / cam["sensor_width_mm"]
+    cx = cam["width"] / 2.0
+    cy = cam["height"] / 2.0
+
+    # --- Find manipuland object (first non-furniture, non-receptacle task object) ---
+    manipuland = None
+    for obj in spec.objects:
+        obj_lower = f"{obj.id} {obj.registry_name}".lower()
+        is_furniture = any(k in obj_lower for k in ("shelf", "shelving", "table", "counter", "desk", "rack"))
+        is_receptacle = any(k in obj_lower for k in ("bin", "basket", "tray", "box", "bowl", "plate"))
+        if not is_furniture and not is_receptacle:
+            manipuland = obj
+            break
+
+    if not manipuland:
+        return errors
+
+    obj_pose = manipuland.params.get("initial_pose", {}) if manipuland.params else {}
+    obj_pos = obj_pose.get("position_xyz")
+    if not obj_pos or len(obj_pos) < 3:
+        return errors
+
+    # --- Project manipuland onto image plane ---
+    proj = _project_to_image_plane(
+        tuple(obj_pos),
+        cam_world,
+        cam["offset_quat_xyzw"],
+        fx_px,
+        cx,
+        cy,
+    )
+
+    if proj is None:
+        errors.append(
+            f"[DepthAlignmentOracle] Manipuland '{manipuland.id}' projects behind the robot's head camera. "
+            f"Object at {obj_pos} is not visible from camera at {cam_world}."
+        )
+        return errors
+
+    pred_x_norm, pred_y_norm, pred_depth = proj
+
+    # --- Compare against dataset fingerprint ---
+    ref_y = ref["apple_y_norm"]
+    ref_x = ref["apple_x_norm"]
+    # If task or object sector targets the right arm / right side, mirror the reference X
+    task_desc = spec.task.description.lower() if spec.task and spec.task.description else ""
+    on_rel = next((r for r in spec.relations if r.subject == manipuland.id and r.kind == "on"), None)
+    sector = on_rel.params.get("surface_sector", "") if on_rel and on_rel.params else ""
+    if "right arm" in task_desc or "front_right" in sector or "right" in sector:
+        ref_x = 1.0 - ref_x
+
+    y_tol = ref.get("y_norm_tol", 0.20)
+    x_tol = ref.get("x_norm_tol", 0.25)
+
+    y_delta = pred_y_norm - ref_y
+    x_delta = pred_x_norm - ref_x
+
+    if abs(y_delta) > y_tol:
+        direction = "higher in frame (object above training distribution)" if y_delta < 0 else "lower in frame"
+        errors.append(
+            f"[DepthAlignmentOracle] Manipuland '{manipuland.id}' projects to Y_norm={pred_y_norm:.3f} "
+            f"but training dataset expects Y_norm={ref_y:.3f} (delta={y_delta:+.3f}, tol=±{y_tol:.2f}). "
+            f"Object is {direction}. Adjust table height, camera pitch, or object forward distance."
+        )
+
+    if abs(x_delta) > x_tol:
+        direction = "too far left" if x_delta < 0 else "too far right"
+        errors.append(
+            f"[DepthAlignmentOracle] Manipuland '{manipuland.id}' projects to X_norm={pred_x_norm:.3f} "
+            f"but training dataset expects X_norm={ref_x:.3f} (delta={x_delta:+.3f}, tol=±{x_tol:.2f}). "
+            f"Object is {direction} in frame. Adjust lateral placement."
+        )
+
+    # --- Check if object distance is plausible for reaching ---
+    if pred_depth > 0.8:
+        errors.append(
+            f"[DepthAlignmentOracle] Manipuland '{manipuland.id}' is {pred_depth:.2f}m from head camera, "
+            f"which is likely too far for the training distribution (typical range 0.3–0.6m). "
+            f"Move object closer to robot or adjust robot base position."
+        )
+
+    return errors
+
+
 def get_known_fixture_bounds(name: str) -> tuple[float, float, float, float, float]:
     """Retrieve approximate support surface boundary [min_x, max_x, min_y, max_y, z_deck]."""
     name_lower = name.lower()
@@ -339,9 +536,10 @@ def relax_spec_spatial_factor_graph(spec: ArenaEnvGraphSpec) -> tuple[ArenaEnvGr
 
 
 def validate_spatial_geometry(spec: ArenaEnvGraphSpec) -> tuple[bool, list[str]]:
-    """Run comprehensive spatial geometric, kinematic, and support containment checks."""
+    """Run comprehensive spatial geometric, kinematic, depth alignment, and support containment checks."""
     diagnostics: list[str] = []
     diagnostics.extend(validate_relational_completeness(spec))
     diagnostics.extend(validate_support_containment(spec))
     diagnostics.extend(validate_kinematic_reachability(spec))
+    diagnostics.extend(validate_depth_alignment(spec))
     return len(diagnostics) == 0, diagnostics

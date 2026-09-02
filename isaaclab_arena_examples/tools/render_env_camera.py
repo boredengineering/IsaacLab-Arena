@@ -87,6 +87,11 @@ def render_environment_cameras(
     except Exception:
         zero_action = torch.zeros((1, *env.action_space.shape), device=env.unwrapped.device)
 
+    # For G1 WBC embodiments, channel -4 commands standing height (0.75m pelvis)
+    # rather than interpreting 0.0 as squat-to-floor.
+    if zero_action.shape[-1] in (23, 50):
+        zero_action[..., -4] = 0.75
+
     for step_idx in range(settle_steps):
         try:
             obs, _, _, _, _ = env.step(zero_action)

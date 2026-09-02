@@ -1,0 +1,50 @@
+{
+  "dataset_analysis": {
+    "label": "Dataset Demonstration",
+    "resolution": [
+      640,
+      480
+    ],
+    "object": {
+      "detected": true,
+      "bbox": [
+        54,
+        310,
+        76,
+        69
+      ],
+      "center": [
+        92,
+        344
+      ],
+      "relative_depth": 0.7765,
+      "norm_center_y": 0.7167,
+      "norm_center_x": 0.1437
+    },
+    "surface_gradient_slope": 0.002908,
+    "lower_deck_median_depth": 0.7804
+  },
+  "simulation_analysis": {
+    "label": "Simulation View",
+    "resolution": [
+      640,
+      480
+    ],
+    "object": {
+      "detected": false,
+      "bbox": null,
+      "center": null,
+      "relative_depth": null,
+      "norm_center_y": null,
+      "norm_center_x": null
+    },
+    "surface_gradient_slope": 0.001466,
+    "lower_deck_median_depth": 0.2118
+  },
+  "discrepancies": {
+    "surface_pitch_slope_ratio": 0.504
+  },
+  "diagnostics": [
+    "Camera pitch is substantially flatter in simulation than dataset (looking forward across table rather than down onto shelf)."
+  ]
+}

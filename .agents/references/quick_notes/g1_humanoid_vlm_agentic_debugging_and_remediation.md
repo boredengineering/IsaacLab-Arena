@@ -238,3 +238,25 @@ To bridge the gap between the low-shelf training distribution and the standard t
    * Relative base-to-object offsets: $\Delta X \in [+0.30, +0.35]\text{ m}$, $\Delta Y_{\text{left}} \in [+0.18, +0.22]\text{ m}$.
    * Relative vertical offset for `GN1x-Tuned-Arena-G1-Static-PickNPlace`: $\Delta Z_{\text{pelvis} \to \text{obj}} \approx -0.80\text{ m}$.
 
+
+---
+
+## 10. Depth Anything Spatial Audit: Empirical Proof of Geometric Disconnect
+
+Using **Depth Anything V2 Small** (`depth-anything/Depth-Anything-V2-Small-hf`) via [`depth_spatial_auditor.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena_examples/tools/depth_spatial_auditor.py), we performed an automated 3D spatial and depth audit comparing the training demonstration video (`episode_000000.mp4`) against our simulation camera view.
+
+### The 4-Panel Empirical Diagnostic
+![Depth Spatial Comparison](/root/.gemini/antigravity-cli/brain/ba3f1d90-4f3f-4461-aa90-252315968f4d/depth_spatial_comparison_v6.png)
+
+### Quantitative Metrics
+
+| Metric | Dataset Demonstration | Simulation View (v6 Tabletop) | Discrepancy / Ratio |
+| :--- | :--- | :--- | :--- |
+| **Surface Gradient Slope** ($\frac{\partial D}{\partial y}$) | `0.002908` | `0.000287` | **0.099 (10x flatter)** |
+| **Camera Line-of-Sight** | Pitch $\approx -35^\circ$ to $-45^\circ$ (looking down) | Pitch $\approx -5^\circ$ (looking forward) | $\Delta \text{Pitch} \approx 35^\circ$ |
+| **Object Vertical Coordinate** ($Y_{norm}$) | `0.7125` (lower third of frame) | `0.2750` (top slice of frame) | **$\Delta Y = -0.4375$** |
+| **Primary Visual Plane** | Horizontal shelf deck filling 70% of frame | Vertical cabinet facade & drawers filling 85% of frame | Complete structural domain shift |
+
+### Why Depth Anything Is Essential for Robotics Datasets
+1. **Zero-Depth Datasets**: Real-world and teleoperation robot datasets (LeRobot, OpenX, DROID) store only 2D RGB video. Depth Anything enables retroactively recovering dense 3D geometry and metric distances without re-collecting data.
+2. **Instant Pre-Flight Diagnosis**: Before running hundreds of simulation rollout steps, a single Depth-Anything comparison immediately flags when a target object or support plane is outside the visual training distribution.

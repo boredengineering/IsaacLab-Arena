@@ -201,6 +201,98 @@ class EvaluationDiagnosticOracle:
                     )
                 )
 
+            # Check Defect 5: Depth/Spatial Alignment Mismatch (Depth Anything V2)
+            # Compares actual rollout camera frames against training dataset using
+            # monocular depth estimation to quantify spatial misalignment.
+            trajectory_frames = sorted(eval_path.glob("**/trajectory*/step_*.png"))
+            dataset_video = self._find_reference_dataset_video(spec)
+            if (
+                trajectory_frames
+                and dataset_video
+                and success_rate < 0.3
+                and object_moved_rate < 0.2
+            ):
+                try:
+                    # Calculate expected target UV in simulation frame using pinhole projection
+                    sim_target_uv = None
+                    emb_pose = spec.embodiment.params.get("initial_pose", {}) if spec.embodiment and spec.embodiment.params else {}
+                    emb_pos = emb_pose.get("position_xyz")
+                    if manipuland_id and emb_pos:
+                        target_obj = next((o for o in spec.objects if o.id == manipuland_id), None)
+                        if target_obj and target_obj.params:
+                            t_pos = target_obj.params.get("initial_pose", {}).get("position_xyz")
+                            if t_pos:
+                                from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
+                                    _G1_HEAD_CAM,
+                                    _project_to_image_plane,
+                                )
+                                cam = _G1_HEAD_CAM
+                                fx = cam["focal_length_mm"] * cam["width"] / cam["sensor_width_mm"]
+                                cx = cam["width"] / 2.0
+                                cy = cam["height"] / 2.0
+                                base_z = emb_pos[2] if emb_pos[2] > 0.2 else 0.0
+                                cam_world = (
+                                    emb_pos[0] + cam["offset_xyz"][0],
+                                    emb_pos[1] + cam["offset_xyz"][1],
+                                    base_z + cam["head_link_height_above_base"] + cam["offset_xyz"][2],
+                                )
+                                proj = _project_to_image_plane(tuple(t_pos), cam_world, cam["offset_quat_xyzw"], fx, cx, cy)
+                                if proj:
+                                    sim_target_uv = (proj[0], proj[1])
+
+                    depth_report = self._run_depth_audit(
+                        dataset_video, trajectory_frames[0], sim_target_uv=sim_target_uv
+                    )
+                    if depth_report:
+                        slope_ratio = depth_report.get("discrepancies", {}).get(
+                            "surface_pitch_slope_ratio", 1.0
+                        )
+                        y_delta_px = depth_report.get("discrepancies", {}).get(
+                            "object_vertical_pixel_delta", 0.0
+                        )
+                        depth_delta = depth_report.get("discrepancies", {}).get(
+                            "object_relative_depth_delta", 0.0
+                        )
+                        sign_flip = depth_report.get("discrepancies", {}).get(
+                            "surface_slope_sign_flip", False
+                        )
+                        diagnostics_msgs = depth_report.get("diagnostics", [])
+
+                        # Trigger on significant spatial misalignment
+                        if sign_flip or abs(slope_ratio) < 0.4 or abs(y_delta_px) > 0.20 or abs(depth_delta) > 0.25:
+                            # Calculate concrete spatial patches:
+                            # Move table closer to robot so target object falls inside training reaching envelope
+                            emb_x = emb_pos[0] if emb_pos else -0.42
+                            recommended_table_x = round(emb_x + 0.28, 3)
+                            table_id = spec.background.id if spec.background else "maple_table"
+
+                            signatures.append(
+                                FailureSignature(
+                                    defect_type="depth_alignment_mismatch",
+                                    severity=0.98,
+                                    evidence=(
+                                        f"Depth Anything V2 spatial audit: slope_ratio={slope_ratio:.3f}, "
+                                        f"sign_flip={sign_flip}, apple_y_delta={y_delta_px:+.3f}, depth_delta={depth_delta:+.3f}. "
+                                        + " ".join(diagnostics_msgs)
+                                    ),
+                                    recommended_spatial_patches={
+                                        table_id: {
+                                            "position_xyz": [recommended_table_x, 0.0, 0.0],
+                                        },
+                                        manipuland_id or "pick_up_object": {
+                                            "surface_sector": "front_center",
+                                        },
+                                        container_id or "destination_location": {
+                                            "surface_sector": "front_left",
+                                        },
+                                    },
+                                )
+                            )
+                except Exception as exc:
+                    print(
+                        f"[EvaluationDiagnosticOracle] Depth audit skipped: {exc}"
+                    )
+
         # --- OPTION B: Generative LLM Healing (When configured or when deterministic signatures don't trigger) ---
         if healing_mode == "llm" or (healing_mode == "hybrid" and len(signatures) == 0 and success_rate < 0.8):
             llm_sigs = self._diagnose_with_llm(
@@ -308,6 +400,92 @@ Identify any physical, kinematic, perceptual, or controller defects and provide 
         except Exception as exc:
             print(f"[EvaluationDiagnosticOracle] Note: LLM diagnostic skipped or unavailable: {exc}")
             return []
+
+    @staticmethod
+    def _find_reference_dataset_video(spec: ArenaEnvGraphSpec) -> Path | None:
+        """Locate the training demonstration video for the given spec's task lineage."""
+        import os
+
+        # 1. Check DATASET_DIR environment variable
+        dataset_dir_env = os.environ.get("DATASET_DIR")
+        if dataset_dir_env:
+            base = Path(dataset_dir_env)
+            # Check for direct mp4s or chunked LeRobot structure
+            mp4_candidates = list(base.glob("**/episode_000000.mp4")) + list(base.glob("**/*.mp4"))
+            if mp4_candidates:
+                return mp4_candidates[0]
+
+        # 2. Search well-known dataset paths
+        candidates = [
+            Path("/datasets/isaaclab_arena/static_apple_tutorial/arena_g1_static_apple_dataset_recorded/lerobot/videos/chunk-000/observation.images.ego_view/episode_000000.mp4"),
+            Path("/home/tarfy/datasets/isaaclab_arena/static_apple_tutorial/arena_g1_static_apple_dataset_recorded/lerobot/videos/chunk-000/observation.images.ego_view/episode_000000.mp4"),
+        ]
+        for c in candidates:
+            if c.exists():
+                return c
+
+        # 3. Dynamic scan in /datasets/
+        root = Path("/datasets")
+        if root.exists():
+            matches = list(root.glob("**/episode_000000.mp4"))
+            if matches:
+                return matches[0]
+
+        return None
+
+    @staticmethod
+    def _run_depth_audit(
+        dataset_video: Path,
+        sim_frame: Path,
+        sim_target_uv: tuple[float, float] | None = None,
+        dataset_target_uv: tuple[float, float] | None = None,
+    ) -> dict | None:
+        """Run Depth Anything V2 spatial comparison between dataset and simulation frame.
+
+        Args:
+            dataset_video: Path to the training demonstration MP4.
+            sim_frame: Path to a simulation camera snapshot (PNG).
+            sim_target_uv: Optional (u_norm, v_norm) expected coordinate in sim frame.
+            dataset_target_uv: Optional (u_norm, v_norm) expected coordinate in dataset frame.
+
+        Returns:
+            Depth audit report dict, or None if the auditor is unavailable.
+        """
+        try:
+            import cv2
+            import numpy as np
+            from PIL import Image as PILImage
+
+            from isaaclab_arena.agentic_environment_generation.depth_spatial_auditor import DepthSpatialAuditor
+        except ImportError:
+            return None
+
+        # Extract first frame from dataset video
+        cap = cv2.VideoCapture(str(dataset_video))
+        ret, frame_bgr = cap.read()
+        cap.release()
+        if not ret:
+            return None
+        d_img = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+
+        # Load simulation frame
+        s_img = np.array(PILImage.open(str(sim_frame)).convert("RGB"))
+
+        # Default dataset target UV from known canonical demonstration if not supplied
+        if dataset_target_uv is None:
+            dataset_target_uv = (0.144, 0.717)
+
+        # Run comparison (saves viz alongside the sim frame)
+        viz_path = sim_frame.parent / f"{sim_frame.stem}_depth_audit.png"
+        auditor = DepthSpatialAuditor()
+        report = auditor.compare(
+            d_img,
+            s_img,
+            output_viz_path=str(viz_path),
+            sim_target_uv=sim_target_uv,
+            dataset_target_uv=dataset_target_uv,
+        )
+        return report
 
 
 

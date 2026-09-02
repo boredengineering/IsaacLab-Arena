@@ -20,7 +20,7 @@
         arena:EnvironmentVersion ;
     prov:generatedAtTime "2026-09-02T15:36:23.821975+00:00"^^xsd:dateTime ;
     prov:wasDerivedFrom :g1_tabletop_apple_to_plate_v2 ;
-    arena:evalDir "/workspaces/isaaclab_arena/eval_output/g1_tabletop_apple_to_plate/2026-09-02_16-41-51"^^xsd:string ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/g1_tabletop_apple_to_plate/2026-09-02_20-28-10"^^xsd:string ;
     arena:failureDiagnostic "vlm_inverted_placement: VLM Critic observed clay plate on the right and apple on the left, contradicting the right-arm task specification."^^xsd:string ;
     arena:remediationAction "Embodiment: Maintained 50-D g1_wbc_agile_joint with action_horizon=40, action_chunk_length=20."^^xsd:string,
         "Spatial: Rectified front_right and front_left table sector bounds to REP-103 robot coordinate frame (-Y right, +Y left) as diagnosed by VLM Critic."^^xsd:string ;

@@ -1,0 +1,62 @@
+{
+  "scenario": "C1 G1 Tabletop Apple to Plate (v6, maple_table)",
+  "dataset_demo": {
+    "apple_center_px": [
+      92,
+      344
+    ],
+    "apple_depth_norm": 0.7765,
+    "apple_y_norm": 0.7167,
+    "apple_x_norm": 0.1437,
+    "surface_slope": 0.001152
+  },
+  "sim_headcam": {
+    "frame": "v6_robot_head_cam_view.png",
+    "apple_center_px": [
+      235,
+      170
+    ],
+    "apple_depth_norm": 0.6039,
+    "apple_y_norm": 0.3542,
+    "apple_x_norm": 0.3672,
+    "surface_slope": -0.005023
+  },
+  "sim_step000": {
+    "frame": "trajectory_v6_full/step_000.png",
+    "apple_center_px": [
+      225,
+      160
+    ],
+    "apple_depth_norm": 0.302,
+    "apple_y_norm": 0.3333,
+    "apple_x_norm": 0.3516,
+    "surface_slope": -0.002652
+  },
+  "sim_step119": {
+    "frame": "trajectory_v6_full/step_119.png",
+    "apple_center_px": [
+      205,
+      170
+    ],
+    "apple_depth_norm": 0.2667,
+    "apple_y_norm": 0.3542,
+    "apple_x_norm": 0.3203,
+    "surface_slope": 0.000718
+  },
+  "discrepancies": {
+    "headcam_apple_depth_delta": -0.1725,
+    "headcam_apple_y_delta_px": -174,
+    "headcam_apple_x_delta_px": 143,
+    "headcam_slope_ratio": -4.362,
+    "step000_apple_depth_delta": -0.4745,
+    "step000_slope_ratio": -2.303,
+    "step119_apple_depth_delta": -0.5098,
+    "step119_slope_ratio": 0.624
+  },
+  "diagnostics": [
+    "Camera pitch angle significantly differs from dataset.",
+    "Apple depth moderately mismatched (delta=-0.1725).",
+    "Apple vertical position is severely off (-174 px, -36.2% of frame).",
+    "Apple horizontal position is severely off (+143 px)."
+  ]
+}

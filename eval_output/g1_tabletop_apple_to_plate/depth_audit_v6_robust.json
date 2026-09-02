@@ -1,0 +1,66 @@
+{
+  "dataset_analysis": {
+    "label": "Dataset Demonstration",
+    "resolution": [
+      640,
+      480
+    ],
+    "object": {
+      "detected": true,
+      "method": "hsv_saliency",
+      "bbox": [
+        56,
+        310,
+        72,
+        26
+      ],
+      "center": [
+        92,
+        323
+      ],
+      "relative_depth": 0.7098,
+      "norm_center_y": 0.6729,
+      "norm_center_x": 0.1437
+    },
+    "surface_gradient_slope": 0.002185,
+    "lower_deck_median_depth": 0.8
+  },
+  "simulation_analysis": {
+    "label": "Simulation View",
+    "resolution": [
+      640,
+      480
+    ],
+    "object": {
+      "detected": true,
+      "method": "target_uv_projection",
+      "bbox": [
+        210,
+        145,
+        48,
+        48
+      ],
+      "center": [
+        234,
+        169
+      ],
+      "relative_depth": 0.598,
+      "norm_center_y": 0.3521,
+      "norm_center_x": 0.3656
+    },
+    "surface_gradient_slope": -0.003925,
+    "lower_deck_median_depth": 0.3216
+  },
+  "discrepancies": {
+    "object_relative_depth_delta": -0.1118,
+    "object_vertical_pixel_delta": -0.3208,
+    "object_horizontal_pixel_delta": 0.2219,
+    "surface_pitch_slope_ratio": -1.796,
+    "surface_slope_sign_flip": true
+  },
+  "diagnostics": [
+    "Target object distance is within acceptable training distribution range.",
+    "Target object is higher in frame (above reach envelope) in simulation (vertical delta: -0.321).",
+    "CRITICAL: Camera pitch slope sign is inverted! Simulation camera is looking level/upward across table, whereas demonstration was looking steeply down onto support surface."
+  ]
+}

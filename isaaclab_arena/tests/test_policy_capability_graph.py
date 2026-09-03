@@ -20,6 +20,7 @@ import rdflib
 from isaaclab_arena.agentic_environment_generation.policy_capability_graph import (
     DIAGNOSTIC_TECHNIQUES,
     FAILURE_MODES,
+    KINEMATIC_MANIFOLDS,
     REMEDIATION_TECHNIQUES,
     SIM_TO_REAL_INVARIANTS,
     DiagnosticCapabilities,
@@ -30,6 +31,8 @@ from isaaclab_arena.agentic_environment_generation.policy_capability_graph impor
     get_policy_profile,
     plan_diagnostic_sequence,
     rank_remediations,
+    resolve_manifold_for_offset,
+    resolve_support_relation,
     select_next_diagnostic,
     select_remediation,
 )
@@ -51,6 +54,22 @@ class _AssetStub:
 
 
 @dataclass
+class _RelationStub:
+    kind: str
+    subject: str
+    reference: str | None = None
+    params: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class _ReifiedStub:
+    source_id: str
+    relation_type: str
+    target_id: str
+    kinematic_manifold: str | None = None
+
+
+@dataclass
 class _TaskStub:
     description: str
 
@@ -63,6 +82,33 @@ class _SpecStub:
     objects: list[Any]
     task: Any
     relations: list[Any] = field(default_factory=list)
+    reified_relations: list[Any] | None = None
+
+
+def _relational_spec(
+    fixture_registry: str,
+    sector: str | None = None,
+    nominal_height: float | None = None,
+    manifold: str | None = None,
+    object_pose: list[float] | None = None,
+) -> _SpecStub:
+    """A scene whose manipuland position comes from its support relation, as generated envs do."""
+    params: dict[str, Any] = {}
+    if sector:
+        params["surface_sector"] = sector
+    if nominal_height is not None:
+        params["nominal_height"] = nominal_height
+    return _SpecStub(
+        env_name="relational_scene",
+        embodiment=_asset("g1", "g1_wbc_agile_joint", [-0.46, 0.0, 0.0]),
+        background=_asset("support", fixture_registry),
+        objects=[_asset("red_apple", "apple_01_objaverse_robolab", object_pose)],
+        task=_TaskStub("move the apple to the plate"),
+        relations=[_RelationStub(kind="on", subject="red_apple", reference="support", params=params)],
+        reified_relations=(
+            [_ReifiedStub("red_apple", "PLACED_ON", "support", kinematic_manifold=manifold)] if manifold else None
+        ),
+    )
 
 
 def _asset(asset_id: str, registry_name: str, position: list[float] | None = None) -> _AssetStub:
@@ -71,29 +117,39 @@ def _asset(asset_id: str, registry_name: str, position: list[float] | None = Non
 
 
 def _tabletop_spec() -> _SpecStub:
-    """Scenario C1 as actually built: maple table at chest height, manipuland front-right."""
+    """Scenario C1 as actually built, using positions MEASURED in the running scene.
+
+    Earlier versions of this stub used a world-frame apple z of 0.7818 against a robot root at
+    z=0.0, which implied the apple sat 0.78 m above the pelvis. That was the frame error the C1
+    autopsy inherited. The values below come from measure_embodiment_frames.py against the real
+    v9 environment: the robot root is declared at z=0.0007 and the apple settles at world
+    z=0.07032, i.e. roughly at pelvis height.
+    """
     return _SpecStub(
         env_name="g1_tabletop_apple_to_plate",
-        embodiment=_asset("g1", "g1_wbc_agile_joint", [-0.46, 0.0, 0.0]),
+        embodiment=_asset("g1", "g1_wbc_agile_joint", [-0.46, 0.0, 0.0007]),
         background=_asset("maple_table", "maple_table_robolab"),
         objects=[
-            _asset("red_apple", "apple_01_objaverse_robolab", [0.0798, -0.3199, 0.7818]),
-            _asset("clay_plate", "clay_plate_robolab", [0.1133, 0.2542, 0.7527]),
+            _asset("red_apple", "apple_01_objaverse_robolab", [-0.09396, 0.05867, 0.07032]),
+            _asset("clay_plate", "clay_plate_robolab", [-0.14346, 0.02099, 0.0066]),
         ],
         task=_TaskStub("Reach with the right arm to grasp the red apple and place it onto the clay plate"),
     )
 
 
 def _corpus_aligned_spec() -> _SpecStub:
-    """The same task laid out to match every one of the corpus invariants."""
+    """The same task laid out to match every corpus invariant, using MEASURED positions.
+
+    From measure_embodiment_frames.py on galileo_g1_static_pick_and_place: robot root/pelvis at
+    world z=-0.0445, apple at z=-0.00457, i.e. +0.0399 relative to the pelvis.
+    """
     return _SpecStub(
         env_name="galileo_g1_static_pick_and_place",
-        embodiment=_asset("g1", "g1_wbc_agile_joint", [-0.46, 0.0, 0.0]),
+        embodiment=_asset("g1", "g1_wbc_agile_joint", [0.24289, 0.077, -0.0445]),
         background=_asset("shelf", "galileo_locomanip_warehouse_shelf"),
         objects=[
-            # 0.75 pelvis offset - 0.8015 corpus height puts the manipuland at the trained elevation.
-            _asset("red_apple", "apple_01_objaverse_robolab", [0.0, 0.199, -0.0515]),
-            _asset("clay_plate", "clay_plate_robolab", [0.0, -0.02, -0.0515]),
+            _asset("red_apple", "apple_01_objaverse_robolab", [0.57806, 0.23175, -0.00457]),
+            _asset("clay_plate", "clay_plate_robolab", [0.57849, 0.05998, -0.02974]),
         ],
         task=_TaskStub("move the apple to the plate"),
     )
@@ -150,22 +206,30 @@ def test_friction_inflation_is_registered_but_inadmissible():
 
 
 def test_tabletop_scene_is_out_of_distribution_on_the_documented_axes():
-    """The measured shifts must reproduce the C1 autopsy from the spec alone."""
+    """Which C1 axes are actually violated, once the frames are measured rather than assumed.
+
+    The original autopsy reported an 80 cm vertical gap. Measurement showed the two scenes differ
+    by ~6.5 cm in support height, so **height is in tolerance** and the violations are laterality,
+    prompt wording, and visual domain. This test pins that corrected reading.
+    """
     profile = get_policy_profile(GN1X)
     assert profile is not None
     shifts = {shift.axis: shift for shift in compute_distribution_shifts(_tabletop_spec(), profile)}
 
     height = shifts["surface_height_rel_pelvis"]
-    assert not height.within_tolerance
-    # Corpus fixed the manipuland ~80 cm below the pelvis; the maple table puts it at pelvis level.
-    assert height.magnitude == pytest.approx(0.833, abs=0.02)
-    assert height.sigma > 5.0
+    assert height.within_tolerance, f"height should no longer be blocking: {height.evidence}"
+    assert abs(height.magnitude) < 0.10
+    assert "kinematic_manifold" not in shifts, "both scenes share one reach envelope"
 
-    assert shifts["arm_laterality"].scene_value == "right"
-    assert not shifts["arm_laterality"].within_tolerance
+    # The measured layout places the apple slightly LEFT of the base centreline, matching the
+    # corpus. The "right arm" in the C1 specification is in the task *text*, not the built layout.
+    assert shifts["arm_laterality"].scene_value == "left"
+    assert shifts["arm_laterality"].within_tolerance
+
+    # What is actually still violated, once height and laterality are measured rather than assumed.
     assert not shifts["prompt_template"].within_tolerance
     assert not shifts["visual_domain"].within_tolerance
-    # The one axis v6 onward got right, and the graph should say so rather than flagging everything.
+    # And the axis v6 onward got right; the graph should say so rather than flagging everything.
     assert shifts["controller_binding"].within_tolerance
 
 
@@ -185,6 +249,200 @@ def test_unregistered_policy_reports_unknown_rather_than_guessing():
 
 
 # ---------------------------------------------------------------------------
+# Support-relation resolution
+# ---------------------------------------------------------------------------
+
+
+def test_support_relation_resolves_from_declared_nominal_height():
+    """An explicit nominal_height wins, matching the object placer's precedence."""
+    spec = _relational_spec("maple_table_robolab", sector="front_left", nominal_height=0.42)
+    support = resolve_support_relation(spec)
+
+    assert support is not None
+    assert support.height_source == "nominal_height"
+    assert support.surface_z == pytest.approx(0.42)
+    # The G1's articulation root is its pelvis, so a root at z=0 puts the pelvis at z=0 and the
+    # offset equals the surface height itself.
+    assert support.offset_rel_frame == pytest.approx(0.42)
+
+
+def test_support_relation_resolves_from_a_named_shelf_tier():
+    """A sector name resolves through the same table the placer reads, with no object pose at all."""
+    spec = _relational_spec("galileo_locomanip", sector="shelf_tier_3")
+    support = resolve_support_relation(spec)
+
+    assert support is not None
+    assert support.height_source == "surface_sector"
+    assert support.anchor_name == "shelf_tier_3"
+    # FIXTURE_SECTOR_BOUNDS declares shelf_tier_3 at +0.90.
+    assert support.surface_z == pytest.approx(0.90)
+    assert support.offset_rel_frame == pytest.approx(0.90)
+
+
+def test_support_relation_prefers_the_relation_over_an_explicit_pose():
+    """Where both exist the relation wins, because the placer derives the pose from it."""
+    spec = _relational_spec(
+        "galileo_locomanip", sector="shelf_tier_1", object_pose=[0.0, 0.199, 0.7818]
+    )
+    support = resolve_support_relation(spec)
+    assert support.height_source == "surface_sector"
+    assert support.surface_z == pytest.approx(-0.03)
+
+
+def test_unresolvable_support_height_is_reported_not_invented():
+    """An under-determined spec must say so rather than defaulting to zero and ranking on it."""
+    spec = _relational_spec("some_unknown_fixture", sector="mystery_shelf")
+    support = resolve_support_relation(spec)
+
+    assert support is not None
+    assert support.height_source == "unresolved"
+    assert support.surface_z is None
+    assert support.offset_rel_frame is None
+
+    shifts = {s.axis: s for s in compute_distribution_shifts(spec, get_policy_profile(GN1X))}
+    height = shifts["surface_height_rel_pelvis"]
+    assert height.scene_value == "unresolved"
+    assert height.manifests_as == (), "an unresolved axis must not raise belief in any failure mode"
+
+
+def test_support_relation_measured_against_a_named_frame():
+    """The offset is frame-relative; asking for the shoulder frame changes the answer."""
+    spec = _relational_spec("galileo_locomanip", sector="shelf_tier_3")
+    pelvis = resolve_support_relation(spec, embodiment_frame="pelvis")
+    shoulder = resolve_support_relation(spec, embodiment_frame="shoulder")
+    base = resolve_support_relation(spec, embodiment_frame="base")
+
+    # The shoulder sits 0.292 m above the pelvis, which the root coincides with on the G1, so the
+    # shoulder-relative offset is lower and base and pelvis agree.
+    assert pelvis.offset_rel_frame > shoulder.offset_rel_frame
+    assert shoulder.offset_rel_frame == pytest.approx(0.90 - 0.292)
+    assert base.offset_rel_frame == pytest.approx(pelvis.offset_rel_frame)
+    assert base.offset_rel_frame == pytest.approx(0.90)
+
+
+def test_corpus_height_tier_reports_no_blocking_shift():
+    """The galileo tier_1 deck is the corpus condition, so it must come back clean.
+
+    tier_1 sits at -0.03, and the measured corpus invariant is +0.040 -- a 0.07 m departure, inside
+    the (still unmeasured) 0.15 m tolerance.
+    """
+    spec = _relational_spec("galileo_locomanip", sector="shelf_tier_1")
+    shifts = compute_distribution_shifts(spec, get_policy_profile(GN1X))
+    height = next(s for s in shifts if s.axis == "surface_height_rel_pelvis")
+    assert height.within_tolerance, height.evidence
+    assert not any(s.axis == "kinematic_manifold" for s in shifts)
+
+
+# ---------------------------------------------------------------------------
+# Kinematic manifolds
+# ---------------------------------------------------------------------------
+
+
+def test_manifold_envelopes_classify_the_sweep_conditions():
+    assert resolve_manifold_for_offset(-0.78) == "low_shelf_reach_down"
+    assert resolve_manifold_for_offset(-0.24) == "mid_shelf_reach"
+    assert resolve_manifold_for_offset(0.15) == "tabletop_stationary_reach"
+    assert resolve_manifold_for_offset(-5.0) is None, "an offset outside every envelope must not be forced"
+
+
+def test_canonical_envelopes_partition_the_height_axis():
+    """Canonical envelopes must be disjoint, or classification becomes registry-order dependent."""
+    families = {m.embodiment_family for m in KINEMATIC_MANIFOLDS.values() if m.embodiment_family}
+    for family in families:
+        envelopes = [
+            m
+            for m in KINEMATIC_MANIFOLDS.values()
+            if m.canonical and m.kind == "support_envelope" and m.embodiment_family == family
+        ]
+        for i, a in enumerate(envelopes):
+            for b in envelopes[i + 1 :]:
+                disjoint = a.z_max_rel_frame <= b.z_min_rel_frame or b.z_max_rel_frame <= a.z_min_rel_frame
+                assert disjoint, f"{a.manifold_id} overlaps {b.manifold_id} for {family}"
+
+
+def test_registry_shape_is_internally_consistent():
+    """Support envelopes need bounds and a family; trajectory labels must not claim either."""
+    for manifold in KINEMATIC_MANIFOLDS.values():
+        assert manifold.kind in ("support_envelope", "trajectory"), manifold.manifold_id
+        if manifold.kind == "support_envelope":
+            assert manifold.z_min_rel_frame is not None and manifold.z_max_rel_frame is not None
+            assert manifold.z_min_rel_frame < manifold.z_max_rel_frame
+            assert manifold.embodiment_family, manifold.manifold_id
+        else:
+            assert manifold.z_min_rel_frame is None and manifold.z_max_rel_frame is None
+        if manifold.alias_of is not None:
+            assert not manifold.canonical, f"{manifold.manifold_id} is both an alias and canonical"
+            assert manifold.alias_of in KINEMATIC_MANIFOLDS
+
+
+def test_trajectory_labels_never_classify_as_a_support_envelope():
+    """A height query must never return a label that describes motion instead of a surface."""
+    for offset in (-0.9, -0.4, 0.0, 0.3):
+        resolved = resolve_manifold_for_offset(offset)
+        if resolved is not None:
+            assert KINEMATIC_MANIFOLDS[resolved].kind == "support_envelope"
+            assert KINEMATIC_MANIFOLDS[resolved].canonical
+
+
+def test_manifold_mismatch_is_reported_as_a_categorical_shift():
+    """A scene in a known-but-uncovered envelope gets its own shift; no config patch closes it."""
+    # +0.30 from the pelvis is the countertop envelope; the corpus covers only tabletop.
+    spec = _relational_spec("maple_table_robolab", nominal_height=0.30)
+    shifts = {s.axis: s for s in compute_distribution_shifts(spec, get_policy_profile(GN1X))}
+
+    assert "kinematic_manifold" in shifts
+    manifold_shift = shifts["kinematic_manifold"]
+    assert not manifold_shift.within_tolerance
+    assert manifold_shift.scene_value == "countertop_stationary_reach"
+    assert manifold_shift.corpus_value == "tabletop_stationary_reach"
+    assert "categorical" in manifold_shift.evidence
+
+
+def test_offset_outside_every_envelope_implicates_reachability_not_the_policy():
+    """Beyond every envelope, the honest reading is "maybe unreachable", not "policy is OOD"."""
+    spec = _relational_spec("galileo_locomanip", sector="shelf_tier_3")  # +0.90 from the pelvis
+    shifts = {s.axis: s for s in compute_distribution_shifts(spec, get_policy_profile(GN1X))}
+
+    manifold_shift = shifts["kinematic_manifold"]
+    assert manifold_shift.scene_value == "outside every registered envelope"
+    assert manifold_shift.manifests_as == ("kinematic_unreachable",)
+    assert "beyond the arm" in manifold_shift.evidence
+    assert manifold_shift.sigma > 1.0, "outside everything should outrank a merely uncovered envelope"
+
+
+def test_measured_scene_heights_are_close_together():
+    """The C1 scenes differ by ~6.5 cm in support height, not the 80 cm the autopsy assumed.
+
+    Measured 2026-09-03 with measure_embodiment_frames.py: galileo apple at +0.0399 from the
+    pelvis, maple apple at -0.0251. Both shoulder distances (0.43 m, 0.47 m) sit inside the
+    documented 0.35-0.48 m comfortable band. This test pins the correction so the 80 cm figure
+    cannot quietly return.
+    """
+    galileo_offset, maple_offset = 0.0399, -0.0251
+    assert abs(galileo_offset - maple_offset) < 0.10
+
+    profile = get_policy_profile(GN1X)
+    invariant = profile.invariant("surface_height_rel_pelvis")
+    assert invariant.numeric_value == pytest.approx(galileo_offset, abs=0.01)
+    # Both scenes fall inside the same reach envelope, so height cannot be the categorical blocker.
+    assert resolve_manifold_for_offset(galileo_offset) == resolve_manifold_for_offset(maple_offset)
+
+
+def test_every_manifold_string_in_generated_specs_is_registered():
+    """Free-text manifolds that resolve to nothing are how this abstraction rots."""
+    from pathlib import Path
+
+    declared = set()
+    for yaml_path in Path("generated_envs").glob("**/*.yaml"):
+        for line in yaml_path.read_text(encoding="utf-8").splitlines():
+            if "kinematic_manifold:" in line:
+                declared.add(line.split(":", 1)[1].strip())
+    assert declared, "no kinematic_manifold values found; the scan is not reaching the specs"
+    unknown = {m for m in declared if m and m not in KINEMATIC_MANIFOLDS}
+    assert not unknown, f"unregistered kinematic_manifold values in generated specs: {sorted(unknown)}"
+
+
+# ---------------------------------------------------------------------------
 # Belief update and planning
 # ---------------------------------------------------------------------------
 
@@ -196,9 +454,14 @@ def test_shift_severity_drives_the_dominant_failure_mode():
 
     dominant = state.dominant()
     assert dominant is not None
-    assert dominant[0] == "vertical_reach_ood"
-    assert state.beliefs["vertical_reach_ood"] > FAILURE_MODES["vertical_reach_ood"].prior
-    # Nothing observed bears on transport dynamics, so that prior must not have moved.
+    # With frames measured, the visual domain is the dominant violated axis -- not height.
+    assert dominant[0] == "vision_domain_ood"
+    assert state.beliefs["vision_domain_ood"] > FAILURE_MODES["vision_domain_ood"].prior
+    # Height is in tolerance, so it must not have been raised at all.
+    assert state.beliefs["vertical_reach_ood"] == pytest.approx(
+        FAILURE_MODES["vertical_reach_ood"].prior
+    )
+    # Nothing observed bears on transport dynamics, so that prior must not have moved either.
     assert state.beliefs["in_flight_slip_inertia"] == pytest.approx(
         FAILURE_MODES["in_flight_slip_inertia"].prior
     )
@@ -277,12 +540,12 @@ def test_remediation_respects_the_scene_preserving_constraint():
     state = PolicyDiagnosticState()
     state.seed_from_shifts(compute_distribution_shifts(_tabletop_spec(), profile))
 
-    changing = select_remediation(state, preserve_target_scene=False)
     preserving = select_remediation(state, preserve_target_scene=True)
-    assert changing is not None and preserving is not None
-    assert changing[0].technique_id == "reanchor_surface_to_corpus_height"
-    assert changing[0].preserves_target_scene is False
+    assert preserving is not None
     assert preserving[0].preserves_target_scene is True
+    # With the visual domain dominant, the scene-preserving fix is to adapt the policy -- which is
+    # the direction chosen for this project.
+    assert preserving[0].technique_id == "visual_domain_randomization_finetune"
 
     ranked = rank_remediations(state, preserve_target_scene=True)
     assert all(technique.preserves_target_scene for technique, _ in ranked)
@@ -328,10 +591,12 @@ def test_out_of_tolerance_shift_emits_the_violates_invariant_edge():
     violated = list(graph.objects(scene_uri, ARENA.violatesInvariant))
     assert violated, "no arena:violatesInvariant edge emitted for an out-of-distribution scene"
     axes = {str(next(graph.objects(inv, ARENA.invariantAxis), "")) for inv in violated}
-    assert "surface_height_rel_pelvis" in axes
+    assert "visual_domain" in axes
 
-    # Only blocking shifts assert a violation; in-tolerance axes must not.
+    # Only blocking shifts assert a violation; in-tolerance axes must not. Height and controller
+    # binding are both within tolerance once the frames are measured.
     assert "controller_binding" not in axes
+    assert "surface_height_rel_pelvis" not in axes
 
 
 def test_blocking_shift_query_joins_shifts_to_admissible_remediations():
@@ -343,7 +608,9 @@ def test_blocking_shift_query_joins_shifts_to_admissible_remediations():
 
     rows = query_blocking_shifts(graph)
     assert rows, "SPARQL returned no blocking shifts for an out-of-distribution scene"
-    assert rows[0]["axis"] == "surface_height_rel_pelvis", "results should be ordered by severity"
+    sigmas = [row["sigma"] for row in rows]
+    assert sigmas == sorted(sigmas, reverse=True), f"results should be ordered by severity: {sigmas}"
+    assert {row["axis"] for row in rows} >= {"visual_domain", "prompt_template"}
     remediations = {row["remediation"] for row in rows if row["remediation"]}
     assert remediations, "blocking shifts should join through to at least one admissible remediation"
 

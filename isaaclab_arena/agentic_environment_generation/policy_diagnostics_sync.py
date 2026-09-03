@@ -23,6 +23,7 @@ from rdflib import Literal, Namespace, RDF, RDFS, XSD
 from isaaclab_arena.agentic_environment_generation.policy_capability_graph import (
     DIAGNOSTIC_TECHNIQUES,
     FAILURE_MODES,
+    KINEMATIC_MANIFOLDS,
     REMEDIATION_TECHNIQUES,
     SIM_TO_REAL_INVARIANTS,
     DistributionShift,
@@ -91,6 +92,24 @@ def emit_technique_catalogue_rdf(graph: rdflib.Graph | None = None) -> rdflib.Gr
         uri = INSTANCES[f"invariant_{name}"]
         graph.add((uri, RDF.type, ARENA.SimToRealInvariant))
         graph.add((uri, RDFS.comment, Literal(description, datatype=XSD.string)))
+
+    for manifold in KINEMATIC_MANIFOLDS.values():
+        uri = INSTANCES[f"manifold_{manifold.manifold_id}"]
+        graph.add((uri, RDF.type, ARENA.KinematicManifold))
+        graph.add((uri, RDFS.label, Literal(manifold.manifold_id, datatype=XSD.string)))
+        graph.add((uri, RDFS.comment, Literal(manifold.description, datatype=XSD.string)))
+        graph.add((uri, ARENA.manifoldKind, Literal(manifold.kind, datatype=XSD.string)))
+        graph.add((uri, ARENA.isCanonicalManifold, Literal(manifold.canonical, datatype=XSD.boolean)))
+        if manifold.embodiment_family:
+            graph.add((uri, ARENA.embodimentFamily, Literal(manifold.embodiment_family, datatype=XSD.string)))
+        if manifold.z_min_rel_frame is not None:
+            graph.add((uri, ARENA.manifoldZMin, Literal(manifold.z_min_rel_frame, datatype=XSD.float)))
+        if manifold.z_max_rel_frame is not None:
+            graph.add((uri, ARENA.manifoldZMax, Literal(manifold.z_max_rel_frame, datatype=XSD.float)))
+        graph.add((uri, ARENA.manifoldReachMax, Literal(manifold.reach_max_m, datatype=XSD.float)))
+        graph.add((uri, ARENA.relativeToFrame, Literal(manifold.frame, datatype=XSD.string)))
+        if manifold.alias_of:
+            graph.add((uri, ARENA.aliasOfManifold, INSTANCES[f"manifold_{manifold.alias_of}"]))
 
     for mode in FAILURE_MODES.values():
         uri = INSTANCES[f"failure_{mode.mode_id}"]
@@ -170,9 +189,27 @@ def emit_policy_profile_rdf(profile: PolicyProfile, graph: rdflib.Graph | None =
     graph.add((corpus_uri, ARENA.demoCount, Literal(profile.demo_count, datatype=XSD.integer)))
     graph.add((corpus_uri, ARENA.referenceScene, INSTANCES[profile.reference_scene]))
 
+    for manifold_id in profile.covered_manifolds:
+        graph.add((corpus_uri, ARENA.coversManifold, INSTANCES[f"manifold_{manifold_id}"]))
+
     for invariant in profile.invariants:
         inv_uri = INSTANCES[f"invariant_{profile.corpus_id}_{invariant.axis}"]
         graph.add((inv_uri, RDF.type, ARENA.TrainingInvariant))
+        if invariant.is_relational:
+            # Typed as relational so a query can distinguish "the corpus fixed this attribute"
+            # from "the corpus fixed this relation", which have different remediations.
+            graph.add((inv_uri, RDF.type, ARENA.SupportRelationInvariant))
+            graph.add((
+                inv_uri,
+                ARENA.constrainsRelation,
+                Literal(invariant.constrains_relation, datatype=XSD.string),
+            ))
+            if invariant.relative_to_frame:
+                graph.add((
+                    inv_uri,
+                    ARENA.relativeToFrame,
+                    Literal(invariant.relative_to_frame, datatype=XSD.string),
+                ))
         graph.add((inv_uri, ARENA.invariantAxis, Literal(invariant.axis, datatype=XSD.string)))
         graph.add((inv_uri, RDFS.comment, Literal(invariant.description, datatype=XSD.string)))
         if invariant.value is not None:

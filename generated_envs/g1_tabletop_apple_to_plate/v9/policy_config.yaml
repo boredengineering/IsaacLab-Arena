@@ -1,3 +1,4 @@
+checkpoint_uri: nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace
 language_instruction: move the apple to the plate
 action_horizon: 40
 embodiment_tag: NEW_EMBODIMENT

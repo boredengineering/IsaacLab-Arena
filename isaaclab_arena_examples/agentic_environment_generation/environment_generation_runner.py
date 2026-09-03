@@ -164,6 +164,80 @@ def add_agentic_env_gen_runner_cli_args(parser: argparse.ArgumentParser) -> None
         default=False,
         help="Record one mp4 per camera in obs['camera_obs'].",
     )
+    group.add_argument(
+        "--policy_ref",
+        type=str,
+        default=None,
+        help=(
+            "Policy profile id or checkpoint URI the environment will be evaluated against "
+            "(e.g. 'nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace'). Enables the transfer-readiness "
+            "pre-flight check and policy-side diagnosis. Falls back to 'checkpoint_uri' in the "
+            "policy config YAML when omitted; without either, policy-side checks are skipped "
+            "because the graph cannot tell which policy is in play."
+        ),
+    )
+
+
+def resolve_policy_ref(args_cli: argparse.Namespace, policy_config_path: Path | str | None = None) -> str | None:
+    """Resolve the policy reference from the CLI, else from the policy config's ``checkpoint_uri``.
+
+    The checkpoint identity lives in the GR00T server's ``--model-path``, outside the graph, so
+    without one of these two sources the policy-side machinery has nothing to key on.
+    """
+    if getattr(args_cli, "policy_ref", None):
+        return args_cli.policy_ref
+    if policy_config_path and Path(policy_config_path).exists():
+        import yaml
+
+        try:
+            config = yaml.safe_load(Path(policy_config_path).read_text(encoding="utf-8")) or {}
+        except Exception:
+            return None
+        return config.get("checkpoint_uri") or config.get("model_path")
+    return None
+
+
+def check_transfer_readiness(spec_path: Path, policy_ref: str | None) -> dict | None:
+    """Report whether a scene lies inside the target policy's training invariants.
+
+    Warns and never blocks: the check is only as trustworthy as its declared tolerances, which are
+    provisional. Returns the report, or None when no policy reference was resolvable.
+    """
+    if not policy_ref:
+        return None
+
+    from isaaclab_arena.agentic_environment_generation.policy_capability_graph import (
+        diagnose_transfer_readiness,
+    )
+    from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+
+    report = diagnose_transfer_readiness(ArenaEnvGraphSpec.from_yaml(spec_path), policy_ref)
+    print("\n" + "=" * 70, flush=True)
+    print(" 🛫 TRANSFER READINESS PRE-FLIGHT", flush=True)
+    print("=" * 70, flush=True)
+    if not report.get("profile_known"):
+        print(f" {report.get('message')}", flush=True)
+        print("=" * 70 + "\n", flush=True)
+        return report
+
+    if report["transfer_expected"]:
+        print(f" ✅ '{report['policy_ref']}': scene is within every declared training invariant.", flush=True)
+    else:
+        print(
+            f" ⚠  '{report['policy_ref']}' ({report['policy_kind']}): scene violates "
+            f"{report['out_of_tolerance_axes']}",
+            flush=True,
+        )
+        print(f"    Worst departure: {report['worst_shift_sigma']}x tolerance", flush=True)
+        print(f"    Dominant failure mode: {report['dominant_failure_mode']}", flush=True)
+        for shift in report["shifts"]:
+            if not shift["within_tolerance"]:
+                print(f"    - {shift['axis']}: {shift['evidence']}", flush=True)
+        print(f"    Scene-preserving fix: {report['scene_preserving_remediation']}", flush=True)
+        print(f"    Scene-changing fix:   {report['scene_changing_remediation']}", flush=True)
+        print("    (warning only - the rollout proceeds)", flush=True)
+    print("=" * 70 + "\n", flush=True)
+    return report
 
 
 def resolve_env_spec(args_cli: argparse.Namespace) -> Path:
@@ -335,6 +409,23 @@ def run_auto_heal(args_cli: argparse.Namespace) -> Path:
         temperature=args_cli.temperature,
     )
 
+    # Fuse the oracle's behavioural signatures with spec-level distribution shifts into one belief
+    # state, and report what the planner would measure and change next. Reporting only for now --
+    # the planner's tolerances are provisional until the Phase 1 sweep measures them, so it does
+    # not yet select the remediation that gets applied below.
+    policy_ref = resolve_policy_ref(args_cli, policy_config_path)
+    diagnostic_state, diagnostic_plan = (None, None)
+    if policy_ref:
+        from isaaclab_arena.agentic_environment_generation.eval_self_healing import (
+            build_policy_diagnostic_state,
+        )
+
+        diagnostic_state, diagnostic_plan = build_policy_diagnostic_state(
+            spec=spec,
+            policy_ref=policy_ref,
+            signatures=signatures,
+        )
+
     print("\n" + "=" * 70, flush=True)
     print(" 🩺 EVALUATION DIAGNOSTIC ORACLE REPORT", flush=True)
     print("=" * 70, flush=True)
@@ -346,6 +437,35 @@ def run_auto_heal(args_cli: argparse.Namespace) -> Path:
         if sig.recommended_spatial_patches:
             print(f"    Spatial Patch: {sig.recommended_spatial_patches}", flush=True)
     print("=" * 70 + "\n", flush=True)
+
+    if diagnostic_plan is not None and diagnostic_plan.get("profile_known"):
+        print("=" * 70, flush=True)
+        print(" 🧠 POLICY DIAGNOSTIC PLANNER", flush=True)
+        print("=" * 70, flush=True)
+        print(f" Policy: {diagnostic_plan['policy_ref']}", flush=True)
+        if diagnostic_plan["out_of_tolerance_axes"]:
+            print(f" Invariants violated: {diagnostic_plan['out_of_tolerance_axes']}", flush=True)
+        print(
+            f" Dominant failure mode: {diagnostic_plan['dominant_failure_mode']} "
+            f"(belief {diagnostic_plan['dominant_belief']})",
+            flush=True,
+        )
+        print(f" Next diagnostic to run: {diagnostic_plan['next_diagnostic']}", flush=True)
+        print(f" Recommended remediation: {diagnostic_plan['recommended_remediation']}", flush=True)
+        for mode_id, belief in list(diagnostic_plan["beliefs"].items())[:5]:
+            print(f"   - {mode_id}: {belief}", flush=True)
+        print("=" * 70 + "\n", flush=True)
+    elif policy_ref:
+        print(
+            f"[auto_heal] no registered policy profile for {policy_ref!r}; policy-side diagnosis skipped.",
+            flush=True,
+        )
+    else:
+        print(
+            "[auto_heal] no --policy_ref and no 'checkpoint_uri' in the policy config; "
+            "policy-side diagnosis skipped.",
+            flush=True,
+        )
 
     engine = EvaluationRemediationEngine()
     healed_spec, healed_policy_path, meta = engine.remediate_and_heal(
@@ -382,6 +502,32 @@ def run_auto_heal(args_cli: argparse.Namespace) -> Path:
     print(f"[auto_heal] 🚀 Recommended rollout steps: {meta.get('recommended_steps', 2000)}", flush=True)
     print(f"[auto_heal] 📜 Lineage ledger updated at: {mgr.lineage_file}", flush=True)
 
+    # Emit the policy-side diagnosis as RDF next to the version snapshot. Written before the
+    # Neo4j attempt because it needs no server and should not be lost when Neo4j is unavailable.
+    if diagnostic_state is not None and diagnostic_plan is not None and diagnostic_plan.get("profile_known"):
+        try:
+            from isaaclab_arena.agentic_environment_generation.policy_capability_graph import (
+                get_policy_profile,
+            )
+            from isaaclab_arena.agentic_environment_generation.policy_diagnostics_sync import (
+                emit_policy_diagnostics_ttl,
+            )
+
+            profile = get_policy_profile(policy_ref)
+            if profile is not None:
+                ttl_path = emit_policy_diagnostics_ttl(
+                    out_path=str(new_v_dir / "policy_diagnostics.ttl"),
+                    env_name=spec.env_name,
+                    profile=profile,
+                    state=diagnostic_state,
+                    eval_run_id=f"{spec.env_name}_v{new_v}",
+                    next_technique_id=diagnostic_plan["next_diagnostic"],
+                    remediation_id=diagnostic_plan["recommended_remediation"],
+                )
+                print(f"[auto_heal] 🧠 Policy diagnostics graph written to: {ttl_path}", flush=True)
+        except Exception as exc:
+            print(f"[auto_heal] policy diagnostics RDF emission skipped: {exc}", flush=True)
+
     # Sync lineage derivation to Neo4j if available
     try:
         from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
@@ -395,6 +541,29 @@ def run_auto_heal(args_cli: argparse.Namespace) -> Path:
         print("[auto_heal] synced lineage derivation to Neo4j LPG.", flush=True)
     except Exception:
         pass
+
+    if diagnostic_state is not None and diagnostic_plan is not None and diagnostic_plan.get("profile_known"):
+        try:
+            from isaaclab_arena.agentic_environment_generation.policy_capability_graph import (
+                get_policy_profile,
+            )
+            from isaaclab_arena.agentic_environment_generation.policy_diagnostics_sync import (
+                sync_policy_diagnostics_to_neo4j,
+            )
+
+            profile = get_policy_profile(policy_ref)
+            if profile is not None:
+                sync_policy_diagnostics_to_neo4j(
+                    env_name=spec.env_name,
+                    profile=profile,
+                    state=diagnostic_state,
+                    eval_run_id=f"{spec.env_name}_v{new_v}",
+                    next_technique_id=diagnostic_plan["next_diagnostic"],
+                    remediation_id=diagnostic_plan["recommended_remediation"],
+                )
+                print("[auto_heal] synced policy diagnostics to Neo4j LPG.", flush=True)
+        except Exception:
+            pass
 
     return healed_spec_path
 
@@ -567,12 +736,19 @@ def main() -> int:
         return 0
 
     if args_cli.mode == "build":
+        spec_path = _resolved_graph_spec_yaml(args_cli)
+        # Pre-flight before the simulator starts: an invariant violation costs arithmetic to
+        # detect here and a full rollout to detect later.
+        check_transfer_readiness(spec_path, resolve_policy_ref(args_cli, args_cli.policy_config))
         with SimulationAppContext(args_cli):
-            build_env_and_run_policy(_resolved_graph_spec_yaml(args_cli), args_cli)
+            build_env_and_run_policy(spec_path, args_cli)
         return 0
 
     with SimulationAppContext(args_cli):
         env_graph_spec_path = resolve_env_spec(args_cli)
+        # In 'full' mode the spec does not exist until the agent resolves it, so the check runs
+        # here rather than before the app starts. It still precedes env construction and rollout.
+        check_transfer_readiness(env_graph_spec_path, resolve_policy_ref(args_cli, args_cli.policy_config))
         build_env_and_run_policy(env_graph_spec_path, args_cli)
     return 0
 

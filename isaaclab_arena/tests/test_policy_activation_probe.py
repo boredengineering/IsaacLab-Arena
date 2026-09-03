@@ -334,6 +334,25 @@ def test_probe_reports_missing_topology_instead_of_failing():
     assert any("transformer_blocks" in note for note in report.notes)
 
 
+def test_chunk_dynamics_accepts_a_numpy_action_output():
+    """Gr00tPolicy returns un-transformed actions as numpy, and un-batched; both must work."""
+    np = pytest.importorskip("numpy")
+
+    class _NumpyPolicy(_FakeGr00t):
+        def get_action(self, inputs, options=None):
+            out = super().get_action(inputs, options)
+            # Mimic Gr00tPolicy: numpy, and without the batch axis.
+            return {"action": out["action_pred"].squeeze(0).cpu().numpy().astype(np.float32)}
+
+    dynamics = measure_action_chunk_dynamics(_NumpyPolicy(chunk_scale=1.0), _observation(), seed=0)
+    assert dynamics["action_horizon"] == float(HORIZON)
+    assert dynamics["chunk_displacement_l2"] > 0.0
+
+    ablation = measure_ablation_sensitivity(_NumpyPolicy(vision_weight=4.0), _observation(), seed=0)
+    assert ablation["sampling_noise_floor"] > 0.0
+    assert ablation["vision_ablation_ratio"] > 0.5
+
+
 def test_probe_rejects_a_model_without_an_action_head():
     with pytest.raises(AssertionError, match="action_head"):
         Gr00tActivationProbe(torch.nn.Linear(2, 2))

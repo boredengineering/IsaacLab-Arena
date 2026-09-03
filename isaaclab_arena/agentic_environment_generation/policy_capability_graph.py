@@ -34,8 +34,175 @@ from typing import Any, Iterable
 
 
 @dataclass(frozen=True)
+class KinematicManifold:
+    """A named region of an embodiment's reach space that a corpus may or may not cover.
+
+    Promoted from the free-text ``ReifiedRelationSpec.kinematic_manifold`` field so a corpus can
+    declare which manifolds it demonstrates and a scene can be checked against them. A manifold
+    mismatch is categorical: no policy-config patch closes it, which is precisely the distinction
+    a bare scalar tolerance cannot express.
+    """
+
+    manifold_id: str
+    description: str
+    kind: str
+    """``support_envelope`` (where the surface may sit) or ``trajectory`` (how the motion runs).
+    Only support envelopes have height bounds; trajectory labels describe the motion instead."""
+
+    embodiment_family: str = ""
+    z_min_rel_frame: float | None = None
+    """Lower bound of the support height this manifold covers, in the frame named by ``frame``."""
+
+    z_max_rel_frame: float | None = None
+    frame: str = "pelvis"
+    reach_min_m: float = 0.0
+    reach_max_m: float = 0.65
+    canonical: bool = True
+    """False for a label that names a region an existing canonical envelope already covers. Such
+    labels are registered so specs using them still validate, but they are excluded from
+    classification so the canonical envelopes remain a partition."""
+
+    alias_of: str | None = None
+
+    def covers_height(self, offset: float) -> bool:
+        """Whether a support offset in this manifold's frame falls inside its envelope.
+
+        Half-open on the upper bound so adjacent envelopes classify an offset unambiguously.
+        """
+        if self.z_min_rel_frame is None or self.z_max_rel_frame is None:
+            return False
+        return self.z_min_rel_frame <= offset < self.z_max_rel_frame
+
+
+KINEMATIC_MANIFOLDS: dict[str, KinematicManifold] = {
+    m.manifold_id: m
+    for m in (
+        # --- Canonical G1 support envelopes: a partition of the pelvis-relative height axis. ---
+        KinematicManifold(
+            manifold_id="low_shelf_reach_down",
+            description=(
+                "Manipulation on a low deck well below the pelvis, requiring a forward-and-down reach "
+                "with torso pitch. The envelope demonstrated by the galileo warehouse-shelf corpus."
+            ),
+            kind="support_envelope",
+            embodiment_family="unitree_g1",
+            z_min_rel_frame=-0.95,
+            z_max_rel_frame=-0.60,
+        ),
+        KinematicManifold(
+            manifold_id="mid_shelf_reach",
+            description="An intermediate deck between the low-shelf and tabletop envelopes.",
+            kind="support_envelope",
+            embodiment_family="unitree_g1",
+            z_min_rel_frame=-0.60,
+            z_max_rel_frame=-0.20,
+        ),
+        KinematicManifold(
+            manifold_id="tabletop_stationary_reach",
+            description=(
+                "Manipulation on a surface near pelvis height, reached forward with little torso pitch."
+            ),
+            kind="support_envelope",
+            embodiment_family="unitree_g1",
+            z_min_rel_frame=-0.20,
+            z_max_rel_frame=0.20,
+        ),
+        KinematicManifold(
+            manifold_id="countertop_stationary_reach",
+            description="Manipulation on a raised counter, above pelvis height.",
+            kind="support_envelope",
+            embodiment_family="unitree_g1",
+            z_min_rel_frame=0.20,
+            z_max_rel_frame=0.50,
+        ),
+        # --- Other embodiment families. ---
+        KinematicManifold(
+            manifold_id="droid_manipulation_workspace",
+            description=(
+                "Franka-on-DROID-stand near-field workspace: the tabletop sits well above the arm's "
+                "base mount, and the teleoperation corpus only ever placed objects 25-45 cm in front."
+            ),
+            kind="support_envelope",
+            embodiment_family="franka_droid",
+            z_min_rel_frame=0.60,
+            z_max_rel_frame=0.90,
+            frame="base",
+            reach_max_m=0.45,
+        ),
+        # --- Registered aliases: real labels in use that overlap a canonical envelope. ---
+        KinematicManifold(
+            manifold_id="unitree_g1_bimanual_chest_height",
+            description="Bimanual work at chest height; the same region as countertop_stationary_reach.",
+            kind="support_envelope",
+            embodiment_family="unitree_g1",
+            z_min_rel_frame=0.20,
+            z_max_rel_frame=0.50,
+            canonical=False,
+            alias_of="countertop_stationary_reach",
+        ),
+        KinematicManifold(
+            manifold_id="unitree_g1_crouch_manipulation",
+            description="Crouching to reach a low deck; the same region as low_shelf_reach_down.",
+            kind="support_envelope",
+            embodiment_family="unitree_g1",
+            z_min_rel_frame=-0.95,
+            z_max_rel_frame=-0.60,
+            canonical=False,
+            alias_of="low_shelf_reach_down",
+        ),
+        # --- Trajectory labels: describe the motion, not where the surface sits. ---
+        KinematicManifold(
+            manifold_id="pick_and_place_trajectory",
+            description="Grasp, transport, release. Constrains the motion, not the support height.",
+            kind="trajectory",
+        ),
+        KinematicManifold(
+            manifold_id="plate_placement_stable",
+            description="Release onto a flat receptacle without toppling it.",
+            kind="trajectory",
+        ),
+        KinematicManifold(
+            manifold_id="bimanual_transfer_trajectory",
+            description="Hand-to-hand transfer between arms.",
+            kind="trajectory",
+        ),
+    )
+}
+"""The closed set of reach envelopes and trajectory labels.
+
+Height bounds are **provisional** until the Phase 1 sweep measures them -- see
+`.agents/references/plans/g1_policy_transfer_implementation_plan.md`. The two non-canonical
+entries record that the free-text ``kinematic_manifold`` field accumulated synonyms before it had
+a schema; they validate without pretending to partition the axis.
+"""
+
+
+def resolve_manifold_for_offset(offset: float, embodiment_family: str = "unitree_g1") -> str | None:
+    """Return the canonical support envelope containing ``offset``, or None when none does.
+
+    Only canonical support envelopes are considered, so the result does not depend on registry
+    ordering. Trajectory labels and aliases are excluded by construction.
+    """
+    for manifold in KINEMATIC_MANIFOLDS.values():
+        if (
+            manifold.canonical
+            and manifold.kind == "support_envelope"
+            and manifold.embodiment_family == embodiment_family
+            and manifold.covers_height(offset)
+        ):
+            return manifold.manifold_id
+    return None
+
+
+@dataclass(frozen=True)
 class TrainingInvariant:
-    """A scene property a demonstration corpus never varied, and so fixed for policies trained on it."""
+    """A scene property a demonstration corpus never varied, and so fixed for policies trained on it.
+
+    An invariant may be *attributive* (a lone value on one axis) or **relational** -- constraining
+    the offset between two entities related through the scene graph. Relational invariants set
+    ``constrains_relation`` and ``relative_to_frame``; the height and lateral invariants are of this
+    kind, because reaching is a relative act and only the relation transfers across scenes.
+    """
 
     axis: str
     """Named axis of variation, e.g. ``surface_height_rel_pelvis``."""
@@ -50,6 +217,17 @@ class TrainingInvariant:
 
     tolerance: float | None = None
     """Drift on this axis that the policy still tolerates. Shift magnitude is reported in units of it."""
+
+    constrains_relation: str | None = None
+    """Relation type this invariant constrains, e.g. ``PLACED_ON``. Set for relational invariants."""
+
+    relative_to_frame: str | None = None
+    """Embodiment frame the offset is measured against: ``pelvis``, ``shoulder``, or ``base``."""
+
+    @property
+    def is_relational(self) -> bool:
+        """Whether this invariant constrains a relation rather than a standalone attribute."""
+        return self.constrains_relation is not None
 
 
 @dataclass(frozen=True)
@@ -72,6 +250,9 @@ class PolicyProfile:
     action_head_kind: str = ""
     num_denoising_steps: int = 4
     language_instruction: str = ""
+    covered_manifolds: tuple[str, ...] = ()
+    """Kinematic manifolds the corpus demonstrates. A scene outside all of them is a categorical
+    mismatch, not a tolerance excursion."""
 
     def invariant(self, axis: str) -> TrainingInvariant | None:
         """Return the invariant on ``axis``, or None if the corpus did not fix that axis."""
@@ -817,17 +998,23 @@ POLICY_PROFILES: dict[str, PolicyProfile] = {
         action_head_kind="alternate_vl_dit",
         num_denoising_steps=4,
         language_instruction="move the apple to the plate",
+        covered_manifolds=("tabletop_stationary_reach",),
         invariants=(
             TrainingInvariant(
                 axis="surface_height_rel_pelvis",
                 description=(
-                    "Every demonstration placed the manipuland on a low shelf deck roughly 80 cm below "
-                    "the pelvis, at knee-to-thigh level, so the learned reach prior descends to that "
-                    "elevation regardless of where the object actually is."
+                    "MEASURED 2026-09-03: the corpus manipuland rests +0.040 m relative to the pelvis, "
+                    "i.e. essentially at pelvis height, 0.43 m from the shoulder. This replaces an "
+                    "earlier -0.8015 m figure that came from comparing a world-frame shelf z against "
+                    "an assumed foot-level base frame; the G1's articulation root is its pelvis, so "
+                    "that comparison was off by the assumed 0.75 m offset. The tolerance below is "
+                    "still unmeasured -- the Phase 1 sweep exists to determine it."
                 ),
                 unit="m",
-                numeric_value=-0.8015,
+                numeric_value=0.040,
                 tolerance=0.15,
+                constrains_relation="PLACED_ON",
+                relative_to_frame="pelvis",
             ),
             TrainingInvariant(
                 axis="arm_laterality",
@@ -858,6 +1045,8 @@ POLICY_PROFILES: dict[str, PolicyProfile] = {
                 unit="m",
                 numeric_value=0.199,
                 tolerance=0.12,
+                constrains_relation="PLACED_ON",
+                relative_to_frame="base",
             ),
         ),
     ),
@@ -884,17 +1073,216 @@ def get_policy_profile(policy_ref: str | None) -> PolicyProfile | None:
 
 _RECEPTACLE_TOKENS = ("bin", "basket", "box", "tray", "bowl", "plate", "crate", "pot")
 
-# Standing pelvis height above the base frame for bipedal embodiments. Matches the convention in
-# spatial_geometric_oracle, which treats a base z below 0.2 m as ground-anchored and adds this
-# offset to recover the pelvis height that manipulation-height invariants are measured against.
-_PELVIS_HEIGHT_ABOVE_BASE_M = 0.75
-_GROUND_ANCHORED_BASE_Z_M = 0.2
+# Height of each named embodiment frame above the articulation root, for the Unitree G1.
+#
+# MEASURED 2026-09-03 with isaaclab_arena_examples/tools/measure_embodiment_frames.py, across both
+# the galileo reference scene and the maple-table scene. The G1's articulation root *is* its pelvis
+# (``G1SupplementalInfo.root_frame_name == 'pelvis'``), so the pelvis offset is zero -- an earlier
+# assumed 0.75 treated the root as a foot-level base frame and inflated every height comparison by
+# three quarters of a metre. The shoulder offset reproduced to within 1 mm across both scenes:
+#
+#   galileo: pelvis z = -0.0445, left_shoulder z = +0.24761  -> +0.2921
+#   maple:   pelvis z = +0.09543, left_shoulder z = +0.38653 -> +0.2911
+#
+# ``spatial_geometric_oracle:423`` still carries the old independent 0.75 for its kinematic-oracle
+# warning; that is a separate call site and is wrong for the same reason.
+FRAME_HEIGHT_ABOVE_BASE_M: dict[str, float] = {
+    "base": 0.0,
+    "pelvis": 0.0,
+    "shoulder": 0.292,
+}
 
 
-def _pelvis_height(base_pos: list[float]) -> float:
-    """Return the pelvis height for an embodiment whose base sits at ``base_pos``."""
-    base_z = base_pos[2]
-    return base_z + _PELVIS_HEIGHT_ABOVE_BASE_M if base_z < _GROUND_ANCHORED_BASE_Z_M else base_z
+def frame_height(base_pos: list[float], frame: str = "pelvis") -> float:
+    """Return the world height of a named embodiment frame for a root at ``base_pos``.
+
+    The G1's articulation root is its pelvis, so a spec's ``initial_pose`` z *is* the pelvis height
+    and no ground-anchoring correction applies. Whole-body control settles the pose after reset, so
+    the realised height drifts from the declared one by up to ~0.1 m; use
+    ``measure_embodiment_frames.py`` when the realised value matters.
+    """
+    assert frame in FRAME_HEIGHT_ABOVE_BASE_M, f"Unknown embodiment frame {frame!r}"
+    return base_pos[2] + FRAME_HEIGHT_ABOVE_BASE_M[frame]
+
+
+@dataclass(frozen=True)
+class SupportRelation:
+    """The resolved (embodiment, support surface, manipuland) triple for one scene.
+
+    Produced by traversing the scene graph's relations rather than indexing into object poses,
+    because in a generated environment the manipuland usually carries no explicit pose at all --
+    the placer derives it from this relation.
+    """
+
+    manipuland_id: str
+    fixture_id: str | None
+    anchor_name: str | None
+    surface_z: float | None
+    """World z of the support surface, or None when the spec does not determine it."""
+
+    height_source: str
+    """How ``surface_z`` was obtained: ``nominal_height``, ``surface_sector``, ``explicit_pose``,
+    or ``unresolved``. Recorded because a value inferred from a sector deck is weaker evidence than
+    a declared nominal height, and an unresolved one must not be silently treated as zero."""
+
+    lateral_y: float | None = None
+    manifold: str | None = None
+    """The ``kinematic_manifold`` declared on the corresponding reified relation, if any."""
+
+    frame_z: float | None = None
+    """World z of the embodiment frame the offset is measured against."""
+
+    frame: str = "pelvis"
+
+    @property
+    def offset_rel_frame(self) -> float | None:
+        """Support height minus embodiment frame height, or None when either is unresolved."""
+        if self.surface_z is None or self.frame_z is None:
+            return None
+        return self.surface_z - self.frame_z
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable view of the resolved relation."""
+        return {
+            "manipuland_id": self.manipuland_id,
+            "fixture_id": self.fixture_id,
+            "anchor_name": self.anchor_name,
+            "surface_z": self.surface_z,
+            "height_source": self.height_source,
+            "lateral_y": self.lateral_y,
+            "manifold": self.manifold,
+            "frame": self.frame,
+            "frame_z": self.frame_z,
+            "offset_rel_frame": self.offset_rel_frame,
+        }
+
+
+def _on_relation_for(spec: Any, subject_id: str) -> Any | None:
+    """Return the ``on`` relation whose subject is ``subject_id``, if the spec declares one."""
+    for relation in getattr(spec, "relations", []) or []:
+        if getattr(relation, "kind", "") == "on" and getattr(relation, "subject", None) == subject_id:
+            return relation
+    return None
+
+
+def _reified_relation_for(spec: Any, subject_id: str) -> Any | None:
+    """Return the reified PLACED_ON relation whose source is ``subject_id``, if present."""
+    for relation in getattr(spec, "reified_relations", None) or []:
+        if getattr(relation, "source_id", None) == subject_id and "PLACED_ON" in getattr(
+            relation, "relation_type", ""
+        ):
+            return relation
+    return None
+
+
+def resolve_support_relation(spec: Any, embodiment_frame: str = "pelvis") -> SupportRelation | None:
+    """Resolve the support relation for a scene by traversing its relations.
+
+    Height precedence mirrors ``object_placer._sample_on_surface``: an explicit ``nominal_height``
+    on the ``on`` relation wins, then a named ``surface_sector``/``surface_anchor`` deck from
+    ``FIXTURE_SECTOR_BOUNDS``, then an explicit pose on the manipuland. The source is returned
+    alongside the value so a caller can weigh the evidence.
+
+    Args:
+        spec: The ``ArenaEnvGraphSpec`` (or any object exposing the same attribute names).
+        embodiment_frame: Frame to express the offset against -- ``pelvis``, ``shoulder``, ``base``.
+
+    Returns:
+        The resolved relation, or None when the spec declares no manipuland to resolve.
+    """
+    manipuland, _ = _classify_objects(spec)
+    if manipuland is None:
+        return None
+
+    embodiment = getattr(spec, "embodiment", None)
+    base_pos = _position_of(embodiment) if embodiment is not None else None
+    frame_z = frame_height(base_pos, embodiment_frame) if base_pos else None
+
+    on_relation = _on_relation_for(spec, manipuland.id)
+    reified = _reified_relation_for(spec, manipuland.id)
+    params = (getattr(on_relation, "params", None) or {}) if on_relation is not None else {}
+
+    fixture_id = getattr(on_relation, "reference", None) if on_relation is not None else None
+    anchor_name = params.get("surface_sector") or params.get("surface_anchor")
+    manifold = getattr(reified, "kinematic_manifold", None) if reified is not None else None
+
+    explicit_pos = _position_of(manipuland)
+    surface_z: float | None = None
+    height_source = "unresolved"
+
+    if params.get("nominal_height") is not None:
+        surface_z = float(params["nominal_height"])
+        height_source = "nominal_height"
+    elif anchor_name and fixture_id:
+        fixture = _fixture_by_id(spec, fixture_id)
+        registry_name = getattr(fixture, "registry_name", "") if fixture is not None else ""
+        deck_z = _sector_deck_z(registry_name, str(anchor_name))
+        if deck_z is not None:
+            fixture_pos = _position_of(fixture) if fixture is not None else None
+            # The placer adds the fixture's bbox min z; the spec has no bbox, so the fixture's own
+            # origin z is the closest available proxy. Recorded as sector-derived accordingly.
+            surface_z = deck_z + (fixture_pos[2] if fixture_pos else 0.0)
+            height_source = "surface_sector"
+
+    if surface_z is None and explicit_pos is not None:
+        surface_z = explicit_pos[2]
+        height_source = "explicit_pose"
+
+    return SupportRelation(
+        manipuland_id=manipuland.id,
+        fixture_id=fixture_id,
+        anchor_name=str(anchor_name) if anchor_name else None,
+        surface_z=surface_z,
+        height_source=height_source,
+        lateral_y=(explicit_pos[1] - base_pos[1]) if (explicit_pos and base_pos) else None,
+        manifold=manifold,
+        frame_z=frame_z,
+        frame=embodiment_frame,
+    )
+
+
+def _fixture_by_id(spec: Any, fixture_id: str) -> Any | None:
+    """Return the background or object node whose id is ``fixture_id``."""
+    background = getattr(spec, "background", None)
+    if background is not None and getattr(background, "id", None) == fixture_id:
+        return background
+    for obj in getattr(spec, "objects", []) or []:
+        if obj.id == fixture_id:
+            return obj
+    return None
+
+
+def _sector_deck_z(fixture_registry_name: str, sector_name: str) -> float | None:
+    """Return the declared deck z for a fixture sector, or None when it is not declared.
+
+    Reads the same ``FIXTURE_SECTOR_BOUNDS`` table the object placer uses, so a sweep that selects
+    an anchor by name resolves to the height the simulator will actually place the object at.
+    """
+    if not fixture_registry_name:
+        return None
+    try:
+        from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
+            FIXTURE_SECTOR_BOUNDS,
+        )
+    except ImportError:
+        return None
+
+    fixture_lower = fixture_registry_name.lower()
+    sector_lower = sector_name.lower()
+    for fixture_key, sectors in FIXTURE_SECTOR_BOUNDS.items():
+        if fixture_key not in fixture_lower:
+            continue
+        bounds = sectors.get(sector_lower)
+        if bounds is None:
+            bounds = next(
+                (b for key, b in sectors.items() if key in sector_lower or sector_lower in key),
+                None,
+            )
+        if bounds is not None:
+            # A declared deck z of exactly 0.0 means "inherit the fixture's own surface", which the
+            # spec cannot resolve without a bounding box; report it as undetermined rather than 0.
+            return float(bounds[4]) if bounds[4] != 0.0 else None
+    return None
 
 
 def _position_of(asset: Any) -> list[float] | None:
@@ -937,30 +1325,94 @@ def compute_distribution_shifts(spec: Any, profile: PolicyProfile) -> list[Distr
     base_pos = _position_of(embodiment) if embodiment else None
     target_pos = _position_of(manipuland) if manipuland else None
 
-    # 1. Vertical manipulation height relative to the pelvis, which is the frame the learned reach
-    #    prior is expressed in.
+    # 1. The support relation: how the manipuland's support surface sits relative to a named frame
+    #    on the embodiment. Resolved by graph traversal, since a generated scene's manipuland
+    #    usually carries no explicit pose.
     height_inv = profile.invariant("surface_height_rel_pelvis")
-    if height_inv and base_pos and target_pos and height_inv.numeric_value is not None:
-        observed = target_pos[2] - _pelvis_height(base_pos)
-        magnitude = observed - height_inv.numeric_value
-        tolerance = height_inv.tolerance or 0.1
-        sigma = abs(magnitude) / tolerance
-        shifts.append(
-            DistributionShift(
-                axis=height_inv.axis,
-                magnitude=magnitude,
-                sigma=sigma,
-                within_tolerance=sigma < 1.0,
-                manifests_as=("vertical_reach_ood", "vision_geometry_ood"),
-                scene_value=f"{observed:+.4f} m",
-                corpus_value=f"{height_inv.numeric_value:+.4f} m",
-                evidence=(
-                    f"Manipuland sits {observed:+.3f} m relative to the pelvis; the corpus fixed this "
-                    f"at {height_inv.numeric_value:+.3f} m (tolerance {tolerance:.2f} m). "
-                    f"Departure {magnitude:+.3f} m = {sigma:.1f}x tolerance."
-                ),
+    support = resolve_support_relation(spec, height_inv.relative_to_frame or "pelvis") if height_inv else None
+    if height_inv and support is not None and height_inv.numeric_value is not None:
+        observed = support.offset_rel_frame
+        if observed is None:
+            # Better to say the spec is under-determined than to invent a height and rank on it.
+            shifts.append(
+                DistributionShift(
+                    axis=height_inv.axis,
+                    magnitude=0.0,
+                    sigma=0.0,
+                    within_tolerance=True,
+                    manifests_as=(),
+                    scene_value="unresolved",
+                    corpus_value=f"{height_inv.numeric_value:+.4f} m",
+                    evidence=(
+                        f"Support height for '{support.manipuland_id}' could not be resolved from the "
+                        f"spec (source={support.height_source}); declare a nominal_height, a known "
+                        f"surface_sector, or an explicit pose before this axis can be checked."
+                    ),
+                )
             )
-        )
+        else:
+            magnitude = observed - height_inv.numeric_value
+            tolerance = height_inv.tolerance or 0.1
+            sigma = abs(magnitude) / tolerance
+            scene_manifold = resolve_manifold_for_offset(observed)
+            covered = scene_manifold in profile.covered_manifolds if scene_manifold else False
+            manifests = ["vertical_reach_ood", "vision_geometry_ood"] if sigma >= 1.0 else []
+            shifts.append(
+                DistributionShift(
+                    axis=height_inv.axis,
+                    magnitude=magnitude,
+                    sigma=sigma,
+                    within_tolerance=sigma < 1.0,
+                    manifests_as=tuple(manifests),
+                    scene_value=f"{observed:+.4f} m ({support.height_source})",
+                    corpus_value=f"{height_inv.numeric_value:+.4f} m",
+                    evidence=(
+                        f"Support relation '{support.manipuland_id}' on '{support.fixture_id}'"
+                        f"{f' anchor {support.anchor_name}' if support.anchor_name else ''} sits "
+                        f"{observed:+.3f} m relative to the {support.frame}; the corpus fixed this at "
+                        f"{height_inv.numeric_value:+.3f} m (tolerance {tolerance:.2f} m). "
+                        f"Departure {magnitude:+.3f} m = {sigma:.1f}x tolerance. "
+                        f"Height source: {support.height_source}. "
+                        f"Scene manifold: {scene_manifold or 'outside every registered envelope'}; "
+                        f"corpus covers {list(profile.covered_manifolds) or 'nothing declared'}."
+                    ),
+                )
+            )
+
+            # 1b. Manifold coverage is categorical, and worth reporting separately: a scene inside a
+            #     manifold the corpus never demonstrated cannot be fixed by a config patch. An
+            #     offset outside *every* registered envelope is a stronger signal still, because it
+            #     may be beyond the arm entirely -- in which case a failure there says nothing about
+            #     the policy.
+            if profile.covered_manifolds and not covered:
+                outside_all = scene_manifold is None
+                shifts.append(
+                    DistributionShift(
+                        axis="kinematic_manifold",
+                        magnitude=1.0,
+                        sigma=2.0 if outside_all else 1.0,
+                        within_tolerance=False,
+                        manifests_as=("vertical_reach_ood",) if not outside_all else ("kinematic_unreachable",),
+                        scene_value=scene_manifold or "outside every registered envelope",
+                        corpus_value=", ".join(profile.covered_manifolds),
+                        evidence=(
+                            (
+                                f"The support relation sits {observed:+.3f} m from the "
+                                f"{support.frame}, outside every registered reach envelope. This may "
+                                f"be beyond the arm rather than merely out of distribution -- verify "
+                                f"reachability before attributing a failure here to the policy."
+                            )
+                            if outside_all
+                            else (
+                                f"The support relation instantiates the '{scene_manifold}' reach "
+                                f"envelope, which this corpus does not cover (it demonstrates "
+                                f"{', '.join(profile.covered_manifolds)}). A manifold mismatch is "
+                                f"categorical: no policy-config change closes it, only re-relating "
+                                f"the scene or extending the training distribution."
+                            )
+                        ),
+                    )
+                )
 
     # 2. Lateral offset, which also determines which arm the reach corridor demands.
     lateral_inv = profile.invariant("lateral_offset_rel_base")

@@ -449,6 +449,16 @@ def _predict_chunk(model: Any, observation: dict[str, Any], seed: int) -> Any:
     if chunk is None and isinstance(output, dict):
         chunk = output.get("action_pred") or output.get("action")
     assert chunk is not None, "Model output carries no 'action_pred'; cannot measure chunk dynamics."
+
+    if not torch.is_tensor(chunk):
+        # Gr00tPolicy.get_action returns un-transformed actions as numpy; the raw Gr00tN1d7 returns
+        # a tensor. Probing at the Gr00tPolicy level is preferred, so accept both.
+        import numpy as np
+
+        chunk = torch.as_tensor(np.asarray(chunk))
+    if chunk.ndim == 2:
+        # A single un-batched (horizon, action_dim) chunk; add the batch axis the metrics expect.
+        chunk = chunk.unsqueeze(0)
     return chunk.float()
 
 

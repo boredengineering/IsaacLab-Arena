@@ -133,6 +133,78 @@ arena:invariantUnit a owl:DatatypeProperty ;
     rdfs:range xsd:string .
 
 # ---------------------------------------------------------------------------
+# Relational invariants and kinematic manifolds
+#
+# A support height is not an attribute of an object; it is a property of the relation between a
+# support surface and the robot. Modelling it as a scalar on a policy loses that, and loses the
+# ability to check a scene the profile has never seen. These classes carry the relation instead.
+# ---------------------------------------------------------------------------
+
+arena:SupportRelationInvariant a owl:Class, rdfs:Class ;
+    rdfs:label "Support Relation Invariant" ;
+    rdfs:comment "A training invariant over a relation triple rather than a standalone attribute. Constrains the offset between a support anchor and a named embodiment frame, for the relation pattern a policy was trained on: (embodiment) standsAtAffordance (fixture) together with (manipuland) placedOnSubSurface (anchor)." ;
+    rdfs:subClassOf arena:TrainingInvariant .
+
+arena:KinematicManifold a owl:Class, rdfs:Class ;
+    rdfs:label "Kinematic Manifold" ;
+    rdfs:comment "A named region of an embodiment's reach space, e.g. low_shelf_reach_down versus tabletop_stationary_reach. Promoted from the free-text kinematic_manifold field so a corpus can declare which regions it demonstrates and a scene can be checked against them. A manifold mismatch is categorical: no policy-config patch closes it." ;
+    rdfs:subClassOf prov:Entity .
+
+arena:constrainsRelation a owl:DatatypeProperty ;
+    rdfs:comment "Relation type the invariant constrains, e.g. 'PLACED_ON'." ;
+    rdfs:domain arena:SupportRelationInvariant ;
+    rdfs:range xsd:string .
+
+arena:relativeToFrame a owl:DatatypeProperty ;
+    rdfs:comment "Embodiment frame the offset is measured against: 'pelvis', 'shoulder', or 'base'. Recorded because reach feasibility is frame-relative and an unstated frame is the usual source of sign and magnitude errors." ;
+    rdfs:domain arena:SupportRelationInvariant ;
+    rdfs:range xsd:string .
+
+arena:coversManifold a owl:ObjectProperty ;
+    rdfs:comment "A manifold this corpus demonstrates. A scene outside every covered manifold is out of distribution categorically, not by degree." ;
+    rdfs:domain arena:DemonstrationCorpus ;
+    rdfs:range arena:KinematicManifold .
+
+arena:instantiatesManifold a owl:ObjectProperty ;
+    rdfs:comment "The manifold a scene's support relation falls inside." ;
+    rdfs:range arena:KinematicManifold .
+
+arena:manifoldKind a owl:DatatypeProperty ;
+    rdfs:comment "'support_envelope' (where a surface may sit) or 'trajectory' (how the motion runs). Only support envelopes carry height bounds." ;
+    rdfs:domain arena:KinematicManifold ;
+    rdfs:range xsd:string .
+
+arena:manifoldZMin a owl:DatatypeProperty ;
+    rdfs:domain arena:KinematicManifold ;
+    rdfs:range xsd:float .
+
+arena:manifoldZMax a owl:DatatypeProperty ;
+    rdfs:domain arena:KinematicManifold ;
+    rdfs:range xsd:float .
+
+arena:manifoldReachMax a owl:DatatypeProperty ;
+    rdfs:domain arena:KinematicManifold ;
+    rdfs:range xsd:float .
+
+arena:embodimentFamily a owl:DatatypeProperty ;
+    rdfs:domain arena:KinematicManifold ;
+    rdfs:range xsd:string .
+
+arena:isCanonicalManifold a owl:DatatypeProperty ;
+    rdfs:comment "False for a label naming a region a canonical envelope already covers. Such labels are registered so specs using them still validate, but are excluded from classification so the canonical envelopes remain a partition." ;
+    rdfs:domain arena:KinematicManifold ;
+    rdfs:range xsd:boolean .
+
+arena:aliasOfManifold a owl:ObjectProperty ;
+    rdfs:domain arena:KinematicManifold ;
+    rdfs:range arena:KinematicManifold .
+
+arena:supportHeightSource a owl:DatatypeProperty ;
+    rdfs:comment "How a measured support height was obtained: 'nominal_height', 'surface_sector', 'explicit_pose', or 'unresolved'. A sector-derived value is weaker evidence than a declared nominal height, and an unresolved one must not be treated as zero." ;
+    rdfs:domain arena:DistributionShift ;
+    rdfs:range xsd:string .
+
+# ---------------------------------------------------------------------------
 # Distribution shift: the bridge from the scene graph to the model graph
 # ---------------------------------------------------------------------------
 

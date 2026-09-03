@@ -58,6 +58,9 @@ def _test_g1_locomanip_object_on_destination_termination(simulation_app) -> bool
         background_scene=background,
         force_threshold=0.5,
         velocity_threshold=0.1,
+        # This test drops the box into the bin under gravity with zero actions to exercise the
+        # contact-sensor termination, so no grasp-and-lift occurs.
+        require_lift_before_place=False,
         mimic_env_cfg_factory=_build_g1_pick_and_place_mimic_cfg,
     )
 

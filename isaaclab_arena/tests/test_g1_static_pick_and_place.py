@@ -88,6 +88,9 @@ def get_test_environment(num_envs: int):
         background_scene=background,
         episode_length_s=30.0,
         task_description="Pick up the apple from the table and place it onto the plate.",
+        # The success case teleports the apple above the plate and lets it settle, so the
+        # grasp-and-lift stage of the sequential success gate never fires.
+        require_lift_before_place=False,
     )
 
     isaaclab_arena_environment = IsaacLabArenaEnvironment(

@@ -97,6 +97,8 @@ class EvaluationDiagnosticOracle:
         lifted_count = 0
         total_episodes_counted = 0
         placed_count = 0
+        false_success_count = 0
+        false_success_lengths: list[int] = []
         if jsonl_files:
             for jf in jsonl_files:
                 for line in jf.read_text(encoding="utf-8").splitlines():
@@ -110,6 +112,12 @@ class EvaluationDiagnosticOracle:
                             lifted_count += 1
                         if rec.get("success", False):
                             placed_count += 1
+                            # A success flag alongside a zero progress score means the success
+                            # predicate fired without the task having been performed.
+                            progress = rec.get("progress", {}) or {}
+                            if float(progress.get("overall_score", 1.0)) <= 0.0:
+                                false_success_count += 1
+                                false_success_lengths.append(int(rec.get("episode_length", 0)))
                     except Exception:
                         pass
 
@@ -118,6 +126,26 @@ class EvaluationDiagnosticOracle:
 
         # --- OPTION A: Deterministic Statistical & Spatial Oracle Rules ---
         if healing_mode in ("deterministic", "hybrid"):
+            # Check Defect 0: False-Positive Success Termination (checked first, because every
+            # metric downstream of it is meaningless while it holds).
+            if false_success_count > 0:
+                shortest = min(false_success_lengths) if false_success_lengths else 0
+                signatures.append(
+                    FailureSignature(
+                        defect_type="harness_false_success",
+                        severity=1.0,
+                        evidence=(
+                            f"{false_success_count}/{total_episodes_counted} episodes reported success with a "
+                            f"zero progress score (shortest such episode: {shortest} steps). The success "
+                            f"predicate fired without the task having been performed - typically a contact "
+                            f"sensor triggered by an object resting against or grazing its destination. "
+                            f"Gate placement behind a verified lift before trusting any other metric from "
+                            f"this run."
+                        ),
+                        recommended_policy_patches={},
+                        recommended_spatial_patches={},
+                    )
+                )
             # Check Defect 1: VLA Training Distribution & Camera Perception Standoff (CRITICAL)
             manipuland_id = None
             container_id = None
@@ -504,6 +532,102 @@ Identify any physical, kinematic, perceptual, or controller defects and provide 
         )
         return report
 
+
+
+DEFECT_TYPE_TO_FAILURE_MODES: dict[str, tuple[str, ...]] = {
+    "harness_false_success": ("harness_false_success",),
+    "camera_occlusion": ("kinematic_unreachable", "vision_geometry_ood"),
+    "unconditioned_vla": ("unconditioned_language",),
+    "horizon_truncation": ("horizon_truncation",),
+    "in_flight_slip_inertia": ("in_flight_slip_inertia",),
+    "depth_alignment_mismatch": ("vision_geometry_ood", "vertical_reach_ood"),
+}
+"""Maps the oracle's defect strings onto failure modes in the policy capability graph."""
+
+
+def build_policy_diagnostic_state(
+    spec: ArenaEnvGraphSpec,
+    policy_ref: str,
+    signatures: list[FailureSignature] | None = None,
+    probe_report: Any = None,
+) -> tuple[Any, dict[str, Any]]:
+    """Assemble a belief state over failure modes from spec geometry, oracle signatures, and probes.
+
+    Fuses the three evidence sources the pipeline can produce: distribution shifts measured off the
+    graph spec alone, behavioural signatures from a rollout, and activation-level evidence from
+    ``policy_activation_probe``. The result is the belief state the technique planner selects from.
+
+    Args:
+        spec: The evaluated environment graph.
+        policy_ref: Profile id or checkpoint URI of the evaluated policy.
+        signatures: Signatures from ``EvaluationDiagnosticOracle.diagnose_eval_run``, if a rollout ran.
+        probe_report: A ``ProbeReport`` from ``policy_activation_probe``, if weights were reachable.
+
+    Returns:
+        ``(state, plan)`` where ``state`` is the ``PolicyDiagnosticState`` and ``plan`` reports the
+        dominant failure mode plus the next diagnostic and remediation the planner selected.
+        ``plan["profile_known"]`` is False when the policy has no registered profile.
+    """
+    from isaaclab_arena.agentic_environment_generation.policy_capability_graph import (
+        DiagnosticCapabilities,
+        PolicyDiagnosticState,
+        ProbeObservation,
+        compute_distribution_shifts,
+        get_policy_profile,
+        select_next_diagnostic,
+        select_remediation,
+    )
+
+    profile = get_policy_profile(policy_ref)
+    state = PolicyDiagnosticState()
+
+    if profile is not None:
+        state.seed_from_shifts(compute_distribution_shifts(spec, profile))
+
+    observations: list[ProbeObservation] = []
+    for sig in signatures or []:
+        modes = DEFECT_TYPE_TO_FAILURE_MODES.get(sig.defect_type)
+        if not modes:
+            continue
+        observations.append(
+            ProbeObservation(
+                metric=f"oracle_signature::{sig.defect_type}",
+                value=sig.severity,
+                technique_id="progress_funnel_statistics",
+                supports=modes,
+                # Severity 0.9 gives a ratio near 9, so a confident signature dominates the prior
+                # while a tentative one only nudges it.
+                likelihood_ratio=max(sig.severity, 0.05) / max(1.0 - sig.severity, 0.05),
+                note=sig.evidence[:400],
+            )
+        )
+    if probe_report is not None:
+        observations.extend(probe_report.to_observations())
+    if observations:
+        state.apply_observations(observations)
+
+    capabilities = DiagnosticCapabilities(
+        has_policy_weights=probe_report is not None,
+        has_rollout_artifacts=bool(signatures),
+        has_gpu=False,
+        has_reference_dataset=False,
+    )
+    next_diagnostic = select_next_diagnostic(state, capabilities)
+    remediation = select_remediation(state)
+    dominant = state.dominant()
+
+    plan: dict[str, Any] = {
+        "profile_known": profile is not None,
+        "policy_ref": profile.policy_id if profile else policy_ref,
+        "dominant_failure_mode": dominant[0] if dominant else None,
+        "dominant_belief": round(dominant[1], 4) if dominant else None,
+        "out_of_tolerance_axes": [s.axis for s in state.shifts if not s.within_tolerance],
+        "next_diagnostic": next_diagnostic[0].technique_id if next_diagnostic else None,
+        "recommended_remediation": remediation[0].technique_id if remediation else None,
+        "recommended_remediation_patch": dict(remediation[0].patch) if remediation else {},
+        "beliefs": {mode_id: round(belief, 4) for mode_id, belief in state.ranked(min_belief=0.05)},
+    }
+    return state, plan
 
 
 class EvaluationRemediationEngine:

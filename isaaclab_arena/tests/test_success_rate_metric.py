@@ -60,7 +60,9 @@ def _test_success_rate_metric(simulation_app):
         name="robot_initial_position",
         embodiment=embodiment,
         scene=scene,
-        task=PickAndPlaceTask(cracker_box, destination_location, background),
+        # ``require_lift_before_place=False``: the per-env reset poses place the box directly in or
+        # out of the drawer to produce a known success rate, so no grasp-and-lift occurs.
+        task=PickAndPlaceTask(cracker_box, destination_location, background, require_lift_before_place=False),
         teleop_device=None,
     )
 

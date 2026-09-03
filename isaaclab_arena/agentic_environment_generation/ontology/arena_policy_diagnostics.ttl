@@ -1,0 +1,361 @@
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov:  <http://www.w3.org/ns/prov#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+# ============================================================================
+# Policy diagnostics ontology module.
+#
+# arena_schema.ttl models the *scene*: what exists and where it sits. That is only
+# half of an evaluation. A rollout also depends on the policy, on the demonstration
+# corpus that policy inherited its assumptions from, and on the finite set of
+# techniques available to measure, attribute, and repair a failure.
+#
+# This module adds those entities so the generation pipeline can reason about
+# "make the model work" with the same graph machinery it uses for "build the scene".
+# The load-bearing edge is arena:violatesInvariant, which connects an
+# arena:EnvironmentGraph to an arena:TrainingInvariant asserted by the corpus a
+# policy was trained on -- the bridge between the scene graph and the model graph.
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# The policy and its provenance
+# ---------------------------------------------------------------------------
+
+arena:Policy a owl:Class, rdfs:Class ;
+    rdfs:label "Policy" ;
+    rdfs:comment "A concrete policy checkpoint that can be evaluated in an arena environment." ;
+    rdfs:subClassOf prov:Entity .
+
+arena:PolicyArchitecture a owl:Class, rdfs:Class ;
+    rdfs:label "Policy Architecture" ;
+    rdfs:comment "Structural description of a policy: conditioning modality, backbone, action head, action space." ;
+    rdfs:subClassOf prov:Entity .
+
+arena:DemonstrationCorpus a owl:Class, rdfs:Class ;
+    rdfs:label "Demonstration Corpus" ;
+    rdfs:comment "The demonstration dataset a policy was trained or fine-tuned on." ;
+    rdfs:subClassOf prov:Entity .
+
+arena:TrainingInvariant a owl:Class, rdfs:Class ;
+    rdfs:label "Training Invariant" ;
+    rdfs:comment "A measurable scene property held fixed across a demonstration corpus, and therefore silently assumed by any policy trained on it." ;
+    rdfs:subClassOf prov:Entity .
+
+arena:SimToRealInvariant a owl:Class, rdfs:Class ;
+    rdfs:label "Sim-to-Real Invariant" ;
+    rdfs:comment "A physical-plausibility constraint a remediation must not break, e.g. that real fruit friction cannot be edited to force a grasp." ;
+    rdfs:subClassOf prov:Entity .
+
+arena:hasArchitecture a owl:ObjectProperty ;
+    rdfs:domain arena:Policy ;
+    rdfs:range arena:PolicyArchitecture .
+
+arena:wasTrainedOn a owl:ObjectProperty ;
+    rdfs:comment "Links a policy to the corpus whose invariants it inherited." ;
+    rdfs:subPropertyOf prov:wasDerivedFrom ;
+    rdfs:domain arena:Policy ;
+    rdfs:range arena:DemonstrationCorpus .
+
+arena:establishesInvariant a owl:ObjectProperty ;
+    rdfs:comment "Links a corpus to a property it never varied, and thus fixed for policies trained on it." ;
+    rdfs:domain arena:DemonstrationCorpus ;
+    rdfs:range arena:TrainingInvariant .
+
+arena:referenceScene a owl:ObjectProperty ;
+    rdfs:comment "The environment graph a corpus was recorded in." ;
+    rdfs:domain arena:DemonstrationCorpus ;
+    rdfs:range arena:EnvironmentGraph .
+
+arena:checkpointUri a owl:DatatypeProperty ;
+    rdfs:domain arena:Policy ;
+    rdfs:range xsd:string .
+
+arena:policyKind a owl:DatatypeProperty ;
+    rdfs:comment "'task_finetuned' for a checkpoint fitted to one scene, 'foundation_generalist' for a broadly pretrained VLA. Determines whether cross-scene transfer may be assumed." ;
+    rdfs:domain arena:Policy ;
+    rdfs:range xsd:string .
+
+arena:languageInstruction a owl:DatatypeProperty ;
+    rdfs:domain arena:Policy ;
+    rdfs:range xsd:string .
+
+arena:actionDim a owl:DatatypeProperty ;
+    rdfs:domain arena:PolicyArchitecture ;
+    rdfs:range xsd:integer .
+
+arena:actionChunkLength a owl:DatatypeProperty ;
+    rdfs:domain arena:PolicyArchitecture ;
+    rdfs:range xsd:integer .
+
+arena:visionBackbone a owl:DatatypeProperty ;
+    rdfs:domain arena:PolicyArchitecture ;
+    rdfs:range xsd:string .
+
+arena:actionHeadKind a owl:DatatypeProperty ;
+    rdfs:comment "e.g. 'flow_matching_dit', 'alternate_vl_dit'." ;
+    rdfs:domain arena:PolicyArchitecture ;
+    rdfs:range xsd:string .
+
+arena:numDenoisingSteps a owl:DatatypeProperty ;
+    rdfs:domain arena:PolicyArchitecture ;
+    rdfs:range xsd:integer .
+
+arena:controllerBinding a owl:DatatypeProperty ;
+    rdfs:comment "Embodiment action backend the policy's action vector is valid for, e.g. 'g1_wbc_agile_joint'." ;
+    rdfs:range xsd:string .
+
+arena:demoCount a owl:DatatypeProperty ;
+    rdfs:domain arena:DemonstrationCorpus ;
+    rdfs:range xsd:integer .
+
+arena:invariantAxis a owl:DatatypeProperty ;
+    rdfs:comment "Named axis of variation, e.g. 'surface_height_rel_pelvis', 'visual_domain', 'arm_laterality', 'prompt_template', 'action_space_dim'." ;
+    rdfs:domain arena:TrainingInvariant ;
+    rdfs:range xsd:string .
+
+arena:invariantValue a owl:DatatypeProperty ;
+    rdfs:domain arena:TrainingInvariant ;
+    rdfs:range xsd:string .
+
+arena:invariantNumericValue a owl:DatatypeProperty ;
+    rdfs:domain arena:TrainingInvariant ;
+    rdfs:range xsd:float .
+
+arena:invariantTolerance a owl:DatatypeProperty ;
+    rdfs:comment "How far a candidate scene may drift on this axis before the policy is out of distribution." ;
+    rdfs:domain arena:TrainingInvariant ;
+    rdfs:range xsd:float .
+
+arena:invariantUnit a owl:DatatypeProperty ;
+    rdfs:domain arena:TrainingInvariant ;
+    rdfs:range xsd:string .
+
+# ---------------------------------------------------------------------------
+# Distribution shift: the bridge from the scene graph to the model graph
+# ---------------------------------------------------------------------------
+
+arena:DistributionShift a owl:Class, rdfs:Class ;
+    rdfs:label "Distribution Shift" ;
+    rdfs:comment "A reified measurement of how far one environment graph departs from one training invariant. Reified so belief and evidence attach to the measurement itself." ;
+    rdfs:subClassOf prov:Entity .
+
+arena:violatesInvariant a owl:ObjectProperty ;
+    rdfs:comment "Asserts that a scene departs from an invariant a policy depends on. The key edge joining scene structure to model competence." ;
+    rdfs:domain arena:EnvironmentGraph ;
+    rdfs:range arena:TrainingInvariant .
+
+arena:shiftOfInvariant a owl:ObjectProperty ;
+    rdfs:domain arena:DistributionShift ;
+    rdfs:range arena:TrainingInvariant .
+
+arena:shiftInGraph a owl:ObjectProperty ;
+    rdfs:domain arena:DistributionShift ;
+    rdfs:range arena:EnvironmentGraph .
+
+arena:shiftForPolicy a owl:ObjectProperty ;
+    rdfs:domain arena:DistributionShift ;
+    rdfs:range arena:Policy .
+
+arena:manifestsAs a owl:ObjectProperty ;
+    rdfs:comment "The failure mode a distribution shift is expected to produce at rollout time." ;
+    rdfs:domain arena:DistributionShift ;
+    rdfs:range arena:FailureMode .
+
+arena:shiftAxis a owl:DatatypeProperty ;
+    rdfs:domain arena:DistributionShift ;
+    rdfs:range xsd:string .
+
+arena:shiftMagnitude a owl:DatatypeProperty ;
+    rdfs:domain arena:DistributionShift ;
+    rdfs:range xsd:float .
+
+arena:shiftSigma a owl:DatatypeProperty ;
+    rdfs:comment "Shift magnitude expressed in units of the invariant's tolerance; >= 1.0 means out of distribution." ;
+    rdfs:domain arena:DistributionShift ;
+    rdfs:range xsd:float .
+
+arena:withinTolerance a owl:DatatypeProperty ;
+    rdfs:domain arena:DistributionShift ;
+    rdfs:range xsd:boolean .
+
+# ---------------------------------------------------------------------------
+# Failure modes
+# ---------------------------------------------------------------------------
+
+arena:FailureMode a owl:Class, rdfs:Class ;
+    rdfs:label "Failure Mode" ;
+    rdfs:comment "A named, attributable cause of evaluation failure." ;
+    rdfs:subClassOf prov:Entity .
+
+arena:failureLayer a owl:DatatypeProperty ;
+    rdfs:comment "Which layer of the stack owns the fault: 'harness', 'evaluation', 'perception', 'conditioning', 'kinematic', 'dynamics', 'training_distribution'." ;
+    rdfs:domain arena:FailureMode ;
+    rdfs:range xsd:string .
+
+arena:priorBelief a owl:DatatypeProperty ;
+    rdfs:comment "Probability assigned to this failure mode before diagnostic evidence is gathered." ;
+    rdfs:domain arena:FailureMode ;
+    rdfs:range xsd:float .
+
+arena:posteriorBelief a owl:DatatypeProperty ;
+    rdfs:comment "Probability after applying the evidence gathered by diagnostic techniques." ;
+    rdfs:domain arena:FailureMode ;
+    rdfs:range xsd:float .
+
+arena:excludes a owl:ObjectProperty ;
+    rdfs:comment "Two failure modes that cannot both be the dominant cause; used to prune the hypothesis set." ;
+    rdfs:domain arena:FailureMode ;
+    rdfs:range arena:FailureMode .
+
+# ---------------------------------------------------------------------------
+# The finite technique catalogue
+# ---------------------------------------------------------------------------
+
+arena:Technique a owl:Class, rdfs:Class ;
+    rdfs:label "Technique" ;
+    rdfs:comment "Base class for the closed set of procedures the pipeline may invoke autonomously." ;
+    rdfs:subClassOf prov:Plan .
+
+arena:DiagnosticTechnique a owl:Class, rdfs:Class ;
+    rdfs:label "Diagnostic Technique" ;
+    rdfs:comment "A procedure that produces evidence separating candidate failure modes." ;
+    rdfs:subClassOf arena:Technique .
+
+arena:ActivationProbe a owl:Class, rdfs:Class ;
+    rdfs:label "Activation Probe" ;
+    rdfs:comment "A diagnostic technique that reads a policy's internal activations rather than its behaviour." ;
+    rdfs:subClassOf arena:DiagnosticTechnique .
+
+arena:RemediationTechnique a owl:Class, rdfs:Class ;
+    rdfs:label "Remediation Technique" ;
+    rdfs:comment "A procedure that changes the scene, the policy config, the harness, or the training data to resolve a failure mode." ;
+    rdfs:subClassOf arena:Technique .
+
+arena:discriminates a owl:ObjectProperty ;
+    rdfs:comment "Failure modes whose truth value this technique's evidence can separate. Drives information-gain-based technique selection." ;
+    rdfs:domain arena:DiagnosticTechnique ;
+    rdfs:range arena:FailureMode .
+
+arena:resolves a owl:ObjectProperty ;
+    rdfs:domain arena:RemediationTechnique ;
+    rdfs:range arena:FailureMode .
+
+arena:invalidatedBy a owl:ObjectProperty ;
+    rdfs:comment "An invariant that forbids this remediation, e.g. inflating asset friction is invalidated by the sim-to-real invariant." ;
+    rdfs:domain arena:RemediationTechnique ;
+    rdfs:range arena:SimToRealInvariant .
+
+arena:probesModule a owl:DatatypeProperty ;
+    rdfs:comment "Dotted module path the probe attaches its hooks to, e.g. 'action_head.model.transformer_blocks'." ;
+    rdfs:domain arena:ActivationProbe ;
+    rdfs:range xsd:string .
+
+arena:probeMetric a owl:DatatypeProperty ;
+    rdfs:domain arena:DiagnosticTechnique ;
+    rdfs:range xsd:string .
+
+arena:techniqueCost a owl:DatatypeProperty ;
+    rdfs:comment "Relative cost of running the technique, in arbitrary comparable units. Selection minimises cost per bit of information." ;
+    rdfs:domain arena:Technique ;
+    rdfs:range xsd:float .
+
+arena:expectedEfficacy a owl:DatatypeProperty ;
+    rdfs:comment "Expected probability that this remediation resolves the failure mode it targets." ;
+    rdfs:domain arena:RemediationTechnique ;
+    rdfs:range xsd:float .
+
+arena:requiresPolicyWeights a owl:DatatypeProperty ;
+    rdfs:comment "True when the technique needs in-process access to model weights, i.e. it cannot run against a remote inference server." ;
+    rdfs:domain arena:Technique ;
+    rdfs:range xsd:boolean .
+
+arena:requiresRollout a owl:DatatypeProperty ;
+    rdfs:domain arena:Technique ;
+    rdfs:range xsd:boolean .
+
+arena:requiresGpu a owl:DatatypeProperty ;
+    rdfs:domain arena:Technique ;
+    rdfs:range xsd:boolean .
+
+arena:requiresReferenceDataset a owl:DatatypeProperty ;
+    rdfs:domain arena:Technique ;
+    rdfs:range xsd:boolean .
+
+# ---------------------------------------------------------------------------
+# Evidence
+# ---------------------------------------------------------------------------
+
+arena:ProbeObservation a owl:Class, rdfs:Class ;
+    rdfs:label "Probe Observation" ;
+    rdfs:comment "One measured value produced by a diagnostic technique, retained as evidence for or against failure modes." ;
+    rdfs:subClassOf prov:Entity .
+
+arena:producedByTechnique a owl:ObjectProperty ;
+    rdfs:subPropertyOf prov:wasGeneratedBy ;
+    rdfs:domain arena:ProbeObservation ;
+    rdfs:range arena:DiagnosticTechnique .
+
+arena:observedDuring a owl:ObjectProperty ;
+    rdfs:domain arena:ProbeObservation ;
+    rdfs:range arena:EvaluationRun .
+
+arena:supports a owl:ObjectProperty ;
+    rdfs:comment "This observation raises belief in the failure mode." ;
+    rdfs:domain arena:ProbeObservation ;
+    rdfs:range arena:FailureMode .
+
+arena:refutes a owl:ObjectProperty ;
+    rdfs:comment "This observation lowers belief in the failure mode." ;
+    rdfs:domain arena:ProbeObservation ;
+    rdfs:range arena:FailureMode .
+
+arena:observationMetric a owl:DatatypeProperty ;
+    rdfs:domain arena:ProbeObservation ;
+    rdfs:range xsd:string .
+
+arena:observationValue a owl:DatatypeProperty ;
+    rdfs:domain arena:ProbeObservation ;
+    rdfs:range xsd:float .
+
+arena:observationReference a owl:DatatypeProperty ;
+    rdfs:comment "Reference value the observation is compared against, typically measured on the training corpus." ;
+    rdfs:domain arena:ProbeObservation ;
+    rdfs:range xsd:float .
+
+arena:observationConfidence a owl:DatatypeProperty ;
+    rdfs:domain arena:ProbeObservation ;
+    rdfs:range xsd:float .
+
+arena:likelihoodRatio a owl:DatatypeProperty ;
+    rdfs:comment "P(observation | failure mode) / P(observation | not failure mode); the Bayesian update weight." ;
+    rdfs:range xsd:float .
+
+# ---------------------------------------------------------------------------
+# Evaluation run linkage
+# ---------------------------------------------------------------------------
+
+arena:evaluatedPolicy a owl:ObjectProperty ;
+    rdfs:domain arena:EvaluationRun ;
+    rdfs:range arena:Policy .
+
+arena:appliedTechnique a owl:ObjectProperty ;
+    rdfs:comment "A diagnostic technique that was actually executed against this run." ;
+    rdfs:domain arena:EvaluationRun ;
+    rdfs:range arena:DiagnosticTechnique .
+
+arena:attributedToFailureMode a owl:ObjectProperty ;
+    rdfs:comment "The failure mode this run's evidence converged on." ;
+    rdfs:subPropertyOf prov:wasAttributedTo ;
+    rdfs:domain arena:EvaluationRun ;
+    rdfs:range arena:FailureMode .
+
+arena:remediatedBy a owl:ObjectProperty ;
+    rdfs:domain arena:EvaluationRun ;
+    rdfs:range arena:RemediationTechnique .
+
+arena:nextTechnique a owl:ObjectProperty ;
+    rdfs:comment "The technique the planner selected to run next, retained so the plan is auditable after the fact." ;
+    rdfs:domain arena:EvaluationRun ;
+    rdfs:range arena:Technique .

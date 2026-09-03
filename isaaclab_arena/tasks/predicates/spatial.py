@@ -13,6 +13,7 @@ from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors.contact_sensor.contact_sensor import ContactSensor
 
+from isaaclab_arena.tasks.predicates.episode_state import get_episode_scoped_state
 from isaaclab_arena.tasks.predicates.object_settling import get_object_initial_rest_state
 from isaaclab_arena.tasks.predicates.predicate_utils import get_env, get_root_lin_vel_w, get_root_pos_w, select
 
@@ -45,6 +46,27 @@ def object_is_above_height(
     else:
         result = object_z > (surface_height + distance)
     return select(result, env_id)
+
+
+def object_lifted_above_resting_min(
+    env: ManagerBasedRLEnv,
+    object_name: str,
+    distance: float = 5e-2,
+    env_id: int | None = None,
+) -> torch.Tensor:
+    """Checks if an object is currently ``distance`` m above the lowest height it reached this episode.
+
+    Unlike ``object_is_above_height``, this needs neither a hardcoded surface height nor a recorded
+    settled state: the reference is a per-env running minimum of the object's own height, which
+    tracks the resting height once the object stops falling. That makes it usable from termination
+    predicates, which run whether or not progress tracking is enabled.
+
+    Returns True when ``object_name`` sits at least ``distance`` m above its resting height.
+    """
+
+    object_z = get_root_pos_w(env, object_name)[:, 2]
+    resting_z = get_episode_scoped_state(env).running_min(f"resting_min_z::{object_name}", object_z)
+    return select(object_z > (resting_z + distance), env_id)
 
 
 def object_moving(

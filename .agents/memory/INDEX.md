@@ -8,4 +8,11 @@
 | `2026-08-27` | `g1eval` | Host Mounts Assurance & G1 Eval Playbook | Implemented ensure_host_directories.sh, audited models/datasets, and documented canonical G1 closed-loop eval. | Active |
 | `2026-08-27` | `gr00tport` | GR00T Image Build & Policy Server Bring-Up | Fixed submodule Dockerfile, container working dir, DooD mounts, and verified policy server on port 5558. | Active |
 | `2026-08-27` | `submodfork` | Submodule Fork Migration & Git Playbook | Migrated Isaac-GR00T and IsaacLab to boredengineering forks, updated .gitmodules, and documented workflow. | Active |
-
+| `2026-08-28` | `rdfstarlpg` | RDF-star + LPG + PROV-O Scene Graph Architecture | Designed the dual-representation env graph: RDF-star reified relations with SHACL validation, Neo4j LPG mirror, and W3C PROV-O lineage. | Active |
+| `2026-08-29` | `causalinfer` | Causal Notes & Spatial Factor Graph Relaxation | Formalized SpatialFactorGraph loopy-belief-propagation pose relaxation, prior/posterior entropy bookkeeping, and causal intervention semantics. | Active |
+| `2026-08-31` | `autoheal` | Autonomous Evaluation Self-Healing Flywheel | Implemented EvaluationDiagnosticOracle + EvaluationRemediationEngine, semantic env/eval versioning, dual-ledger lineage, and `--healing_mode {hybrid,deterministic,llm}`. | Active |
+| `2026-09-01` | `droidbench` | DROID/Franka Scenario Benchmarks (B1, B4) | Ran statistical Markov funnels across N=42–70 episodes; established lift-vs-conversion diagnostics and the receding-horizon chunk-compression trade-off. | Active |
+| `2026-09-02` | `g1autopsy` | G1 Humanoid VLM Failure Autopsy (v4–v6) | Built headless-render + VLM autopsy tooling, discovered the 50-D `g1_wbc_agile_joint` action contract, and proved server health at 100% on the reference scene. | Active |
+| `2026-09-02` | `depthaudit` | Depth Anything V2 Spatial Audit | Quantified the training-vs-sim geometric disconnect (10x surface-slope flattening, ΔY_norm = −0.44) and added `depth_alignment_mismatch` as a defect type. | Active |
+| `2026-09-03` | `c1blockers` | Scenario C1 (v7–v9) Autopsy & Architectural Blockers | Diagnosed the PhysX hand-interpenetration catapult, the false-positive contact-termination trap, and the 80 cm vertical OOD gap in the GN1x checkpoint. | Blocked |
+| `2026-09-03` | `modelgraph` | Policy Diagnostics Ontology & Sequential Success Gate | Added `SuccessMode.SEQUENCE` lift-before-place gating, the policy/technique/defect ontology module, activation probes, and the technique-selection planner. | Active |

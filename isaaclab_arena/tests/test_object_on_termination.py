@@ -49,7 +49,9 @@ def _test_object_on_destination_termination(simulation_app) -> bool:
 
     scene = Scene(assets=[background, cracker_box, destination_location])
 
-    task = PickAndPlaceTask(cracker_box, destination_location, background)
+    # ``require_lift_before_place=False``: this test drops the box into the drawer under gravity
+    # with zero actions to exercise the contact-sensor termination, so no grasp-and-lift occurs.
+    task = PickAndPlaceTask(cracker_box, destination_location, background, require_lift_before_place=False)
     isaaclab_arena_environment = IsaacLabArenaEnvironment(
         name="kitchen",
         embodiment=FrankaIKEmbodiment(),
@@ -138,6 +140,72 @@ def _test_object_on_destination_termination(simulation_app) -> bool:
     return True
 
 
+def _test_lift_gate_rejects_unlifted_placement(simulation_app) -> bool:
+    """With the lift gate on, an object that only falls into the drawer must not report success.
+
+    Same scene and same zero actions as the test above, which does reach the drawer and does fire
+    success once the gate is off. Nothing here is ever grasped or raised, so the sequential gate
+    must withhold success for the whole run - this is the regression guard for a contact sensor
+    reporting a placement the robot never performed.
+    """
+
+    from isaaclab_arena.assets.object_reference import ObjectReference
+    from isaaclab_arena.assets.registries import AssetRegistry
+    from isaaclab_arena.cli.isaaclab_arena_cli import arena_env_builder_cfg_from_argparse, get_isaaclab_arena_cli_parser
+    from isaaclab_arena.embodiments.franka.franka import FrankaIKEmbodiment
+    from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
+    from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
+    from isaaclab_arena.scene.scene import Scene
+    from isaaclab_arena.tasks.pick_and_place_task import PickAndPlaceTask
+    from isaaclab_arena.utils.pose import Pose
+
+    args_cli = get_isaaclab_arena_cli_parser().parse_args([])
+
+    asset_registry = AssetRegistry()
+    background = asset_registry.get_asset_by_name("kitchen_with_open_drawer")()
+    cracker_box = asset_registry.get_asset_by_name("cracker_box")()
+    destination_location = ObjectReference(
+        name="destination_location",
+        prim_path="{ENV_REGEX_NS}/kitchen_with_open_drawer/Cabinet_B_02",
+        parent_asset=background,
+    )
+    cracker_box.set_initial_pose(
+        Pose(position_xyz=(0.0758066475391388, -0.5088448524475098, 0.5), rotation_xyzw=(0, 0, 0, 1))
+    )
+
+    scene = Scene(assets=[background, cracker_box, destination_location])
+    # Gate left at its default (on) - the point of the test.
+    task = PickAndPlaceTask(cracker_box, destination_location, background)
+    isaaclab_arena_environment = IsaacLabArenaEnvironment(
+        name="kitchen",
+        embodiment=FrankaIKEmbodiment(),
+        scene=scene,
+        task=task,
+    )
+
+    builder = ArenaEnvBuilder(isaaclab_arena_environment, arena_env_builder_cfg_from_argparse(args_cli))
+    env = builder.make_registered()
+    env.reset()
+
+    try:
+        success_vec = []
+        for _ in tqdm.tqdm(range(NUM_STEPS)):
+            with torch.inference_mode():
+                actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
+                env.step(actions)
+                success_vec.append(env.unwrapped.termination_manager.get_term("success").clone())
+    except Exception as e:
+        print(f"Error: {e}")
+        traceback.print_exc()
+        return False
+    finally:
+        env.close()
+
+    fired = [step for step, success in enumerate(success_vec) if bool(success.item())]
+    assert not fired, f"Lift gate let an unlifted placement report success at steps {fired}"
+    return True
+
+
 def test_object_on_destination_termination():
     result = run_simulation_app_function(
         _test_object_on_destination_termination,
@@ -146,5 +214,14 @@ def test_object_on_destination_termination():
     assert result, "Test failed"
 
 
+def test_lift_gate_rejects_unlifted_placement():
+    result = run_simulation_app_function(
+        _test_lift_gate_rejects_unlifted_placement,
+        headless=HEADLESS,
+    )
+    assert result, "Test failed"
+
+
 if __name__ == "__main__":
     test_object_on_destination_termination()
+    test_lift_gate_rejects_unlifted_placement()

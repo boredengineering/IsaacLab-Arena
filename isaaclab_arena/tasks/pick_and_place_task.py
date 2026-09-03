@@ -24,7 +24,12 @@ from isaaclab_arena.metrics.success_rate import SuccessRateMetric
 from isaaclab_arena.progress_tracking.progress_objective import ProgressObjective
 from isaaclab_arena.tasks.common.mimic_default_params import MIMIC_DATAGEN_CONFIG_DEFAULTS
 from isaaclab_arena.tasks.predicates.object_settling import objects_settled
-from isaaclab_arena.tasks.predicates.spatial import object_is_above_height, object_on_destination, objects_in_proximity
+from isaaclab_arena.tasks.predicates.spatial import (
+    object_is_above_height,
+    object_lifted_above_resting_min,
+    object_on_destination,
+    objects_in_proximity,
+)
 from isaaclab_arena.tasks.task_base import TaskBase
 from isaaclab_arena.tasks.task_transition import Relocate, TaskTransition
 from isaaclab_arena.tasks.terminations import SuccessMode, check_success
@@ -37,8 +42,10 @@ from isaaclab_arena.utils.configclass import make_configclass
 class PickAndPlaceTask(TaskBase):
     """Pick-and-place task. Success fires when the pick-up object contacts the destination
     with low velocity and, when ``max_separation`` is set, is within axis-aligned proximity
-    of the destination. Failure (object_dropped) fires when the object falls below the
-    background's ``object_min_z``.
+    of the destination. With ``require_lift_before_place`` (the default) those checks are
+    additionally gated behind a ``min_lift_height`` lift, so an object nudged into its
+    destination without ever being grasped does not report success. Failure (object_dropped)
+    fires when the object falls below the background's ``object_min_z``.
 
     The default Mimic cfg is ``PickPlaceMimicEnvCfg``. When a task needs a different cfg
     shape (different arm subtask sequences, different per-subtask numerical knobs,
@@ -63,6 +70,8 @@ class PickAndPlaceTask(TaskBase):
         force_threshold: float = 0.1,
         velocity_threshold: float = 0.1,
         max_separation: tuple[float, float, float] | None = None,
+        require_lift_before_place: bool = True,
+        min_lift_height: float = 0.05,
         mimic_env_cfg_factory: Callable[[ArmMode], MimicEnvCfg] | None = None,
     ):
         super().__init__(episode_length_s=episode_length_s)
@@ -74,6 +83,8 @@ class PickAndPlaceTask(TaskBase):
         self.scene_config = self.make_scene_cfg()
         self.force_threshold = force_threshold
         self.velocity_threshold = velocity_threshold
+        self.require_lift_before_place = require_lift_before_place
+        self.min_lift_height = min_lift_height
         if max_separation is None:
             dest_name = (getattr(destination_location, "name", "") or "").lower()
             if any(k in dest_name for k in ("bin", "bowl", "box", "basket", "pail", "crate", "pot")):
@@ -111,7 +122,21 @@ class PickAndPlaceTask(TaskBase):
         return self.termination_cfg
 
     def make_termination_cfg(self):
-        predicates = [
+        predicates = []
+        if self.require_lift_before_place:
+            # Gates the contact check behind a real grasp: a contact sensor alone fires when the
+            # object is merely nudged against the destination, which reports success for an
+            # episode in which the robot never picked anything up.
+            predicates.append(
+                TerminationTermCfg(
+                    func=object_lifted_above_resting_min,
+                    params={
+                        "object_name": self.pick_up_object.name,
+                        "distance": self.min_lift_height,
+                    },
+                )
+            )
+        predicates.append(
             TerminationTermCfg(
                 func=object_on_destination,
                 params={
@@ -121,7 +146,7 @@ class PickAndPlaceTask(TaskBase):
                     "velocity_threshold": self.velocity_threshold,
                 },
             ),
-        ]
+        )
         if self.max_separation is not None:
             # TODO(qianl): replace objects_in_proximity with object_centroid_in_proximity
             # for tighter container placement checks.
@@ -142,8 +167,9 @@ class PickAndPlaceTask(TaskBase):
         success = TerminationTermCfg(
             func=check_success,
             params={
-                "mode": SuccessMode.ALL,
+                "mode": SuccessMode.SEQUENCE if self.require_lift_before_place else SuccessMode.ALL,
                 "predicates": predicates,
+                "gate_id": f"pick_and_place::{self.pick_up_object.name}",
             },
         )
         object_dropped = TerminationTermCfg(

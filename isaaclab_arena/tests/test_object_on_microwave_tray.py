@@ -50,7 +50,9 @@ def _test_object_on_microwave_tray_termination(simulation_app) -> bool:
         name="microwave_tray",
         embodiment=FrankaIKEmbodiment(),
         scene=scene,
-        task=PickAndPlaceTask(dex_cube, destination_ref, background),
+        # ``require_lift_before_place=False``: the cube is dropped onto the tray with zero actions
+        # to exercise the contact-sensor termination, so no grasp-and-lift occurs.
+        task=PickAndPlaceTask(dex_cube, destination_ref, background, require_lift_before_place=False),
     )
 
     env = ArenaEnvBuilder(isaaclab_arena_environment, arena_env_builder_cfg_from_argparse(args_cli)).make_registered()

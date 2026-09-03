@@ -64,7 +64,9 @@ def _test_object_set_on_destination_termination(simulation_app) -> bool:
         name="object_set_termination_test",
         embodiment=FrankaIKEmbodiment(),
         scene=scene,
-        task=PickAndPlaceTask(object_set, destination_location, background),
+        # ``require_lift_before_place=False``: the objects drop into the drawer under gravity with
+        # zero actions to exercise the contact-sensor termination, so no grasp-and-lift occurs.
+        task=PickAndPlaceTask(object_set, destination_location, background, require_lift_before_place=False),
     )
 
     builder = ArenaEnvBuilder(isaaclab_arena_environment, arena_env_builder_cfg_from_argparse(args_cli))

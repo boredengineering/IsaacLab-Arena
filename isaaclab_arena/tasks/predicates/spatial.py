@@ -54,9 +54,10 @@ def object_lifted_above_resting_min(
     distance: float = 5e-2,
     rest_speed_threshold: float = 5e-2,
     rest_steps_required: int = 3,
+    min_airborne_steps: int = 1,
     env_id: int | None = None,
 ) -> torch.Tensor:
-    """Checks if an object has been raised ``distance`` m above the lowest height it rested at.
+    """Checks if an object has been held ``distance`` m above its resting height, for a duration.
 
     Unlike ``object_is_above_height``, this needs neither a hardcoded surface height nor a recorded
     settled state: the reference is a per-env running minimum of the object's own height, which
@@ -75,8 +76,23 @@ def object_lifted_above_resting_min(
 
     Resting first is therefore part of the definition of having been lifted, not an optimisation.
 
-    Returns True when ``object_name`` has come to rest and now sits at least ``distance`` m above
-    the lowest height it rested at.
+    ``min_airborne_steps`` additionally requires the object to *stay* above the threshold for that
+    many **consecutive** steps. A pick is a sustained state, not an instant: an object clipped
+    upward by a passing hand, or one crossing the threshold on a single-frame physics excursion,
+    satisfies an instantaneous height test but was never carried. Requiring dwell is what separates
+    "lifted and held" from "touched hard enough to move".
+
+    Args:
+        env: The environment.
+        object_name: Scene name of the object.
+        distance: Required height above the resting height, in metres.
+        rest_speed_threshold: Speed below which the object counts as at rest, in m/s.
+        rest_steps_required: Consecutive at-rest steps needed to establish the resting reference.
+        min_airborne_steps: Consecutive steps the object must remain above ``distance``.
+        env_id: Optional single env to select.
+
+    Returns True once ``object_name`` has rested, then remained at least ``distance`` m above that
+    resting height for ``min_airborne_steps`` consecutive steps.
     """
 
     state = get_episode_scoped_state(env)
@@ -90,7 +106,10 @@ def object_lifted_above_resting_min(
     reference_z = state.running_min(
         f"resting_min_z::{object_name}", torch.where(has_rested, object_z, torch.full_like(object_z, float("inf")))
     )
-    return select(has_rested & (object_z > (reference_z + distance)), env_id)
+    above_threshold = has_rested & (object_z > (reference_z + distance))
+    # Consecutive-step run, so a momentary excursion above the threshold does not count as a lift.
+    airborne_run = state.run_length(f"airborne_run::{object_name}", above_threshold)
+    return select(airborne_run >= min_airborne_steps, env_id)
 
 
 def object_moving(

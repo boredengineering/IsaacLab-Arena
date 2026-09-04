@@ -72,6 +72,7 @@ class PickAndPlaceTask(TaskBase):
         max_separation: tuple[float, float, float] | None = None,
         require_lift_before_place: bool = True,
         min_lift_height: float = 0.05,
+        min_airborne_steps: int = 1,
         mimic_env_cfg_factory: Callable[[ArmMode], MimicEnvCfg] | None = None,
     ):
         super().__init__(episode_length_s=episode_length_s)
@@ -85,6 +86,8 @@ class PickAndPlaceTask(TaskBase):
         self.velocity_threshold = velocity_threshold
         self.require_lift_before_place = require_lift_before_place
         self.min_lift_height = min_lift_height
+        self.min_airborne_steps = min_airborne_steps
+        """Consecutive steps the object must stay above ``min_lift_height`` to count as carried."""
         if max_separation is None:
             dest_name = (getattr(destination_location, "name", "") or "").lower()
             if any(k in dest_name for k in ("bin", "bowl", "box", "basket", "pail", "crate", "pot")):
@@ -133,6 +136,7 @@ class PickAndPlaceTask(TaskBase):
                     params={
                         "object_name": self.pick_up_object.name,
                         "distance": self.min_lift_height,
+                        "min_airborne_steps": self.min_airborne_steps,
                     },
                 )
             )

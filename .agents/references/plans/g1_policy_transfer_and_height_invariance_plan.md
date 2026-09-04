@@ -13,6 +13,9 @@
 > **Decision context**: Pathways A (rebuild the benchmark on the shelf scene) and B (collect demos on `maple_table`) were rejected. The chosen direction is **fine-tune on the galileo scene and transfer to `maple_table`**, with the generation pipeline responsible for diagnosing and closing the transfer gap.
 > **What changed during review**: the original step 1 recommended fine-tuning with height variation. Investigation found (a) the tolerance driving that recommendation was never measured, and (b) the galileo scene already contains the shelf tiers needed to measure it. The plan below therefore leads with measurement, not training.
 
+> [!NOTE]
+> **Phase numbering in this document is superseded by [`g1_pick_success_phases.md`](g1_pick_success_phases.md)** (canonical `P0`-`P6` tracker, 2026-09-04). The sections here remain valid as detail; cite phases from the tracker.
+
 ---
 
 ## 1. The Correction That Reordered This Plan

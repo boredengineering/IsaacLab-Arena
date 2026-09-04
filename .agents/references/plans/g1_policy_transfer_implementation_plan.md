@@ -6,6 +6,9 @@
 > 1. The height sweep is **not** a YAML change. The corpus-aligned scene is a Python factory with a hardcoded shelf constant and an invisible collision patch (§2.1). The sweep becomes a ~20-line change to one file plus a shell loop — cheaper and far more controlled than authoring graph specs.
 > 2. The `−0.8015 m` corpus invariant **may be frame-confused**, not merely un-toleranced (§1). If so, the height axis is mis-parameterised at its root, and the sweep must start by measuring frames rather than success rates.
 
+> [!NOTE]
+> **Phase numbering in this document is superseded by [`g1_pick_success_phases.md`](g1_pick_success_phases.md)** (canonical `P0`-`P6` tracker, 2026-09-04). The sections here remain valid as detail; cite phases from the tracker.
+
 ---
 
 ## 1. Phase 0 — Resolve the Frame Ambiguity First — **DONE 2026-09-03, and it changed the diagnosis**

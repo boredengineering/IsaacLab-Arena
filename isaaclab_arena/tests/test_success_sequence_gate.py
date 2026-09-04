@@ -305,3 +305,61 @@ def _test_bouncing_object_does_not_count_as_lifted(simulation_app) -> bool:
 
 def test_bouncing_object_does_not_count_as_lifted():
     assert run_simulation_app_function(_test_bouncing_object_does_not_count_as_lifted)
+
+
+def _test_momentary_excursion_is_not_a_lift(simulation_app) -> bool:
+    """An object clipped above the threshold for one step is not "lifted and held".
+
+    The v17-v20 evaluations measured a peak lift of under 2 cm, so the lift threshold had to come
+    down from its asserted 5 cm. Lowering a height threshold alone would let a hand that swipes the
+    object upward register as a pick, which is why ``min_airborne_steps`` exists: a carry is a
+    sustained state. This checks the dwell requirement independently of the height one.
+    """
+    import torch
+
+    from isaaclab_arena.tasks.predicates import spatial
+
+    try:
+        env = _MockEnv(num_envs=1)
+        # Rest for 3 steps to establish the reference at 0.010, then a 1-step spike, then a
+        # sustained 5-step carry at the same height.
+        trace = [
+            (0.010, 0.00),
+            (0.010, 0.00),
+            (0.010, 0.00),  # reference established at 0.010
+            (0.040, 0.30),  # single-step spike, 3 cm above rest -- must NOT count
+            (0.010, 0.05),  # back down
+            (0.040, 0.20),  # sustained carry begins
+            (0.041, 0.15),
+            (0.040, 0.10),
+            (0.042, 0.10),
+            (0.040, 0.08),  # 5th consecutive airborne step -- must count
+        ]
+        original_pos, original_vel = spatial.get_root_pos_w, spatial.get_root_lin_vel_w
+        results = []
+        try:
+            for height, speed in trace:
+                spatial.get_root_pos_w = lambda e, n, _h=height: torch.tensor([[0.0, 0.0, _h]])
+                spatial.get_root_lin_vel_w = lambda e, n, _s=speed: torch.tensor([[_s, 0.0, 0.0]])
+                env.step()
+                results.append(
+                    bool(spatial.object_lifted_above_resting_min(env, "obj", distance=0.015, min_airborne_steps=5)[0])
+                )
+        finally:
+            spatial.get_root_pos_w, spatial.get_root_lin_vel_w = original_pos, original_vel
+
+        spike_index = 3
+        assert not results[spike_index], f"a single-step spike must not count as a lift: {results}"
+        assert not any(results[:9]), f"nothing before the 5th airborne step may qualify: {results}"
+        assert results[9], f"a sustained 5-step carry must count: {results}"
+    except AssertionError:
+        raise
+    except Exception as e:
+        print(f"Error: {e}")
+        traceback.print_exc()
+        return False
+    return True
+
+
+def test_momentary_excursion_is_not_a_lift():
+    assert run_simulation_app_function(_test_momentary_excursion_is_not_a_lift)

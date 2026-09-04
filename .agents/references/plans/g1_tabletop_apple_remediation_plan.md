@@ -11,6 +11,9 @@
 > prompt. See §5c. Every conclusion below dated before 2026-09-04 that rests on `v9` telemetry
 > should be read against §5c first.
 
+> [!NOTE]
+> **Phase numbering in this document is superseded by [`g1_pick_success_phases.md`](g1_pick_success_phases.md)** (canonical `P0`-`P6` tracker, 2026-09-04). The sections here remain valid as detail; cite phases from the tracker.
+
 ---
 
 ## 1. Executive Summary & Problem Evolution

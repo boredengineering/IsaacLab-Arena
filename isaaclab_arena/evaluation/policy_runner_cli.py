@@ -152,3 +152,26 @@ def add_policy_runner_arguments(parser: argparse.ArgumentParser) -> None:
         default=1.0,
         help="Max per-object angular speed (rad/s) for an object to be considered settled.",
     )
+    parser.add_argument(
+        "--trace_reach",
+        type=str,
+        default=None,
+        help=(
+            "Log per-step reach geometry to this JSONL path: the manipuland's height above its "
+            "own resting height, its speed, and its distance to the destination. This is what "
+            "distinguishes a policy that never touches the object from one that picks it but "
+            "lifts less than the success gate's threshold."
+        ),
+    )
+    parser.add_argument(
+        "--trace_reach_object",
+        type=str,
+        default=None,
+        help="Scene name of the manipuland to trace. Required when --trace_reach is set.",
+    )
+    parser.add_argument(
+        "--trace_reach_destination",
+        type=str,
+        default=None,
+        help="Scene name of the destination object, for the distance column.",
+    )

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import torch
 import tqdm
@@ -205,6 +206,69 @@ def verify_and_settle_scene(
     return report, obs
 
 
+class ReachTracer:
+    """Records manipuland height-above-rest, speed, and distance to destination, per step.
+
+    Written for choosing lift thresholds from data instead of asserting them: the success gate's
+    ``min_lift_height`` is only meaningful against the distribution of lifts the policy actually
+    produces on a given scene.
+    """
+
+    def __init__(
+        self,
+        path: str,
+        base_env,
+        object_name: str,
+        destination_name: str | None,
+        contact_sensor_name: str | None = None,
+    ):
+        self._path = path
+        self._rows: list[str] = []
+        self._env = base_env
+        self._object_name = object_name
+        self._destination_name = destination_name
+        self._contact_sensor_name = contact_sensor_name
+        self._rest_z: torch.Tensor | None = None
+        self._step = 0
+
+    def _pos(self, name):
+        return wp.to_torch(self._env.scene[name].data.root_pos_w)
+
+    def record(self) -> None:
+        obj = self._pos(self._object_name)
+        speed = wp.to_torch(self._env.scene[self._object_name].data.root_lin_vel_w).norm(dim=-1)
+        z = obj[:, 2]
+        # Resting reference: first sample taken while essentially still.
+        if self._rest_z is None and bool((speed < 1e-2).all()):
+            self._rest_z = z.clone()
+        row = {
+            "step": self._step,
+            "obj_z": [round(v, 5) for v in z.tolist()],
+            "speed": [round(v, 5) for v in speed.tolist()],
+        }
+        if self._rest_z is not None:
+            row["lift"] = [round(v, 5) for v in (z - self._rest_z).tolist()]
+        if self._destination_name is not None:
+            dest = self._pos(self._destination_name)
+            row["dist_to_dest"] = [round(v, 5) for v in (obj - dest).norm(dim=-1).tolist()]
+            row["xy_to_dest"] = [round(v, 5) for v in (obj[:, :2] - dest[:, :2]).norm(dim=-1).tolist()]
+        if self._contact_sensor_name is not None:
+            try:
+                sensor = self._env.scene[self._contact_sensor_name]
+                force = torch.norm(wp.to_torch(sensor.data.force_matrix_w), dim=-1).reshape(-1)
+                row["contact_force"] = [round(v, 5) for v in force.tolist()]
+            except KeyError:
+                # No contact sensor for this task; the rest of the trace is still useful.
+                self._contact_sensor_name = None
+        self._rows.append(json.dumps(row))
+        self._step += 1
+
+    def close(self) -> None:
+        """Write the buffered trace. Called on every rollout exit path, including exceptions."""
+        with open(self._path, "w") as fh:
+            fh.write("\n".join(self._rows) + "\n")
+
+
 def rollout_policy(
     env,
     policy: PolicyBase,
@@ -214,11 +278,15 @@ def rollout_policy(
     settle_steps: int = 12,
     lin_vel_thresh: float = 0.1,
     ang_vel_thresh: float = 1.0,
+    trace_reach: str | None = None,
+    trace_reach_object: str | None = None,
+    trace_reach_destination: str | None = None,
 ) -> MetricsDataCollection | None:
     assert num_steps is not None or num_episodes is not None, "Either num_steps or num_episodes must be provided"
     assert num_steps is None or num_episodes is None, "Only one of num_steps or num_episodes must be provided"
 
     pbar = None
+    tracer = None
     try:
         obs, _ = env.reset()
 
@@ -236,6 +304,16 @@ def rollout_policy(
         policy.reset()
         policy.set_task_description(env.unwrapped.get_language_instruction())
 
+        if trace_reach is not None:
+            assert trace_reach_object is not None, "--trace_reach requires --trace_reach_object"
+            tracer = ReachTracer(
+                trace_reach,
+                env.unwrapped,
+                object_name=trace_reach_object,
+                destination_name=trace_reach_destination,
+                contact_sensor_name=f"contact_sensor_{trace_reach_object}",
+            )
+
         # Setup progress bar based on num_steps or num_episodes
         if num_steps is not None:
             pbar = tqdm.tqdm(total=num_steps, desc="Steps", unit="step")
@@ -249,6 +327,8 @@ def rollout_policy(
             with torch.inference_mode():
                 actions = policy.get_action(env, obs)
                 obs, _, terminated, truncated, _ = env.step(actions)
+                if tracer is not None:
+                    tracer.record()
 
                 if terminated.any() or truncated.any():
                     # Only reset policy for those envs that are terminated or truncated
@@ -289,10 +369,15 @@ def rollout_policy(
                         break
 
         pbar.close()
+        if tracer is not None:
+            tracer.close()
 
     except Exception as e:
         if pbar is not None:
             pbar.close()
+        # Flush the trace before re-raising: a crashed rollout is exactly when it is wanted.
+        if tracer is not None:
+            tracer.close()
         raise RuntimeError(f"Error rolling out policy: {e}")
 
     else:
@@ -415,6 +500,9 @@ def main():
             num_episodes,
             check_settling=getattr(args_cli, "check_settling", True),
             settle_steps=getattr(args_cli, "settle_steps", 12),
+            trace_reach=getattr(args_cli, "trace_reach", None),
+            trace_reach_object=getattr(args_cli, "trace_reach_object", None),
+            trace_reach_destination=getattr(args_cli, "trace_reach_destination", None),
             lin_vel_thresh=getattr(args_cli, "settle_lin_vel_thresh", 0.1),
             ang_vel_thresh=getattr(args_cli, "settle_ang_vel_thresh", 1.0),
         )

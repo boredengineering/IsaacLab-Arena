@@ -127,6 +127,24 @@ def _standing_actions(env) -> torch.Tensor:
     return actions
 
 
+def _world_extent(prim_path: str) -> list[float] | None:
+    """Return the world-aligned bounding-box size of ``prim_path``, or None if unavailable."""
+    try:
+        import omni.usd
+        from pxr import Usd, UsdGeom
+
+        stage = omni.usd.get_context().get_stage()
+        prim = stage.GetPrimAtPath(prim_path)
+        if not prim or not prim.IsValid():
+            return None
+        cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), [UsdGeom.Tokens.default_, UsdGeom.Tokens.render])
+        size = cache.ComputeWorldBound(prim).ComputeAlignedRange().GetSize()
+        return [float(size[0]), float(size[1]), float(size[2])]
+    except Exception as exc:  # noqa: BLE001 - geometry is a bonus; never fail the measurement for it
+        print(f"[measure] could not compute extent for {prim_path}: {exc}")
+        return None
+
+
 def measure() -> dict:
     """Settle the scene, then report frame and support positions with derived offsets."""
     env, label = _build_env()
@@ -164,10 +182,17 @@ def measure() -> dict:
         # Every rigid object in the scene, so the support surface and manipuland are both captured.
         for name, obj in unwrapped.scene.rigid_objects.items():
             pos = wp.to_torch(obj.data.root_pos_w)[0].to(origin.device)
-            report["objects"][name] = {
+            entry = {
                 "world": [round(float(v), 5) for v in pos.tolist()],
                 "env_local": [round(float(v), 5) for v in (pos - origin).tolist()],
             }
+            # Extents matter for success thresholds: "on the plate" is bounded by the plate's own
+            # footprint, so that radius has to be measured rather than guessed.
+            extent = _world_extent(f"/World/envs/env_0/{name}")
+            if extent is not None:
+                entry["extent_m"] = [round(v, 5) for v in extent]
+                entry["footprint_radius_m"] = round(max(extent[0], extent[1]) / 2.0, 5)
+            report["objects"][name] = entry
 
         # Derived offsets: the quantities the invariants are actually expressed in.
         def _first(marker: str) -> tuple[str, torch.Tensor] | None:

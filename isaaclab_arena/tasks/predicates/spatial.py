@@ -167,11 +167,31 @@ def object_on_destination(
     contact_sensor_cfg: SceneEntityCfg = SceneEntityCfg("pick_up_object_contact_sensor"),
     force_threshold: float = 1.0,
     velocity_threshold: float = 0.5,
+    destination_cfg: SceneEntityCfg | None = None,
+    max_xy_separation: float | None = None,
 ) -> torch.Tensor:
-    """Checks if an object is in contact with it's destination location via a contact sensor.
+    """Checks if an object is resting on its destination, via contact and optional proximity.
 
-    Returns True when the object is in contact with destination above a force threshold
-    and below a velocity threshold.
+    Contact alone is not evidence of placement. On ``g1_tabletop_apple_to_plate`` this predicate
+    fired while the manipuland sat on the *table* 0.214 m from the plate: the object had grazed the
+    plate earlier in the episode, and the residual reading cleared the (0.1 N) force threshold once
+    the object came to rest and satisfied the velocity gate. Passing ``destination_cfg`` and
+    ``max_xy_separation`` adds a geometric conjunct evaluated at the *same step*, so a stale or
+    noisy sensor reading can no longer stand in for a placement.
+
+    Args:
+        env: The environment.
+        object_cfg: The object being placed.
+        contact_sensor_cfg: Contact sensor on the object, filtered to the destination.
+        force_threshold: Minimum contact force, in N.
+        velocity_threshold: Maximum object speed, in m/s.
+        destination_cfg: The destination object. Required to enable the proximity check.
+        max_xy_separation: Maximum horizontal centre-to-centre distance, in m. Requires
+            ``destination_cfg``; when either is None the proximity check is skipped and the
+            predicate keeps its contact-only behaviour.
+
+    Returns True when the object is in contact with its destination above ``force_threshold``,
+    below ``velocity_threshold``, and (when configured) within ``max_xy_separation`` of it.
     """
 
     unwrapped_env = get_env(env)
@@ -193,6 +213,14 @@ def object_on_destination(
     velocity_below_threshold = velocity_w_norm < velocity_threshold
 
     condition_met = torch.logical_and(force_above_threshold, velocity_below_threshold)
+
+    if max_xy_separation is not None:
+        assert destination_cfg is not None, "max_xy_separation requires destination_cfg"
+        destination: RigidObject = unwrapped_env.scene[destination_cfg.name]
+        object_xy = wp.to_torch(object.data.root_pos_w)[:, :2]
+        destination_xy = wp.to_torch(destination.data.root_pos_w)[:, :2]
+        xy_separation = torch.linalg.vector_norm(object_xy - destination_xy, dim=-1)
+        condition_met = torch.logical_and(condition_met, xy_separation < max_xy_separation)
 
     return condition_met
 

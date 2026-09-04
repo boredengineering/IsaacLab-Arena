@@ -73,6 +73,7 @@ class PickAndPlaceTask(TaskBase):
         require_lift_before_place: bool = True,
         min_lift_height: float = 0.05,
         min_airborne_steps: int = 1,
+        max_destination_xy_separation: float | None = None,
         mimic_env_cfg_factory: Callable[[ArmMode], MimicEnvCfg] | None = None,
     ):
         super().__init__(episode_length_s=episode_length_s)
@@ -88,6 +89,12 @@ class PickAndPlaceTask(TaskBase):
         self.min_lift_height = min_lift_height
         self.min_airborne_steps = min_airborne_steps
         """Consecutive steps the object must stay above ``min_lift_height`` to count as carried."""
+        self.max_destination_xy_separation = max_destination_xy_separation
+        """Horizontal distance within which the object counts as on the destination, in m.
+
+        None keeps the contact-only check. Set it to stop a stale contact reading from standing in
+        for a placement.
+        """
         if max_separation is None:
             dest_name = (getattr(destination_location, "name", "") or "").lower()
             if any(k in dest_name for k in ("bin", "bowl", "box", "basket", "pail", "crate", "pot")):
@@ -148,6 +155,8 @@ class PickAndPlaceTask(TaskBase):
                     "contact_sensor_cfg": SceneEntityCfg(self.contact_sensor_name),
                     "force_threshold": self.force_threshold,
                     "velocity_threshold": self.velocity_threshold,
+                    "destination_cfg": SceneEntityCfg(self.destination_location.name),
+                    "max_xy_separation": self.max_destination_xy_separation,
                 },
             ),
         )

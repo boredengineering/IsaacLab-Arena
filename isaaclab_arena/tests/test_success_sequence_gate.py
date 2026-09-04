@@ -363,3 +363,85 @@ def _test_momentary_excursion_is_not_a_lift(simulation_app) -> bool:
 
 def test_momentary_excursion_is_not_a_lift():
     assert run_simulation_app_function(_test_momentary_excursion_is_not_a_lift)
+
+
+def _test_contact_without_proximity_is_not_a_placement(simulation_app) -> bool:
+    """A contact reading while the object sits far from the destination is not a placement.
+
+    Observed in the v20 evaluation: the manipuland grazed the plate mid-episode, bounced back to
+    its start, and ``object_on_destination`` then fired while the object rested on the *table*
+    0.214 m away -- the residual force reading cleared a 0.1 N threshold once the velocity gate was
+    satisfied. The geometric conjunct has to be evaluated at the same step as the contact, which is
+    why it lives inside the predicate rather than being a separate latching stage.
+    """
+    import torch
+
+    from isaaclab.managers import SceneEntityCfg
+
+    from isaaclab_arena.tasks.predicates import spatial
+
+    class _Data:
+        def __init__(self, pos, vel=None, force=None):
+            self.root_pos_w = torch.tensor(pos)
+            if vel is not None:
+                self.root_lin_vel_w = torch.tensor(vel)
+            if force is not None:
+                self.force_matrix_w = torch.tensor(force)
+
+    class _Obj:
+        def __init__(self, data):
+            self.data = data
+
+    class _SceneEnv:
+        """Minimal stand-in exposing only what the predicate reads."""
+
+        def __init__(self, obj_xy, dest_xy, force):
+            self.num_envs = 1
+            self.device = "cpu"
+            self.scene = {
+                "obj": _Obj(_Data([[obj_xy[0], obj_xy[1], 0.02]], [[0.0, 0.0, 0.0]])),
+                "dest": _Obj(_Data([[dest_xy[0], dest_xy[1], 0.01]])),
+                # (N, B, M, 3) with B = M = 1
+                "sensor": _Obj(_Data([[[[force, 0.0, 0.0]]]])),
+            }
+
+    def evaluate(obj_xy, dest_xy, force, max_xy_separation):
+        env = _SceneEnv(obj_xy, dest_xy, force)
+        return bool(
+            spatial.object_on_destination(
+                env,
+                object_cfg=SceneEntityCfg("obj"),
+                contact_sensor_cfg=SceneEntityCfg("sensor"),
+                force_threshold=0.1,
+                velocity_threshold=0.1,
+                destination_cfg=SceneEntityCfg("dest"),
+                max_xy_separation=max_xy_separation,
+            )[0]
+        )
+
+    try:
+        # The v20 false positive: object at rest, spurious force, 0.214 m from the destination.
+        assert not evaluate(
+            (0.214, 0.0), (0.0, 0.0), force=0.5, max_xy_separation=0.08
+        ), "a contact reading 0.214 m from the destination must not count as a placement"
+        # A genuine placement: same contact force, object on the destination.
+        assert evaluate(
+            (0.03, 0.0), (0.0, 0.0), force=0.5, max_xy_separation=0.08
+        ), "a contact reading within the destination's footprint must count"
+        # Proximity alone is not enough either -- the contact force still has to be there.
+        assert not evaluate(
+            (0.03, 0.0), (0.0, 0.0), force=0.0, max_xy_separation=0.08
+        ), "proximity without contact must not count"
+        # Backwards compatibility: with no proximity configured, behaviour is contact-only.
+        assert evaluate((0.214, 0.0), (0.0, 0.0), force=0.5, max_xy_separation=None)
+    except AssertionError:
+        raise
+    except Exception as e:
+        print(f"Error: {e}")
+        traceback.print_exc()
+        return False
+    return True
+
+
+def test_contact_without_proximity_is_not_a_placement():
+    assert run_simulation_app_function(_test_contact_without_proximity_is_not_a_placement)

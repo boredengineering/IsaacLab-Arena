@@ -561,6 +561,304 @@ And extend the Neo4j block at `:386-397`, which already swallows exceptions with
 
 ---
 
+## 5b. Phase 5 — Visual-Axis Diagnosis (DRAFT v1, superseded below by §5c)
+
+> [!NOTE]
+> Retained deliberately so the effect of the literature review in §5c is auditable. **Do not
+> implement from this section** — implement §5c.
+
+Phase 0's frame measurement moved the visual domain to the front: height and laterality measure
+in-tolerance, `vision_domain_ood` is the dominant belief, and `visual_domain_randomization_finetune`
+is what the planner selects. Two experiments follow, both cheap.
+
+### 5b.1 Corpus image-token centroid
+
+Mean-pool the backbone's image-masked tokens over the 200 corpus episodes, save a `.pt`, then
+report cosine distance from a `maple_table` observation's pooled embedding to that centroid. This
+activates `vl_embedding_ood_distance`, which is registered but inert. Decision rule: a small
+distance means the frozen encoder represents both scenes similarly, so the projector and DiT have
+tractable material and default fine-tune flags suffice; a large distance means `tune_visual=True`
+is required.
+
+### 5b.2 The stale-frame defect
+
+The generated maple env sets `num_rerenders_on_reset = 0`; the reference factory sets `1`
+(`galileo_g1_static_pick_and_place_environment.py:290`) precisely so the policy does not condition
+on the previous episode's final rendered frame. Set it to 1 in the generated env and re-run; if
+success changes, this was a harness bug masquerading as a domain-shift failure.
+
+### 5b.3 Acceptance
+
+- Centroid distance reported with both absolute values and the galileo-vs-maple contrast.
+- Rerender fix either changes the metric or is ruled out.
+
+---
+
+## 5c. Phase 5 — Visual-Axis Diagnosis (AUTHORITATIVE, literature-reviewed 2026-09-03)
+
+### 5c.0 What the review changed, and why it matters
+
+Four findings, each of which alters the draft in §5b. The first would have produced a **wrong answer**.
+
+| # | Draft assumed | Literature says | Consequence |
+| :-- | :--- | :--- | :--- |
+| 1 | `num_rerenders_on_reset = 1` fixes stale frames | It reportedly **does not** — [IsaacLab #6394](https://github.com/isaac-sim/IsaacLab/issues/6394) measures ~4.96 with 2 rerenders vs ~4.98 with 0. Root cause is a render/physics ordering problem: with fabric enabled, poses written via the PhysX tensor API only reach the renderer during a *physics step*, and `reset()` never steps physics. | §5b.2's test would have flipped an ineffective flag, seen no change, and **wrongly exonerated stale frames**. Must be replaced by an assertion on pixels. |
+| 2 | Cosine distance to a corpus centroid is the OOD score | Expected ranking is kNN (cosine, L2-normalised) ≳ Mahalanobis > cosine-to-centroid > Euclidean-to-centroid; cosine-to-centroid *is* Mahalanobis with an identity covariance and the norm discarded. [Sun et al. 2022](https://arxiv.org/abs/2204.06507) report kNN FPR95 29.15% vs Mahalanobis 37.94%. | Upgrade the score. Mahalanobis is nearly free (one pass, no index). Mitigating nuance: in *transformer* embedding spaces angular and Mahalanobis scores nearly coincide ([OODformer](https://arxiv.org/pdf/2107.08976) finds ±2%), so the draft was suboptimal rather than invalid. |
+| 3 | ~20 episodes per condition | 20 trials cannot separate policies differing by <20–30 points. [Robot Learning as an Empirical Science](https://arxiv.org/html/2409.09491) is explicit: 13/20 vs 14/20 supports no claim. | **Underpowered.** See the computed table in §5c.3; this is simulation, so 100+/arm is affordable and 20 is indefensible. |
+| 4 | `tune_visual=False` (GR00T default) is the baseline path | Freezing the encoder under a domain gap is the *disfavoured* setting. [Diffusion Policy](https://arxiv.org/pdf/2303.04137) ablations: ViT-CLIP 0.70 frozen → 0.98 fine-tuned; ResNet18 0.58 → 0.92. [OpenVLA](https://arxiv.org/pdf/2406.09246) fine-tuned its SigLIP-DINOv2 backbone after finding frozen encoders produced "unstable, clearly suboptimal" behaviour. | §4's decision table is too conservative. Becomes a **three-arm comparison**, plus a non-training fourth option (§5c.4). |
+
+Two counterweights kept the recommendation from flipping entirely: GR00T N1.5+ freezes the VLM *deliberately* to preserve language grounding, and a driving result found a fine-tuned 14B VLM **worse** than frozen through over-specialisation. So this is a measurement, not a foregone conclusion — which is why §5c.4 is a comparison rather than a switch.
+
+---
+
+### 5c.1 Stale-observation test — assertion, not flag-flipping
+
+**Hypothesis.** The policy's first observation each episode is the *previous* episode's final rendered frame, so a vision-conditioned policy conditions on a scene that no longer exists. This is a harness defect that would masquerade as domain shift, and it is present exactly where our generated env sits: `use_fabric=True` with `num_rerenders_on_reset=0`.
+
+**Why the draft's test was invalid.** Setting the flag to 1 is the documented remedy and is reported not to work, because re-rendering still happens before PhysX has published the new transforms. A no-change result would have been read as "stale frames are not the problem" when it in fact means "the flag does not fix stale frames".
+
+**Protocol.** Measure the defect directly in pixel space; do not infer it from a success rate.
+
+```
+For each of K = 10 consecutive episodes:
+  1. obs_reset  = env.reset()                      # candidate stale frame
+  2. obs_step1  = env.step(hold_action)            # first genuinely post-reset render
+  3. record  d_self  = mean |obs_reset - obs_step1|      (should be ~0 if fresh)
+  4. record  d_prev  = mean |obs_reset - obs_final_{k-1}| (should be LARGE if fresh)
+Report both distributions. Stale frames are confirmed iff d_prev << d_self.
+```
+
+Run the matrix `{num_rerenders_on_reset ∈ {0, 1, 2}} x {rerender_on_reset ∈ {False, True}}`, and additionally a variant that forces a physics step before the first sensor read. The last is the remedy the root-cause analysis implies; the flags are the remedies the docs claim.
+
+**Interpretation.** If `d_prev << d_self` in the default config, every vision-derived measurement in this project's history — including the depth audits and the VLM autopsies — was taken on a frame the policy would not actually have seen at that moment. That does not invalidate the *scene* geometry findings, but it does invalidate any claim about what the policy saw on step 0.
+
+**Cost.** One short rollout per config; ~15 minutes total. **Do this before any fine-tuning decision**, because it is the cheapest hypothesis on the table and it can invalidate the others' evidence base.
+
+---
+
+### 5c.2 Representation-space OOD score — Mahalanobis and kNN, not cosine-to-centroid
+
+**Unit of analysis.** One score per *observation*, from the mean over image-masked backbone tokens for that frame. Token-level scoring (one score per patch) is a refinement that answers a different question — "which patches are unfamiliar" — and is deferred.
+
+**Bank construction.** Over the 200 corpus episodes, at a fixed frame stride, collect pooled image-token embeddings `Z ∈ R^{N x D}` with `D = backbone_embedding_dim = 2048`. At ~100 frames/episode and stride 5, `N ≈ 4000`, so `N > D` and a covariance is estimable — but only just, so use **Ledoit–Wolf shrinkage** rather than the raw empirical covariance.
+
+**Three scores, reported together.**
+
+| Score | Definition | Why included |
+| :--- | :--- | :--- |
+| `cosine_to_centroid` | `1 - cos(z, mean(Z))` | Continuity with the already-registered metric; cheap |
+| `mahalanobis` | `sqrt((z-mu)^T S^-1 (z-mu))`, `S` = Ledoit–Wolf | Uses covariance; near-free; the literature's default first choice |
+| `knn_cosine` | cosine distance to the k-th nearest L2-normalised row of `Z`, `k=3` | Strongest of the three; no distributional assumption |
+
+**Calibration is mandatory and is the part most easily skipped.** A raw distance is uninterpretable. Hold out 20% of corpus frames as in-distribution positives, then report each score as a **percentile against that held-out ID distribution**, plus AUROC for separating held-out-corpus from maple frames. A maple frame at the 99.9th ID percentile is meaningful; "cosine distance 0.37" is not.
+
+This also retires an unvalidated constant: `VL_EMBEDDING_OOD_DISTANCE = 0.35` in `policy_activation_probe.py` was chosen a priori. Replace the threshold with the measured ID 95th percentile.
+
+**Negative-control requirement.** Also score a **galileo** frame the bank did not see. If it lands at a similar percentile to maple, the score is not measuring domain shift and the whole approach fails — which must be reported, not quietly dropped.
+
+---
+
+### 5c.3 Statistical protocol — computed, not asserted
+
+Two-sided Fisher exact on the success counts, computed for this design:
+
+| n / arm | 0.90 vs 0.50 | 0.90 vs 0.70 | 0.90 vs 0.80 | 0.70 vs 0.50 |
+| ---: | :--- | :--- | :--- | :--- |
+| 20 | p=0.014 ✓ | p=0.235 ✗ | p=0.661 ✗ | p=0.333 ✗ |
+| 50 | p<0.001 ✓ | p=0.023 ✓ | p=0.262 ✗ | p=0.066 ✗ |
+| **100** | p<0.001 ✓ | p<0.001 ✓ | p=0.073 ✗ | p=0.006 ✓ |
+| 200 | p<0.001 ✓ | p<0.001 ✓ | p=0.007 ✓ | p<0.001 ✓ |
+
+Clopper–Pearson 95% interval at an observed 90%: n=20 → ±15.2 pts; n=50 → ±9.2; n=100 → ±6.4; n=200 → ±4.4; n=1000 → ±1.9.
+
+**Decisions.**
+
+- **n = 100 per arm** is the floor for any comparison this project reports. It resolves a 20-point difference and is affordable in simulation. The earlier "~20 episodes" figure is retired.
+- Report **Clopper–Pearson** intervals alongside every success rate.
+- Use **direct hypothesis tests**, not interval overlap. Toyota Research Institute's guidance notes the common error explicitly: two intervals can overlap substantially while still being statistically separated. Apply Holm–Bonferroni across the arms of a sweep.
+- **A near-fatal design flaw already present**: the reference environment sets `APPLE_SPAWN_XY_RANGE_M = 0.0` (`galileo_g1_static_pick_and_place_environment.py:67`), so every episode has *identical* initial conditions. Under zero randomisation, n episodes of a deterministic-except-for-noise policy give far fewer than n independent samples, and the binomial interval is optimistic. Increasing n does nothing about bias from a narrow initial-condition distribution. **Any powered comparison must first restore spawn randomisation** (the constant's own comment says the jitter exists so a finetuned policy can generalise over the spawn range) and vary the seed per episode.
+
+---
+
+### 5c.4 Phase 3 revision — a four-arm comparison, replacing §4's table
+
+The literature does not support picking `tune_visual` a priori. It supports measuring, with these arms:
+
+| Arm | Configuration | Literature basis | Cost |
+| :--- | :--- | :--- | :--- |
+| **A. Frozen + augmentation** | GR00T defaults: `tune_visual=False`, `tune_projector=True`, plus `color_jitter_params` / `random_rotation_angle` | The disfavoured setting under a domain gap — but note `tune_projector=True` already supplies the "small tunable module on a frozen backbone" that a generalist-tuning study found "improved considerably over head-only tuning" | Low |
+| **B. Encoder fine-tune at reduced LR** | `tune_visual=True`, vision LR 10x below the policy net | Diffusion Policy's best configuration; OpenVLA's deliberate choice | Medium |
+| **C. Adapter / LoRA on the vision tower** | Low-rank adaptation, backbone otherwise frozen | Preserves pretrained breadth while recovering plasticity; the answer to the over-specialisation counterexample | Medium |
+| **D. Observation canonicalisation (no training)** | Transform maple observations toward the corpus appearance at inference | Narrows the *test* distribution instead of widening the training one; viable precisely because our target scene is fixed | Low |
+
+**Arm D deserves emphasis** because it is the only arm requiring no GPU training and it fits this project's constraint exactly: the target scene is fixed and known, so a fixed appearance transform is admissible where a general solution would not be. It should be added to `REMEDIATION_TECHNIQUES` as `canonicalize_observation_domain` (effort `config`, `preserves_target_scene=True`).
+
+**Domain-randomisation caveats to encode**, all from the review:
+
+- Randomise only what plausibly varies in deployment; heavy lighting randomisation under fixed lighting wastes capacity. Start narrow, widen progressively while monitoring.
+- DR has been observed to induce more redundant and entangled representations — a representation-quality cost, not a free lunch.
+- Regularisation penalising internal feature divergence under randomisation outperforms naive DR, so `visual_domain_randomization_finetune`'s efficacy of 0.75 should be treated as an upper bound for the naive form.
+
+---
+
+### 5c.5 Implementation checklist
+
+| # | Change | File |
+| :-- | :--- | :--- |
+| 1 | New failure mode `harness_stale_observation` (layer `harness`), with `success_progress_consistency_check` and a new `stale_frame_assertion` diagnostic discriminating it | `policy_capability_graph.py` |
+| 2 | New remediation `force_physics_step_before_sensor_read` (effort `harness`, efficacy high) and `canonicalize_observation_domain` (effort `config`) | `policy_capability_graph.py` |
+| 3 | Replace `VL_EMBEDDING_OOD_DISTANCE` with a calibrated percentile; add `mahalanobis` and `knn_cosine` to the probe's reported stats | `policy_activation_probe.py` |
+| 4 | `measure_corpus_embedding_bank.py` — build `Z`, Ledoit–Wolf covariance, L2-normalised kNN index, ID held-out calibration | new tool |
+| 5 | `test_stale_observation.py` — the `d_prev << d_self` assertion across the flag matrix | new sim test |
+| 6 | Restore `APPLE_SPAWN_XY_RANGE_M` > 0 and per-episode seed variation before any powered comparison | reference env / sweep harness |
+| 7 | `summarize_support_sweep.py`: add Clopper–Pearson intervals, Fisher exact pairwise tests, Holm–Bonferroni correction | existing tool |
+
+---
+
+### 5c.6 Acceptance criteria and falsification
+
+**Ordered gates.** Each must pass before the next is worth running.
+
+1. **Stale-frame assertion completes** with `d_prev` and `d_self` distributions reported for every config. If stale frames are confirmed *and* fixable, re-run the v9 evaluation before anything else — prior visual evidence is suspect.
+2. **OOD score is calibrated and discriminating**: held-out-corpus vs maple AUROC > 0.8, and the negative control (unseen galileo frame) scores near the ID distribution. If AUROC ≈ 0.5, the representation does not distinguish the scenes and the visual hypothesis is **refuted** — at which point neither the height nor the visual axis explains the failure and the diagnosis reopens.
+3. **Powered comparison** at n ≥ 100/arm with restored spawn randomisation, Clopper–Pearson intervals, and corrected pairwise tests.
+4. Only then, the four-arm training comparison.
+
+**What would falsify this phase:**
+
+- Fresh frames confirmed **and** OOD AUROC ≈ 0.5 → the visual axis is not the blocker either. With height already cleared, this would mean the dominant remaining candidates are the prompt-token axis and the lateral offset, both currently ranked low, and the belief priors in `FAILURE_MODES` need revisiting.
+- Arm A matching or beating Arm B → the frozen-encoder counterexamples apply to this checkpoint, and `tune_visual=True` should not be pursued.
+- The negative control scoring as OOD as maple → the bank or the pooling is wrong, not the scene.
+
+---
+
+## 5d. v9 Re-run with Fresh Frames (2026-09-04) — the fake success is gone, and a harness defect outranks the visual hypothesis
+
+Re-ran the v9 evaluation after the stale-frame fix, with `num_rerenders_on_reset=1` confirmed in the
+composed config. GN1x served locally from `/models/isaaclab_arena/static_apple_tutorial/gn1x_tuned_static_apple`.
+
+| | original `v9_full` | fresh-frame re-run |
+| :--- | :--- | :--- |
+| episodes | 1 | 11 |
+| reported `success_rate` | **1.0** | **0.0** |
+| **false successes** | **1/1** | **0/11** |
+| settled reached | — | 8/11 |
+| lifted reached | 0 | **0/11** |
+| shortest episode | 15 steps | 7 steps |
+
+**1. Pathway C works in production.** The v9 result that started this whole investigation — `success_rate: 1.0`
+from a 15-frame episode — does not reproduce. Zero false successes in 11 episodes, and the honest
+number is 0.0. The sequential lift gate is doing exactly what it was built for.
+
+**2. `unsettled_scene` is confirmed live, and it now outranks the visual hypothesis.** The runtime
+settle gate reports the manipuland at **0.22–0.67 m/s** and **5.5–17.0 rad/s** at inference entry,
+with the plate also unsettled, and only 8/11 episodes reach the settled predicate at all. This is
+the scaled-plate instability already documented in `g1_tabletop_apple_to_plate_remediation_plan`
+§5B (`scale: [0.5, 0.5, 0.5]` on a deck with no collision support), still present and unaddressed.
+
+The consequence for gate ordering: **an unsettled scene means the policy never gets a fair trial**,
+so no visual-domain measurement taken in this environment is interpretable yet. `unsettled_scene`
+is a harness-layer defect, cheaper to fix than anything in the model, and it precedes gate 2.
+
+**3. Lift rate is 0/11**, so the failure is at approach/grasp, not transport. And the 7-step episode
+is almost certainly `object_dropped` firing — the manipuland leaving the surface — which is
+consistent with the unstable physics rather than with anything the policy did.
+
+### Revised gate order
+
+1. ~~Stale reset frames~~ — **done**, fixed.
+2. **`unsettled_scene`** — NEW gate, confirmed by measurement. Remediation `hold_action_settle_warmup`
+   is already registered; the likely fix is the plate scale / a collision support patch on
+   `maple_table_robolab`, mirroring `StaticShelfSupport`. This is another instance of risk §9.7.
+3. Corpus embedding bank / visual OOD — only meaningful once the scene settles.
+4. Powered comparison, then the four-arm training study.
+
+### Environment note
+
+`docker/run_gr00t_server.sh` currently fails: a stale `submodules/Isaac-GR00T/.venv` built with
+CPython 3.10 (2026-08-27) makes `uv run` resolve a 3.10 environment, and the pinned flash-attn
+wheel is cp312-only. Workaround used here, which changes nothing on the host:
+`UV_PROJECT_ENVIRONMENT=/opt/gr00t-venv312 uv run --python 3.12 ...`.
+
+Bypassing `uv` entirely does **not** work: the image's system 3.12 `transformers` rejects the
+meta-device `from_pretrained` pattern GR00T relies on (`RuntimeError: You are using from_pretrained
+with a meta device context manager`), which its own code comments in
+`gr00t_n1d7.py:101-111` anticipate. The `uv`-pinned versions are load-bearing. **Fixing this
+properly means removing the stale venv or pinning the interpreter in the script — a `docker/`
+change, so it needs sign-off.**
+
+---
+
+## 5e. End-to-End Iteration (2026-09-04): settle fixed, two false-success bugs closed, one blocker left
+
+Three iterations against the live GN1x server, each measured.
+
+### Iteration 1 — v10: spawn clearance
+
+**Diagnosis.** All `maple_table*` sectors in `FIXTURE_SECTOR_BOUNDS` declare deck `z = 0.0`, and the
+table's USD origin sits at its deck, so the deck resolves to world `z ~= 0`. The placer computes
+`z = surface_z + clearance_m - child_bbox.min_z` with `On.clearance_m` defaulting to **1 cm**
+(`relations.py:195`). Objects therefore spawn 1 cm above the surface and free-fall onto it:
+`sqrt(2 * 9.81 * 0.01) = 0.44 m/s`, against the 0.22-0.67 m/s the settle gate was reporting. A
+sphere then *rolls*, which a 10-step settle window cannot damp.
+
+**Fix.** `clearance_m: 0.001` on both `on` relations in a new v10 spec, plus `--settle_steps 60`.
+
+**Result.** Velocities fell roughly 100x and all objects settle:
+
+| | v9 | v10 |
+| :--- | :--- | :--- |
+| apple linear velocity at entry | 0.22-0.67 m/s | **0.0024-0.053 m/s** |
+| apple angular velocity | 5.5-17.0 rad/s | **0.21-0.30 rad/s** |
+| runtime settle gate | UNSETTLED | **SETTLED** |
+
+### Iteration 2 — a second false-success mode, in Pathway C itself
+
+v10 reported `success_rate = 0.033` (1/30) -- but the false-success detector flagged that single
+success as spurious (`overall_score = 0.0`). **The lift gate had a hole**: `running_min` tracks the
+lowest height reached, so an object that spawns above the surface, falls, and *rebounds* clears
+`min + 5 cm` with no robot involvement.
+
+Fixed by requiring the object to have rested before a lift can count. The first attempt still
+failed, and the test said why: an object is placed with zero velocity, so it reads as at rest for
+exactly the step before gravity acts, and a single at-rest sample latched immediately. The working
+form requires **sustained** rest -- `rest_steps_required = 3` consecutive at-rest steps -- via a new
+`EpisodeScopedState.run_length` primitive. `test_bouncing_object_does_not_count_as_lifted` pins both
+artefacts.
+
+### Iteration 3 — v11: verified
+
+| | v9 | v10 | v11 |
+| :--- | :--- | :--- | :--- |
+| episodes | 11 | 30 | 71 |
+| **false successes** | 1 | 1 | **0** |
+| genuine lifts | 0 | 0 | **2** |
+| settled (progress predicate) | 8/11 | 1/30 | 4/71 |
+
+Two genuine lifts is the first non-zero lift count this project has recorded on `maple_table` with
+the gate active. Note the runtime gate and the progress predicate disagree because they use
+different thresholds -- gate 0.1 m/s / 1.0 rad/s, predicate 1e-2 / 5e-2 -- so the measured
+0.21-0.30 rad/s passes one and fails the other. Worth reconciling.
+
+### The remaining blocker
+
+**Median episode length is 7 steps out of a 1000-step budget** (min 6, max 1000). The policy has no
+time to act, so nothing downstream of this is measurable. Under investigation; the candidates are
+the `object_dropped` termination (`root_height_below_minimum` against
+`background_scene.object_min_z`) and a possible world-versus-env-relative frame mismatch in that
+comparison, given the deck sits at world `z ~= 0` here.
+
+### Workflow correction
+
+Evaluations now run through a **persistent** container (`isaaclab_arena-latest`) via `docker exec`,
+not a fresh `docker run --rm` per command. The unit-test suite went from minutes to **13 s**, since
+the Omniverse asset cache is reused. Note that `docker/run_docker.sh` cannot be used from inside the
+devcontainer: it mounts `-v ".:${WORKDIR}"` with a *relative* source, which under
+docker-outside-of-docker resolves against the host filesystem rather than the devcontainer's cwd.
+It is a host-side script.
+
+---
+
 ## 6. Hygiene
 
 | # | Action | Files | Notes |
@@ -665,3 +963,80 @@ If the schedule cannot absorb 1a+1b before a decision is needed, run the §2.6 f
 - `.agents/memory/sessions/20260903_190000_transferplan.md`, `20260903_180000_modelgraph.md`
 - `isaaclab_arena_environments/galileo_g1_static_pick_and_place_environment.py` — the parameterisation target
 - `isaaclab_arena_environments/cli.py:148-176` — why a cfg field becomes a CLI flag for free
+
+---
+
+## 11. Implementation Status (2026-09-03)
+
+Against the §5c.5 checklist.
+
+| # | Item | Status | Notes |
+| :-- | :--- | :--- | :--- |
+| 1 | `harness_stale_observation` failure mode + `stale_frame_assertion` diagnostic | **Done** | Registry integrity tests cover it |
+| 2 | `force_physics_step_before_sensor_read`, `canonicalize_observation_domain` remediations | **Done** | The planner now selects canonicalisation over retraining for a visual-domain dominant belief, on cost-normalised score |
+| 3 | Calibrated OOD scores in the probe | **Done** | `VL_EMBEDDING_OOD_DISTANCE = 0.35` replaced by `VL_EMBEDDING_OOD_PERCENTILE = 95.0`; without a bank the probe now emits a `likelihood_ratio=1.0` observation that explicitly moves no belief |
+| 4 | `corpus_embedding_bank.py` | **Done** | Four scores, Ledoit-Wolf shrinkage, held-out percentile calibration, AUROC. 12 tests |
+| 5 | `test_stale_observation.py` | **Done, and it found the defect** | See §11.1. Passes as a regression guard |
+| 6 | Spawn randomisation | **Done, as opt-in** | `pick_up_object_spawn_xy_range_m` cfg field rather than changing the module default, so existing baselines are untouched |
+| 7 | Clopper-Pearson / Fisher / Holm-Bonferroni | **Done** | 11 tests, pinned against the plan's power table |
+
+### A finding from implementing item 4
+
+Building the bank surfaced a limitation of the score the plan had upgraded *to*. **Both cosine scores are blind to a purely radial shift**: scaling every embedding outward along the mean direction leaves the angle unchanged, so `cosine_to_centroid` and the L2-normalised `knn_cosine` both score it at chance (AUROC < 0.7 measured), while Mahalanobis and a Euclidean kNN both catch it (AUROC > 0.9).
+
+This is the concrete form of the "norm removal" weakness the literature named, and it is not hypothetical: an appearance change that alters embedding magnitude rather than direction would be invisible to the score §5c.2 originally specified. Consequences, both implemented:
+
+- A fourth score, `knn_euclidean`, without normalisation.
+- `is_ood` takes the **maximum** over the calibrated percentiles rather than trusting one, so a shift visible to any score is reported.
+- `test_cosine_scores_are_blind_to_a_purely_radial_shift` pins the limitation so nobody later relies on the cosine scores alone.
+
+### 11.1 GATE 1 RESULT: stale reset frames are real, and the flag *does* fix them
+
+Measured on the light kitchen scene, three episodes per configuration, `d_prev` = distance from the
+previous episode's final frame, `d_self` = distance from the frame after one post-reset step:
+
+| Config | Verdict | `d_prev` (ep 1, 2) | `d_self` (ep 1, 2) |
+| :--- | :--- | :--- | :--- |
+| rerenders=0, fabric on — **Isaac Lab default** | **2/2 STALE** | **0.0, 0.0** | 6.0, 12.0 |
+| rerenders=1, fabric on | 0/2 fresh | 5.95, 12.17 | 1.74, 2.58 |
+| rerenders=2, fabric on | 0/2 fresh | 6.82, 13.13 | 1.74, 2.22 |
+| rerenders=1, fabric **off** | 2/2 stale | 0.52, 0.40 | 0.58, 0.41 |
+
+**The defect is confirmed.** Under the default, `d_prev = 0.0` *exactly* — the observation returned
+by `reset()` is bit-identical to the previous episode's final frame, while differing from the
+post-step frame by 6–12 intensity levels. A vision-conditioned policy conditions its first action
+chunk of every episode on a scene that no longer exists.
+
+**Correction to §5c.0 item 1.** That section asserted, on the strength of
+[IsaacLab #6394](https://github.com/isaac-sim/IsaacLab/issues/6394), that `num_rerenders_on_reset`
+does *not* fix this. On this Isaac Lab version and scene **it does**: one re-render inverts the
+relation cleanly. The issue report may be version- or reset-event-specific. The methodological point
+in §5c.0 still stands — the defect had to be measured in pixels rather than inferred from a success
+rate, and that is exactly how both the defect *and* the working remedy were established. But the
+specific claim "the flag does not work" was wrong, and taking it on trust would have led to
+patching the simulator instead of setting a flag.
+
+**Anomaly worth noting**: with `disable_fabric=True` every distance collapses below 1.0 and
+`d_prev ≈ d_self`, i.e. the camera barely updates between any pair of frames. Disabling fabric
+appears to suppress render updates rather than fix the ordering. Not pursued further; do not treat
+it as a remedy.
+
+**Fix applied.** `arena_env_graph_conversion_utils.build_arena_env_from_graph_spec` now installs an
+`env_cfg_callback` that forces `num_rerenders_on_reset >= 1`. Generated environments previously had
+no equivalent of the guarantee the hand-tuned reference environment sets at
+`galileo_g1_static_pick_and_place_environment.py:290` — this was concrete evidence for risk §9.7,
+and the maple v9 environment was running in exactly the confirmed-stale configuration.
+
+**Consequence for prior findings**: any measurement this project took from a *first* frame of an
+episode in a generated environment was taken on the previous episode's image. That does not affect
+scene-geometry results, but it does affect claims about what the policy saw at step 0 — which
+includes the depth audits and the VLM keyframe autopsies where those sampled step 0.
+
+### Item 5 history (retained)
+
+The test builds all four flag configurations in the simulator and reaches the per-episode comparison, but fails on an inference-tensor lifetime error rather than on its assertion. Two fixes have been applied (constructing the reset pose fresh instead of mutating `default_root_state`; materialising camera frames as ordinary CPU tensors) and a run is outstanding. **Until it is green, the stale-frame hypothesis is neither confirmed nor refuted** -- and since it is gate 1, nothing downstream should be treated as measured. The mechanism at `manager_based_env.py:425-431` and the flag's reported ineffectiveness are documented facts; whether this project's environments actually exhibit the defect is not yet established here.
+
+### Not started
+
+- `measure_corpus_embedding_bank.py`, the tool that runs the backbone over the 200 corpus episodes to populate a bank. The bank machinery and its calibration are done and tested; only the extraction pass over real data is missing, and it needs the gated `nvidia/Cosmos-Reason2-2B` access described in §9.5.
+- The four-arm training comparison (§5c.4).

@@ -127,9 +127,10 @@ eval_output/isolated_thumbnails/
 *asset_thumbnails/
 eval_output/*.png
 eval_output/*.mp4
+# Rollout media in per-run subdirectories. The .jsonl result/evidence files are kept.
+eval_output/**/*.png
+eval_output/**/*.mp4
 
 # Local environment variables & secrets
 .env
 .env.*
-
-

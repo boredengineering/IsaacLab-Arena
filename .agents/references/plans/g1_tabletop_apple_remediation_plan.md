@@ -1,8 +1,15 @@
 # Remediation Plan & Architectural Resolution: G1 Tabletop Pick-and-Place (`Scenario C1`)
 
 > [!IMPORTANT]
-> **Status**: ACTIVE ARCHITECTURAL RESOLUTION (Post-`v9` Autopsy).
-> While `v8` successfully resolved the physical hand collision and Phase 1 object settling invariants ($< 0.07\text{ mm}$ drift), the subsequent rollout in `v9` uncovered a **false-positive premature termination trap** and a **fundamental domain mismatch** between the pre-trained imitation checkpoint (`nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace`) and the synthetic tabletop environment (`maple_table_robolab`).
+> **Status**: ACTIVE (Post-`v17`, revised 2026-09-04). **Goal restated**: make the GN1x checkpoint
+> actually pick the apple on the maple table.
+>
+> `v8` resolved hand collision and settling ($< 0.07\text{ mm}$ drift). `v9` uncovered a
+> false-positive termination trap. The `v10`–`v17` sweep on 2026-09-04 then established that the
+> **single largest defect was in the evaluation harness, not the policy**, and falsified three of
+> the corpus-alignment claims this document previously asserted as fact — including the training
+> prompt. See §5c. Every conclusion below dated before 2026-09-04 that rests on `v9` telemetry
+> should be read against §5c first.
 
 ---
 
@@ -81,7 +88,7 @@ FIXTURE_SECTOR_BOUNDS = {
 
 ```
                                Top-Down Geometry (World Frame)
-                               
+
    Robot Base          Fingertips         Table Deck Front        Plate Center       Apple Center
   [ X = -0.46m ]     [ X = -0.04m ]        [ X = -0.38m ]        [ X = +0.11m ]     [ X = +0.08m ]
        |                  |                      |                      |                  |
@@ -181,30 +188,173 @@ Iteration `v9` aligned the language prompt (`"move the apple to the plate"`) and
 
 ---
 
-## 6. The Core Architectural Blockers (Why Subsequent Attempts on this Setup Will Fail)
+## 5c. Iterations `v10`–`v17` (2026-09-04): the harness outranked the policy, and three corpus claims were wrong
 
-Iterating further within the `maple_table_robolab` + `nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace` configuration will continue to fail due to three immutable architectural constraints:
+### A. The harness was manufacturing the failure it was being used to diagnose
 
-### 1. The Checkpoint is an Overfitted Imitation Policy, Not a Zero-Shot Generalist VLA
-`nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace` is a task-specific checkpoint fine-tuned on 200 teleoperated demonstrations recorded strictly inside the reference environment `galileo_g1_static_pick_and_place`. It does not possess zero-shot cross-scene visual or physical generalization.
+Every rollout from `v8` to `v12` was scored on telemetry produced by a broken settle loop.
+`verify_and_settle_scene` used `torch.zeros()` as its "hold" action. For the G1 decoupled WBC the
+action vector is `[joint_targets | navigate_cmd(3) | base_height(1) | torso_rpy(3)]`, where joint
+entries are **absolute** targets and `base_height` defaults to $0.75\text{ m}$. Zeros therefore
+command a squat to the floor and every joint to $0\text{ rad}$, discarding the scene's
+`initial_joint_pos`. The robot collapsed across the table and launched the apple before inference
+began.
 
-### 2. Massive Out-of-Distribution (OOD) Visual Domain Shift
-| Reference Demonstrations (`galileo_locomanip`) | Synthetic Environment (`maple_table_robolab`) |
+Two further defects compounded it: the settle checks averaged object speed **over envs** (one
+apple in free fall masked by three still ones), and the loop discarded `terminated`/`truncated`, so
+auto-resets during settling were silently recorded as completed episodes.
+
+| Metric | `v11`/`v12` (before) | `v13`–`v17` (after) |
+| :--- | :--- | :--- |
+| Episodes recorded | 71 / 19 | 8 (as requested) |
+| Median episode length | **7 steps** | **1000 steps** (full horizon) |
+| Terminations | continuous | **zero** |
+| False successes | 1 (`v9`), 0 after rest-guard | **zero** |
+| Progress score | noise | **0.333, stable** (`objects_settled` only) |
+
+Fixed in `build_neutral_hold_action` (commit `83dc00658`). **The lesson is procedural**: a
+harness defect that fabricates episodes outranks every model-side hypothesis, because it corrupts
+the evidence used to rank them. This is now the first gate in the ordering (§7c).
+
+### B. The policy is not inert — it moves purposefully, to the wrong place
+
+With honest episodes, `v14` recorded viewport and head-camera video for the first time. Over
+1000 steps the arms move continuously and the torso leans in. The hands settle **splayed to the far
+left and right periphery** and never converge on the apple, which sits clearly visible, centred and
+well-lit in frame.
+
+> [!WARNING]
+> This **falsifies** §6.2's stated mechanism, that "cross-attention activations collapse or produce
+> null action vectors, preventing the arms from initiating purposeful reaching." The arms initiate
+> purposeful motion for the entire episode. The observable is a *misdirected* reach, not an absent
+> one — a symmetric, target-independent posture, which is the documented signature of a policy
+> regressing to its training-set mean trajectory rather than one that has stopped producing output.
+
+### C. Three corpus-alignment claims in §6.3 were asserted, not measured — and two are false
+
+The corpus dataset is local at
+`/datasets/isaaclab_arena/static_apple_tutorial/nvidia/Arena-G1-Static-PickNPlace-Task`.
+Reading its `meta/` directly settles what had been argued from memory:
+
+| §6.3 claim | Measured | Verdict |
+| :--- | :--- | :--- |
+| Prompt is *strictly* `"move the apple to the plate"` | All 208 annotated episodes carry exactly one string: **`"Pick up the apple from the shelf and place it onto the plate on the same shelf next to it."`** | **FALSE** |
+| Arm: 100% left | Left-arm convergence confirmed in `ego_view` video | Confirmed |
+| Layout: apple left, plate right | Confirmed, and matches the target scene | Confirmed — so **no mirroring is required** |
+| 200 demonstrations | `total_episodes = 251`, `total_frames = 35066`, `fps = 50` | Corrected |
+
+**Every evaluation from `v8` to `v16` fed a prompt that appears nowhere in the training corpus.**
+This document asserted the opposite, and that assertion propagated into the planner's
+`prompt_alignment` invariant as "satisfied."
+
+`bilateral_mirror: true` was likewise carried in `v8`–`v12` on the strength of the
+now-retracted right-arm contradiction, while `v9` had *already* mirrored the object layout in the
+scene. Two mirrors compose to the identity on geometry but not on the arm remap.
+
+### D. Four single-variable experiments, all negative on the task metric
+
+Each ran 2 episodes × 1000 steps against the honest harness, changing exactly one thing:
+
+| Run | Change | `object_moved_rate` | Verdict |
+| :--- | :--- | :--- | :--- |
+| `v14` | baseline (`bilateral_mirror: true`, chunk 40, wrong prompt) | 0.0 | — |
+| `v15` | `bilateral_mirror: false` | 0.0 | necessary, not sufficient |
+| `v16` | + `action_chunk_length: 40 → 16` (canonical) | 0.0 | necessary, not sufficient |
+| `v17` | + **exact corpus prompt** | 0.0 | necessary, not sufficient |
+
+`v15`–`v17` are all corrections of real distribution violations and should be kept. None of them
+moves the apple. **The failure is not a configuration detail**, which is what justifies escalating
+to the grounding/appearance axis rather than continuing to sweep inference knobs.
+
+### E. The appearance gap, measured through the same camera
+
+Extracting frame 0 of a corpus `ego_view` episode and of the `v14` head-cam, and counting
+red-dominant pixels ($r>90 \wedge r>1.45g \wedge r>1.6b$):
+
+| | corpus (`galileo`) | target (`maple_table`) | ratio |
+| :--- | :--- | :--- | :--- |
+| Mean frame brightness | 50.8 | 103.5 | **2.04×** |
+| Red-dominant pixels | 1,169 | 82,966 | **71×** |
+| Apple bounding box | 46×48 px | swamped (639×391) | — |
+| Surface | dark matte, horizon at $v\approx0.45$ | bright wood grain filling frame | — |
+| Background | dense: shelf struts, magenta structures | near-empty grey void | — |
+
+In the corpus, "small reddish blob on a dark matte surface" is a near-perfect linear detector for
+the apple. On the maple table the wood grain occupies the **same colour region as the target**, so
+that cue is destroyed — 71× more red-dominant pixels, with the apple's own contribution
+indistinguishable inside them.
+
+> [!NOTE]
+> This is a *mechanism* for §6.2's conclusion, and it is a sharper claim than "massive OOD visual
+> domain shift": the specific low-level cue that separates target from background in training is
+> absent in deployment. It is testable, and it predicts which remediations can work — see §7c.
+
+---
+
+## 6. The Core Constraints (revised 2026-09-04)
+
+> [!IMPORTANT]
+> This section previously read "Why Subsequent Attempts on this Setup Will Fail" and listed three
+> *immutable* blockers. Two of its three mechanisms did not survive measurement. It is retained,
+> corrected, because the corrections are the useful part.
+
+### 1. The checkpoint is a narrow imitation policy — **stands, with figures corrected**
+
+`nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace` is fine-tuned from `nvidia/GR00T-N1.7-3B` on
+**251 episodes / 35,066 frames at 50 Hz** ([model card](https://huggingface.co/nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace)),
+teleoperated via XR headset inside the single reference environment
+`galileo_g1_static_pick_and_place`. It has no claim to zero-shot cross-scene generalisation.
+
+The architectural reason this matters more than the episode count suggests: in GR00T the **VLM
+backbone is frozen** during pre-training and fine-tuning, and vision-language embeddings are
+cross-attended by the DiT action head, which also receives proprioceptive state. When only the
+action head and projectors train, the policy can satisfy the imitation objective by predicting
+actions from **state alone** — a shortcut that yields low training loss and a mean-trajectory
+policy at deployment. NVIDIA's own recipe counters it with strong state dropout and colour jitter,
+and exposes `--tune-visual` / `--tune-llm` to widen what adapts
+([finetuning guide](https://github.com/NVIDIA/Isaac-GR00T/blob/main/getting_started/3_0_new_embodiment_finetuning.md)).
+
+This is the classic **causal confusion** failure of imitation learning: policies attend to features
+that are spuriously correlated with expert actions, and — critically —
+*"causally confused agents produce low open-loop supervised loss but poor closed-loop performance
+upon deployment"* ([de Haan et al., NeurIPS 2019](https://proceedings.neurips.cc/paper_files/paper/9343-causal-confusion-in-imitation-learning.pdf)).
+The proprioceptive-state case is treated directly by
+[Adapt Your Body](https://www.researchgate.net/publication/393184798_Adapt_Your_Body_Mitigating_Proprioception_Shifts_in_Imitation_Learning),
+which names it the *proprioception shift problem*.
+
+The same symptom is widely reported against this exact codebase:
+[#200](https://github.com/NVIDIA/Isaac-GR00T/issues/200) (UR5, 300 episodes — "moves toward the
+target but 7/10 times goes to a point ~5 cm away"),
+[#210](https://github.com/NVIDIA/Isaac-GR00T/issues/210) (arm reaches *above* the can and stops),
+[#241](https://github.com/NVIDIA/Isaac-GR00T/issues/241) (user computing mean predictions to test
+whether vision is used at all), and #141 ("it seems that images are ignored").
+
+### 2. Visual domain shift — **stands, mechanism replaced with a measured one**
+
+The original table of qualitative contrasts (dark matte shelf vs. bright wood grain; dense
+background vs. empty void) is confirmed by direct frame comparison. But the stated mechanism —
+cross-attention collapsing to null action vectors, arms never initiating motion — is **falsified**
+by the `v14` video (§5c.B).
+
+The measured mechanism is **target/background colour-cue collision**: 2.04× brighter frames and
+**71× more red-dominant pixels**, in which the apple's own 46×48 px signature is no longer
+separable (§5c.E). Training made "reddish blob on dark matte" sufficient; deployment removes it.
+
+Magnitude, for calibration: $\pi_0$ trained on one canonical viewpoint scores 65.3% on RLBench and
+**collapses to 6.3% under a 15° camera rotation**, with the scene fully observable and the goal
+unchanged ([AnyCamVLA](https://www.alphaxiv.org/overview/2603.05868)). Appearance and framing
+shifts of the size measured here are more than sufficient to explain a 0% rate.
+
+### 3. Kinematic and prompt contradiction — **substantially FALSE**
+
+| Original claim | Status |
 | :--- | :--- |
-| Dark matte industrial shelf surface | High-contrast, bright yellow-brown wood grain |
-| Dense background features (white/gray packing boxes, shelf struts) | Empty white void |
-| Low-glare directional shadows | Flat default dome light |
+| Corpus prompt is strictly `"move the apple to the plate"` | **FALSE.** One string only: `"Pick up the apple from the shelf and place it onto the plate on the same shelf next to it."` The prompt we fed for ten iterations is the OOD one. |
+| Right-arm layout required by C1 spec, corpus is left-arm ⇒ irreconcilable | **Retracted.** The generated scene's measured layout is **left**, matching the corpus. No contradiction and no mirroring needed. |
+| Vertical reach OOD: surface height off by $5.6\times$ tolerance ($\approx 80\text{ cm}$) | **Retracted 2026-09-03** by `measure_embodiment_frames.py`. The G1 articulation root **is** its pelvis, so the assumed $+0.75\text{ m}$ offset inflated every comparison. True manipulation-height difference: **6.5 cm**, inside tolerance. |
 
-Diffusion policy visual backbones (`AlternateVLDiT`) encode image patch tokens. When fed the wood-grain table texture, the cross-attention activations collapse or produce null action vectors, preventing the arms from initiating purposeful reaching.
-
-### 3. Kinematic and Prompt Specification Contradiction
-* **Scenario C1 Specification** (`env_gen_test.md`):
-  *"Reach with the right arm to grasp the red apple from the front right of the maple table and place it onto the clay plate on the front left."*
-* **Checkpoint Demonstrations**:
-  * **Arm**: 100% Left arm. Zero right-arm grasp demonstrations exist in the checkpoint weights.
-  * **Layout**: Apple on the left ($\Delta Y \approx +0.19\text{ m}$), plate in the center ($\Delta Y \approx -0.02\text{ m}$).
-  * **Conditioning Prompt**: Strictly `"move the apple to the plate"`.
-* **The Conflict**: Providing the C1 prompt causes prompt token OOD rejection. Providing the C1 right-arm layout commands the left arm into empty space on the left. Aligning to the left arm violates the benchmark specification while still failing due to the visual domain shift.
+What remains of this blocker is narrow and fixable: the prompt was simply wrong, and is corrected
+in `v17`.
 
 ---
 
@@ -249,9 +399,98 @@ That required the graph to model the policy, which it previously did not. See se
 * `arena:invalidatedBy` keeps physically dishonest fixes representable and permanently disqualified.
 * `RemediationTechnique.preserves_target_scene` encodes this very decision: fixes that work by rebuilding the scene as the corpus are excluded when the scene is what is being evaluated.
 
-Running the C1 `v9` spec through it reproduces this document's autopsy with no rollout and no policy weights: `surface_height_rel_pelvis` off by 5.6x tolerance (dominant `vertical_reach_ood`), laterality/prompt/visual-domain violated, and `controller_binding` correctly reported as **in** tolerance.
+Running the C1 `v9` spec through it reproduced this document's autopsy with no rollout and no
+policy weights: `surface_height_rel_pelvis` off by 5.6x tolerance (dominant `vertical_reach_ood`),
+laterality/prompt/visual-domain violated, and `controller_binding` correctly reported as **in**
+tolerance.
+
+> [!WARNING]
+> **That planner output is superseded (2026-09-04) and is retained only to show the failure mode.**
+> Three of its four violations were artefacts of unmeasured inputs:
+> `surface_height_rel_pelvis` used an assumed $+0.75\text{ m}$ pelvis offset (the root *is* the
+> pelvis, so the real gap is 6.5 cm, in tolerance); laterality was already matching; and
+> `prompt_alignment` was scored **satisfied** against a corpus prompt string that this document had
+> recorded incorrectly. Only `visual_domain` survives — and it is now the dominant term.
+>
+> The general lesson: an invariant whose reference value is *asserted in prose* rather than
+> *measured from the corpus* will confidently produce a wrong ranking. Each `TrainingInvariant`
+> needs provenance naming the artefact it was measured from, so "asserted" is a visible state.
+> Two invariants (`prompt_alignment`, `surface_height_rel_pelvis`) must be re-derived from
+> `meta/tasks.jsonl` and `measure_embodiment_frames.py` output respectively.
 
 **Next step for the transfer plan**: after fine-tuning, register a new `PolicyProfile` whose invariants reflect the widened training distribution. Transfer readiness against `maple_table` then becomes a re-measurement rather than a re-argument.
+
+---
+
+## 7c. The Path to a Working Pick (2026-09-04) — ranked, with the decision rule that ranks it
+
+### The distinction that unblocks this
+
+Pathway A was rejected for rebuilding the target scene *as* the corpus — moving the surface to the
+corpus height, mirroring the layout. That rejection is sound, but `preserves_target_scene` as
+currently modelled is **too coarse**, and it has been blocking legitimate fixes. Split it:
+
+| Class | Examples | Is it the benchmark? |
+| :--- | :--- | :--- |
+| **Scene semantics** | which table asset, object identities, their placement, the task itself, surface height, layout laterality | **Yes.** Changing these changes what is measured. Stays rejected. |
+| **Nuisance rendering parameters** | dome-light intensity and colour temperature, material albedo/roughness, background clutter, camera exposure | **No.** These are free parameters of the renderer that no part of the C1 specification pins. |
+
+C1 asks whether the pipeline can build and evaluate *a tabletop pick-and-place on `maple_table_robolab`*.
+It does not specify that the scene must be lit by an unmodified default dome light at 2× the
+corpus's brightness. Treating photometry as a nuisance parameter is not moving the goalposts — and
+the literature says it is the **dominant** axis: an ablation of visual domain randomisation reports
+no-randomisation 41%, camera-only 48%, **lighting-only 87%**, full 90%
+([Robust Visual Sim-to-Real Transfer](https://arxiv.org/pdf/2307.15320)).
+
+> [!IMPORTANT]
+> **Ontology change required.** `RemediationTechnique.preserves_target_scene` must become two
+> predicates — `preserves_scene_semantics` and `alters_nuisance_parameters` — or the planner will
+> keep excluding the cheapest viable fix. Tracked in the implementation plan.
+
+### Ranked pathways
+
+Ordered by (evidence strength) ÷ (cost), all preserving scene semantics:
+
+| # | Pathway | Cost | Preserves semantics | Rests on |
+| :--- | :--- | :--- | :--- | :--- |
+| **0** | **Establish ground truth first**: open-loop eval on the corpus + modality ablation | hours, no training | yes | the *official* first step, never run here |
+| **1** | **Photometric alignment** of the target scene (dome light, table albedo/roughness) toward corpus statistics | hours | yes — nuisance only | measured 2.04× / 71× gap; lighting-dominant DR ablation |
+| **2** | **Test-time observation canonicalisation** — adjust the deployed frame toward the training camera configuration, no retraining | days | yes | [AnyCamVLA](https://arxiv.org/html/2603.05868v1) reports this beating augmentation fine-tuning |
+| **3** | **Re-finetune on the existing corpus with augmentation** — colour/texture jitter + state dropout + `--tune-visual`. **No new demonstrations, target scene untouched** | 1 training run | yes | NVIDIA's stated recipe; directly targets the shortcut |
+| **4** | **Few-shot adaptation** on 10–20 `maple_table` demos (LoRA / ControlVLA-style) | teleop + training | yes | [ControlVLA](https://alphaxiv.org/overview/2506.16211v1) 10–20 demos → 76.7% vs 20.8%; [PriorVLA](https://arxiv.org/html/2605.10925) 10 demos → 48% |
+
+Pathway 3 is the **recommended primary**: it is squarely the §7b decision ("adapt the model, not
+the scene"), needs no new teleoperation because all 251 corpus episodes are local, and attacks the
+mechanism identified in §6.1 rather than a symptom. Pathway 1 is worth doing first regardless,
+because it is hours of work and cleanly tests §5c.E's prediction.
+
+Pathway 4 is a *softened* Pathway B and should stay last: it is the only one that requires new
+demonstrations, which is what Pathway B was rejected for.
+
+### Gate 0 is mandatory and non-obvious
+
+The official GR00T workflow validates a checkpoint with **open-loop evaluation before any
+closed-loop rollout**, and we have never done it. Everything needed is local:
+`submodules/Isaac-GR00T/gr00t/eval/open_loop_eval.py`, the 251-episode corpus, the checkpoint, and
+even the otherwise-gated `nvidia/Cosmos-Reason2-2B` backbone (present in the HF cache — this
+**unblocks** the activation probes previously listed as blocked).
+
+Two outcomes, both decisive:
+
+* **Open-loop MSE is low on corpus data** → the checkpoint reproduces its own training actions; the
+  fault is in deployment-side grounding (appearance, framing, or the state/action convention), so
+  Pathways 1–3 apply.
+* **Open-loop MSE is high** → the fault is upstream of any scene question: normalisation metadata,
+  the `NEW_EMBODIMENT` stats key, or modality wiring. Chasing appearance would be wasted effort.
+
+> [!CAUTION]
+> **Open-loop MSE cannot by itself clear the checkpoint.** Causally confused policies are
+> *defined* by low open-loop loss with poor closed-loop behaviour, so a good plot is consistent
+> with the shortcut hypothesis rather than evidence against it. Gate 0 must therefore pair
+> open-loop eval with a **modality ablation**: re-run inference with vision scrambled and with
+> state perturbed, and compare action chunks. If scrambling the image barely moves the predicted
+> chunk, the policy is state-driven and Pathway 3 is not optional — it is the only thing that
+> can work.
 
 ---
 
@@ -297,4 +536,3 @@ docker exec -it \
   --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/g1_tabletop_apple_to_plate/latest/g1_tabletop_apple_to_plate.yaml \
   --output_base_dir /workspaces/isaaclab_arena/eval_output/g1_tabletop_apple_to_plate
 ```
-

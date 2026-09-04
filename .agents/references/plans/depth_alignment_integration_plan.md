@@ -79,7 +79,7 @@ DATASET_DEPTH_FINGERPRINTS: dict[str, dict[str, float]] = {
     "g1_static_pick_and_place": {
         # Measured from episode_000000.mp4 via Depth Anything V2
         "apple_y_norm": 0.717,      # Apple vertical position in frame
-        "apple_x_norm": 0.144,      # Apple horizontal position in frame  
+        "apple_x_norm": 0.144,      # Apple horizontal position in frame
         "apple_depth_norm": 0.777,  # Normalized depth (closer = higher)
         "surface_slope": 0.0029,    # Camera pitch indicator
         "camera_pitch_deg": -38.0,  # Estimated pitch angle

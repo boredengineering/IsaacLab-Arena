@@ -6,12 +6,12 @@ This document outlines the detailed architectural and technical plan for impleme
 
 ## 1. Executive Summary & System Architecture
 
-The objective is to upgrade IsaacLab-Arena's environment generation from an open-loop symbolic solver into a **fully closed-loop Active Inference Perception-Action Engine**. 
+The objective is to upgrade IsaacLab-Arena's environment generation from an open-loop symbolic solver into a **fully closed-loop Active Inference Perception-Action Engine**.
 
 ```mermaid
 graph TD
     UserPrompt["User Prompt / Goal"] --> Agent["Environment Generation Agent<br/>(Active Inference Engine)"]
-    
+
     subgraph "Phase 1: Generative Specification & Graph-RAG"
         GraphRAG["Graph-RAG Memory<br/>(Neo4j Prior Retrieval)"] -->|Few-Shot Prior Subgraphs| Agent
         Agent -->|Emits Candidate Spec| Spec["ArenaEnvGraphSpec<br/>(Entities, Sectors, Relations)"]
@@ -94,7 +94,7 @@ Symbolic and geometric checks cannot detect camera line-of-sight occlusions, lig
 Introduce a `VisualSceneCritic` module that renders a 1-frame multi-camera preview and uses a multimodal LLM (Claude 4.5 Vision or GPT-4o) as an observation critic.
 
 ```
-[Candidate Scene Spec] 
+[Candidate Scene Spec]
        │
        ▼
 [Render Snapshot] ────► `external_camera_rgb` (720x1280) & `wrist_camera_rgb`

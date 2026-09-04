@@ -1,7 +1,15 @@
 # Plan: G1 Policy Transfer Diagnosis & Height Invariance (Scenario C1 Follow-On)
 
 > [!IMPORTANT]
-> **Status**: ACTIVE — supersedes the "next steps" list drafted on 2026-09-03.
+> **Status**: ACTIVE, **re-scoped 2026-09-04**. Supersedes the "next steps" list drafted on
+> 2026-09-03.
+>
+> **Goal (explicit)**: get `nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace` to *actually pick the
+> apple on the maple table*. Not to characterise why it cannot — to make it work.
+>
+> **This plan's title is now partly misleading and is kept for continuity.** Height invariance was
+> measured on 2026-09-03 and found **in tolerance (6.5 cm)**. The height sweep is demoted from
+> Phase 1 to an optional robustness check. §1b records what replaced it.
 > **Decision context**: Pathways A (rebuild the benchmark on the shelf scene) and B (collect demos on `maple_table`) were rejected. The chosen direction is **fine-tune on the galileo scene and transfer to `maple_table`**, with the generation pipeline responsible for diagnosing and closing the transfer gap.
 > **What changed during review**: the original step 1 recommended fine-tuning with height variation. Investigation found (a) the tolerance driving that recommendation was never measured, and (b) the galileo scene already contains the shelf tiers needed to measure it. The plan below therefore leads with measurement, not training.
 
@@ -32,6 +40,94 @@ The original suggestion — "retarget the existing 200 demos across a height swe
 Raising a target 80 cm is formally an object-pose change, so it is mechanically in-envelope. The open question is *yield*: whether transformed segments survive the success filter, and whether the survivors are dynamically sane or merely kinematically valid. With `generation_num_trials = 100` and `max_num_failures = 25`, a bad transform fails fast and loudly — which makes this cheap to falsify but not safe to assume.
 
 **Consequence**: Mimic-based height augmentation is a Phase 3 option contingent on Phase 1 results, not a Phase 1 action.
+
+---
+
+## 1b. What Replaced the Height Hypothesis (2026-09-04)
+
+§1 argued that a hand-authored tolerance was driving the prioritisation, and that measurement had
+to precede anything expensive. That argument was right, and following it dismantled the plan's own
+leading hypothesis. Three rounds of measurement later:
+
+| Invariant | 2026-09-03 belief | Measured | Where |
+| :--- | :--- | :--- | :--- |
+| `surface_height_rel_pelvis` | violated, 5.6× tolerance, **dominant** | **6.5 cm — in tolerance** | `measure_embodiment_frames.py` |
+| `arm_laterality` | violated (C1 wants right, corpus is left) | **matches** (both left) | frame measurement |
+| `prompt_alignment` | **satisfied** | **violated** — we fed a string absent from the corpus | `meta/tasks.jsonl` |
+| `visual_domain` | violated | **violated, and now quantified**: 2.04× brightness, 71× red-dominant pixels | frame-0 comparison |
+| — (unmodelled) | — | **harness fabricating episodes** | `v13` A/B |
+
+Two of the plan's four ranked violations evaporated, one inverted sign, and the largest single
+defect was in a component the ontology did not model at all. §10's falsification criteria called
+both outcomes in advance, which is the one encouraging result here.
+
+### The methodological finding, which matters more than any single correction
+
+Every invariant that turned out wrong was **asserted in prose and never traced to an artefact**.
+The height tolerance was hand-authored. The corpus prompt was recorded from memory into a plan
+document and then read back as fact for ten iterations. Both were *confidently* wrong, and both
+produced a coherent-looking ranking that sent effort in the wrong direction.
+
+**Required change**: a `TrainingInvariant` must carry provenance — the artefact path and the
+measurement that produced its reference value — and the planner must visibly distinguish
+`measured` from `asserted`, refusing to rank on the latter. An unmeasured invariant is not a weak
+invariant; it is an unfalsifiable one.
+
+### The new dominant hypothesis, and its mechanism
+
+The policy moves purposefully for 1000 steps and reaches a symmetric, target-independent posture.
+That is the signature of **regression to the training-set mean trajectory**, and GR00T's
+architecture explains why it is available: the VLM backbone is **frozen**, and only the DiT action
+head and projectors train, so the imitation objective can be satisfied from **proprioceptive state
+alone** — the *proprioception shift* / causal-confusion shortcut.
+
+The appearance measurement supplies the reason vision cannot rescue it here: in the corpus,
+"small reddish blob on a dark matte surface" is a near-perfect detector for the apple; the maple
+table's wood grain occupies the **same colour region**, multiplying red-dominant pixels 71× and
+destroying the cue.
+
+These two findings are complementary, not competing: a policy that leaned on a fragile colour cue
+*and* had a proprioceptive shortcut available will fall back to the shortcut precisely when the cue
+breaks. That is the hypothesis Phase 0.5 tests directly.
+
+---
+
+## 1c. Phase 0.5 — Ground Truth Before Anything Else (**NEW, now the first action**)
+
+The official GR00T workflow validates a checkpoint by **open-loop evaluation before closed-loop
+rollout**. We skipped it for ten iterations and paid for it. Everything required is already local:
+
+| Asset | Location | Status |
+| :--- | :--- | :--- |
+| Open-loop harness | `submodules/Isaac-GR00T/gr00t/eval/open_loop_eval.py` | present |
+| Corpus dataset | `/datasets/.../Arena-G1-Static-PickNPlace-Task` (251 eps, 35,066 frames) | present |
+| Checkpoint | HF cache | present |
+| `nvidia/Cosmos-Reason2-2B` backbone | HF cache | present — **unblocks the activation probes** previously recorded as blocked on gated access |
+
+### Two tests, run together
+
+**(a) Open-loop fidelity.** Replay corpus trajectories, compare predicted vs. ground-truth actions,
+record per-dimension MSE. Separates "checkpoint is broken / mis-normalised" from "checkpoint is
+fine, deployment is wrong."
+
+**(b) Modality ablation.** The decisive test, and the one this plan previously lacked. For fixed
+state, re-run inference with the image intact, scrambled, and blanked; and for fixed image, with
+state perturbed. Compare action chunks.
+
+| Result | Interpretation | Consequence |
+| :--- | :--- | :--- |
+| Scrambling the image barely changes the chunk | policy is **state-driven**; the shortcut is real | Phase 3 augmentation is mandatory, not optional; appearance fixes alone cannot work |
+| Chunk changes substantially with the image | vision **is** used | the fault is *what* vision encodes here → photometric/framing alignment (Pathway 1/2) should work |
+| Perturbing state dominates everything | proprioception over-reliance confirmed quantitatively | state dropout is the specific fix |
+
+> [!CAUTION]
+> **Do not accept a good open-loop plot as clearance.** Causal confusion is *defined* by low
+> open-loop loss with poor closed-loop performance, so (a) passing is consistent with the shortcut
+> hypothesis, not evidence against it. (a) without (b) is exactly the mistake that would let this
+> plan repeat its own history. Only (b) discriminates.
+
+`measure_ablation_sensitivity` and `BlockConditioningDelta` in `policy_activation_probe.py` already
+implement the machinery; Phase 0.5 is largely wiring them to the now-available backbone.
 
 ---
 
@@ -184,6 +280,74 @@ Register a **new** `PolicyProfile` whose invariants reflect the widened training
 
 ---
 
+## 5b. Phase 3′ — The Two Interventions That Target the Measured Mechanism (**NEW**)
+
+Phase 3 as originally written scoped a fine-tune around *height augmentation*. Height is in
+tolerance, so that scope is void. It is replaced by the two interventions that address what was
+actually measured, ordered cheapest-first.
+
+### Intervention 1 — Photometric alignment (hours, no training)
+
+The C1 specification pins the table asset, the objects, the layout and the task. It does **not**
+pin dome-light intensity or material albedo. Those are renderer nuisance parameters, and the
+literature says they are the *dominant* transfer axis: a visual-DR ablation reports no-randomisation
+41%, camera-only 48%, **lighting-only 87%**, full 90%
+([Robust Visual Sim-to-Real Transfer](https://arxiv.org/pdf/2307.15320)).
+
+Target the measured statistics, not an aesthetic:
+
+| Statistic | Corpus | Target now | Goal |
+| :--- | :--- | :--- | :--- |
+| Mean frame brightness | 50.8 | 103.5 | within ~15% of 50.8 |
+| Red-dominant pixel count | 1,169 | 82,966 | within ~2× of 1,169 |
+| Apple bbox | 46×48 px | swamped | separable blob |
+
+Two knobs: dome-light intensity, and the table material's albedo/roughness. Reducing exposure alone
+darkens the wood but leaves its **hue** inside the apple's colour region, so the 71× figure will
+only partly fall — the albedo change is likely the load-bearing one. Both require a schema addition
+(the graph spec currently has no appearance block at all); tracked in the implementation plan.
+
+**This is a genuine test, not a fix by fiat.** If aligning photometry produces a lift, §1b's
+mechanism is confirmed. If it does not, the colour-cue account is wrong and the shortcut account
+(Intervention 2) carries the whole explanation.
+
+> [!NOTE]
+> Report the metric on the *unaligned* scene too, permanently. A benchmark that only reports its
+> best-lit configuration is measuring the lighting, not the pipeline.
+
+### Intervention 2 — Re-finetune on the existing corpus, with shortcut-breaking augmentation
+
+**No new demonstrations. Target scene untouched.** All 251 corpus episodes are local, so this is
+squarely the §7b decision — adapt the model, not the scene — and it attacks the frozen-VLM
+shortcut identified in §1b rather than a symptom.
+
+| Knob | Why | Source |
+| :--- | :--- | :--- |
+| **State dropout** (mask proprioception with high probability) | removes the shortcut's availability, forcing the action head onto vision | NVIDIA recipe; ChauffeurNet-style dropout, ~80% masking reported |
+| **Colour / photometric jitter** on recorded frames | makes "reddish blob on dark matte" insufficient, so the policy must encode shape and context | NVIDIA recipe; classic visual DR |
+| **`--tune-visual`** | with the encoder frozen, no augmentation can change what features exist | GR00T finetuning guide |
+| Background compositing (optional) | corpus backgrounds are dense and near-constant; target is an empty void | SIMPLER varies background/lighting/distractors/texture |
+
+Expected honest ceiling: dropout is well-attested but **partial** — in the proprioception-shift
+study, dropout and PrimeNet land *between* full-state BC and vision-only BC. Plan for a
+recoverable fraction of the gap, not a solved task.
+
+**Required ablation, cheap and diagnostic**: train a vision-only (no-proprioception) arm. If it
+beats the full-state policy, the shortcut is confirmed and that arm is also the performance floor
+any mitigation must clear.
+
+### Intervention 3 — Few-shot adaptation (**last resort**)
+
+10–20 `maple_table` demonstrations with LoRA / object-centric adaptation
+([ControlVLA](https://alphaxiv.org/overview/2506.16211v1): 10–20 demos → 76.7% vs 20.8%;
+[PriorVLA](https://arxiv.org/html/2605.10925): 10 demos → 48% in-distribution, 32% OOD).
+
+This is a **softened Pathway B** and inherits its objection: it requires new demonstrations on the
+target scene. Keep it last, and if it is reached, say plainly that the zero-new-demo transfer
+premise did not hold rather than relabelling it a success.
+
+---
+
 ## 6. Phase 4 — Close the Loop
 
 `build_policy_diagnostic_state` and `diagnose_transfer_readiness` are implemented and tested, but **nothing invokes them**. The graph currently describes; it does not yet decide.
@@ -226,26 +390,56 @@ NVIDIA RTX PRO 6000 Blackwell Workstation Edition
 
 ---
 
-## 9. Recommended Order
+## 9. Recommended Order (**revised 2026-09-04**)
 
-1. **Phase 1 height sweep** — no training, corrects the tolerance, and can invalidate the current dominant-mode ranking. Gates everything expensive.
-2. **Phase 2 corpus centroid + one local probe run** — cheap, and determines whether `tune_visual` must be unfrozen in Phase 3.
-3. **Phase 4 item (1)** the pre-flight gate — independent, low-risk, immediately useful.
-4. **Phase 3** fine-tune, scoped by what (1) and (2) actually showed.
-5. **Phase 4 items (2)–(3)** once the tolerances are measured rather than assumed.
+The previous ordering led with the height sweep. Height is in tolerance, so that ordering is void.
 
-Hygiene (§7) runs in parallel and blocks only the commit.
+| # | Action | Cost | Gates what |
+| :--- | :--- | :--- | :--- |
+| **1** | **Phase 0.5 (§1c)** — open-loop eval **+ modality ablation** | hours, no training | *everything*. Determines whether the fault is normalisation, vision-grounding, or the state shortcut |
+| **2** | Re-derive the two mis-stated invariants from artefacts, add provenance | hours | the planner's ranking, which is currently built on one false and one retracted value |
+| **3** | **Intervention 1 (§5b)** — photometric alignment | hours | tests the colour-cue mechanism; may produce a lift on its own |
+| **4** | Pre-flight gate (Phase 4 item 1) | low | independent, immediately useful |
+| **5** | **Intervention 2 (§5b)** — augmented re-finetune on the existing corpus | 1 training run | the primary remediation if step 1 shows the state shortcut |
+| **6** | Height sweep (old Phase 1) — **demoted** to robustness characterisation | moderate | nothing on the critical path |
+| **7** | Intervention 3 — few-shot on target demos | teleop + training | last resort only |
+
+Steps 1–2 are pure measurement and must complete before any GPU-week is committed. That is the same
+discipline §1 argued for; the difference is that it now has a track record of overturning the
+plan's own hypotheses three times.
 
 ---
 
-## 10. What Would Falsify This Plan
+## 10. What Would Falsify This Plan (**revised 2026-09-04**)
 
-Stated up front so the Phase 1 result is read honestly rather than fitted:
+The 2026-09-03 criteria are retained below for the record, because two of them **fired**. New
+criteria for the current hypothesis:
 
-- **A/B/C all succeed** (§3) → height is not the blocker, `vertical_reach_ood` is mis-ranked, and the remediation ordering in `policy_capability_graph` is wrong. Phase 3 would then target the visual axis, and `tune_visual` becomes the central question rather than a contingency.
-- **Condition A fails** → the fault is in the stack or the harness, not the distribution, and the entire OOD framing is premature.
-- **Mimic yield at `shelf_tier_2` is near zero** → height augmentation needs teleop or a motion planner, and the "cheap" characterisation of Phase 3 was wrong.
-- **The corpus centroid shows `maple_table` embeddings are close to the corpus** → the visual domain shift is smaller than the depth audit's pixel-space and geometry-space evidence suggested, and `vision_domain_ood` should be down-weighted.
+- **Modality ablation shows the chunk changes substantially with the image** → the state-shortcut
+  account is wrong; vision is used, and the fault is what it encodes. Intervention 2's augmentation
+  is then mis-targeted and Interventions 1–2 should be reordered toward framing/appearance.
+- **Photometric alignment produces no lift and open-loop MSE is low** → the colour-cue mechanism
+  (§1b) is wrong despite the 71× measurement, and appearance is a correlate rather than a cause.
+- **Open-loop MSE is high on corpus data** → the entire OOD framing is premature *again*; the fault
+  is normalisation metadata or modality wiring, and no scene-side or training-side work should
+  start until it is fixed.
+- **Augmented re-finetune recovers nothing** → the zero-new-demonstration premise fails, and
+  Pathway B's objection was correct all along. Say so explicitly rather than sliding to
+  Intervention 3 and calling the result a transfer success.
+- **The vision-only ablation arm underperforms the full-state policy** → there is no proprioceptive
+  shortcut to break, and state dropout is wasted effort.
+
+### 2026-09-03 criteria — outcome
+
+| Criterion | Outcome |
+| :--- | :--- |
+| A/B/C all succeed → height mis-ranked, remediation ordering wrong | **FIRED.** Height measured in tolerance; ordering was wrong |
+| Condition A fails → fault is in the stack or harness, OOD framing premature | **FIRED.** The settle-loop hold action was fabricating episodes |
+| Mimic yield near zero → "cheap" characterisation wrong | not yet tested (Phase 3 descoped) |
+| Corpus centroid close → down-weight `vision_domain_ood` | not yet tested; probes now unblocked (§1c) |
+
+Two of four predicted the failure correctly *and in advance*. The criteria were worth writing; the
+lesson is that they should have gated the ten iterations that ran before them.
 
 ---
 
@@ -256,3 +450,34 @@ Stated up front so the Phase 1 result is read honestly rather than fitted:
 - `.agents/memory/sessions/20260903_180000_modelgraph.md` — ontology, probes, planner
 - `.agents/memory/sessions/20260903_043800_c1blockers.md` — the blockers this plan responds to
 - `.agents/memory/sessions/20260827_015608_sm120dock.md` — SM120 toolchain pins
+
+### External research (2026-09-04)
+
+Checkpoint and framework:
+- [GN1x-Tuned-Arena-G1-Static-PickNPlace model card](https://huggingface.co/nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace) — 251 eps / 35,066 frames @ 50 Hz, XR teleop, from `GR00T-N1.7-3B`
+- [New-embodiment finetuning guide](https://github.com/NVIDIA/Isaac-GR00T/blob/main/getting_started/3_0_new_embodiment_finetuning.md) — state dropout, colour jitter, `--tune-visual` / `--tune-llm`
+- [Isaac-GR00T evaluation & benchmarking](https://deepwiki.com/NVIDIA/Isaac-GR00T/7-evaluation-and-benchmarking) — open-loop-before-closed-loop workflow
+
+Same symptom reported against this codebase:
+- [#200](https://github.com/NVIDIA/Isaac-GR00T/issues/200) — "moves toward the target but lands ~5 cm away", 7/10
+- [#210](https://github.com/NVIDIA/Isaac-GR00T/issues/210) — arm reaches *above* the object and stops
+- [#241](https://github.com/NVIDIA/Isaac-GR00T/issues/241) — testing whether the policy conditions on vision at all
+- [#408](https://github.com/NVIDIA/Isaac-GR00T/issues/408), [#213](https://github.com/NVIDIA/Isaac-GR00T/issues/213) — `NEW_EMBODIMENT` metadata / stats failures
+- [#314](https://github.com/NVIDIA/Isaac-GR00T/issues/314) — instability when `action_dim > 32` (ours is 43/50)
+
+Shortcut learning and causal confusion:
+- [Causal Confusion in Imitation Learning](https://proceedings.neurips.cc/paper_files/paper/9343-causal-confusion-in-imitation-learning.pdf) — **low open-loop loss, poor closed-loop performance**
+- [Adapt Your Body: Mitigating Proprioception Shifts](https://www.researchgate.net/publication/393184798_Adapt_Your_Body_Mitigating_Proprioception_Shifts_in_Imitation_Learning) — proprioception shift; dropout is partial
+- [Fighting Copycat Agents](https://arxiv.org/pdf/2010.14876), [GABRIL](https://arxiv.org/pdf/2507.19647), [Initial State Interventions](https://arxiv.org/pdf/2307.15980)
+
+Viewpoint and appearance sensitivity:
+- [AnyCamVLA](https://arxiv.org/html/2603.05868v1) — $\pi_0$ 65.3% → **6.3% under a 15° camera rotation**; test-time canonicalisation
+- [OC-VLA](https://arxiv.org/html/2508.13103) — actions re-parameterised into camera frame
+- [Robust Visual Sim-to-Real Transfer](https://arxiv.org/pdf/2307.15320) — DR ablation: 41% / 48% / **87% lighting-only** / 90%
+- [SIMPLER](https://arxiv.org/pdf/2405.05941) — sim-to-sim variation over background, lighting, distractors, table texture
+- [IDAPT](https://arxiv.org/pdf/2107.00339) — grounding source env in target beats DR at high randomisation
+
+Few-shot adaptation:
+- [ControlVLA](https://alphaxiv.org/overview/2506.16211v1) — 10–20 demos → 76.7% vs 20.8%
+- [PriorVLA](https://arxiv.org/html/2605.10925) — 10 demos → 48% in-dist / 32% OOD, 25% of params
+- [Domain Arithmetic](https://arxiv.org/pdf/2607.00666) — one demo per scene, LoRA in the vision encoder

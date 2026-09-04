@@ -63,16 +63,16 @@ To ensure the system functions reliably in all runtime environments (whether onl
 ```mermaid
 graph TD
     Start["Preflight Scene Verification Pass"] --> CheckCloud{"Tier 1: Cloud Frontier VLM?<br/>(OpenRouter / Claude 3.7 / Gemini / GPT-4o)"}
-    
+
     CheckCloud -- Available --> RunCloud["Run Cloud Multimodal VLM Inspection"]
     CheckCloud -- Unavailable / No Key --> CheckLocal{"Tier 2: Self-Hosted Local VLM?<br/>(vLLM / Ollama / SGLang / NIM<br/>e.g. Qwen2.5-VL / Cosmos-Reason)"}
-    
+
     CheckLocal -- Available (:8000/v1) --> RunLocal["Run Local VLM Inference via OpenAI-compatible API"]
     CheckLocal -- Unavailable --> CheckGeom{"Tier 3: Local Geometric & Frustum Oracle?<br/>(GPU Raycasting & Projection Matrix)"}
-    
+
     CheckGeom -- Success --> RunGeom["Compute 3D BBox Frustum Projection,<br/>LOS Occlusion & Grounding Raycasts"]
     CheckGeom -- Inconclusive / Error --> Tier4["Tier 4: Graceful Degradation & User Advisory Banner"]
-    
+
     RunCloud --> OutputResult["Emit Structured VisualCriticResult"]
     RunLocal --> OutputResult
     RunGeom --> OutputResult
@@ -156,16 +156,16 @@ graph LR
     subgraph Simulation Environment
         Robot["Unitree G1 Humanoid"]
         Workspace["Kitchen Counter / Island"]
-        
+
         HeadCam["View 1: Egocentric Head Camera<br/>(robot_head_cam_rgb / 640x480)"]
         ObsCam["View 2: Orthogonal Observer Camera<br/>(Viewer Perspective / 1280x720)"]
     end
-    
+
     Robot --> HeadCam
     Workspace --> HeadCam
     Workspace --> ObsCam
     Robot --> ObsCam
-    
+
     HeadCam --> Critic["Multimodal VLM Critic Engine"]
     ObsCam --> Critic
 ```

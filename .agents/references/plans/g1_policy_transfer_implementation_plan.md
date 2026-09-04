@@ -573,7 +573,7 @@ is what the planner selects. Two experiments follow, both cheap.
 
 ### 5b.1 Corpus image-token centroid
 
-Mean-pool the backbone's image-masked tokens over the 200 corpus episodes, save a `.pt`, then
+Mean-pool the backbone's image-masked tokens over the 251 corpus episodes, save a `.pt`, then
 report cosine distance from a `maple_table` observation's pooled embedding to that centroid. This
 activates `vl_embedding_ood_distance`, which is registered but inert. Decision rule: a small
 distance means the frozen encoder represents both scenes similarly, so the projector and DiT have
@@ -640,7 +640,7 @@ Run the matrix `{num_rerenders_on_reset ∈ {0, 1, 2}} x {rerender_on_reset ∈ 
 
 **Unit of analysis.** One score per *observation*, from the mean over image-masked backbone tokens for that frame. Token-level scoring (one score per patch) is a refinement that answers a different question — "which patches are unfamiliar" — and is deferred.
 
-**Bank construction.** Over the 200 corpus episodes, at a fixed frame stride, collect pooled image-token embeddings `Z ∈ R^{N x D}` with `D = backbone_embedding_dim = 2048`. At ~100 frames/episode and stride 5, `N ≈ 4000`, so `N > D` and a covariance is estimable — but only just, so use **Ledoit–Wolf shrinkage** rather than the raw empirical covariance.
+**Bank construction.** Over the 251 corpus episodes, at a fixed frame stride, collect pooled image-token embeddings `Z ∈ R^{N x D}` with `D = backbone_embedding_dim = 2048`. The dataset holds `total_frames = 35066` (measured 2026-09-04), so at stride 5 `N ≈ 7000`, giving `N > 3D` — comfortably better than the `N ≈ 4000` this section originally assumed, though still close enough to `D` that **Ledoit–Wolf shrinkage** remains the right choice over the raw empirical covariance.
 
 **Three scores, reported together.**
 
@@ -1038,5 +1038,309 @@ The test builds all four flag configurations in the simulator and reaches the pe
 
 ### Not started
 
-- `measure_corpus_embedding_bank.py`, the tool that runs the backbone over the 200 corpus episodes to populate a bank. The bank machinery and its calibration are done and tested; only the extraction pass over real data is missing, and it needs the gated `nvidia/Cosmos-Reason2-2B` access described in §9.5.
+- `measure_corpus_embedding_bank.py`, the tool that runs the backbone over the corpus episodes to populate a bank. The bank machinery and its calibration are done and tested; only the extraction pass over real data is missing. **The gated-access blocker is stale as of 2026-09-04** -- `nvidia/Cosmos-Reason2-2B` is cached locally (8.4 GB, weights present); see §12.4. Note the corpus is **251** episodes, not 200.
 - The four-arm training comparison (§5c.4).
+
+---
+
+## 12. Phase 5f — 2026-09-04: What Landed, and the Four Negative Results
+
+### 12.1 The harness defect that outranked every model hypothesis — **FIXED**
+
+Commit `83dc00658`. `verify_and_settle_scene` used `torch.zeros()` as its hold action. For
+`G1DecoupledWBCJointAction` the layout is
+`[joint_targets | navigate_cmd(3) | base_height(1) | torso_rpy(3)]` with **absolute** joint targets
+and `base_height` default `0.75`
+(`isaaclab_arena_g1/g1_env/mdp/actions/g1_decoupled_wbc_joint_action.py:87`), so zeros command a
+floor squat plus all-joints-to-zero and discard `initial_joint_pos`.
+
+```python
+# isaaclab_arena/evaluation/policy_runner.py
+def build_neutral_hold_action(base_env) -> torch.Tensor:
+    """Zero is not neutral for every embodiment; hold the posture instead."""
+    ...
+    is_wbc = any("wbc" in type(t).__name__.lower()
+                 for t in getattr(base_env.action_manager, "_terms", {}).values())
+    if not is_wbc:
+        return hold_action                      # delta spaces: zero *is* the hold
+    hold_action[:, :num_joints] = default_joint_pos[:, :num_joints]
+    hold_action[:, -num_base_height_cmd - num_torso_rpy_cmd] = 0.75
+```
+
+Two supporting fixes in the same commit: per-env `max` instead of `mean` on settle velocities (one
+apple in free fall was masked by three still ones), and breaking on `terminated | truncated` so
+auto-resets during settling stop being recorded as episodes.
+
+| Metric | before | after |
+| :--- | :--- | :--- |
+| Median episode length | 7 steps | **1000** (full horizon) |
+| Terminations / false successes | continuous / 1 | **0 / 0** |
+
+**Generalise the class of bug, not the instance.** Any harness code that synthesises an action
+without consulting the action term's semantics is suspect. Grep for `torch.zeros` used as a
+command anywhere in `evaluation/` and `tests/`, and prefer `build_neutral_hold_action`.
+
+### 12.2 Four single-variable experiments — all negative
+
+Against the honest harness, 2 episodes × 1000 steps each:
+
+| Run | Change | `object_moved_rate` |
+| :--- | :--- | :--- |
+| `v14` | baseline | 0.0 |
+| `v15` | `bilateral_mirror: false` | 0.0 |
+| `v16` | + `action_chunk_length: 40 → 16` | 0.0 |
+| `v17` | + exact corpus prompt | 0.0 |
+
+All three changes are corrections of real violations and are kept. `generated_envs/.../v15|v16|v17`
+hold the specs. **Conclusion: the failure is not an inference-config detail**, which is what
+authorises the more expensive work below.
+
+### 12.3 The corpus, read rather than recalled
+
+`/datasets/isaaclab_arena/static_apple_tutorial/nvidia/Arena-G1-Static-PickNPlace-Task/meta/`
+
+```
+tasks.jsonl   -> exactly 1 task, used by all 208 annotated episodes:
+                 "Pick up the apple from the shelf and place it onto the plate
+                  on the same shelf next to it."
+info.json     -> total_episodes=251  total_frames=35066  fps=50  robot_type=unitree_g1
+modality.json -> video: {ego_view}      (single camera)
+                 state: left_leg[0:6] right_leg[6:12] waist[12:15]
+                        left_arm[15:22] left_hand[22:29]
+                        right_arm[29:36] right_hand[36:43]
+                        (+ left/right_wrist_pose from observation.eef_pose)
+```
+
+Also present: `stats.json`, `relative_stats.json`, and an `observation.img_state_delta` feature.
+
+**Every run `v8`–`v16` fed a prompt absent from this file.** The remediation plan asserted the
+opposite. Action: `TrainingInvariant` reference values must be **derived from artefacts at load
+time**, not transcribed — see §15.
+
+### 12.4 Blocker cleared: the backbone is cached
+
+`~/.cache/huggingface/hub/models--nvidia--Cosmos-Reason2-2B` — 8.4 GB, `model.safetensors` +
+`config.json` present. §11's "Not started" entry for `measure_corpus_embedding_bank.py` and §3's
+gated-access blocker are **both stale**; the activation probes and the embedding bank can run.
+
+---
+
+## 13. Phase 0.5 Implementation — Open-Loop Eval and Modality Ablation
+
+This is now the **first** action in the plan. It is the official GR00T validation step and has
+never been run in this project.
+
+### 13.1 Open-loop fidelity
+
+`submodules/Isaac-GR00T/gr00t/eval/open_loop_eval.py` exists in the pinned submodule. Flag names
+drift between revisions (`--action-horizon` vs `--execution-horizon`) — read the checked-out file
+before scripting it.
+
+```bash
+# Run in the GR00T env, not the Arena container. Interpreter pin per session `sm120dock`:
+UV_PROJECT_ENVIRONMENT=/opt/gr00t-venv312 uv run --python 3.12 \
+  python gr00t/eval/open_loop_eval.py \
+    --dataset-path /datasets/isaaclab_arena/static_apple_tutorial/nvidia/Arena-G1-Static-PickNPlace-Task \
+    --embodiment-tag NEW_EMBODIMENT \
+    --model-path nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace \
+    --traj-ids 0 1 2 \
+    --save-plot-path eval_output/openloop/
+```
+
+Record per-dimension MSE, not just the aggregate: the 43-D action splits into
+leg/waist/arm/hand groups, and a policy that is fine on legs and wrong on `left_arm[15:22]` is a
+different diagnosis from uniform error.
+
+**Also diff the normalisation metadata** — the single most-reported `NEW_EMBODIMENT` failure
+([#408](https://github.com/NVIDIA/Isaac-GR00T/issues/408),
+[#213](https://github.com/NVIDIA/Isaac-GR00T/issues/213)): confirm the checkpoint's
+`experiment_cfg/metadata.json` carries a `new_embodiment` key whose per-dimension stats match
+`meta/stats.json`. If inference silently falls back to pretrain stats, un-normalisation is wrong
+and every downstream conclusion is void. Check specifically for padded dims where `min == max`.
+
+### 13.2 Modality ablation — the test that actually discriminates
+
+New tool: `isaaclab_arena_examples/tools/probe_policy_conditioning.py`, wrapping the existing
+`measure_ablation_sensitivity` / `BlockConditioningDelta` in
+`isaaclab_arena/agentic_environment_generation/policy_activation_probe.py`.
+
+For a fixed corpus observation, emit the action chunk under:
+
+| Arm | Image | State | Reads on |
+| :--- | :--- | :--- | :--- |
+| `baseline` | real | real | reference chunk |
+| `vision_scrambled` | pixel-shuffled | real | is vision used at all |
+| `vision_blank` | mid-grey | real | ditto, stronger |
+| `vision_crossscene` | a `maple_table` frame | real | does the target frame move the chunk |
+| `state_perturbed` | real | +noise | proprioceptive reliance |
+| `state_zeroed` | real | zeros | ditto, stronger |
+
+Report $\lVert \Delta \text{chunk} \rVert_2$ per arm, normalised by the baseline chunk norm, and
+the per-joint-group breakdown.
+
+> [!CAUTION]
+> **Do not report a low open-loop MSE as "checkpoint is healthy".** Causally confused policies have
+> low open-loop loss *by construction*
+> ([de Haan et al.](https://proceedings.neurips.cc/paper_files/paper/9343-causal-confusion-in-imitation-learning.pdf)).
+> §13.1 alone cannot clear the checkpoint; only §13.2 separates "learned the task" from "learned
+> the proprioceptive shortcut". Both, or neither.
+
+**Acceptance.** `vision_scrambled` and `vision_blank` deltas below ~10% of baseline norm ⇒ the
+policy is state-driven, and §16 becomes mandatory. `vision_crossscene` producing a *large* delta
+while the closed-loop reach stays fixed would be a contradiction worth chasing separately.
+
+---
+
+## 14. Observation-Framing Metrology (`measure_observation_framing.py`)
+
+The 2.04× / 71× figures came from an ad-hoc script. Formalise it, because it is the metric
+Intervention 1 optimises against and it must be reproducible.
+
+`isaaclab_arena_examples/tools/measure_observation_framing.py`:
+
+* Inputs: a corpus dataset path (reads `videos/chunk-*/observation.images.ego_view/*.mp4`) and
+  either an eval run's camera mp4 or a live env.
+* Per frame: mean/percentile brightness, per-channel histograms, and a **target-separability**
+  score — red-dominant pixel count under $r>90 \wedge r>1.45g \wedge r>1.6b$, plus the largest
+  connected component's bbox and its share of all red-dominant pixels.
+* Output: JSON next to the run, plus a corpus-vs-target delta table.
+
+> [!WARNING]
+> The colour predicate is a **hand-tuned heuristic on one frame pair**, the same species of
+> unmeasured constant that produced the height error. Before it is used to rank anything:
+> compute it over ≥100 corpus frames and ≥100 target frames, report the distribution rather than a
+> point value, and verify the corpus blob actually tracks the apple (its bbox should follow the
+> hand during the grasp). If separability does not degrade across the corpus as the hand occludes
+> the apple, the metric is measuring the background, not the target.
+
+A defensible upgrade, if the heuristic proves fragile: score separability in the **backbone's**
+embedding space using `corpus_embedding_bank.py` (Mahalanobis, already calibrated and tested)
+rather than in RGB.
+
+---
+
+## 15. Invariant Provenance (the change that prevents a fourth wrong ranking)
+
+Three of four ranked violations were wrong, and every one was **asserted in prose**. The ontology
+records tolerances and reference values but not *where they came from*.
+
+Add to `TrainingInvariant` in `policy_capability_graph.py`:
+
+```python
+    reference_source: str
+    """Artefact the reference value was measured from, e.g.
+    "meta/tasks.jsonl" or "measure_embodiment_frames.py:galileo_static.json"."""
+
+    evidence_grade: Literal["measured", "derived", "asserted"]
+    """`asserted` values are reported but MUST NOT contribute to ranking."""
+```
+
+* `compute_distribution_shifts()` filters `asserted` invariants out of the ranking and lists them
+  separately as *unranked, unmeasured*.
+* `diagnose_transfer_readiness()` refuses to name a dominant failure mode if any `asserted`
+  invariant could outrank the winner had it been measured.
+* Re-derive the two known-bad values: `prompt_alignment` from `meta/tasks.jsonl`, and
+  `surface_height_rel_pelvis` from `measure_embodiment_frames.py` output.
+
+This is the single highest-leverage ontology change available, because it converts a silent
+failure into a loud one.
+
+---
+
+## 16. Appearance as a Nuisance Parameter (schema + remediation split)
+
+### 16.1 The graph spec has no appearance block
+
+`generated_envs/g1_tabletop_apple_to_plate/v17/g1_tabletop_apple_to_plate.yaml` has
+`env_name / embodiment / background / objects / relations / reified_relations` and **no** control
+over lighting or materials. Intervention 1 is therefore blocked on a schema addition:
+
+```yaml
+appearance:                     # optional; absent == today's defaults
+  dome_light:
+    intensity: 300.0
+    color_temperature: 5200.0
+  material_overrides:
+    - target: background        # or an object id
+      albedo_scale: 0.35
+      roughness: 0.7
+```
+
+Realised through an `_env_cfg_callback` in
+`isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py` — the same hook already used
+to force `num_rerenders_on_reset >= 1`.
+
+### 16.2 Split the over-coarse remediation predicate
+
+`RemediationTechnique.preserves_target_scene` currently excludes photometric alignment along with
+genuine benchmark rewrites. Replace with two predicates:
+
+| | `preserves_scene_semantics` | `alters_nuisance_parameters` |
+| :--- | :--- | :--- |
+| `reanchor_surface_to_corpus_height` | **False** | False |
+| `mirror_layout_to_corpus_laterality` | **False** | False |
+| `align_scene_photometry` | **True** | True |
+| `augment_corpus_and_refinetune` | **True** | False |
+
+`select_remediation(preserve_scene_semantics=True)` then admits photometric alignment while still
+excluding Pathway A's rewrites. Report `alters_nuisance_parameters` in the plan output so a lift
+obtained by re-lighting is never silently presented as a pipeline capability.
+
+---
+
+## 17. Augmented Re-Finetune (the primary remediation)
+
+No new demonstrations; all 251 corpus episodes are local. Targets the frozen-VLM shortcut directly.
+
+| Arm | `--tune-visual` | State dropout | Photometric jitter | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| A (control) | off | off | off | reproduce the current checkpoint |
+| B | off | **on** | off | is the shortcut the whole story |
+| C | **on** | on | **on** | the recommended recipe |
+| D (floor) | on | **inputs removed** | on | vision-only ablation — confirms the shortcut and sets the floor |
+
+Arm D is the diagnostic: if it beats A, the proprioceptive shortcut is confirmed
+([Adapt Your Body](https://www.researchgate.net/publication/393184798_Adapt_Your_Body_Mitigating_Proprioception_Shifts_in_Imitation_Learning)).
+
+Kernel readiness is already verified on this host (§9.5): `sm_120` native, real `AlternateVLDiT`
+forward+backward finite, 7.84 GB peak at batch 64. `--tune-visual` unfreezes the encoder and will
+raise that materially — re-measure before committing to a long run rather than extrapolating from
+the action-head-only figures.
+
+**Honest expectation**: dropout-style mitigations land *between* full-state BC and vision-only BC in
+the published comparisons. Budget for recovering a fraction of the gap, and state the fraction.
+
+### Bookkeeping
+
+After any successful arm, register a **new** `PolicyProfile` whose invariants describe the widened
+distribution, with `evidence_grade="measured"` and `reference_source` pointing at the training
+config. Transfer readiness against `maple_table` then becomes a re-measurement rather than a
+re-argument — which was §7b's original intent and is only now enforceable.
+
+---
+
+## 18. Revised Risks (2026-09-04)
+
+1. **The colour-separability metric is one hand-tuned predicate on one frame pair.** Mitigated by
+   §14's distribution requirement and the embedding-space fallback. Until then it is a hypothesis
+   with a number attached, not a measurement.
+2. **Photometric alignment could "work" for the wrong reason.** Darkening the scene changes
+   brightness, contrast, *and* effective SNR at once. If it produces a lift, ablate the knobs
+   separately before claiming the colour-cue mechanism is confirmed.
+3. **Nuisance-vs-semantics is a judgement call, and it is ours.** The split in §16.2 is defensible
+   but it is not written into the C1 specification. Record it as an explicit decision in the
+   benchmark's own output so a reader can disagree with it.
+4. **Open-loop eval may pass and teach us nothing.** By construction for a causally confused
+   policy. Budget for §13.2 as the real gate and treat §13.1 as a cheap precondition.
+5. **`--tune-visual` on 251 episodes risks catastrophic forgetting of the pretrained features**,
+   which is the failure mode the LoRA/adapter literature exists to avoid
+   ([PriorVLA](https://arxiv.org/html/2605.10925) keeps a frozen prior expert). If arm C degrades
+   below arm A on the *corpus* scene, switch to a parameter-efficient variant rather than tuning
+   the learning rate.
+6. **Four negative config experiments do not prove config is irrelevant** — they prove those four
+   settings are not *sufficient*. Denoising steps, `action_horizon`, and the state/action
+   convention (absolute joint targets vs. N1.7's relative-EEF pretrain spaces) remain untested and
+   are cheap; fold them into §13.1 rather than a fifth closed-loop sweep.
+7. **The 6.5 cm height result is a single measurement of a single pair of scenes.** It is enough to
+   demote the height sweep, not enough to conclude height never matters. The demoted sweep still
+   characterises the manifold and should run once the critical path clears.

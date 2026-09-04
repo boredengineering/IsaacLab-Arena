@@ -356,3 +356,43 @@ def test_chunk_dynamics_accepts_a_numpy_action_output():
 def test_probe_rejects_a_model_without_an_action_head():
     with pytest.raises(AssertionError, match="action_head"):
         Gr00tActivationProbe(torch.nn.Linear(2, 2))
+
+
+def test_bank_verdict_supersedes_the_uncalibrated_cosine_distance():
+    """With a calibrated bank the probe asserts; without one it explicitly asserts nothing."""
+    from isaaclab_arena.agentic_environment_generation.corpus_embedding_bank import build_bank
+    from isaaclab_arena.agentic_environment_generation.policy_activation_probe import VL_EMBEDDING_OOD_PERCENTILE
+
+    model = _FakeGr00t()
+    # The fake backbone emits HIDDEN-dim features; fit a bank on samples far from what it produces
+    # so the observation reads as out of distribution.
+    generator = torch.Generator().manual_seed(0)
+    reference = torch.randn(120, HIDDEN, generator=generator) * 0.1 + 40.0
+    bank = build_bank(reference, source="unit-test")
+
+    with Gr00tActivationProbe(model, corpus_bank=bank) as probe:
+        model.get_action(_observation())
+        report = probe.report()
+
+    assert "bank_is_ood" in report.vl_embedding_stats
+    metrics = {observation.metric for observation in report.to_observations()}
+    assert "corpus_embedding_ood_percentile" in metrics
+    assert "cosine_distance_to_corpus_centroid" not in metrics, "bank verdict must supersede it"
+
+    ood_observation = next(o for o in report.to_observations() if o.metric == "corpus_embedding_ood_percentile")
+    assert ood_observation.reference == VL_EMBEDDING_OOD_PERCENTILE
+    assert "vision_domain_ood" in ood_observation.supports
+
+
+def test_without_a_bank_the_centroid_distance_supports_no_conclusion():
+    """An uncalibrated distance must not move any belief."""
+    model = _FakeGr00t()
+    with Gr00tActivationProbe(model, corpus_image_centroid=torch.ones(HIDDEN)) as probe:
+        model.get_action(_observation())
+        report = probe.report()
+
+    observation = next(o for o in report.to_observations() if o.metric == "cosine_distance_to_corpus_centroid")
+    assert observation.supports == ()
+    assert observation.refutes == ()
+    assert observation.likelihood_ratio == 1.0, "a neutral ratio leaves the prior untouched"
+    assert "supports no conclusion" in observation.note

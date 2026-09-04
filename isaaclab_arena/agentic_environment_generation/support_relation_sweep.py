@@ -32,9 +32,10 @@ from __future__ import annotations
 
 import argparse
 import copy
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from isaaclab_arena.agentic_environment_generation.policy_capability_graph import (
     frame_height,
@@ -106,9 +107,7 @@ def _initial_pose(node: dict[str, Any]) -> dict[str, Any]:
 def _declared_decks(fixture_registry_name: str) -> dict[str, float]:
     """Return ``{sector_name: deck_z}`` for a fixture's declared, non-inherited decks."""
     try:
-        from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
-            FIXTURE_SECTOR_BOUNDS,
-        )
+        from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import FIXTURE_SECTOR_BOUNDS
     except ImportError:
         return {}
 
@@ -303,7 +302,7 @@ def generate_support_height_sweep_dicts(
             achieved = offset
             notes.append(
                 f"translated embodiment by {delta:+.3f} m in Z; a platform must be added under it "
-                f"for the scene to be physically plausible"
+                "for the scene to be physically plausible"
             )
 
         manifold = resolve_manifold_for_offset(achieved)
@@ -361,9 +360,7 @@ def _closest_deck(
     return min(decks, key=sort_key)
 
 
-def _current_surface_z(
-    relation: dict[str, Any], decks: dict[str, float], fixture_pos: Sequence[float]
-) -> float | None:
+def _current_surface_z(relation: dict[str, Any], decks: dict[str, float], fixture_pos: Sequence[float]) -> float | None:
     """Return the base spec's support surface z, or None when the spec does not determine it."""
     params = relation.get("params", {}) or {}
     if params.get("nominal_height") is not None:
@@ -474,8 +471,7 @@ def main() -> int:
             policy_config_source=args.policy_config,
             trigger="support_relation_sweep",
             remediations=[
-                f"support offset {variant.achieved_offset_m:+.3f} m rel {args.frame} "
-                f"via {variant.realization}"
+                f"support offset {variant.achieved_offset_m:+.3f} m rel {args.frame} via {variant.realization}"
                 + (f" (anchor {variant.anchor_name})" if variant.anchor_name else "")
             ],
             diagnostics=variant.notes,

@@ -11,6 +11,7 @@ The generator operates on plain spec dicts, so these run without Isaac Sim.
 from __future__ import annotations
 
 from typing import Any
+
 import pytest
 
 from isaaclab_arena.agentic_environment_generation.support_relation_sweep import (
@@ -50,16 +51,14 @@ def _spec_dict(fixture_registry: str = "galileo_locomanip", sector: str = "shelf
         "relations": [
             {"kind": "on", "subject": "red_apple", "reference": "support", "params": {"surface_sector": sector}},
         ],
-        "reified_relations": [
-            {
-                "reifier_id": "reifier_apple_support",
-                "source_id": "red_apple",
-                "relation_type": "PLACED_ON",
-                "target_id": "support",
-                "kinematic_manifold": "low_shelf_reach_down",
-                "evidence_sources": ["tabletop_spatial_planner"],
-            }
-        ],
+        "reified_relations": [{
+            "reifier_id": "reifier_apple_support",
+            "source_id": "red_apple",
+            "relation_type": "PLACED_ON",
+            "target_id": "support",
+            "kinematic_manifold": "low_shelf_reach_down",
+            "evidence_sources": ["tabletop_spatial_planner"],
+        }],
         "task": {"composition": "atomic", "description": "move the apple to the plate", "subtasks": []},
     }
 
@@ -123,9 +122,7 @@ def test_anchor_realization_refuses_offsets_with_no_declared_deck():
 def test_auto_falls_back_to_fixture_translation():
     """``auto`` uses an anchor where one fits and translates the fixture where none does."""
     unsupported = TIER_1_OFFSET + 0.25
-    variants = generate_support_height_sweep_dicts(
-        _spec_dict(), [TIER_3_OFFSET, unsupported], realization="auto"
-    )
+    variants = generate_support_height_sweep_dicts(_spec_dict(), [TIER_3_OFFSET, unsupported], realization="auto")
 
     assert variants[0].realization == "anchor"
     assert variants[0].anchor_name == "shelf_tier_3"

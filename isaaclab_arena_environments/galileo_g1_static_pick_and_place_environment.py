@@ -158,6 +158,15 @@ class GalileoG1StaticPickAndPlaceEnvironmentCfg(ArenaEnvironmentCfg):
     task_description: str = "move the apple to the plate"
     lock_waist: bool = True
     """Keep the waist out of Pink IK unless extended arm reach is required."""
+    pick_up_object_spawn_xy_range_m: float = APPLE_SPAWN_XY_RANGE_M
+    """Half-range of the manipuland's per-episode XY randomization, in metres.
+
+    Defaults to the module constant (currently 0.0) so existing baselines are unchanged. Raise it
+    for any evaluation whose result is meant to generalize: with zero randomization every episode
+    has identical initial conditions, so N episodes provide far fewer than N independent samples
+    and the binomial confidence interval around the success rate is optimistic. Increasing the
+    episode count does nothing about that -- only varying the initial conditions does.
+    """
 
 
 @register_environment
@@ -248,16 +257,17 @@ class GalileoG1StaticPickAndPlaceEnvironment(ArenaEnvironmentFactory[GalileoG1St
         # are pinned (rpy_min == rpy_max) so the object always lands flush on the shelf
         # in its authored orientation; we only randomize XY. This gives recorded demos
         # spatial variation that lets a finetuned policy generalize over the spawn range.
+        spawn_range = cfg.pick_up_object_spawn_xy_range_m
         pick_up_object.set_initial_pose(
             PoseRange(
                 position_xyz_min=(
-                    pick_up_object_x - APPLE_SPAWN_XY_RANGE_M,
-                    pick_up_object_y - APPLE_SPAWN_XY_RANGE_M,
+                    pick_up_object_x - spawn_range,
+                    pick_up_object_y - spawn_range,
                     pick_up_object_z,
                 ),
                 position_xyz_max=(
-                    pick_up_object_x + APPLE_SPAWN_XY_RANGE_M,
-                    pick_up_object_y + APPLE_SPAWN_XY_RANGE_M,
+                    pick_up_object_x + spawn_range,
+                    pick_up_object_y + spawn_range,
                     pick_up_object_z,
                 ),
                 rpy_min=(0.0, 0.0, 0.0),

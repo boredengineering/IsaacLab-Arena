@@ -25,8 +25,9 @@ evidence is produced by ``policy_activation_probe`` and fed back in as ``ProbeOb
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Value types
@@ -99,9 +100,7 @@ KINEMATIC_MANIFOLDS: dict[str, KinematicManifold] = {
         ),
         KinematicManifold(
             manifold_id="tabletop_stationary_reach",
-            description=(
-                "Manipulation on a surface near pelvis height, reached forward with little torso pitch."
-            ),
+            description="Manipulation on a surface near pelvis height, reached forward with little torso pitch.",
             kind="support_envelope",
             embodiment_family="unitree_g1",
             z_min_rel_frame=-0.20,
@@ -449,6 +448,22 @@ FAILURE_MODES: dict[str, FailureMode] = {
             ),
         ),
         FailureMode(
+            mode_id="harness_stale_observation",
+            label="First observation of an episode is the previous episode's frame",
+            layer="harness",
+            prior=0.08,
+            description=(
+                "A known Isaac Lab render/physics ordering defect: with fabric enabled, poses written "
+                "through the PhysX tensor API only reach the renderer during a physics step, and "
+                "reset() never steps physics. So the camera observation returned at reset shows the "
+                "pre-reset scene while proprioceptive state is post-reset. A vision-conditioned "
+                "policy then conditions its first action chunk on a scene that no longer exists. "
+                "Setting num_rerenders_on_reset is the documented remedy and is reported not to fix "
+                "it, because the re-render still precedes the transform publication. Diagnose in "
+                "pixel space, not from success rates."
+            ),
+        ),
+        FailureMode(
             mode_id="unsettled_scene",
             label="Scene not settled at inference entry",
             layer="harness",
@@ -585,6 +600,21 @@ DIAGNOSTIC_TECHNIQUES: dict[str, DiagnosticTechnique] = {
                 "Compares each episode's success flag against its progress objective score. A run that "
                 "reports success with a zero progress score, or with an implausibly short episode "
                 "length, is measuring the harness rather than the policy."
+            ),
+        ),
+        DiagnosticTechnique(
+            technique_id="stale_frame_assertion",
+            label="Reset-frame freshness assertion",
+            metric="reset_frame_prev_vs_self_distance_ratio",
+            discriminates=("harness_stale_observation",),
+            cost=0.05,
+            requires_rollout=True,
+            description=(
+                "Compares the observation returned by reset() against both the previous episode's "
+                "final frame and the frame after one post-reset step. Fresh frames give "
+                "d_prev >> d_self; stale frames invert that. Measured in pixel space because the "
+                "documented flag remedy is reported ineffective, so inferring freshness from a "
+                "success rate would exonerate the defect rather than test it."
             ),
         ),
         DiagnosticTechnique(
@@ -818,6 +848,36 @@ REMEDIATION_TECHNIQUES: dict[str, RemediationTechnique] = {
             patch={"check_settling": True, "settle_steps": 12},
         ),
         RemediationTechnique(
+            technique_id="force_physics_step_before_sensor_read",
+            label="Publish transforms before the first sensor read after reset",
+            resolves=("harness_stale_observation",),
+            expected_efficacy=0.9,
+            effort="harness",
+            cost=0.1,
+            description=(
+                "Step physics once (or otherwise flush the fabric transform buffer) between reset "
+                "and the first camera read, so the first observation reflects the post-reset scene. "
+                "Preferred over num_rerenders_on_reset, which is the documented remedy but is "
+                "reported not to fix the underlying ordering problem."
+            ),
+        ),
+        RemediationTechnique(
+            technique_id="canonicalize_observation_domain",
+            label="Transform observations toward the corpus appearance at inference",
+            resolves=("vision_domain_ood",),
+            expected_efficacy=0.5,
+            effort="config",
+            cost=0.2,
+            description=(
+                "Narrow the test distribution instead of widening the training one: map the target "
+                "scene's observations toward the appearance the corpus was recorded in. Admissible "
+                "here precisely because the target scene is fixed and known, which is what makes a "
+                "fixed transform defensible where a general solution would not be. The only visual "
+                "remediation needing no GPU training."
+            ),
+            preserves_target_scene=True,
+        ),
+        RemediationTechnique(
             technique_id="select_matching_controller_binding",
             label="Bind the embodiment backend that matches the policy action space",
             resolves=("action_space_mismatch",),
@@ -1029,8 +1089,7 @@ POLICY_PROFILES: dict[str, PolicyProfile] = {
             TrainingInvariant(
                 axis="visual_domain",
                 description=(
-                    "Dark matte industrial shelving against dense background clutter under directional "
-                    "lighting."
+                    "Dark matte industrial shelving against dense background clutter under directional lighting."
                 ),
                 value="galileo_locomanip_warehouse_shelf",
             ),
@@ -1168,9 +1227,7 @@ def _on_relation_for(spec: Any, subject_id: str) -> Any | None:
 def _reified_relation_for(spec: Any, subject_id: str) -> Any | None:
     """Return the reified PLACED_ON relation whose source is ``subject_id``, if present."""
     for relation in getattr(spec, "reified_relations", None) or []:
-        if getattr(relation, "source_id", None) == subject_id and "PLACED_ON" in getattr(
-            relation, "relation_type", ""
-        ):
+        if getattr(relation, "source_id", None) == subject_id and "PLACED_ON" in getattr(relation, "relation_type", ""):
             return relation
     return None
 
@@ -1261,9 +1318,7 @@ def _sector_deck_z(fixture_registry_name: str, sector_name: str) -> float | None
     if not fixture_registry_name:
         return None
     try:
-        from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
-            FIXTURE_SECTOR_BOUNDS,
-        )
+        from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import FIXTURE_SECTOR_BOUNDS
     except ImportError:
         return None
 
@@ -1346,7 +1401,7 @@ def compute_distribution_shifts(spec: Any, profile: PolicyProfile) -> list[Distr
                     evidence=(
                         f"Support height for '{support.manipuland_id}' could not be resolved from the "
                         f"spec (source={support.height_source}); declare a nominal_height, a known "
-                        f"surface_sector, or an explicit pose before this axis can be checked."
+                        "surface_sector, or an explicit pose before this axis can be checked."
                     ),
                 )
             )
@@ -1396,19 +1451,17 @@ def compute_distribution_shifts(spec: Any, profile: PolicyProfile) -> list[Distr
                         scene_value=scene_manifold or "outside every registered envelope",
                         corpus_value=", ".join(profile.covered_manifolds),
                         evidence=(
-                            (
-                                f"The support relation sits {observed:+.3f} m from the "
-                                f"{support.frame}, outside every registered reach envelope. This may "
-                                f"be beyond the arm rather than merely out of distribution -- verify "
-                                f"reachability before attributing a failure here to the policy."
-                            )
+                            f"The support relation sits {observed:+.3f} m from the "
+                            f"{support.frame}, outside every registered reach envelope. This may "
+                            "be beyond the arm rather than merely out of distribution -- verify "
+                            "reachability before attributing a failure here to the policy."
                             if outside_all
                             else (
                                 f"The support relation instantiates the '{scene_manifold}' reach "
-                                f"envelope, which this corpus does not cover (it demonstrates "
+                                "envelope, which this corpus does not cover (it demonstrates "
                                 f"{', '.join(profile.covered_manifolds)}). A manifold mismatch is "
-                                f"categorical: no policy-config change closes it, only re-relating "
-                                f"the scene or extending the training distribution."
+                                "categorical: no policy-config change closes it, only re-relating "
+                                "the scene or extending the training distribution."
                             )
                         ),
                     )
@@ -1477,8 +1530,7 @@ def compute_distribution_shifts(spec: Any, profile: PolicyProfile) -> list[Distr
                 scene_value=description or "<empty>",
                 corpus_value=prompt_inv.value,
                 evidence=(
-                    f"Task instruction {description!r} differs from the corpus instruction "
-                    f"{prompt_inv.value!r}."
+                    f"Task instruction {description!r} differs from the corpus instruction {prompt_inv.value!r}."
                     if mismatch
                     else "Task instruction matches the corpus instruction verbatim."
                 ),
@@ -1502,7 +1554,7 @@ def compute_distribution_shifts(spec: Any, profile: PolicyProfile) -> list[Distr
                 corpus_value=visual_inv.value or "",
                 evidence=(
                     f"Background asset {observed!r} is not the corpus scene {visual_inv.value!r}; every "
-                    f"demonstration frame shows the latter."
+                    "demonstration frame shows the latter."
                     if mismatch
                     else f"Background matches the corpus scene {observed!r}."
                 ),
@@ -1811,7 +1863,7 @@ def diagnose_transfer_readiness(
             "policy_ref": policy_ref,
             "message": (
                 f"No policy profile registered for {policy_ref!r}; transfer readiness cannot be assessed "
-                f"until its demonstration corpus invariants are declared in POLICY_PROFILES."
+                "until its demonstration corpus invariants are declared in POLICY_PROFILES."
             ),
         }
 

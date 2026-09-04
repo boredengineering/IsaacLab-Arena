@@ -32,11 +32,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from isaaclab_arena.agentic_environment_generation.spec_io import (
-    DEFAULT_AGENTIC_OUTPUT_DIR,
-    write_env_graph_dict,
-    write_env_graph_spec,
-)
+from isaaclab_arena.agentic_environment_generation.spec_io import DEFAULT_AGENTIC_OUTPUT_DIR, write_env_graph_dict
 from isaaclab_arena.cli.isaaclab_arena_cli import arena_env_builder_cfg_from_argparse, get_isaaclab_arena_cli_parser
 from isaaclab_arena.utils.isaaclab_utils.simulation_app import SimulationAppContext
 
@@ -206,9 +202,7 @@ def check_transfer_readiness(spec_path: Path, policy_ref: str | None) -> dict | 
     if not policy_ref:
         return None
 
-    from isaaclab_arena.agentic_environment_generation.policy_capability_graph import (
-        diagnose_transfer_readiness,
-    )
+    from isaaclab_arena.agentic_environment_generation.policy_capability_graph import diagnose_transfer_readiness
     from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
     report = diagnose_transfer_readiness(ArenaEnvGraphSpec.from_yaml(spec_path), policy_ref)
@@ -224,8 +218,7 @@ def check_transfer_readiness(spec_path: Path, policy_ref: str | None) -> dict | 
         print(f" ✅ '{report['policy_ref']}': scene is within every declared training invariant.", flush=True)
     else:
         print(
-            f" ⚠  '{report['policy_ref']}' ({report['policy_kind']}): scene violates "
-            f"{report['out_of_tolerance_axes']}",
+            f" ⚠  '{report['policy_ref']}' ({report['policy_kind']}): scene violates {report['out_of_tolerance_axes']}",
             flush=True,
         )
         print(f"    Worst departure: {report['worst_shift_sigma']}x tolerance", flush=True)
@@ -337,6 +330,93 @@ def resolve_env_spec(args_cli: argparse.Namespace) -> Path:
     return path
 
 
+def print_policy_diagnostic_plan(diagnostic_plan: dict | None, policy_ref: str | None) -> None:
+    """Print the planner's belief state and selected next steps, or say why it was skipped."""
+    if diagnostic_plan is not None and diagnostic_plan.get("profile_known"):
+        print("=" * 70, flush=True)
+        print(" 🧠 POLICY DIAGNOSTIC PLANNER", flush=True)
+        print("=" * 70, flush=True)
+        print(f" Policy: {diagnostic_plan['policy_ref']}", flush=True)
+        if diagnostic_plan["out_of_tolerance_axes"]:
+            print(f" Invariants violated: {diagnostic_plan['out_of_tolerance_axes']}", flush=True)
+        print(
+            f" Dominant failure mode: {diagnostic_plan['dominant_failure_mode']} "
+            f"(belief {diagnostic_plan['dominant_belief']})",
+            flush=True,
+        )
+        print(f" Next diagnostic to run: {diagnostic_plan['next_diagnostic']}", flush=True)
+        print(f" Recommended remediation: {diagnostic_plan['recommended_remediation']}", flush=True)
+        for mode_id, belief in list(diagnostic_plan["beliefs"].items())[:5]:
+            print(f"   - {mode_id}: {belief}", flush=True)
+        print("=" * 70 + "\n", flush=True)
+    elif policy_ref:
+        print(
+            f"[auto_heal] no registered policy profile for {policy_ref!r}; policy-side diagnosis skipped.",
+            flush=True,
+        )
+    else:
+        print(
+            "[auto_heal] no --policy_ref and no 'checkpoint_uri' in the policy config; policy-side diagnosis skipped.",
+            flush=True,
+        )
+
+
+def emit_policy_diagnostics_artifacts(
+    spec_env_name: str,
+    policy_ref: str | None,
+    diagnostic_state,
+    diagnostic_plan: dict | None,
+    out_dir: Path,
+    version: int,
+) -> None:
+    """Write the policy-side diagnosis as RDF, then mirror it into Neo4j if one is reachable.
+
+    RDF first and in its own try block: it needs no server, so a missing Neo4j must not lose it.
+    """
+    if diagnostic_state is None or diagnostic_plan is None or not diagnostic_plan.get("profile_known"):
+        return
+
+    from isaaclab_arena.agentic_environment_generation.policy_capability_graph import get_policy_profile
+
+    profile = get_policy_profile(policy_ref)
+    if profile is None:
+        return
+
+    eval_run_id = f"{spec_env_name}_v{version}"
+    try:
+        from isaaclab_arena.agentic_environment_generation.policy_diagnostics_sync import emit_policy_diagnostics_ttl
+
+        ttl_path = emit_policy_diagnostics_ttl(
+            out_path=str(out_dir / "policy_diagnostics.ttl"),
+            env_name=spec_env_name,
+            profile=profile,
+            state=diagnostic_state,
+            eval_run_id=eval_run_id,
+            next_technique_id=diagnostic_plan["next_diagnostic"],
+            remediation_id=diagnostic_plan["recommended_remediation"],
+        )
+        print(f"[auto_heal] 🧠 Policy diagnostics graph written to: {ttl_path}", flush=True)
+    except Exception as exc:
+        print(f"[auto_heal] policy diagnostics RDF emission skipped: {exc}", flush=True)
+
+    try:
+        from isaaclab_arena.agentic_environment_generation.policy_diagnostics_sync import (
+            sync_policy_diagnostics_to_neo4j,
+        )
+
+        sync_policy_diagnostics_to_neo4j(
+            env_name=spec_env_name,
+            profile=profile,
+            state=diagnostic_state,
+            eval_run_id=eval_run_id,
+            next_technique_id=diagnostic_plan["next_diagnostic"],
+            remediation_id=diagnostic_plan["recommended_remediation"],
+        )
+        print("[auto_heal] synced policy diagnostics to Neo4j LPG.", flush=True)
+    except Exception:
+        pass
+
+
 def run_auto_heal(args_cli: argparse.Namespace) -> Path:
     """Diagnose evaluation telemetry and apply automated Active Inference self-healing."""
     from isaaclab_arena.agentic_environment_generation.eval_self_healing import (
@@ -416,9 +496,7 @@ def run_auto_heal(args_cli: argparse.Namespace) -> Path:
     policy_ref = resolve_policy_ref(args_cli, policy_config_path)
     diagnostic_state, diagnostic_plan = (None, None)
     if policy_ref:
-        from isaaclab_arena.agentic_environment_generation.eval_self_healing import (
-            build_policy_diagnostic_state,
-        )
+        from isaaclab_arena.agentic_environment_generation.eval_self_healing import build_policy_diagnostic_state
 
         diagnostic_state, diagnostic_plan = build_policy_diagnostic_state(
             spec=spec,
@@ -438,34 +516,7 @@ def run_auto_heal(args_cli: argparse.Namespace) -> Path:
             print(f"    Spatial Patch: {sig.recommended_spatial_patches}", flush=True)
     print("=" * 70 + "\n", flush=True)
 
-    if diagnostic_plan is not None and diagnostic_plan.get("profile_known"):
-        print("=" * 70, flush=True)
-        print(" 🧠 POLICY DIAGNOSTIC PLANNER", flush=True)
-        print("=" * 70, flush=True)
-        print(f" Policy: {diagnostic_plan['policy_ref']}", flush=True)
-        if diagnostic_plan["out_of_tolerance_axes"]:
-            print(f" Invariants violated: {diagnostic_plan['out_of_tolerance_axes']}", flush=True)
-        print(
-            f" Dominant failure mode: {diagnostic_plan['dominant_failure_mode']} "
-            f"(belief {diagnostic_plan['dominant_belief']})",
-            flush=True,
-        )
-        print(f" Next diagnostic to run: {diagnostic_plan['next_diagnostic']}", flush=True)
-        print(f" Recommended remediation: {diagnostic_plan['recommended_remediation']}", flush=True)
-        for mode_id, belief in list(diagnostic_plan["beliefs"].items())[:5]:
-            print(f"   - {mode_id}: {belief}", flush=True)
-        print("=" * 70 + "\n", flush=True)
-    elif policy_ref:
-        print(
-            f"[auto_heal] no registered policy profile for {policy_ref!r}; policy-side diagnosis skipped.",
-            flush=True,
-        )
-    else:
-        print(
-            "[auto_heal] no --policy_ref and no 'checkpoint_uri' in the policy config; "
-            "policy-side diagnosis skipped.",
-            flush=True,
-        )
+    print_policy_diagnostic_plan(diagnostic_plan, policy_ref)
 
     engine = EvaluationRemediationEngine()
     healed_spec, healed_policy_path, meta = engine.remediate_and_heal(
@@ -502,31 +553,14 @@ def run_auto_heal(args_cli: argparse.Namespace) -> Path:
     print(f"[auto_heal] 🚀 Recommended rollout steps: {meta.get('recommended_steps', 2000)}", flush=True)
     print(f"[auto_heal] 📜 Lineage ledger updated at: {mgr.lineage_file}", flush=True)
 
-    # Emit the policy-side diagnosis as RDF next to the version snapshot. Written before the
-    # Neo4j attempt because it needs no server and should not be lost when Neo4j is unavailable.
-    if diagnostic_state is not None and diagnostic_plan is not None and diagnostic_plan.get("profile_known"):
-        try:
-            from isaaclab_arena.agentic_environment_generation.policy_capability_graph import (
-                get_policy_profile,
-            )
-            from isaaclab_arena.agentic_environment_generation.policy_diagnostics_sync import (
-                emit_policy_diagnostics_ttl,
-            )
-
-            profile = get_policy_profile(policy_ref)
-            if profile is not None:
-                ttl_path = emit_policy_diagnostics_ttl(
-                    out_path=str(new_v_dir / "policy_diagnostics.ttl"),
-                    env_name=spec.env_name,
-                    profile=profile,
-                    state=diagnostic_state,
-                    eval_run_id=f"{spec.env_name}_v{new_v}",
-                    next_technique_id=diagnostic_plan["next_diagnostic"],
-                    remediation_id=diagnostic_plan["recommended_remediation"],
-                )
-                print(f"[auto_heal] 🧠 Policy diagnostics graph written to: {ttl_path}", flush=True)
-        except Exception as exc:
-            print(f"[auto_heal] policy diagnostics RDF emission skipped: {exc}", flush=True)
+    emit_policy_diagnostics_artifacts(
+        spec_env_name=spec.env_name,
+        policy_ref=policy_ref,
+        diagnostic_state=diagnostic_state,
+        diagnostic_plan=diagnostic_plan,
+        out_dir=new_v_dir,
+        version=new_v,
+    )
 
     # Sync lineage derivation to Neo4j if available
     try:
@@ -541,29 +575,6 @@ def run_auto_heal(args_cli: argparse.Namespace) -> Path:
         print("[auto_heal] synced lineage derivation to Neo4j LPG.", flush=True)
     except Exception:
         pass
-
-    if diagnostic_state is not None and diagnostic_plan is not None and diagnostic_plan.get("profile_known"):
-        try:
-            from isaaclab_arena.agentic_environment_generation.policy_capability_graph import (
-                get_policy_profile,
-            )
-            from isaaclab_arena.agentic_environment_generation.policy_diagnostics_sync import (
-                sync_policy_diagnostics_to_neo4j,
-            )
-
-            profile = get_policy_profile(policy_ref)
-            if profile is not None:
-                sync_policy_diagnostics_to_neo4j(
-                    env_name=spec.env_name,
-                    profile=profile,
-                    state=diagnostic_state,
-                    eval_run_id=f"{spec.env_name}_v{new_v}",
-                    next_technique_id=diagnostic_plan["next_diagnostic"],
-                    remediation_id=diagnostic_plan["recommended_remediation"],
-                )
-                print("[auto_heal] synced policy diagnostics to Neo4j LPG.", flush=True)
-        except Exception:
-            pass
 
     return healed_spec_path
 
@@ -657,9 +668,9 @@ def build_env_from_env_graph_spec(env_graph_spec_path: Path, args_cli: argparse.
 
         critic = VisualSceneCritic()
         critic_result = critic.evaluate_scene_spec(loaded_env_graph_spec)
-        print(f"\n======================================================================", flush=True)
+        print("\n======================================================================", flush=True)
         print(f"  👁️  Preflight Visual Critic Inspection (Tier: {critic_result.tier_used})", flush=True)
-        print(f"======================================================================", flush=True)
+        print("======================================================================", flush=True)
         print(f"• Conforms:         {'✅ PASS' if critic_result.conforms else '⚠️ ANOMALIES DETECTED'}", flush=True)
         print(f"• Visibility Score: {critic_result.visibility_score:.1f} / 10.0", flush=True)
         if critic_result.occluded_objects:
@@ -672,7 +683,7 @@ def build_env_from_env_graph_spec(env_graph_spec_path: Path, args_cli: argparse.
                 print(f"  - {anom}", flush=True)
         if critic_result.actionable_feedback and not critic_result.conforms:
             print(f"• Actionable Advice: {critic_result.actionable_feedback}", flush=True)
-        print(f"======================================================================\n", flush=True)
+        print("======================================================================\n", flush=True)
     except Exception as exc:
         print(f"[runner] Preflight visual critic check skipped: {exc}", flush=True)
 

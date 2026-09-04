@@ -72,6 +72,7 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import torch  # noqa: E402
+
 import warp as wp  # noqa: E402
 
 # Bodies whose positions define the frames that manipulation-height invariants are expressed in.
@@ -84,9 +85,7 @@ def _build_env():
     from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
 
     if args_cli.env_graph_spec_yaml is not None:
-        from isaaclab_arena.environment_spec.arena_env_graph_conversion_utils import (
-            build_arena_env_from_graph_spec,
-        )
+        from isaaclab_arena.environment_spec.arena_env_graph_conversion_utils import build_arena_env_from_graph_spec
         from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
         spec_path = args_cli.env_graph_spec_yaml
@@ -179,11 +178,7 @@ def measure() -> dict:
 
         pelvis = _first("pelvis")
         left_shoulder = next(
-            (
-                (n, body_pos_w[i])
-                for i, n in enumerate(body_names)
-                if "shoulder" in n.lower() and "left" in n.lower()
-            ),
+            ((n, body_pos_w[i]) for i, n in enumerate(body_names) if "shoulder" in n.lower() and "left" in n.lower()),
             None,
         )
         derived: dict = {}

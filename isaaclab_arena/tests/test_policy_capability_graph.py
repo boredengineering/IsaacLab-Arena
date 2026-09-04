@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+
 import pytest
 import rdflib
 
@@ -43,6 +44,7 @@ from isaaclab_arena.agentic_environment_generation.policy_diagnostics_sync impor
     emit_technique_catalogue_rdf,
     query_blocking_shifts,
 )
+
 GN1X = "nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace"
 
 
@@ -281,9 +283,7 @@ def test_support_relation_resolves_from_a_named_shelf_tier():
 
 def test_support_relation_prefers_the_relation_over_an_explicit_pose():
     """Where both exist the relation wins, because the placer derives the pose from it."""
-    spec = _relational_spec(
-        "galileo_locomanip", sector="shelf_tier_1", object_pose=[0.0, 0.199, 0.7818]
-    )
+    spec = _relational_spec("galileo_locomanip", sector="shelf_tier_1", object_pose=[0.0, 0.199, 0.7818])
     support = resolve_support_relation(spec)
     assert support.height_source == "surface_sector"
     assert support.surface_z == pytest.approx(-0.03)
@@ -458,13 +458,9 @@ def test_shift_severity_drives_the_dominant_failure_mode():
     assert dominant[0] == "vision_domain_ood"
     assert state.beliefs["vision_domain_ood"] > FAILURE_MODES["vision_domain_ood"].prior
     # Height is in tolerance, so it must not have been raised at all.
-    assert state.beliefs["vertical_reach_ood"] == pytest.approx(
-        FAILURE_MODES["vertical_reach_ood"].prior
-    )
+    assert state.beliefs["vertical_reach_ood"] == pytest.approx(FAILURE_MODES["vertical_reach_ood"].prior)
     # Nothing observed bears on transport dynamics, so that prior must not have moved either.
-    assert state.beliefs["in_flight_slip_inertia"] == pytest.approx(
-        FAILURE_MODES["in_flight_slip_inertia"].prior
-    )
+    assert state.beliefs["in_flight_slip_inertia"] == pytest.approx(FAILURE_MODES["in_flight_slip_inertia"].prior)
 
 
 def test_refuting_evidence_lowers_belief():
@@ -543,13 +539,18 @@ def test_remediation_respects_the_scene_preserving_constraint():
     preserving = select_remediation(state, preserve_target_scene=True)
     assert preserving is not None
     assert preserving[0].preserves_target_scene is True
-    # With the visual domain dominant, the scene-preserving fix is to adapt the policy -- which is
-    # the direction chosen for this project.
-    assert preserving[0].technique_id == "visual_domain_randomization_finetune"
+    # With the visual domain dominant, the top scene-preserving fix is observation canonicalisation:
+    # it needs no GPU training, so it wins on cost-normalised score even at lower efficacy. The
+    # training-tier options remain in the ranking below it.
+    assert preserving[0].technique_id == "canonicalize_observation_domain"
 
     ranked = rank_remediations(state, preserve_target_scene=True)
+    ranked_ids = [technique.technique_id for technique, _ in ranked]
     assert all(technique.preserves_target_scene for technique, _ in ranked)
-    assert "collect_demos_and_finetune" in {technique.technique_id for technique, _ in ranked}
+    assert "visual_domain_randomization_finetune" in ranked_ids
+    assert "collect_demos_and_finetune" in ranked_ids
+    # Cheap-and-weak must not hide the expensive-and-strong; the ranking is the deliverable.
+    assert ranked_ids.index("canonicalize_observation_domain") < ranked_ids.index("collect_demos_and_finetune")
 
 
 def test_remediation_targets_the_dominant_mode():

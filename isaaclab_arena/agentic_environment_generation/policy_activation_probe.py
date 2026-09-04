@@ -52,9 +52,14 @@ STATIC_CHUNK_DISPLACEMENT = 1e-2
 # influencing the prediction any more than resampling the initial noise would.
 ABLATION_INSENSITIVE_RATIO = 0.5
 
-# Cosine distance from the corpus image-token centroid beyond which the observation is treated as
-# out of distribution in the representation the action head consumes.
-VL_EMBEDDING_OOD_DISTANCE = 0.35
+# Percentile of the corpus's own in-distribution score distribution above which an observation is
+# treated as out of distribution.
+#
+# This replaces a hardcoded cosine distance of 0.35, which was chosen a priori and was therefore
+# uninterpretable: a raw distance carries no information about whether it is unusual. The bank in
+# ``corpus_embedding_bank`` calibrates against a held-out slice of corpus frames, so the threshold
+# is measured rather than asserted.
+VL_EMBEDDING_OOD_PERCENTILE = 95.0
 
 
 @dataclass
@@ -121,7 +126,7 @@ class ProbeReport:
                     likelihood_ratio=4.0,
                     note=(
                         f"Image cross-attention blocks move the hidden state {ratio:.3f}x as much as "
-                        f"self-attention blocks."
+                        "self-attention blocks."
                     ),
                 )
             )
@@ -159,7 +164,7 @@ class ProbeReport:
                     likelihood_ratio=8.0,
                     note=(
                         f"Blanking the camera image moves the predicted chunk {vision_ratio:.3f}x as much "
-                        f"as resampling the initial noise. "
+                        "as resampling the initial noise. "
                         + (
                             "The policy is not conditioning on vision in this state."
                             if insensitive
@@ -183,26 +188,57 @@ class ProbeReport:
                     likelihood_ratio=4.0,
                     note=(
                         f"Swapping in the corpus instruction moves the predicted chunk {prompt_ratio:.3f}x "
-                        f"the noise floor."
+                        "the noise floor."
                     ),
                 )
             )
 
-        distance = self.vl_embedding_stats.get("cosine_distance_to_corpus_centroid")
-        if distance is not None:
-            ood = distance > VL_EMBEDDING_OOD_DISTANCE
+        # Prefer the calibrated bank verdict; fall back to the raw centroid distance only when no
+        # bank was supplied, and say so, because an uncalibrated distance is weak evidence.
+        bank_verdict = self.vl_embedding_stats.get("bank_is_ood")
+        if bank_verdict is not None:
+            ood = bank_verdict >= 1.0
+            percentiles = {
+                key: self.vl_embedding_stats.get(f"bank_{key}")
+                for key in ("mahalanobis_percentile", "knn_percentile", "knn_euclidean_percentile")
+            }
+            worst = max((v for v in percentiles.values() if v is not None), default=0.0)
             observations.append(
                 ProbeObservation(
-                    metric="cosine_distance_to_corpus_centroid",
-                    value=round(distance, 5),
-                    reference=VL_EMBEDDING_OOD_DISTANCE,
+                    metric="corpus_embedding_ood_percentile",
+                    value=round(worst, 3),
+                    reference=VL_EMBEDDING_OOD_PERCENTILE,
                     technique_id="vl_embedding_ood_distance",
                     supports=("vision_domain_ood",) if ood else (),
                     refutes=("vision_domain_ood",) if not ood else (),
-                    likelihood_ratio=5.0,
-                    note=f"Image-token embeddings sit {distance:.3f} cosine from the corpus centroid.",
+                    likelihood_ratio=6.0,
+                    note=(
+                        f"Image-token embedding sits at the {worst:.1f}th percentile of the corpus's "
+                        "own held-out score distribution (threshold "
+                        f"{VL_EMBEDDING_OOD_PERCENTILE:.0f}). Per-metric percentiles: {percentiles}."
+                    ),
                 )
             )
+        else:
+            distance = self.vl_embedding_stats.get("cosine_distance_to_corpus_centroid")
+            if distance is not None:
+                observations.append(
+                    ProbeObservation(
+                        metric="cosine_distance_to_corpus_centroid",
+                        value=round(distance, 5),
+                        reference=None,
+                        technique_id="vl_embedding_ood_distance",
+                        supports=(),
+                        refutes=(),
+                        likelihood_ratio=1.0,
+                        note=(
+                            f"Uncalibrated cosine distance {distance:.3f} to the corpus centroid. No "
+                            "bank was supplied, so this supports no conclusion: build one with "
+                            "corpus_embedding_bank.build_bank to get a percentile. Cosine is also "
+                            "blind to a purely radial shift."
+                        ),
+                    )
+                )
 
         return observations
 
@@ -282,17 +318,27 @@ class Gr00tActivationProbe:
     call made inside the context.
     """
 
-    def __init__(self, model: Any, corpus_image_centroid: Any | None = None):
+    def __init__(
+        self,
+        model: Any,
+        corpus_image_centroid: Any | None = None,
+        corpus_bank: Any | None = None,
+    ):
         """
         Args:
             model: A ``Gr00tN1d7`` module, or a wrapper exposing ``.model.action_head``.
             corpus_image_centroid: Optional 1-D tensor of mean image-token embeddings measured over
-                the training corpus. When supplied, the probe reports cosine distance to it.
+                the training corpus. When supplied, the probe reports cosine distance to it. Kept
+                for continuity; ``corpus_bank`` is the stronger option.
+            corpus_bank: Optional ``CorpusEmbeddingBank``. When supplied, the probe reports
+                Mahalanobis and kNN scores with percentiles calibrated against held-out corpus
+                frames, which is what makes an OOD verdict defensible rather than a bare distance.
         """
         self._model = model
         self._action_head = _resolve_action_head(model)
         self._backbone = _resolve_backbone(model)
         self._corpus_image_centroid = corpus_image_centroid
+        self._corpus_bank = corpus_bank
         self._handles: list[Any] = []
         self._block_sums: dict[int, float] = {}
         self._block_counts: dict[int, int] = {}
@@ -392,6 +438,20 @@ class Gr00tActivationProbe:
             self._vl_stats["image_token_activation_std"] = float(selected.std())
 
             pooled = selected.mean(dim=0)
+
+            if self._corpus_bank is not None:
+                try:
+                    scores = self._corpus_bank.score(pooled)
+                except Exception as exc:  # a scoring failure must not abort the rollout
+                    self._notes.append(f"corpus bank scoring failed: {type(exc).__name__}: {exc}")
+                else:
+                    for key, value in scores.to_dict().items():
+                        if value is not None:
+                            self._vl_stats[f"bank_{key}"] = float(value)
+                    verdict = scores.is_ood(VL_EMBEDDING_OOD_PERCENTILE)
+                    if verdict is not None:
+                        self._vl_stats["bank_is_ood"] = float(verdict)
+
             if self._corpus_image_centroid is not None:
                 centroid = self._corpus_image_centroid.to(device=pooled.device, dtype=pooled.dtype)
                 if centroid.shape == pooled.shape:
@@ -410,9 +470,11 @@ class Gr00tActivationProbe:
         deltas = [
             BlockConditioningDelta(
                 block_index=index,
-                role=_block_role(index, self._attend_text_every_n_blocks)
-                if self._uses_alternate_vl_dit
-                else "unclassified",
+                role=(
+                    _block_role(index, self._attend_text_every_n_blocks)
+                    if self._uses_alternate_vl_dit
+                    else "unclassified"
+                ),
                 mean_relative_delta=self._block_sums[index] / max(self._block_counts[index], 1),
                 call_count=self._block_counts[index],
             )

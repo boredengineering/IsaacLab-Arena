@@ -39,9 +39,8 @@ Run inside the GR00T image, which is where flash-attn is installed::
 from __future__ import annotations
 
 import os
-import traceback
-
 import torch
+import traceback
 
 # Real GR00T N1.7 action-head geometry (gr00t/configs/model/gr00t_n1d7.py:91-106).
 DIT_NUM_LAYERS = 16
@@ -113,8 +112,7 @@ def check_flash_attn() -> bool:
     print(f"flash_attn version    : {getattr(flash_attn, '__version__', 'unknown')}")
     # Qwen3-VL head dim, not the DiT's -- this path is the backbone's.
     q, k, v = (
-        torch.randn(BATCH, VL_SEQ_LEN, 8, 64, dtype=torch.bfloat16, device="cuda", requires_grad=True)
-        for _ in range(3)
+        torch.randn(BATCH, VL_SEQ_LEN, 8, 64, dtype=torch.bfloat16, device="cuda", requires_grad=True) for _ in range(3)
     )
     try:
         out = flash_attn_func(q, k, v, causal=True)
@@ -140,12 +138,22 @@ def check_sdpa_at_dit_shapes() -> bool:
     )
     for label, kv_len in shapes:
         q = torch.randn(
-            BATCH, DIT_NUM_HEADS, ACTION_SEQ_LEN, DIT_HEAD_DIM,
-            dtype=torch.bfloat16, device="cuda", requires_grad=True,
+            BATCH,
+            DIT_NUM_HEADS,
+            ACTION_SEQ_LEN,
+            DIT_HEAD_DIM,
+            dtype=torch.bfloat16,
+            device="cuda",
+            requires_grad=True,
         )
         k = torch.randn(
-            BATCH, DIT_NUM_HEADS, kv_len, DIT_HEAD_DIM,
-            dtype=torch.bfloat16, device="cuda", requires_grad=True,
+            BATCH,
+            DIT_NUM_HEADS,
+            kv_len,
+            DIT_HEAD_DIM,
+            dtype=torch.bfloat16,
+            device="cuda",
+            requires_grad=True,
         )
         v = torch.randn_like(k, requires_grad=True)
         try:
@@ -160,17 +168,21 @@ def check_sdpa_at_dit_shapes() -> bool:
 
     # Report which backends the dispatcher will actually consider for this shape.
     try:
-        from torch.backends.cuda import can_use_efficient_attention, can_use_flash_attention
-        from torch.backends.cuda import SDPAParams
+        from torch.backends.cuda import SDPAParams, can_use_efficient_attention, can_use_flash_attention
 
         params = SDPAParams(
             torch.randn(BATCH, DIT_NUM_HEADS, ACTION_SEQ_LEN, DIT_HEAD_DIM, dtype=torch.bfloat16, device="cuda"),
             torch.randn(BATCH, DIT_NUM_HEADS, VL_SEQ_LEN, DIT_HEAD_DIM, dtype=torch.bfloat16, device="cuda"),
             torch.randn(BATCH, DIT_NUM_HEADS, VL_SEQ_LEN, DIT_HEAD_DIM, dtype=torch.bfloat16, device="cuda"),
-            None, 0.0, False, False,
+            None,
+            0.0,
+            False,
+            False,
         )
-        print(f"   backend availability: flash={can_use_flash_attention(params)} "
-              f"mem_efficient={can_use_efficient_attention(params)}")
+        print(
+            f"   backend availability: flash={can_use_flash_attention(params)} "
+            f"mem_efficient={can_use_efficient_attention(params)}"
+        )
     except Exception as exc:
         print(f"   (backend introspection unavailable: {type(exc).__name__}: {exc})")
 

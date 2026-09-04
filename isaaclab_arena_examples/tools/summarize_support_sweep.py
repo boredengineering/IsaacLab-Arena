@@ -67,10 +67,109 @@ class ConditionSummary:
             "lift_rate": round(self.lift_rate, 4),
             "success_rate": round(self.success_rate, 4),
             "conversion_rate": round(self.conversion_rate, 4),
+            "success_ci95": [round(v, 4) for v in clopper_pearson(self.placed, self.episodes)],
+            "underpowered": self.episodes < MIN_EPISODES_FOR_COMPARISON,
             "manifold": self.manifold,
             "trustworthy": self.trustworthy,
             "notes": list(self.notes),
         }
+
+
+# ---------------------------------------------------------------------------
+# Statistics
+#
+# A success rate without an interval is not a result. At n=20 the Clopper-Pearson 95% interval
+# around an observed 90% spans +/-15.2 points, which is wider than most differences this project
+# has reported. And interval overlap is not a test: two intervals can overlap substantially while
+# a direct test still separates them, so pairwise comparisons use Fisher's exact test with a
+# Holm-Bonferroni correction rather than eyeballing error bars.
+# ---------------------------------------------------------------------------
+
+MIN_EPISODES_FOR_COMPARISON = 100
+"""Floor for any comparison this project reports. Two-sided Fisher exact at n=100/arm resolves a
+0.90-vs-0.70 difference (p<0.001) but not 0.90-vs-0.80 (p=0.073); at n=20 it resolves neither."""
+
+
+def clopper_pearson(successes: int, total: int, confidence: float = 0.95) -> tuple[float, float]:
+    """Return the exact binomial confidence interval for ``successes``/``total``.
+
+    Exact rather than normal-approximation because the approximation misbehaves at the small n and
+    extreme p this domain produces. Falls back to a conservative bound if scipy is unavailable.
+    """
+    if total <= 0:
+        return (0.0, 1.0)
+    alpha = 1.0 - confidence
+    try:
+        from scipy.stats import beta
+    except ImportError:
+        # Without scipy, report the widest honest bound rather than a wrong narrow one.
+        return (0.0, 1.0)
+    low = float(beta.ppf(alpha / 2, successes, total - successes + 1)) if successes > 0 else 0.0
+    high = float(beta.ppf(1 - alpha / 2, successes + 1, total - successes)) if successes < total else 1.0
+    return (low, high)
+
+
+def fisher_exact_two_sided(a: int, b: int, c: int, d: int) -> float:
+    """Two-sided Fisher exact p-value for the 2x2 table ``[[a, b], [c, d]]``.
+
+    Implemented directly so the tool has no hard scipy dependency: it sums the probability of every
+    table at least as extreme as the observed one under the hypergeometric null.
+    """
+    from math import comb
+
+    n = a + b + c + d
+    if n == 0:
+        return 1.0
+    row1, col1 = a + b, a + c
+
+    def probability(x: int) -> float:
+        return comb(row1, x) * comb(n - row1, col1 - x) / comb(n, col1)
+
+    observed = probability(a)
+    low = max(0, col1 - (n - row1))
+    high = min(row1, col1)
+    return min(1.0, sum(probability(x) for x in range(low, high + 1) if probability(x) <= observed + 1e-12))
+
+
+def holm_bonferroni(p_values: dict[tuple[str, str], float], alpha: float = 0.05) -> dict[tuple[str, str], bool]:
+    """Return which comparisons survive a Holm-Bonferroni correction at ``alpha``.
+
+    A sweep makes every pairwise comparison at once, so uncorrected p-values would find
+    "significant" differences by multiplicity alone.
+    """
+    ordered = sorted(p_values.items(), key=lambda kv: kv[1])
+    total = len(ordered)
+    significant: dict[tuple[str, str], bool] = {}
+    for index, (pair, p_value) in enumerate(ordered):
+        threshold = alpha / (total - index)
+        if p_value <= threshold and all(significant.get(prev[0], False) for prev in ordered[:index]):
+            significant[pair] = True
+        else:
+            significant[pair] = False
+    return significant
+
+
+def pairwise_comparisons(summaries: list[ConditionSummary], alpha: float = 0.05) -> list[dict]:
+    """Compare every trustworthy pair of conditions, corrected for multiplicity."""
+    usable = [s for s in summaries if s.trustworthy]
+    raw: dict[tuple[str, str], float] = {}
+    for i, first in enumerate(usable):
+        for second in usable[i + 1 :]:
+            raw[(first.label, second.label)] = fisher_exact_two_sided(
+                first.placed,
+                first.episodes - first.placed,
+                second.placed,
+                second.episodes - second.placed,
+            )
+    corrected = holm_bonferroni(raw, alpha=alpha)
+    return [
+        {
+            "pair": list(pair),
+            "p_value": round(p_value, 6),
+            "significant_holm": corrected[pair],
+        }
+        for pair, p_value in sorted(raw.items(), key=lambda kv: kv[1])
+    ]
 
 
 def summarize_condition(label: str, run_dir: Path, offset_m: float | None = None) -> ConditionSummary:
@@ -108,7 +207,7 @@ def summarize_condition(label: str, run_dir: Path, offset_m: float | None = None
     if false_success:
         notes.append(
             f"{false_success} episode(s) reported success with a zero progress score - this "
-            f"condition's numbers are not trustworthy"
+            "condition's numbers are not trustworthy"
         )
 
     return ConditionSummary(
@@ -195,34 +294,53 @@ def main() -> int:
     assert condition_dirs, f"no condition subdirectories under {args.sweep_root}"
 
     if args.offsets:
-        assert len(args.offsets) == len(condition_dirs), (
-            f"{len(args.offsets)} offsets for {len(condition_dirs)} conditions "
-            f"({[d.name for d in condition_dirs]})"
-        )
+        assert len(args.offsets) == len(
+            condition_dirs
+        ), f"{len(args.offsets)} offsets for {len(condition_dirs)} conditions ({[d.name for d in condition_dirs]})"
 
     summaries = [
-        summarize_condition(d.name, d, args.offsets[i] if args.offsets else None)
-        for i, d in enumerate(condition_dirs)
+        summarize_condition(d.name, d, args.offsets[i] if args.offsets else None) for i, d in enumerate(condition_dirs)
     ]
 
     print("\n" + "=" * 96)
     print(" SUPPORT-RELATION SWEEP")
     print("=" * 96)
-    header = f"{'condition':<26} {'offset':>8} {'N':>4} {'lift':>7} {'success':>8} {'conv':>7} {'false':>6}"
+    header = (
+        f"{'condition':<24} {'offset':>8} {'N':>5} {'lift':>7} {'success':>8} "
+        f"{'95% CI (Clopper-Pearson)':>26} {'false':>6}"
+    )
     print(header)
     print("-" * 96)
     for summary in summaries:
         offset = f"{summary.offset_m:+.3f}" if summary.offset_m is not None else "n/a"
-        flag = "" if summary.trustworthy else "  <-- UNTRUSTWORTHY"
+        low, high = clopper_pearson(summary.placed, summary.episodes)
+        ci = f"[{low:.3f}, {high:.3f}] +/-{100 * (high - low) / 2:.1f}pt"
+        flags = []
+        if not summary.trustworthy:
+            flags.append("UNTRUSTWORTHY")
+        if summary.episodes < MIN_EPISODES_FOR_COMPARISON:
+            flags.append(f"UNDERPOWERED(n<{MIN_EPISODES_FOR_COMPARISON})")
+        suffix = ("  <-- " + ", ".join(flags)) if flags else ""
         print(
-            f"{summary.label:<26} {offset:>8} {summary.episodes:>4} "
-            f"{summary.lift_rate:>6.1%} {summary.success_rate:>7.1%} "
-            f"{summary.conversion_rate:>6.1%} {summary.false_success:>6}{flag}"
+            f"{summary.label:<24} {offset:>8} {summary.episodes:>5} "
+            f"{summary.lift_rate:>6.1%} {summary.success_rate:>7.1%} {ci:>26} "
+            f"{summary.false_success:>6}{suffix}"
         )
     print("-" * 96)
     for summary in summaries:
         for note in summary.notes:
             print(f"  {summary.label}: {note}")
+
+    comparisons = pairwise_comparisons(summaries)
+    if comparisons:
+        print("\nPairwise comparisons (Fisher exact, Holm-Bonferroni corrected):")
+        for entry in comparisons:
+            verdict = "SIGNIFICANT" if entry["significant_holm"] else "not significant"
+            print(f"  {entry['pair'][0]} vs {entry['pair'][1]}: p={entry['p_value']:.5f}  {verdict}")
+        print(
+            "  Note: interval overlap is NOT a test. These p-values, not the CI overlap above,\n"
+            "  determine whether two conditions differ."
+        )
 
     estimate = estimate_tolerance(summaries, args.corpus_offset)
     print("\nTolerance estimate:")
@@ -234,7 +352,12 @@ def main() -> int:
         args.out_json.parent.mkdir(parents=True, exist_ok=True)
         args.out_json.write_text(
             json.dumps(
-                {"conditions": [s.to_dict() for s in summaries], "tolerance_estimate": estimate},
+                {
+                    "conditions": [s.to_dict() for s in summaries],
+                    "pairwise_comparisons": comparisons,
+                    "tolerance_estimate": estimate,
+                    "min_episodes_for_comparison": MIN_EPISODES_FOR_COMPARISON,
+                },
                 indent=2,
             ),
             encoding="utf-8",

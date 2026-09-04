@@ -16,9 +16,10 @@ every evaluation; the per-run parts hang off an ``arena:EvaluationRun`` node.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
+
 import rdflib
-from rdflib import Literal, Namespace, RDF, RDFS, XSD
+from rdflib import RDF, RDFS, XSD, Literal, Namespace
 
 from isaaclab_arena.agentic_environment_generation.policy_capability_graph import (
     DIAGNOSTIC_TECHNIQUES,
@@ -367,7 +368,7 @@ def emit_policy_diagnostics_ttl(
 # ---------------------------------------------------------------------------
 
 
-def sync_technique_catalogue_to_neo4j(driver: Optional[Any] = None) -> dict[str, Any]:
+def sync_technique_catalogue_to_neo4j(driver: Any | None = None) -> dict[str, Any]:
     """Mirror the static registries into Neo4j as an LPG.
 
     Catalogue nodes are global rather than per environment, so a Cypher query can compare which
@@ -513,7 +514,7 @@ def sync_policy_diagnostics_to_neo4j(
     eval_run_id: str = "policy_diagnostics_run",
     next_technique_id: str | None = None,
     remediation_id: str | None = None,
-    driver: Optional[Any] = None,
+    driver: Any | None = None,
 ) -> dict[str, Any]:
     """Mirror a policy, its corpus invariants, and one run's shifts and beliefs into Neo4j.
 

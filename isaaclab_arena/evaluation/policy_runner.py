@@ -257,8 +257,10 @@ class ReachTracer:
                 sensor = self._env.scene[self._contact_sensor_name]
                 force = torch.norm(wp.to_torch(sensor.data.force_matrix_w), dim=-1).reshape(-1)
                 row["contact_force"] = [round(v, 5) for v in force.tolist()]
-            except KeyError:
-                # No contact sensor for this task; the rest of the trace is still useful.
+            except Exception:
+                # Catch-all rather than KeyError alone: a sensor that exists but filters no prims
+                # leaves force_matrix_w as None, and wp.to_torch(None) raises. This is a purely
+                # diagnostic trace, so no failure reading it should abort the evaluation around it.
                 self._contact_sensor_name = None
         self._rows.append(json.dumps(row))
         self._step += 1
@@ -387,6 +389,34 @@ def rollout_policy(
         if hasattr(env.unwrapped.cfg, "metrics") and env.unwrapped.cfg.metrics is not None:
             return env.unwrapped.compute_metrics()
         return None
+
+
+def _resolve_telemetry_env_name(args_cli: argparse.Namespace) -> str:
+    """Resolve the environment name that evaluation telemetry is attached to.
+
+    The name is the join key between an evaluation run and its environment node in the graph, so a
+    generic fallback silently orphans the run. Registered example environments arrive under the
+    subparser destination ``example_environment`` rather than ``environment_name``, which is why
+    both are consulted before the graph-spec filename.
+
+    Args:
+        args_cli: Parsed evaluation arguments.
+
+    Returns:
+        The resolved name, or ``"arena_env"`` when no source identifies the environment.
+    """
+    for attr in ("environment_name", "example_environment"):
+        candidate = getattr(args_cli, attr, None)
+        if candidate and candidate != "arena_env":
+            return str(candidate)
+
+    yaml_arg = getattr(args_cli, "env_graph_spec_yaml", None)
+    if yaml_arg:
+        from pathlib import Path
+
+        return Path(yaml_arg).stem.replace("_env_graph", "")
+
+    return "arena_env"
 
 
 def list_variations(args_parser: argparse.ArgumentParser) -> None:
@@ -527,15 +557,7 @@ def main():
                 try:
                     from isaaclab_arena.evaluation.telemetry_to_prov import record_eval_telemetry_to_prov
 
-                    env_name = getattr(args_cli, "environment_name", None)
-                    if not env_name or env_name == "arena_env":
-                        yaml_arg = getattr(args_cli, "env_graph_spec_yaml", None)
-                        if yaml_arg:
-                            from pathlib import Path
-
-                            env_name = Path(yaml_arg).stem.replace("_env_graph", "")
-                        else:
-                            env_name = "arena_env"
+                    env_name = _resolve_telemetry_env_name(args_cli)
                     policy_name = getattr(args_cli, "policy_type", None)
                     plain_metrics = metrics_to_plain_python_types(metrics)
                     record_eval_telemetry_to_prov(

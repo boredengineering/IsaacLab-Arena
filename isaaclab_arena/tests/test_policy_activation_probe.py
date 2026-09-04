@@ -396,3 +396,89 @@ def test_without_a_bank_the_centroid_distance_supports_no_conclusion():
     assert observation.refutes == ()
     assert observation.likelihood_ratio == 1.0, "a neutral ratio leaves the prior untouched"
     assert "supports no conclusion" in observation.note
+
+
+class _NestedObsPolicy:
+    """A policy taking the nested, batched observation ``Gr00tPolicy.get_action`` requires.
+
+    ``parse_observation_gr00t`` groups leaves one level down (``{"video": {"ego_view": arr}}``)
+    rather than keying them flat, and returns the chunk as a numpy array inside a dict. Both
+    differences broke the probe in ways a flat-observation fixture cannot catch.
+    """
+
+    def __init__(self, vision_weight: float = 1.0, state_weight: float = 1.0):
+        self.vision_weight = vision_weight
+        self.state_weight = state_weight
+
+    def get_action(self, inputs, options=None):
+        import numpy as np
+
+        image = np.asarray(inputs["video"]["ego_view"], dtype=np.float64).reshape(-1)
+        weights = np.linspace(0.0, 1.0, image.size)
+        image_term = self.vision_weight * float((image * weights).mean())
+        state_term = self.state_weight * float(np.asarray(inputs["state"]["left_arm"]).mean())
+        ramp = np.linspace(0.0, 1.0, HORIZON).reshape(1, HORIZON, 1)
+        # Drawn through torch so the probe's own torch.manual_seed controls it. numpy's global RNG
+        # is not seeded by the probe, which would make every ablation delta here nondeterministic.
+        noise = torch.randn(1, HORIZON, ACTION_DIM).numpy()
+        chunk = ramp * (1.0 + image_term + state_term) + 0.01 * noise
+        return {"action_pred": chunk}
+
+
+def _nested_observation() -> dict:
+    import numpy as np
+
+    return {
+        "video": {"ego_view": np.linspace(0.0, 1.0, 4 * 4 * 3).reshape(1, 4, 4, 3)},
+        "state": {"left_arm": np.full((1, 5), 0.3)},
+        "language": {"annotation.human.task_description": [["pick up the red apple"]]},
+    }
+
+
+def test_nested_observations_are_ablated_not_silently_skipped():
+    """Regression: nested observations must be found, or every ratio is silently absent.
+
+    The probe's key matching was written for the flat ``video.x`` form, so against the nested form
+    that a real GR00T policy requires it located no image and no state, reported no ratios, and
+    looked like a clean run rather than a failed measurement.
+    """
+    result = measure_ablation_sensitivity(
+        _NestedObsPolicy(), _nested_observation(), corpus_instruction="move the apple to the plate", seed=0
+    )
+
+    assert "vision_ablation_ratio" in result, "nested image was not located"
+    assert "state_ablation_ratio" in result, "nested state was not located"
+    assert "prompt_ablation_ratio" in result, "nested instruction was not located"
+
+
+def test_state_ablation_separates_a_proprioceptive_policy_from_an_indifferent_one():
+    """Zeroing the state must move a state-conditioned policy and not a state-blind one."""
+    depends = measure_ablation_sensitivity(
+        _NestedObsPolicy(vision_weight=0.0, state_weight=40.0), _nested_observation(), seed=0
+    )
+    ignores = measure_ablation_sensitivity(
+        _NestedObsPolicy(vision_weight=0.0, state_weight=0.0), _nested_observation(), seed=0
+    )
+
+    assert depends["state_ablation_ratio"] > ignores["state_ablation_ratio"]
+    assert ignores["state_ablation_ratio"] < 1.0
+
+
+def test_prompt_swap_preserves_the_nesting_the_policy_validates():
+    """The instruction must be replaced inside its container, not have the container overwritten.
+
+    ``Gr00tPolicy.check_observation`` asserts that ``language`` is a dict, so assigning a bare
+    string over it raises before any delta can be measured.
+    """
+    from isaaclab_arena.agentic_environment_generation.policy_activation_probe import _swap_text
+
+    assert _swap_text([["old text"]], "new") == [["new"]]
+    assert _swap_text(["a", "b"], "new") == ["new", "new"]
+    assert _swap_text("old", "new") == "new"
+    assert _swap_text(object(), "new") is None, "unknown containers must be reported as unhandled"
+
+
+def test_chunk_is_read_from_a_dict_holding_an_array():
+    """Regression: selecting the chunk with `or` raises on any array with more than one element."""
+    chunk = measure_action_chunk_dynamics(_NestedObsPolicy(), _nested_observation(), seed=0)
+    assert chunk, "a dict-returning policy must yield chunk dynamics rather than raising"

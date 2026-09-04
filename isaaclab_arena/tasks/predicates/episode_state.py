@@ -36,6 +36,8 @@ class EpisodeScopedState:
         self._latches: dict[str, torch.Tensor] = {}
         self._minima: dict[str, torch.Tensor] = {}
         self._runs: dict[str, torch.Tensor] = {}
+        self._run_steps: dict[str, torch.Tensor] = {}
+        """Per-run-key episode step at which that run last advanced, keeping run_length idempotent."""
         self._last_step = torch.full((num_envs,), -1, dtype=torch.long, device=device)
 
     def sync_episode_boundary(self, episode_step: torch.Tensor | None) -> None:
@@ -58,6 +60,8 @@ class EpisodeScopedState:
             minimum[restarted] = float("inf")
         for run in self._runs.values():
             run[restarted] = 0
+        for counted_at in self._run_steps.values():
+            counted_at[restarted] = -1
 
     def latch(self, key: str, num_stages: int, stage: int, satisfied: torch.Tensor) -> torch.Tensor:
         """Latch ``stage`` True where ``satisfied``, and return the latched mask for that stage.
@@ -72,19 +76,32 @@ class EpisodeScopedState:
         return latched[stage]
 
     def run_length(self, key: str, holding: torch.Tensor) -> torch.Tensor:
-        """Return the number of consecutive calls for which ``holding`` has been true per env.
+        """Return the number of consecutive *steps* for which ``holding`` has been true per env.
 
         Resets to zero the moment ``holding`` goes false, so it measures a *sustained* condition.
         A momentary one -- an object at zero velocity for the single step before gravity acts on it
         -- never accumulates.
+
+        Advances at most once per env per step. Counting calls instead would make the result
+        depend on how many places evaluate the predicate, so wiring the same predicate into both a
+        termination gate and a progress objective would silently halve the steps any
+        ``min_*_steps`` threshold demands.
         """
         run = self._runs.get(key)
         if run is None:
             run = torch.zeros(self._num_envs, dtype=torch.long, device=self._device)
             self._runs[key] = run
+        counted_at = self._run_steps.get(key)
+        if counted_at is None:
+            counted_at = torch.full((self._num_envs,), -1, dtype=torch.long, device=self._device)
+            self._run_steps[key] = counted_at
+
         holding = holding.to(device=self._device, dtype=torch.bool)
-        run = torch.where(holding, run + 1, torch.zeros_like(run))
+        fresh = counted_at != self._last_step
+        advanced = torch.where(holding, run + 1, torch.zeros_like(run))
+        run = torch.where(fresh, advanced, run)
         self._runs[key] = run
+        self._run_steps[key] = torch.where(fresh, self._last_step, counted_at)
         return run
 
     def running_min(self, key: str, values: torch.Tensor) -> torch.Tensor:

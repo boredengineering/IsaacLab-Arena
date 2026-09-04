@@ -1,4 +1,7 @@
-version: '3.8'
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
 
 services:
   # ----------------------------------------------------------------------------
@@ -36,7 +39,36 @@ services:
       --port ${GR00T_PORT:-5556}
 
   # ----------------------------------------------------------------------------
-  # 2. IsaacLab-Arena Simulation Engine
+  # 2. Neo4j Labeled Property Graph (experience memory)
+  # ----------------------------------------------------------------------------
+  # Backs isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync: generated environment
+  # graphs are written here, evaluation telemetry is attached to them, and graph_rag reads the
+  # result back as generative priors. Evaluation degrades gracefully when this is down, so it is
+  # not a hard dependency -- but with it down the graph silently stops learning from evaluations.
+  #
+  # Published on the default Bolt/HTTP ports so the host-network services reach it at
+  # localhost:7687 with no NEO4J_URI override. Do not address it by Docker bridge IP: that is
+  # assigned in start order and changes whenever containers are recreated.
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: neo4j-arena-compose
+    ports:
+      - "${NEO4J_HTTP_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-isaaclab_arena_password}
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-isaaclab_arena_password} 'RETURN 1' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  # ----------------------------------------------------------------------------
+  # 3. IsaacLab-Arena Simulation Engine
   # ----------------------------------------------------------------------------
   isaaclab-arena:
     image: isaaclab_arena:latest
@@ -44,6 +76,10 @@ services:
     network_mode: host
     ipc: host
     privileged: true
+    # Deliberately no depends_on for neo4j. The graph is an experience memory, not a dependency:
+    # lpg_neo4j_sync fails soft and evaluation continues without it. A service_healthy condition
+    # would invert that, refusing to start the simulator whenever the database is unhealthy or its
+    # image cannot be pulled. Start neo4j alongside for the loop to close; do not gate on it.
     ulimits:
       memlock: -1
       stack: 67108864
@@ -52,6 +88,9 @@ services:
       - ACCEPT_EULA=Y
       - PRIVACY_CONSENT=Y
       - ISAACLAB_PATH=/workspaces/isaaclab_arena/submodules/IsaacLab
+      - NEO4J_URI=${NEO4J_URI:-bolt://localhost:7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-isaaclab_arena_password}
     volumes:
       - ..:/workspaces/isaaclab_arena
       - ${HOME}/datasets:/datasets
@@ -63,3 +102,7 @@ services:
     stdin_open: true
     tty: true
     command: /bin/bash
+
+volumes:
+  neo4j-data:
+  neo4j-logs:

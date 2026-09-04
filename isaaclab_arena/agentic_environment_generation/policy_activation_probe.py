@@ -509,7 +509,11 @@ def _predict_chunk(model: Any, observation: dict[str, Any], seed: int) -> Any:
 
     chunk = getattr(output, "action_pred", None)
     if chunk is None and isinstance(output, dict):
-        chunk = output.get("action_pred") or output.get("action")
+        # Checked with `is None` rather than `or`: these values are arrays, and `or` would evaluate
+        # their truth value, which raises for anything with more than one element.
+        chunk = output.get("action_pred")
+        if chunk is None:
+            chunk = output.get("action")
     assert chunk is not None, "Model output carries no 'action_pred'; cannot measure chunk dynamics."
 
     if not torch.is_tensor(chunk):
@@ -553,13 +557,79 @@ def measure_action_chunk_dynamics(model: Any, observation: dict[str, Any], seed:
         }
 
 
-def _find_image_keys(observation: dict[str, Any]) -> list[str]:
-    """Return the observation keys that carry camera frames."""
-    return [
-        key
-        for key in observation
-        if key.startswith("video.") or "image" in key.lower() or "cam" in key.lower() or key == "vlm_content"
-    ]
+def _modality_entries(observation: dict[str, Any], matches: Any) -> list[tuple[dict[str, Any], str]]:
+    """Return ``(container, key)`` pairs for observation values belonging to one modality.
+
+    Observations come in two shapes and both must work. The flat shape keys leaves directly
+    (``{"video.ego_view": arr}``); the nested, batched shape that ``Gr00tPolicy.get_action``
+    requires groups them one level down (``{"video": {"ego_view": arr}}``). Returning the owning
+    container alongside the key lets callers mutate a leaf without caring which shape they got.
+
+    Args:
+        observation: The observation to inspect.
+        matches: Predicate applied to each top-level key.
+
+    Returns:
+        One pair per mutable leaf, empty when the modality is absent.
+    """
+    entries: list[tuple[dict[str, Any], str]] = []
+    for key, value in observation.items():
+        if not matches(key):
+            continue
+        if isinstance(value, dict):
+            entries.extend((value, sub_key) for sub_key in value)
+        else:
+            entries.append((observation, key))
+    return entries
+
+
+def _is_image_key(key: str) -> bool:
+    """Whether a top-level observation key carries camera frames."""
+    lowered = key.lower()
+    return key in ("video", "vlm_content") or key.startswith("video.") or "image" in lowered or "cam" in lowered
+
+
+def _is_state_key(key: str) -> bool:
+    """Whether a top-level observation key carries proprioceptive state."""
+    return key == "state" or key.startswith("state.")
+
+
+def _is_language_key(key: str) -> bool:
+    """Whether a top-level observation key carries the task instruction."""
+    lowered = key.lower()
+    return key == "language" or "instruction" in lowered or "annotation" in lowered
+
+
+def _zero_like(value: Any) -> Any:
+    """Return ``value`` with every element set to zero, or None if it is not an array."""
+    import torch
+
+    if torch.is_tensor(value):
+        return torch.zeros_like(value)
+
+    if hasattr(value, "shape") and hasattr(value, "dtype"):
+        try:
+            import numpy as np
+
+            return np.zeros_like(np.asarray(value))
+        except ImportError:
+            return None
+
+    return None
+
+
+def _swap_text(value: Any, replacement: str) -> Any:
+    """Return ``value`` with every contained string replaced, preserving its nesting.
+
+    Instructions reach the policy variously as a bare string, a per-batch list, or the doubly
+    nested ``[[text]]`` that batching produces. Substituting the text in place rather than
+    overwriting the container keeps the observation the shape the policy validates against.
+    """
+    if isinstance(value, str):
+        return replacement
+    if isinstance(value, list):
+        return [_swap_text(item, replacement) for item in value]
+    return None
 
 
 def _scramble(value: Any, seed: int) -> Any:
@@ -617,8 +687,10 @@ def measure_ablation_sensitivity(
         alternate_seed: Second seed used to establish the sampling-noise floor.
 
     Returns:
-        Raw deltas, the noise floor, and each delta as a multiple of that floor. Ratios are absent
-        when the corresponding input could not be located in the observation.
+        Raw deltas, the noise floor, and each delta as a multiple of that floor, for the image
+        (spatially scrambled), the proprioceptive state (zeroed), and the instruction (swapped for
+        ``corpus_instruction``). Ratios are absent when the corresponding input could not be
+        located in the observation.
     """
     import torch
 
@@ -630,36 +702,35 @@ def measure_ablation_sensitivity(
     results: dict[str, float] = {"sampling_noise_floor": noise_floor}
     denominator = max(noise_floor, 1e-6)
 
-    image_keys = _find_image_keys(observation)
-    if image_keys:
+    def _run_ablation(name: str, matches: Any, transform: Any) -> None:
+        """Apply ``transform`` to every leaf of one modality and record the resulting delta."""
         ablated = copy.deepcopy(observation)
-        ablated_any = False
-        for key in image_keys:
-            scrambled = _scramble(ablated[key], seed)
-            if scrambled is not None:
-                ablated[key] = scrambled
-                ablated_any = True
-        if ablated_any:
-            ablated_chunk = _predict_chunk(model, ablated, seed)
-            with torch.no_grad():
-                delta = float(torch.linalg.vector_norm(baseline - ablated_chunk))
-            results["vision_ablation_delta"] = delta
-            results["vision_ablation_ratio"] = delta / denominator
+        entries = _modality_entries(ablated, matches)
+        mutated = False
+        for container, key in entries:
+            replacement = transform(container[key])
+            if replacement is not None:
+                container[key] = replacement
+                mutated = True
+        if not mutated:
+            return
+        ablated_chunk = _predict_chunk(model, ablated, seed)
+        with torch.no_grad():
+            delta = float(torch.linalg.vector_norm(baseline - ablated_chunk))
+        results[f"{name}_delta"] = delta
+        results[f"{name}_ratio"] = delta / denominator
+
+    _run_ablation("vision_ablation", _is_image_key, lambda value: _scramble(value, seed))
+
+    # State is zeroed rather than permuted: joint angles have no spatial layout to destroy, so a
+    # permutation would still hand the policy a plausible posture. Zeroing removes the
+    # proprioceptive signal outright. Read this against vision_ablation_ratio -- a policy whose
+    # chunk barely moves without the image but collapses without the state is riding a
+    # proprioceptive shortcut, which is the failure no photometric alignment can fix.
+    _run_ablation("state_ablation", _is_state_key, _zero_like)
 
     if corpus_instruction is not None:
-        swapped = copy.deepcopy(observation)
-        instruction_keys = [
-            key for key in swapped if "instruction" in key.lower() or "annotation" in key.lower() or key == "language"
-        ]
-        for key in instruction_keys:
-            current = swapped[key]
-            swapped[key] = [corpus_instruction] * len(current) if isinstance(current, list) else corpus_instruction
-        if instruction_keys:
-            swapped_chunk = _predict_chunk(model, swapped, seed)
-            with torch.no_grad():
-                delta = float(torch.linalg.vector_norm(baseline - swapped_chunk))
-            results["prompt_ablation_delta"] = delta
-            results["prompt_ablation_ratio"] = delta / denominator
+        _run_ablation("prompt_ablation", _is_language_key, lambda value: _swap_text(value, corpus_instruction))
 
     return results
 

@@ -53,6 +53,15 @@ parser.add_argument(
     help="Embodiment override for --example_environment. The 50-D joint backend by default.",
 )
 parser.add_argument(
+    "--placement_seed",
+    type=int,
+    default=None,
+    help=(
+        "Seed for object placement. Without it, objects are sampled from the unseeded global RNG "
+        "and the measured layout differs on every run."
+    ),
+)
+parser.add_argument(
     "--settle_steps",
     type=int,
     default=60,
@@ -79,8 +88,13 @@ import warp as wp  # noqa: E402
 _FRAME_BODY_MARKERS = ("pelvis", "shoulder", "wrist", "torso", "waist", "elbow")
 
 
-def _build_env():
-    """Build either a graph-spec environment or a registered example environment."""
+def _build_env(placement_seed: int | None = None):
+    """Build either a graph-spec environment or a registered example environment.
+
+    Args:
+        placement_seed: Seed for object placement. None samples from the unseeded global RNG,
+            which makes the measured layout differ on every run.
+    """
     from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
     from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
 
@@ -108,7 +122,7 @@ def _build_env():
         arena_env = factory.build(cfg)
         label = f"{args_cli.example_environment}[{args_cli.embodiment}]"
 
-    builder = ArenaEnvBuilder(arena_env, cfg=ArenaEnvBuilderCfg(num_envs=1))
+    builder = ArenaEnvBuilder(arena_env, cfg=ArenaEnvBuilderCfg(num_envs=1, placement_seed=placement_seed))
     return builder.make_registered(), label
 
 
@@ -147,7 +161,7 @@ def _world_extent(prim_path: str) -> list[float] | None:
 
 def measure() -> dict:
     """Settle the scene, then report frame and support positions with derived offsets."""
-    env, label = _build_env()
+    env, label = _build_env(args_cli.placement_seed)
     env.reset()
 
     try:

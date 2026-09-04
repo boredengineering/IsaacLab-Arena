@@ -5,25 +5,40 @@
 
 """Labeled Property Graph (LPG) synchronizer for IsaacLab-Arena environments using Neo4j and Cypher."""
 
-import os
-from typing import Any, Dict, List, Optional
-import neo4j
+from __future__ import annotations
 
-from isaaclab_arena.environment_spec.arena_env_graph_spec import (
-    ArenaEnvGraphSpec,
-    AssetSpec,
-    SpatialRelationSpec,
-    TaskSpec,
-)
+import os
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import neo4j
+
+from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
 
 def get_neo4j_driver(
-    uri: Optional[str] = None,
-    user: Optional[str] = None,
-    password: Optional[str] = None,
+    uri: str | None = None,
+    user: str | None = None,
+    password: str | None = None,
 ) -> neo4j.Driver:
-    """Creates a Neo4j driver using environment variables or provided credentials."""
-    uri = uri or os.environ.get("NEO4J_URI", "bolt://172.17.0.2:7687")
+    """Creates a Neo4j driver using environment variables or provided credentials.
+
+    The default targets a Bolt endpoint on the local host. Set ``NEO4J_URI`` whenever the
+    database is not there -- notably when it is published on a non-default port, or reached by
+    its Docker bridge address. A bridge IP is assigned in start order and changes when
+    containers are recreated, so it is never a safe default.
+
+    Args:
+        uri: Bolt URI; falls back to ``NEO4J_URI``, then to the local default.
+        user: Username; falls back to ``NEO4J_USER``.
+        password: Password; falls back to ``NEO4J_PASSWORD``.
+    """
+    # Imported here rather than at module scope so that every caller of this module stays
+    # importable without the driver installed. Environments that only run simulation do not
+    # ship it, and a hard top-level import made them fail at collection time.
+    import neo4j
+
+    uri = uri or os.environ.get("NEO4J_URI", "bolt://localhost:7687")
     user = user or os.environ.get("NEO4J_USER", "neo4j")
     password = password or os.environ.get("NEO4J_PASSWORD", "isaaclab_arena_password")
     return neo4j.GraphDatabase.driver(uri, auth=(user, password))
@@ -31,11 +46,11 @@ def get_neo4j_driver(
 
 def sync_spec_to_neo4j(
     spec: ArenaEnvGraphSpec,
-    driver: Optional[neo4j.Driver] = None,
-    telemetry: Optional[Any] = None,
-    parent_env_name: Optional[str] = None,
-    derivation_feedback: Optional[str] = None,
-) -> Dict[str, Any]:
+    driver: neo4j.Driver | None = None,
+    telemetry: Any | None = None,
+    parent_env_name: str | None = None,
+    derivation_feedback: str | None = None,
+) -> dict[str, Any]:
     """Synchronizes an ArenaEnvGraphSpec into Neo4j as a Labeled Property Graph (LPG).
 
     Args:
@@ -144,7 +159,11 @@ def sync_spec_to_neo4j(
 
             # 4. Merge Objects & Furniture
             for obj in spec.objects:
-                label = "Fixture:Furniture" if "table" in obj.registry_name or "shelf" in obj.registry_name or "rack" in obj.registry_name else ("RigidObject:Receptacle" if "bin" in obj.registry_name else "RigidObject")
+                label = (
+                    "Fixture:Furniture"
+                    if "table" in obj.registry_name or "shelf" in obj.registry_name or "rack" in obj.registry_name
+                    else ("RigidObject:Receptacle" if "bin" in obj.registry_name else "RigidObject")
+                )
                 session.run(
                     f"""
                     MATCH (e:EnvironmentGraph {{name: $env_name}})
@@ -344,8 +363,8 @@ def sync_spec_to_neo4j(
 
 def query_reified_relations(
     env_name: str,
-    driver: Optional[neo4j.Driver] = None,
-) -> List[Dict[str, Any]]:
+    driver: neo4j.Driver | None = None,
+) -> list[dict[str, Any]]:
     """Queries all active reified relation factor nodes for an environment in Neo4j."""
     owns_driver = False
     if driver is None:
@@ -379,8 +398,8 @@ def query_reified_relations(
 
 def query_spatial_hierarchy(
     env_name: str,
-    driver: Optional[neo4j.Driver] = None,
-) -> List[Dict[str, Any]]:
+    driver: neo4j.Driver | None = None,
+) -> list[dict[str, Any]]:
     """Queries the hierarchical containment and placement chains in Neo4j."""
     owns_driver = False
     if driver is None:
@@ -410,8 +429,8 @@ def query_spatial_hierarchy(
 
 def sync_eval_telemetry_to_neo4j(
     ttl_path: str,
-    driver: Optional[neo4j.Driver] = None,
-) -> Dict[str, Any]:
+    driver: neo4j.Driver | None = None,
+) -> dict[str, Any]:
     """Ingests a W3C PROV-O eval_telemetry.ttl file into Neo4j."""
     import rdflib
     from rdflib import RDF, Namespace

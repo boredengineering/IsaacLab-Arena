@@ -1,0 +1,102 @@
+{
+  "model_path": "/models/isaaclab_arena/static_apple_tutorial/gn1x_tuned_static_apple",
+  "dataset_path": "/datasets/isaaclab_arena/static_apple_tutorial/lerobot",
+  "traj_id": 2,
+  "steps_probed": [
+    0,
+    20,
+    40,
+    60,
+    80,
+    100,
+    120,
+    140
+  ],
+  "mean_vision_ablation_ratio": 11.449270732443994,
+  "mean_state_ablation_ratio": 4.783282007450423,
+  "mean_prompt_ablation_ratio": 1.0497925096502914,
+  "mean_sampling_noise_floor": 2.7421752251684666,
+  "per_step": [
+    {
+      "sampling_noise_floor": 2.1411900520324707,
+      "vision_ablation_delta": 5.749144554138184,
+      "vision_ablation_ratio": 2.6850230079674398,
+      "state_ablation_delta": 6.892398357391357,
+      "state_ablation_ratio": 3.218956837039721,
+      "prompt_ablation_delta": 0.5830858945846558,
+      "prompt_ablation_ratio": 0.2723186080708605,
+      "step": 0
+    },
+    {
+      "sampling_noise_floor": 3.71699857711792,
+      "vision_ablation_delta": 0.8967644572257996,
+      "vision_ablation_ratio": 0.24126037140458936,
+      "state_ablation_delta": 9.825481414794922,
+      "state_ablation_ratio": 2.6433912230371064,
+      "prompt_ablation_delta": 0.423541396856308,
+      "prompt_ablation_ratio": 0.1139471506563537,
+      "step": 20
+    },
+    {
+      "sampling_noise_floor": 2.1636176109313965,
+      "vision_ablation_delta": 8.900801658630371,
+      "vision_ablation_ratio": 4.113851548286642,
+      "state_ablation_delta": 7.23681640625,
+      "state_ablation_ratio": 3.344776068417509,
+      "prompt_ablation_delta": 2.8064370155334473,
+      "prompt_ablation_ratio": 1.2971039805528894,
+      "step": 40
+    },
+    {
+      "sampling_noise_floor": 4.66854190826416,
+      "vision_ablation_delta": 11.811837196350098,
+      "vision_ablation_ratio": 2.5300912851271655,
+      "state_ablation_delta": 5.868222713470459,
+      "state_ablation_ratio": 1.2569711975986866,
+      "prompt_ablation_delta": 4.473750114440918,
+      "prompt_ablation_ratio": 0.9582756677243434,
+      "step": 60
+    },
+    {
+      "sampling_noise_floor": 0.4117732048034668,
+      "vision_ablation_delta": 13.76402473449707,
+      "vision_ablation_ratio": 33.42622728709711,
+      "state_ablation_delta": 3.2690374851226807,
+      "state_ablation_ratio": 7.938927173959615,
+      "prompt_ablation_delta": 0.9269888401031494,
+      "prompt_ablation_ratio": 2.2512121461268646,
+      "step": 80
+    },
+    {
+      "sampling_noise_floor": 0.32148364186286926,
+      "vision_ablation_delta": 13.823506355285645,
+      "vision_ablation_ratio": 42.999097170804546,
+      "state_ablation_delta": 5.255948066711426,
+      "state_ablation_ratio": 16.34903734527613,
+      "prompt_ablation_delta": 0.9083781242370605,
+      "prompt_ablation_ratio": 2.825581167904445,
+      "step": 100
+    },
+    {
+      "sampling_noise_floor": 3.716543197631836,
+      "vision_ablation_delta": 12.793484687805176,
+      "vision_ablation_ratio": 3.442307544267782,
+      "state_ablation_delta": 7.420053005218506,
+      "state_ablation_ratio": 1.996493141784691,
+      "prompt_ablation_delta": 2.19317626953125,
+      "prompt_ablation_ratio": 0.5901118735627052,
+      "step": 120
+    },
+    {
+      "sampling_noise_floor": 4.797253608703613,
+      "vision_ablation_delta": 10.344354629516602,
+      "vision_ablation_ratio": 2.156307644596678,
+      "state_ablation_delta": 7.280806541442871,
+      "state_ablation_ratio": 1.5177030724899285,
+      "prompt_ablation_delta": 0.43074291944503784,
+      "prompt_ablation_ratio": 0.08978948260386838,
+      "step": 140
+    }
+  ],
+  "verdict": "vision IS load-bearing. The fault is in what vision encodes for this scene, so photometric/appearance alignment is worth trying before a re-finetune."
+}

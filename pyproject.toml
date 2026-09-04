@@ -24,6 +24,13 @@ dependencies = [
     # HDF5 -> LeRobot conversion (isaaclab_arena_gr00t.lerobot.convert_hdf5_to_lerobot), imported at module level.
     # Pinned to 2.2.3 to match the version used in GR00T.
     "pandas==2.2.3",
+    # USD stage introspection (isaaclab_arena.agentic_environment_generation.usd_stage_introspection),
+    # imported at module level.
+    "shapely",
+    # Neo4j LPG experience memory (isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync).
+    # Imported lazily so simulation-only environments stay importable without it, but evaluation
+    # writes its telemetry into the graph, so the evaluation image needs it present.
+    "neo4j",
 ]
 
 [project.optional-dependencies]

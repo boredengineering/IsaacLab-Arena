@@ -25,7 +25,6 @@ from isaaclab_arena.progress_tracking.progress_objective import ProgressObjectiv
 from isaaclab_arena.tasks.common.mimic_default_params import MIMIC_DATAGEN_CONFIG_DEFAULTS
 from isaaclab_arena.tasks.predicates.object_settling import objects_settled
 from isaaclab_arena.tasks.predicates.spatial import (
-    object_is_above_height,
     object_lifted_above_resting_min,
     object_on_destination,
     objects_in_proximity,
@@ -230,10 +229,16 @@ class PickAndPlaceTask(TaskBase):
                 objects_settled,
                 object_names=settle_object_names,
             ),
+            # These must stay identical to the termination gate's stages above. When the progress
+            # funnel scores a weaker condition than the gate, its stages latch on events the gate
+            # rejects, and the run reports a high overall_score alongside success=False -- which
+            # reads as a scoring bug rather than the two metrics measuring different things. It
+            # also makes the ``success and overall_score <= 0`` false-success detector unreachable.
             partial(
-                object_is_above_height,
+                object_lifted_above_resting_min,
                 object_name=self.pick_up_object.name,
-                use_settled_state=True,
+                distance=self.min_lift_height,
+                min_airborne_steps=self.min_airborne_steps,
             ),
             partial(
                 object_on_destination,
@@ -241,6 +246,8 @@ class PickAndPlaceTask(TaskBase):
                 contact_sensor_cfg=SceneEntityCfg(self.contact_sensor_name),
                 force_threshold=self.force_threshold,
                 velocity_threshold=self.velocity_threshold,
+                destination_cfg=SceneEntityCfg(self.destination_location.name),
+                max_xy_separation=self.max_destination_xy_separation,
             ),
         ]
         if self.max_separation is not None:

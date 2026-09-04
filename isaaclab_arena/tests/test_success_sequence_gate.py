@@ -188,6 +188,48 @@ def _test_repeated_evaluation_within_one_step_is_stable(simulation_app) -> bool:
     return True
 
 
+def _test_run_length_counts_steps_not_calls(simulation_app) -> bool:
+    """A sustained-condition counter must not depend on how often the predicate is evaluated.
+
+    Regression: ``run_length`` incremented per call, so wiring one predicate into both the
+    termination gate and a progress objective halved the steps its ``min_*_steps`` threshold
+    actually demanded.
+    """
+    import torch
+
+    from isaaclab_arena.tasks.predicates.episode_state import get_episode_scoped_state
+
+    try:
+        env = _MockEnv(num_envs=1)
+        holding = torch.tensor([True])
+
+        # Two evaluations inside one step must agree.
+        first = int(get_episode_scoped_state(env).run_length("k", holding)[0])
+        second = int(get_episode_scoped_state(env).run_length("k", holding)[0])
+        assert first == second == 1, f"not idempotent within a step: {first} then {second}"
+
+        # Four steps, evaluated twice each, must count four -- not eight.
+        for _ in range(3):
+            env.step()
+            get_episode_scoped_state(env).run_length("k", holding)
+            get_episode_scoped_state(env).run_length("k", holding)
+        run = int(get_episode_scoped_state(env).run_length("k", holding)[0])
+        assert run == 4, f"expected 4 steps counted, got {run}"
+
+        # Losing the condition resets the run.
+        env.step()
+        assert int(get_episode_scoped_state(env).run_length("k", torch.tensor([False]))[0]) == 0
+
+        # A restart must not be blocked by the previous episode's step bookkeeping.
+        env.reset()
+        assert int(get_episode_scoped_state(env).run_length("k", holding)[0]) == 1
+    except Exception as e:
+        print(f"Error: {e}")
+        traceback.print_exc()
+        return False
+    return True
+
+
 def _test_running_min_tracks_resting_height(simulation_app) -> bool:
     """The running minimum follows an object down and holds while it is lifted."""
     import torch
@@ -376,17 +418,25 @@ def _test_contact_without_proximity_is_not_a_placement(simulation_app) -> bool:
     """
     import torch
 
+    import warp as wp
     from isaaclab.managers import SceneEntityCfg
 
     from isaaclab_arena.tasks.predicates import spatial
 
     class _Data:
+        """Scene data holding warp arrays, which is what the predicates read through wp.to_torch.
+
+        Plain torch tensors do not work here: ``wp.to_torch`` inspects ``.device.is_cpu``, which a
+        ``torch.device`` does not have, so a tensor-backed mock fails inside Isaac Lab rather than
+        in the predicate under test.
+        """
+
         def __init__(self, pos, vel=None, force=None):
-            self.root_pos_w = torch.tensor(pos)
+            self.root_pos_w = wp.from_torch(torch.tensor(pos, dtype=torch.float32))
             if vel is not None:
-                self.root_lin_vel_w = torch.tensor(vel)
+                self.root_lin_vel_w = wp.from_torch(torch.tensor(vel, dtype=torch.float32))
             if force is not None:
-                self.force_matrix_w = torch.tensor(force)
+                self.force_matrix_w = wp.from_torch(torch.tensor(force, dtype=torch.float32))
 
     class _Obj:
         def __init__(self, data):
@@ -401,8 +451,9 @@ def _test_contact_without_proximity_is_not_a_placement(simulation_app) -> bool:
             self.scene = {
                 "obj": _Obj(_Data([[obj_xy[0], obj_xy[1], 0.02]], [[0.0, 0.0, 0.0]])),
                 "dest": _Obj(_Data([[dest_xy[0], dest_xy[1], 0.01]])),
-                # (N, B, M, 3) with B = M = 1
-                "sensor": _Obj(_Data([[[[force, 0.0, 0.0]]]])),
+                # The force must be passed by keyword: positionally it lands in root_pos_w and
+                # leaves force_matrix_w unset. (N, B, M, 3) with B = M = 1.
+                "sensor": _Obj(_Data([[0.0, 0.0, 0.0]], force=[[[[force, 0.0, 0.0]]]])),
             }
 
     def evaluate(obj_xy, dest_xy, force, max_xy_separation):
@@ -445,3 +496,7 @@ def _test_contact_without_proximity_is_not_a_placement(simulation_app) -> bool:
 
 def test_contact_without_proximity_is_not_a_placement():
     assert run_simulation_app_function(_test_contact_without_proximity_is_not_a_placement)
+
+
+def test_run_length_counts_steps_not_calls():
+    assert run_simulation_app_function(_test_run_length_counts_steps_not_calls)

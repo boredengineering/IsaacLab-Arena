@@ -7,19 +7,21 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
-import os
+import logging
+import numpy as np
+import torch
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
 import rdflib
-from rdflib import Literal, Namespace, RDF, XSD
-import torch
+from rdflib import RDF, XSD, Literal, Namespace
 
 if TYPE_CHECKING:
     from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+
+logger = logging.getLogger(__name__)
 
 ARENA = Namespace("https://isaac-sim.github.io/arena/schema#")
 PROV = Namespace("http://www.w3.org/ns/prov#")
@@ -122,13 +124,11 @@ def attribute_simulation_telemetry_to_reifiers(
                     reifier_id = matching[0].reifier_id
             diagnostics.append(
                 f"Fault in Reifier '{reifier_id}': Excessive settle drift ({drift:.3f}m). "
-                f"Recommendation: Reduce initial drop offset delta_z or increase surface friction."
+                "Recommendation: Reduce initial drop offset delta_z or increase surface friction."
             )
 
     if telemetry_metrics.get("ik_feasibility", 1.0) < 0.8:
-        diagnostics.append(
-            "Fault in Embodiment Standoff: Standoff distance exceeds arm manipulability manifold."
-        )
+        diagnostics.append("Fault in Embodiment Standoff: Standoff distance exceeds arm manipulability manifold.")
 
     return diagnostics
 
@@ -202,9 +202,18 @@ def record_eval_telemetry_to_prov(
 
     try:
         from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_eval_telemetry_to_neo4j
+
         sync_eval_telemetry_to_neo4j(str(out_path))
-    except Exception:
-        pass
+    except Exception as exc:
+        # The graph is an experience memory, not a dependency of evaluation, so a failure here
+        # must not fail the run. It must still be visible: a silent pass makes an unreachable
+        # database, a missing driver, and an empty graph indistinguishable, and the eval history
+        # then diverges from the graph without anyone noticing.
+        logger.warning(
+            "Neo4j eval-telemetry sync failed (%s: %s); %s was written but the graph was not updated.",
+            type(exc).__name__,
+            exc,
+            out_path,
+        )
 
     return out_path
-

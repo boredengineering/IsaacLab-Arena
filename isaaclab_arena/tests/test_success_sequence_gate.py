@@ -6,6 +6,7 @@
 """Tests for ``SuccessMode.SEQUENCE`` and the episode-scoped state backing it."""
 
 import traceback
+
 import pytest
 
 from isaaclab_arena.tests.utils.subprocess import run_simulation_app_function
@@ -242,3 +243,65 @@ def test_repeated_evaluation_within_one_step_is_stable():
 
 def test_running_min_tracks_resting_height():
     assert run_simulation_app_function(_test_running_min_tracks_resting_height)
+
+
+def _test_bouncing_object_does_not_count_as_lifted(simulation_app) -> bool:
+    """An object that falls, bounces, and rises must not satisfy the lift gate.
+
+    This is the failure mode observed in the v10 evaluation: the manipuland spawned above the
+    surface, fell (driving the running minimum down), rebounded past the 5 cm threshold, and
+    latched the lift stage with no robot involvement -- producing a success with a zero progress
+    score. Requiring the object to have been at rest first is what closes it.
+
+    The scene accessors are patched rather than simulated so the sequence of heights and speeds is
+    exact and the assertion is about the predicate's logic, not about physics.
+    """
+    import torch
+
+    from isaaclab_arena.tasks.predicates import spatial
+
+    try:
+        env = _MockEnv(num_envs=1)
+        # (height, speed) per step. A 1 cm spawn gap: fall to 0.00, rebound to 0.06 while still
+        # moving fast, then settle at 0.01, then a genuine 6 cm lift.
+        trace = [
+            (0.010, 0.00),  # spawned, momentarily at rest before gravity acts
+            (0.004, 0.40),  # falling
+            (0.000, 0.44),  # lowest point, still fast
+            (0.060, 0.35),  # REBOUND above threshold, still fast -- must NOT count
+            (0.030, 0.20),  # coming back down
+            (0.010, 0.01),  # settled
+            (0.011, 0.02),  # at rest on the surface
+            (0.010, 0.01),  # third consecutive at-rest step establishes the reference
+            (0.075, 0.30),  # genuine lift, 6.5 cm above the rested height
+        ]
+        original_pos, original_vel = spatial.get_root_pos_w, spatial.get_root_lin_vel_w
+        results = []
+        try:
+            for height, speed in trace:
+                spatial.get_root_pos_w = lambda e, n, _h=height: torch.tensor([[0.0, 0.0, _h]])
+                spatial.get_root_lin_vel_w = lambda e, n, _s=speed: torch.tensor([[_s, 0.0, 0.0]])
+                env.step()
+                results.append(bool(spatial.object_lifted_above_resting_min(env, "obj", distance=0.05)[0]))
+        finally:
+            spatial.get_root_pos_w, spatial.get_root_lin_vel_w = original_pos, original_vel
+
+        rebound_index = 3
+        assert not results[rebound_index], (
+            f"the rebound at step {rebound_index} was counted as a lift; a bouncing object can then "
+            f"fake a success. results={results}"
+        )
+        assert results[-1], f"a genuine 6.5 cm lift after resting must count. results={results}"
+        # Nothing before the object first rests may qualify.
+        assert not any(results[: rebound_index + 1]), f"pre-rest steps must all be False: {results}"
+    except AssertionError:
+        raise
+    except Exception as e:
+        print(f"Error: {e}")
+        traceback.print_exc()
+        return False
+    return True
+
+
+def test_bouncing_object_does_not_count_as_lifted():
+    assert run_simulation_app_function(_test_bouncing_object_does_not_count_as_lifted)

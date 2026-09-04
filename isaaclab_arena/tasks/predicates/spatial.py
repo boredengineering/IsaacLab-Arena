@@ -52,21 +52,45 @@ def object_lifted_above_resting_min(
     env: ManagerBasedRLEnv,
     object_name: str,
     distance: float = 5e-2,
+    rest_speed_threshold: float = 5e-2,
+    rest_steps_required: int = 3,
     env_id: int | None = None,
 ) -> torch.Tensor:
-    """Checks if an object is currently ``distance`` m above the lowest height it reached this episode.
+    """Checks if an object has been raised ``distance`` m above the lowest height it rested at.
 
     Unlike ``object_is_above_height``, this needs neither a hardcoded surface height nor a recorded
     settled state: the reference is a per-env running minimum of the object's own height, which
     tracks the resting height once the object stops falling. That makes it usable from termination
     predicates, which run whether or not progress tracking is enabled.
 
-    Returns True when ``object_name`` sits at least ``distance`` m above its resting height.
+    The result stays False until the object has been at rest for ``rest_steps_required``
+    *consecutive* steps. Two distinct artefacts make that necessary, both observed:
+
+    * A *bouncing* object otherwise satisfies the height test on its own rebound -- it spawns above
+      the surface, falls, drives the running minimum down, and rises past ``distance`` with no robot
+      involvement. That produced a false success in the v10 evaluation.
+    * A single at-rest sample is not enough, because an object is placed with zero velocity and so
+      reads as at rest for exactly the step before gravity acts on it. Requiring consecutive steps
+      discards that instant while any genuine resting contact accumulates immediately.
+
+    Resting first is therefore part of the definition of having been lifted, not an optimisation.
+
+    Returns True when ``object_name`` has come to rest and now sits at least ``distance`` m above
+    the lowest height it rested at.
     """
 
+    state = get_episode_scoped_state(env)
+    speed = torch.linalg.vector_norm(get_root_lin_vel_w(env, object_name), dim=-1)
+    rest_run = state.run_length(f"rest_run::{object_name}", speed < rest_speed_threshold)
+    has_rested = state.latch(f"has_rested::{object_name}", 1, 0, rest_run >= rest_steps_required)
+
     object_z = get_root_pos_w(env, object_name)[:, 2]
-    resting_z = get_episode_scoped_state(env).running_min(f"resting_min_z::{object_name}", object_z)
-    return select(object_z > (resting_z + distance), env_id)
+    # Only track the resting height once at rest, so a mid-fall low point cannot become the
+    # reference the lift is measured against.
+    reference_z = state.running_min(
+        f"resting_min_z::{object_name}", torch.where(has_rested, object_z, torch.full_like(object_z, float("inf")))
+    )
+    return select(has_rested & (object_z > (reference_z + distance)), env_id)
 
 
 def object_moving(

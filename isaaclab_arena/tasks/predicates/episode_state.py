@@ -35,6 +35,7 @@ class EpisodeScopedState:
         self._device = device
         self._latches: dict[str, torch.Tensor] = {}
         self._minima: dict[str, torch.Tensor] = {}
+        self._runs: dict[str, torch.Tensor] = {}
         self._last_step = torch.full((num_envs,), -1, dtype=torch.long, device=device)
 
     def sync_episode_boundary(self, episode_step: torch.Tensor | None) -> None:
@@ -55,6 +56,8 @@ class EpisodeScopedState:
             latch[:, restarted] = False
         for minimum in self._minima.values():
             minimum[restarted] = float("inf")
+        for run in self._runs.values():
+            run[restarted] = 0
 
     def latch(self, key: str, num_stages: int, stage: int, satisfied: torch.Tensor) -> torch.Tensor:
         """Latch ``stage`` True where ``satisfied``, and return the latched mask for that stage.
@@ -67,6 +70,22 @@ class EpisodeScopedState:
             self._latches[key] = latched
         latched[stage] |= satisfied.to(device=self._device, dtype=torch.bool)
         return latched[stage]
+
+    def run_length(self, key: str, holding: torch.Tensor) -> torch.Tensor:
+        """Return the number of consecutive calls for which ``holding`` has been true per env.
+
+        Resets to zero the moment ``holding`` goes false, so it measures a *sustained* condition.
+        A momentary one -- an object at zero velocity for the single step before gravity acts on it
+        -- never accumulates.
+        """
+        run = self._runs.get(key)
+        if run is None:
+            run = torch.zeros(self._num_envs, dtype=torch.long, device=self._device)
+            self._runs[key] = run
+        holding = holding.to(device=self._device, dtype=torch.bool)
+        run = torch.where(holding, run + 1, torch.zeros_like(run))
+        self._runs[key] = run
+        return run
 
     def running_min(self, key: str, values: torch.Tensor) -> torch.Tensor:
         """Fold ``values`` into a per-env running minimum and return it."""

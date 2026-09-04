@@ -10,7 +10,9 @@ import os
 import torch
 import tqdm
 from importlib import import_module
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+import warp as wp
 
 from isaaclab_arena.assets.registries import PolicyRegistry
 from isaaclab_arena.cli.isaaclab_arena_cli import get_isaaclab_arena_cli_parser
@@ -63,6 +65,49 @@ def is_distributed(args_cli: argparse.Namespace) -> bool:
     )
 
 
+def build_neutral_hold_action(base_env) -> torch.Tensor:
+    """Build an action that holds the robot's current posture, for use while the scene settles.
+
+    A zero action is **not** neutral for every embodiment. For the G1 decoupled whole-body
+    controller the action vector is ``[joint_targets | navigate_cmd(3) | base_height(1) |
+    torso_rpy(3)]`` where the joint entries are *absolute* targets and the base-height entry is a
+    commanded pelvis height whose default is 0.75 m
+    (``g1_decoupled_wbc_joint_action.py:87``). Sending zeros therefore commands the robot to squat
+    to the floor and drive every upper-body joint to 0 rad, discarding the scene's
+    ``initial_joint_pos``. During a settle loop that swings the arms through the workspace and
+    launches the very objects the loop is waiting on -- which is what produced 5-16 step episodes in
+    the g1_tabletop_apple_to_plate evaluations, with the manipuland tripping ``object_dropped``
+    before the policy ever ran.
+
+    For delta-style action spaces (Franka IK and friends) zero *is* the correct hold, so that
+    remains the fallback.
+    """
+    num_envs = base_env.num_envs
+    action_dim = base_env.action_manager.total_action_dim
+    hold_action = torch.zeros((num_envs, action_dim), device=base_env.device)
+
+    # Detect a whole-body-control action term rather than keying on the action width, which
+    # several embodiments share.
+    is_wbc = any(
+        "wbc" in type(term).__name__.lower() for term in getattr(base_env.action_manager, "_terms", {}).values()
+    )
+    if not is_wbc:
+        return hold_action
+
+    num_navigate_cmd, num_base_height_cmd, num_torso_rpy_cmd = 3, 1, 3
+    tail = num_navigate_cmd + num_base_height_cmd + num_torso_rpy_cmd
+    if action_dim <= tail:
+        return hold_action
+
+    robot = base_env.scene["robot"]
+    default_joint_pos = wp.to_torch(robot.data.default_joint_pos)
+    num_joints = min(action_dim - tail, default_joint_pos.shape[-1])
+    hold_action[:, :num_joints] = default_joint_pos[:, :num_joints].to(hold_action.device)
+    # Hold the standing pelvis height instead of commanding a squat to the floor.
+    hold_action[:, -num_base_height_cmd - num_torso_rpy_cmd] = 0.75
+    return hold_action
+
+
 def verify_and_settle_scene(
     env,
     settle_steps: int = 25,
@@ -89,17 +134,30 @@ def verify_and_settle_scene(
     obs = None
     max_steps = max(settle_steps, 25)
     if max_steps > 0:
-        num_envs = base_env.num_envs
-        action_dim = base_env.action_manager.total_action_dim
-        hold_action = torch.zeros((num_envs, action_dim), device=base_env.device)
+        hold_action = build_neutral_hold_action(base_env)
         for step_idx in range(max_steps):
-            obs, _, _, _, _ = env.step(hold_action)
+            obs, _, terminated, truncated, _ = env.step(hold_action)
+            # A termination during settling is auto-reset by ManagerBasedRLEnv.step and would
+            # otherwise be silently recorded as a completed episode. Surface it instead of
+            # consuming it: an object that cannot survive a posture-hold has a scene problem, and
+            # continuing to step only produces more phantom episodes.
+            if terminated is not None and bool(torch.as_tensor(terminated).any()):
+                print(
+                    f"[policy_runner] ⚠️  Scene terminated during settling at step {step_idx} "
+                    f"(terminated={torch.as_tensor(terminated).tolist()}). The scene is not stable "
+                    "under a posture hold; the episodes recorded here are settle artefacts, not "
+                    "policy rollouts.",
+                    flush=True,
+                )
+                break
             if step_idx >= 15:
                 curr_settled = True
                 for name in movable_objects:
                     asset = scene[name]
-                    lin_v = asset.data.root_lin_vel_w.norm(dim=-1).mean().item()
-                    ang_v = asset.data.root_ang_vel_w.norm(dim=-1).mean().item()
+                    # max, not mean: averaging over envs lets one object in free fall be masked by
+                    # three still ones, which is how an unsettled scene previously read as settled.
+                    lin_v = wp.to_torch(asset.data.root_lin_vel_w).norm(dim=-1).max().item()
+                    ang_v = wp.to_torch(asset.data.root_ang_vel_w).norm(dim=-1).max().item()
                     if lin_v > lin_vel_thresh or ang_v > ang_vel_thresh:
                         curr_settled = False
                         break
@@ -108,11 +166,16 @@ def verify_and_settle_scene(
 
     settle_status = {}
     all_settled = True
-    print(f"[policy_runner] 🔍 Phase 1 Settle Verification: Checking {len(movable_objects)} scene objects for stationarity...")
+    print(
+        f"[policy_runner] 🔍 Phase 1 Settle Verification: Checking {len(movable_objects)} scene objects for"
+        " stationarity..."
+    )
     for name in movable_objects:
         asset = scene[name]
-        lin_vel = asset.data.root_lin_vel_w.norm(dim=-1).mean().item()
-        ang_vel = asset.data.root_ang_vel_w.norm(dim=-1).mean().item()
+        # Worst env, not the average: the report decides whether inference starts on a still
+        # scene, and one object in free fall makes that false regardless of the other envs.
+        lin_vel = wp.to_torch(asset.data.root_lin_vel_w).norm(dim=-1).max().item()
+        ang_vel = wp.to_torch(asset.data.root_ang_vel_w).norm(dim=-1).max().item()
         is_settled = bool((lin_vel <= lin_vel_thresh) and (ang_vel <= ang_vel_thresh))
         settle_status[name] = {
             "lin_vel_m_s": round(lin_vel, 4),
@@ -381,6 +444,7 @@ def main():
                         yaml_arg = getattr(args_cli, "env_graph_spec_yaml", None)
                         if yaml_arg:
                             from pathlib import Path
+
                             env_name = Path(yaml_arg).stem.replace("_env_graph", "")
                         else:
                             env_name = "arena_env"
@@ -395,7 +459,9 @@ def main():
 
                     # Auto-update EnvironmentVersionManager lineage ledger if inside versioned tree
                     try:
-                        from isaaclab_arena.agentic_environment_generation.version_manager import EnvironmentVersionManager
+                        from isaaclab_arena.agentic_environment_generation.version_manager import (
+                            EnvironmentVersionManager,
+                        )
 
                         yaml_arg = getattr(args_cli, "env_graph_spec_yaml", None)
                         if yaml_arg:
@@ -416,7 +482,8 @@ def main():
                                             eval_output_dir=output_dir,
                                         )
                                         print(
-                                            f"[policy_runner] 📜 Auto-updated lineage ledger for {e_name} v{v_num} with evaluation metrics."
+                                            f"[policy_runner] 📜 Auto-updated lineage ledger for {e_name} v{v_num} with"
+                                            " evaluation metrics."
                                         )
                     except Exception as exc:
                         print(f"Warning: Failed to update EnvironmentVersionManager lineage: {exc}")

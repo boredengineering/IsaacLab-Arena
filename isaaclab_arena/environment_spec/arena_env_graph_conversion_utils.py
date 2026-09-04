@@ -39,12 +39,34 @@ def build_arena_env_from_graph_spec(graph_spec: ArenaEnvGraphSpec, enable_camera
     _ensure_scene_lighting(graph_spec, assets_by_node_id)
     _attach_spatial_relations_to_assets(graph_spec.relations, assets_by_node_id)
     scene_assets = [asset for node_id, asset in assets_by_node_id.items() if node_id != graph_spec.embodiment.id]
+
+    def _env_cfg_callback(env_cfg):
+        """Force one RTX re-render after reset so the first observation is not the last episode's.
+
+        Without this, the camera observation returned by ``reset()`` is bit-identical to the
+        previous episode's final frame: ``ManagerBasedEnv.reset`` calls ``sim.forward()`` rather
+        than stepping physics, so with fabric enabled the poses written during reset have not
+        reached the renderer. Measured on the shipped default (``num_rerenders_on_reset = 0``) in
+        ``isaaclab_arena/tests/test_stale_observation.py``: the reset frame differed from the
+        predecessor by exactly 0.0 while differing from the post-step frame by 6-12 intensity
+        levels. With one re-render that inverts, which is the correct ordering.
+
+        A vision-conditioned policy would otherwise condition its first action chunk of every
+        episode on a scene that no longer exists. The hand-tuned reference environment sets this
+        for the same reason (``galileo_g1_static_pick_and_place_environment.py:290``); generated
+        environments had no equivalent.
+        """
+        if getattr(env_cfg, "num_rerenders_on_reset", 0) < 1:
+            env_cfg.num_rerenders_on_reset = 1
+        return env_cfg
+
     return IsaacLabArenaEnvironment(
         name=graph_spec.env_name,
         scene=Scene(assets=scene_assets),
         embodiment=assets_by_node_id[graph_spec.embodiment.id],
         task=build_task_from_spec(graph_spec.task, assets_by_node_id),
         placer_params=build_checks_for_placer_params(graph_spec),
+        env_cfg_callback=_env_cfg_callback,
     )
 
 
@@ -129,9 +151,7 @@ def instantiate_assets_from_spec(
             embodiment_params["initial_pose"] = parsed_emb_pose
     initial_joint_pos = embodiment_params.pop("initial_joint_pos", None)
     finger_friction_params = embodiment_params.pop("finger_contact_friction", None)
-    embodiment_instance = asset_registry.get_asset_by_name(graph_spec.embodiment.registry_name)(
-        **embodiment_params
-    )
+    embodiment_instance = asset_registry.get_asset_by_name(graph_spec.embodiment.registry_name)(**embodiment_params)
     if initial_joint_pos is not None and hasattr(embodiment_instance, "set_joint_initial_pos"):
         embodiment_instance.set_joint_initial_pos(initial_joint_pos)
     if finger_friction_params is not None and hasattr(embodiment_instance, "set_finger_contact_friction"):
@@ -156,7 +176,11 @@ def instantiate_assets_from_spec(
         parsed_obj_pose = _parse_pose_data(initial_pose_data)
         is_anchor_obj = any(r.kind == "is_anchor" and r.subject == obj.id for r in graph_spec.relations)
         has_relations = any(r.subject == obj.id and r.kind != "is_anchor" for r in graph_spec.relations)
-        if parsed_obj_pose is not None and (is_anchor_obj or not has_relations) and hasattr(asset_instance, "set_initial_pose"):
+        if (
+            parsed_obj_pose is not None
+            and (is_anchor_obj or not has_relations)
+            and hasattr(asset_instance, "set_initial_pose")
+        ):
             asset_instance.set_initial_pose(parsed_obj_pose)
         assets_by_node_id[obj.id] = asset_instance
 
@@ -220,4 +244,3 @@ def _attach_spatial_relations_to_assets(
 
                 if get_relation(subject_asset, RandomAroundSolution) is None:
                     subject_asset.add_relation(RandomAroundSolution(x_half_m=0.03, y_half_m=0.03))
-

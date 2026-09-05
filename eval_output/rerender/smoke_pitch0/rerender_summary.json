@@ -1,0 +1,58 @@
+{
+  "dataset_file": "/datasets/isaaclab_arena/static_apple_tutorial/arena_g1_static_apple_dataset_recorded.hdf5",
+  "environment": "galileo_g1_static_pick_and_place",
+  "renders_per_frame": 2,
+  "fps": 50,
+  "depth_downsample": 1,
+  "camera": {
+    "camera_name": "robot_head_cam",
+    "data_types": [
+      "rgb",
+      "distance_to_image_plane"
+    ],
+    "clipping_range": [
+      0.1,
+      20.0
+    ],
+    "offset_pos": [
+      0.04485,
+      0.0,
+      0.35325
+    ],
+    "offset_rot_xyzw": [
+      -0.62721,
+      0.62721,
+      -0.32651,
+      0.32651
+    ],
+    "offset_convention": "ros",
+    "camera_pitch_deg": 0.0,
+    "camera_height_offset_m": 0.0,
+    "resolution_hw": [
+      480,
+      640
+    ]
+  },
+  "episodes": [
+    {
+      "episode_index": 0,
+      "demo": "demo_0",
+      "num_frames": 12,
+      "depth_shape": [
+        12,
+        480,
+        640
+      ],
+      "depth_inf_fraction": 0.0,
+      "depth_min_m": 0.2314453125,
+      "depth_max_m": 4.40625,
+      "rgb_mean_abs_diff": 52.26965729890046,
+      "rgb_psnr_db": 10.257133918475944
+    }
+  ],
+  "rgb_fidelity": {
+    "episodes_compared": 1,
+    "mean_abs_diff": 52.26965729890046,
+    "worst_episode_mean_abs_diff": 52.26965729890046
+  }
+}

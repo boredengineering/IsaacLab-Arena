@@ -29,8 +29,18 @@ identified in the artefacts.
 | **P5** | Augmented re-finetune on existing corpus | ⏸ **deprioritised by P2c** | — | impl §17, strategic §5b.I2 |
 | **P6** | Few-shot on target demos — **last resort** | ⏸ | — | strategic §5b.I3 |
 | **PX** | Height sweep — **demoted, off critical path** | ⏸ optional | nothing | strategic §3 |
+| **F1-F5** | **Monocular-depth / camera-pitch fixes** | ⏳ **NEXT — supersedes P3/P4** | the grasp itself | [depth debug record](g1_monocular_depth_and_camera_pitch_debug.md) |
 
 Legend: ✅ done · ⏳ in progress / next · ⏸ blocked or not started
+
+> [!IMPORTANT]
+> **2026-09-05: the failure is the grasp, not the place.** Per-episode (not pooled) inspection shows
+> 6 of 9 episodes barely touch the apple and one *launches* it at 1.6 m/s. The policy has no depth
+> input (`video: ["ego_view"]`, camera `data_types=["rgb"]`) and the scene tilts its camera via a
+> `waist_pitch_joint: 0.2` posture override the corpus never had, so its monocular depth cue is
+> wrong and it closes on air. Full diagnosis, method, and fix sequence:
+> [`g1_monocular_depth_and_camera_pitch_debug.md`](g1_monocular_depth_and_camera_pitch_debug.md).
+> This supersedes P3/P4 on the critical path — photometric alignment cannot fix a camera-pose error.
 
 > [!IMPORTANT]
 > **The old `P2` split into `P2a`/`P2b`/`P2c`.** The tracker previously marked `P2` as "complete for

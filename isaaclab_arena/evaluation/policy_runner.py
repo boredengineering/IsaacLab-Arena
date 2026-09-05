@@ -221,6 +221,7 @@ class ReachTracer:
         object_name: str,
         destination_name: str | None,
         contact_sensor_name: str | None = None,
+        hand_body_patterns: tuple[str, ...] = ("wrist", "hand"),
     ):
         self._path = path
         self._rows: list[str] = []
@@ -230,9 +231,40 @@ class ReachTracer:
         self._contact_sensor_name = contact_sensor_name
         self._rest_z: torch.Tensor | None = None
         self._step = 0
+        self._hand_indices = self._resolve_hand_bodies(hand_body_patterns)
+
+    def _resolve_hand_bodies(self, patterns: tuple[str, ...]) -> dict[str, int]:
+        """Map end-effector body names to their index in the robot's body array.
+
+        Discovered by substring rather than hardcoded, because body naming differs across
+        embodiments. Returning an empty mapping simply omits the hand columns from the trace.
+        """
+        try:
+            body_names = self._env.scene["robot"].body_names
+        except Exception:
+            return {}
+        return {name: i for i, name in enumerate(body_names) if any(p in name.lower() for p in patterns)}
 
     def _pos(self, name):
         return wp.to_torch(self._env.scene[name].data.root_pos_w)
+
+    def _nearest_hand_to(self, target: torch.Tensor) -> tuple[str, torch.Tensor] | None:
+        """Return the tracked end-effector body closest to ``target``, with its world position.
+
+        Which hand does the reaching is not known in advance, and picking the nearer one each step
+        is what makes the horizontal/vertical error decomposition meaningful: a fixed choice would
+        report the idle arm's distance whenever the other arm is the one working.
+        """
+        if not self._hand_indices:
+            return None
+        pos_w = wp.to_torch(self._env.scene["robot"].data.body_pos_w)
+        best_name, best_pos, best_dist = None, None, None
+        for name, index in self._hand_indices.items():
+            candidate = pos_w[:, index, :]
+            dist = float((candidate - target).norm(dim=-1)[0])
+            if best_dist is None or dist < best_dist:
+                best_name, best_pos, best_dist = name, candidate, dist
+        return (best_name, best_pos) if best_name is not None else None
 
     def record(self) -> None:
         obj = self._pos(self._object_name)
@@ -252,6 +284,17 @@ class ReachTracer:
             dest = self._pos(self._destination_name)
             row["dist_to_dest"] = [round(v, 5) for v in (obj - dest).norm(dim=-1).tolist()]
             row["xy_to_dest"] = [round(v, 5) for v in (obj[:, :2] - dest[:, :2]).norm(dim=-1).tolist()]
+        # Hand-to-object error, split into horizontal and vertical. This is what separates "reached
+        # the wrong place" from "reached the right place at the wrong height": a policy with no
+        # depth input can converge in XY off a correct bearing while missing in Z entirely, which
+        # presents as closing the hand on air.
+        nearest = self._nearest_hand_to(obj)
+        if nearest is not None:
+            name, hand = nearest
+            row["hand_body"] = name
+            row["hand_xy_to_obj"] = [round(v, 5) for v in (hand[:, :2] - obj[:, :2]).norm(dim=-1).tolist()]
+            row["hand_z_minus_obj"] = [round(v, 5) for v in (hand[:, 2] - obj[:, 2]).tolist()]
+            row["hand_dist_to_obj"] = [round(v, 5) for v in (hand - obj).norm(dim=-1).tolist()]
         if self._contact_sensor_name is not None:
             try:
                 sensor = self._env.scene[self._contact_sensor_name]

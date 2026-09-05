@@ -1,0 +1,41 @@
+{
+  "frames_compared": 12,
+  "mean_abs_diff": 52.039786241319455,
+  "psnr_db": 10.292343505699213,
+  "channel_mean_rendered": [
+    93.16,
+    55.58,
+    54.49
+  ],
+  "channel_mean_recorded": [
+    51.41,
+    48.31,
+    44.93
+  ],
+  "channel_permutation_mean_abs_diff": {
+    "RGB": 54.553,
+    "BGR": 57.13,
+    "GRB": 55.34,
+    "RBG": 55.279,
+    "GBR": 57.276,
+    "BRG": 55.92
+  },
+  "latency_scan_mean_abs_diff": {
+    "rendered[0]_vs_recorded[0]": 54.553,
+    "rendered[0]_vs_recorded[1]": 50.963,
+    "rendered[0]_vs_recorded[2]": 50.963,
+    "rendered[0]_vs_recorded[3]": 50.888,
+    "rendered[0]_vs_recorded[4]": 51.079,
+    "rendered[0]_vs_recorded[5]": 51.611,
+    "rendered[0]_vs_recorded[6]": 52.031,
+    "rendered[0]_vs_recorded[7]": 52.17
+  },
+  "orientation_mean_abs_diff": {
+    "unflipped": 54.553,
+    "vertical_flip": 75.125,
+    "horizontal_flip": 68.581
+  },
+  "verdict": "SCENE MISMATCH: channel order, orientation and render latency are all ruled out, so the current build renders a different scene. Per-channel mean gap (R,G,B) = [41.8, 7.3, 9.6].",
+  "episode": 0,
+  "contact_sheet": "eval_output/rerender/smoke_validated/fidelity_episode_000000.png"
+}

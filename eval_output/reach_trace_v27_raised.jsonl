@@ -1,0 +1,252 @@
+{"step": 0, "obj_z": [0.61378], "speed": [1.3311], "dist_to_dest": [0.29367], "xy_to_dest": [0.14686], "contact_force": [0.0]}
+{"step": 1, "obj_z": [0.62067], "speed": [1.27135], "dist_to_dest": [0.30134], "xy_to_dest": [0.18374], "contact_force": [0.0]}
+{"step": 2, "obj_z": [0.62362], "speed": [1.2401], "dist_to_dest": [0.31054], "xy_to_dest": [0.2225], "contact_force": [0.0]}
+{"step": 3, "obj_z": [0.62264], "speed": [1.2395], "dist_to_dest": [0.32332], "xy_to_dest": [0.26187], "contact_force": [0.0]}
+{"step": 4, "obj_z": [0.61776], "speed": [1.26959], "dist_to_dest": [0.33283], "xy_to_dest": [0.29586], "contact_force": [0.0]}
+{"step": 5, "obj_z": [0.60899], "speed": [1.32828], "dist_to_dest": [0.3386], "xy_to_dest": [0.32186], "contact_force": [0.0]}
+{"step": 6, "obj_z": [0.59634], "speed": [1.41202], "dist_to_dest": [0.33182], "xy_to_dest": [0.32946], "contact_force": [0.0]}
+{"step": 7, "obj_z": [0.57983], "speed": [1.51666], "dist_to_dest": [0.32669], "xy_to_dest": [0.32488], "contact_force": [0.0]}
+{"step": 8, "obj_z": [0.55947], "speed": [1.63821], "dist_to_dest": [0.33223], "xy_to_dest": [0.3133], "contact_force": [0.0]}
+{"step": 9, "obj_z": [0.51658], "speed": [2.64844], "dist_to_dest": [0.34419], "xy_to_dest": [0.29683], "contact_force": [0.0]}
+{"step": 10, "obj_z": [0.46268], "speed": [5.85146], "dist_to_dest": [0.36558], "xy_to_dest": [0.2849], "contact_force": [0.0]}
+{"step": 11, "obj_z": [0.3297], "speed": [17.62715], "dist_to_dest": [0.34461], "xy_to_dest": [0.2764], "contact_force": [0.0]}
+{"step": 12, "obj_z": [0.21844], "speed": [29.45306], "dist_to_dest": [0.6479], "xy_to_dest": [0.60576], "contact_force": [0.0]}
+{"step": 13, "obj_z": [0.40481], "speed": [29.14721], "dist_to_dest": [1.10918], "xy_to_dest": [0.97793], "contact_force": [0.0]}
+{"step": 14, "obj_z": [0.61187], "speed": [29.08074], "dist_to_dest": [1.54777], "xy_to_dest": [1.27177], "contact_force": [0.0]}
+{"step": 15, "obj_z": [0.80018], "speed": [29.01544], "dist_to_dest": [2.01901], "xy_to_dest": [1.60373], "contact_force": [0.0]}
+{"step": 16, "obj_z": [0.98222], "speed": [28.95132], "dist_to_dest": [2.48161], "xy_to_dest": [1.94909], "contact_force": [0.0]}
+{"step": 17, "obj_z": [1.17934], "speed": [28.88839], "dist_to_dest": [2.93191], "xy_to_dest": [2.35276], "contact_force": [0.0]}
+{"step": 18, "obj_z": [1.35685], "speed": [28.82667], "dist_to_dest": [3.39681], "xy_to_dest": [2.79558], "contact_force": [0.0]}
+{"step": 19, "obj_z": [1.52464], "speed": [28.76615], "dist_to_dest": [3.84917], "xy_to_dest": [3.22715], "contact_force": [0.0]}
+{"step": 20, "obj_z": [1.71083], "speed": [28.70683], "dist_to_dest": [4.31776], "xy_to_dest": [3.66409], "contact_force": [0.0]}
+{"step": 21, "obj_z": [1.87832], "speed": [28.64875], "dist_to_dest": [4.79957], "xy_to_dest": [4.12609], "contact_force": [0.0]}
+{"step": 22, "obj_z": [2.03207], "speed": [28.59189], "dist_to_dest": [5.26349], "xy_to_dest": [4.57335], "contact_force": [0.0]}
+{"step": 23, "obj_z": [2.20646], "speed": [28.53627], "dist_to_dest": [5.73755], "xy_to_dest": [5.01912], "contact_force": [0.0]}
+{"step": 24, "obj_z": [2.36449], "speed": [28.48189], "dist_to_dest": [6.22797], "xy_to_dest": [5.49146], "contact_force": [0.0]}
+{"step": 25, "obj_z": [2.50453], "speed": [28.42875], "dist_to_dest": [6.69928], "xy_to_dest": [5.95032], "contact_force": [0.0]}
+{"step": 26, "obj_z": [2.66633], "speed": [28.37688], "dist_to_dest": [7.17611], "xy_to_dest": [6.40315], "contact_force": [0.0]}
+{"step": 27, "obj_z": [2.81535], "speed": [28.32627], "dist_to_dest": [7.67366], "xy_to_dest": [6.88471], "contact_force": [0.0]}
+{"step": 28, "obj_z": [2.94206], "speed": [28.27693], "dist_to_dest": [8.1467], "xy_to_dest": [7.34855], "contact_force": [0.0]}
+{"step": 29, "obj_z": [3.09041], "speed": [28.22887], "dist_to_dest": [8.6179], "xy_to_dest": [7.8007], "contact_force": [0.0]}
+{"step": 30, "obj_z": [3.23084], "speed": [28.1821], "dist_to_dest": [9.10885], "xy_to_dest": [8.27595], "contact_force": [0.0]}
+{"step": 31, "obj_z": [3.34481], "speed": [28.13661], "dist_to_dest": [9.59216], "xy_to_dest": [8.75505], "contact_force": [0.0]}
+{"step": 32, "obj_z": [3.47867], "speed": [28.09242], "dist_to_dest": [10.07165], "xy_to_dest": [9.22055], "contact_force": [0.0]}
+{"step": 33, "obj_z": [3.61075], "speed": [28.04953], "dist_to_dest": [10.57803], "xy_to_dest": [9.71498], "contact_force": [0.0]}
+{"step": 34, "obj_z": [3.71294], "speed": [28.00796], "dist_to_dest": [11.07875], "xy_to_dest": [10.21597], "contact_force": [0.0]}
+{"step": 35, "obj_z": [3.83114], "speed": [27.96769], "dist_to_dest": [11.5678], "xy_to_dest": [10.69642], "contact_force": [0.0]}
+{"step": 36, "obj_z": [3.95466], "speed": [27.92875], "dist_to_dest": [12.08338], "xy_to_dest": [11.20286], "contact_force": [0.0]}
+{"step": 37, "obj_z": [4.04654], "speed": [27.89113], "dist_to_dest": [12.59585], "xy_to_dest": [11.71797], "contact_force": [0.0]}
+{"step": 38, "obj_z": [4.14815], "speed": [27.85484], "dist_to_dest": [13.09223], "xy_to_dest": [12.21117], "contact_force": [0.0]}
+{"step": 39, "obj_z": [4.26213], "speed": [27.81989], "dist_to_dest": [13.61247], "xy_to_dest": [12.72464], "contact_force": [0.0]}
+{"step": 40, "obj_z": [4.34543], "speed": [27.78629], "dist_to_dest": [14.1376], "xy_to_dest": [13.25428], "contact_force": [0.0]}
+{"step": 41, "obj_z": [4.43024], "speed": [27.75402], "dist_to_dest": [14.64345], "xy_to_dest": [13.76203], "contact_force": [0.0]}
+{"step": 42, "obj_z": [4.53286], "speed": [27.72311], "dist_to_dest": [15.16768], "xy_to_dest": [14.2823], "contact_force": [0.0]}
+{"step": 43, "obj_z": [4.60911], "speed": [27.69356], "dist_to_dest": [15.70459], "xy_to_dest": [14.82481], "contact_force": [0.0]}
+{"step": 44, "obj_z": [4.67802], "speed": [27.66536], "dist_to_dest": [16.22238], "xy_to_dest": [15.34886], "contact_force": [0.0]}
+{"step": 45, "obj_z": [4.76697], "speed": [27.63853], "dist_to_dest": [16.75097], "xy_to_dest": [15.87686], "contact_force": [0.0]}
+{"step": 46, "obj_z": [4.8368], "speed": [27.61306], "dist_to_dest": [17.29788], "xy_to_dest": [16.43002], "contact_force": [0.0]}
+{"step": 47, "obj_z": [4.89193], "speed": [27.58897], "dist_to_dest": [17.82966], "xy_to_dest": [16.97133], "contact_force": [0.0]}
+{"step": 48, "obj_z": [4.96513], "speed": [27.56626], "dist_to_dest": [18.36294], "xy_to_dest": [17.50776], "contact_force": [0.0]}
+{"step": 49, "obj_z": [5.02771], "speed": [27.54492], "dist_to_dest": [18.91245], "xy_to_dest": [18.06399], "contact_force": [0.0]}
+{"step": 50, "obj_z": [5.07193], "speed": [27.52496], "dist_to_dest": [19.44958], "xy_to_dest": [18.61225], "contact_force": [0.0]}
+{"step": 51, "obj_z": [5.12848], "speed": [27.50639], "dist_to_dest": [19.98037], "xy_to_dest": [19.14949], "contact_force": [0.0]}
+{"step": 52, "obj_z": [5.18142], "speed": [27.48921], "dist_to_dest": [20.52471], "xy_to_dest": [19.7014], "contact_force": [0.0]}
+{"step": 53, "obj_z": [5.21727], "speed": [27.47342], "dist_to_dest": [21.0635], "xy_to_dest": [20.25188], "contact_force": [0.0]}
+{"step": 54, "obj_z": [5.25822], "speed": [27.45901], "dist_to_dest": [21.59474], "xy_to_dest": [20.79241], "contact_force": [0.0]}
+{"step": 55, "obj_z": [5.2984], "speed": [27.44601], "dist_to_dest": [22.13407], "xy_to_dest": [21.341], "contact_force": [0.0]}
+{"step": 56, "obj_z": [5.32669], "speed": [27.4344], "dist_to_dest": [22.67186], "xy_to_dest": [21.89067], "contact_force": [0.0]}
+{"step": 57, "obj_z": [5.35486], "speed": [27.42419], "dist_to_dest": [23.20522], "xy_to_dest": [22.43518], "contact_force": [0.0]}
+{"step": 58, "obj_z": [5.38005], "speed": [27.41539], "dist_to_dest": [23.74173], "xy_to_dest": [22.98316], "contact_force": [0.0]}
+{"step": 59, "obj_z": [5.39917], "speed": [27.40798], "dist_to_dest": [24.27612], "xy_to_dest": [23.52993], "contact_force": [0.0]}
+{"step": 60, "obj_z": [5.41768], "speed": [27.40198], "dist_to_dest": [24.81098], "xy_to_dest": [24.07677], "contact_force": [0.0]}
+{"step": 61, "obj_z": [5.42793], "speed": [27.39738], "dist_to_dest": [25.34771], "xy_to_dest": [24.62701], "contact_force": [0.0]}
+{"step": 62, "obj_z": [5.43471], "speed": [27.39418], "dist_to_dest": [25.87818], "xy_to_dest": [25.17105], "contact_force": [0.0]}
+{"step": 63, "obj_z": [5.44505], "speed": [27.39239], "dist_to_dest": [26.412], "xy_to_dest": [25.71714], "contact_force": [0.0]}
+{"step": 64, "obj_z": [5.44276], "speed": [27.392], "dist_to_dest": [26.95101], "xy_to_dest": [26.27094], "contact_force": [0.0]}
+{"step": 65, "obj_z": [5.43438], "speed": [27.39302], "dist_to_dest": [27.47934], "xy_to_dest": [26.81455], "contact_force": [0.0]}
+{"step": 66, "obj_z": [5.43553], "speed": [27.39545], "dist_to_dest": [28.0094], "xy_to_dest": [27.35723], "contact_force": [0.0]}
+{"step": 67, "obj_z": [5.42399], "speed": [27.39928], "dist_to_dest": [28.55056], "xy_to_dest": [27.91353], "contact_force": [0.0]}
+{"step": 68, "obj_z": [5.39959], "speed": [27.40451], "dist_to_dest": [29.07985], "xy_to_dest": [28.45981], "contact_force": [0.0]}
+{"step": 69, "obj_z": [5.38864], "speed": [27.41115], "dist_to_dest": [29.60489], "xy_to_dest": [28.99833], "contact_force": [0.0]}
+{"step": 70, "obj_z": [5.37027], "speed": [27.41919], "dist_to_dest": [30.14608], "xy_to_dest": [29.55433], "contact_force": [0.0]}
+{"step": 71, "obj_z": [5.33133], "speed": [27.42863], "dist_to_dest": [30.67912], "xy_to_dest": [30.10551], "contact_force": [0.0]}
+{"step": 72, "obj_z": [5.30495], "speed": [27.43947], "dist_to_dest": [31.20005], "xy_to_dest": [30.64128], "contact_force": [0.0]}
+{"step": 73, "obj_z": [5.28018], "speed": [27.45171], "dist_to_dest": [31.73831], "xy_to_dest": [31.19384], "contact_force": [0.0]}
+{"step": 74, "obj_z": [5.22975], "speed": [27.46534], "dist_to_dest": [32.27634], "xy_to_dest": [31.75035], "contact_force": [0.0]}
+{"step": 75, "obj_z": [5.1856], "speed": [27.48037], "dist_to_dest": [32.79582], "xy_to_dest": [32.28621], "contact_force": [0.0]}
+{"step": 76, "obj_z": [5.15282], "speed": [27.49679], "dist_to_dest": [33.3287], "xy_to_dest": [32.83309], "contact_force": [0.0]}
+{"step": 77, "obj_z": [5.09429], "speed": [27.5146], "dist_to_dest": [33.87104], "xy_to_dest": [33.39347], "contact_force": [0.0]}
+{"step": 78, "obj_z": [5.03182], "speed": [27.5338], "dist_to_dest": [34.39249], "xy_to_dest": [33.93264], "contact_force": [0.0]}
+{"step": 79, "obj_z": [4.98797], "speed": [27.55438], "dist_to_dest": [34.91892], "xy_to_dest": [34.4732], "contact_force": [0.0]}
+{"step": 80, "obj_z": [4.924], "speed": [27.57634], "dist_to_dest": [35.46331], "xy_to_dest": [35.03461], "contact_force": [0.0]}
+{"step": 81, "obj_z": [4.84453], "speed": [27.59967], "dist_to_dest": [35.98987], "xy_to_dest": [35.57971], "contact_force": [0.0]}
+{"step": 82, "obj_z": [4.78596], "speed": [27.62439], "dist_to_dest": [36.51057], "xy_to_dest": [36.11507], "contact_force": [0.0]}
+{"step": 83, "obj_z": [4.71776], "speed": [27.65047], "dist_to_dest": [37.05373], "xy_to_dest": [36.67399], "contact_force": [0.0]}
+{"step": 84, "obj_z": [4.62429], "speed": [27.67792], "dist_to_dest": [37.58747], "xy_to_dest": [37.22636], "contact_force": [0.0]}
+{"step": 85, "obj_z": [4.54757], "speed": [27.70673], "dist_to_dest": [38.10498], "xy_to_dest": [37.7593], "contact_force": [0.0]}
+{"step": 86, "obj_z": [4.47437], "speed": [27.7369], "dist_to_dest": [38.64341], "xy_to_dest": [38.3123], "contact_force": [0.0]}
+{"step": 87, "obj_z": [4.37117], "speed": [27.76842], "dist_to_dest": [39.18458], "xy_to_dest": [38.87135], "contact_force": [0.0]}
+{"step": 88, "obj_z": [4.2741], "speed": [27.80129], "dist_to_dest": [39.70303], "xy_to_dest": [39.40599], "contact_force": [0.0]}
+{"step": 89, "obj_z": [4.19275], "speed": [27.8355], "dist_to_dest": [40.23412], "xy_to_dest": [39.95081], "contact_force": [0.0]}
+{"step": 90, "obj_z": [4.08433], "speed": [27.87106], "dist_to_dest": [40.78039], "xy_to_dest": [40.51352], "contact_force": [0.0]}
+{"step": 91, "obj_z": [3.9673], "speed": [27.90795], "dist_to_dest": [41.30466], "xy_to_dest": [41.05431], "contact_force": [0.0]}
+{"step": 92, "obj_z": [3.87257], "speed": [27.94616], "dist_to_dest": [41.82822], "xy_to_dest": [41.59126], "contact_force": [0.0]}
+{"step": 93, "obj_z": [3.76186], "speed": [27.9857], "dist_to_dest": [42.3749], "xy_to_dest": [42.15254], "contact_force": [0.0]}
+{"step": 94, "obj_z": [3.62863], "speed": [28.02656], "dist_to_dest": [42.90857], "xy_to_dest": [42.70232], "contact_force": [0.0]}
+{"step": 95, "obj_z": [3.51499], "speed": [28.06873], "dist_to_dest": [43.42791], "xy_to_dest": [43.23503], "contact_force": [0.0]}
+{"step": 96, "obj_z": [3.40132], "speed": [28.11221], "dist_to_dest": [43.96961], "xy_to_dest": [43.78959], "contact_force": [0.0]}
+{"step": 97, "obj_z": [3.25813], "speed": [28.15698], "dist_to_dest": [44.51283], "xy_to_dest": [44.34762], "contact_force": [0.0]}
+{"step": 98, "obj_z": [3.12257], "speed": [28.20305], "dist_to_dest": [45.03402], "xy_to_dest": [44.8821], "contact_force": [0.0]}
+{"step": 99, "obj_z": [3.00112], "speed": [28.25041], "dist_to_dest": [45.5676], "xy_to_dest": [45.42718], "contact_force": [0.0]}
+{"step": 100, "obj_z": [2.85384], "speed": [28.29905], "dist_to_dest": [46.11632], "xy_to_dest": [45.98879], "contact_force": [0.0]}
+{"step": 101, "obj_z": [2.69806], "speed": [28.34896], "dist_to_dest": [46.64533], "xy_to_dest": [46.53046], "contact_force": [0.0]}
+{"step": 102, "obj_z": [2.5619], "speed": [28.40014], "dist_to_dest": [47.1722], "xy_to_dest": [47.06789], "contact_force": [0.0]}
+{"step": 103, "obj_z": [2.41255], "speed": [28.45258], "dist_to_dest": [47.72009], "xy_to_dest": [47.62657], "contact_force": [0.0]}
+{"step": 104, "obj_z": [2.24251], "speed": [28.50628], "dist_to_dest": [48.2593], "xy_to_dest": [48.17708], "contact_force": [0.0]}
+{"step": 105, "obj_z": [2.08656], "speed": [28.56122], "dist_to_dest": [48.78513], "xy_to_dest": [48.71255], "contact_force": [0.0]}
+{"step": 106, "obj_z": [1.93181], "speed": [28.6174], "dist_to_dest": [49.32755], "xy_to_dest": [49.26389], "contact_force": [0.0]}
+{"step": 107, "obj_z": [1.75417], "speed": [28.67482], "dist_to_dest": [49.87416], "xy_to_dest": [49.81981], "contact_force": [0.0]}
+{"step": 108, "obj_z": [1.57863], "speed": [28.73346], "dist_to_dest": [50.4053], "xy_to_dest": [50.35933], "contact_force": [0.0]}
+{"step": 109, "obj_z": [1.41203], "speed": [28.79331], "dist_to_dest": [50.9427], "xy_to_dest": [50.90399], "contact_force": [0.0]}
+{"step": 110, "obj_z": [1.22949], "speed": [28.85438], "dist_to_dest": [51.491], "xy_to_dest": [51.45942], "contact_force": [0.0]}
+{"step": 111, "obj_z": [1.0394], "speed": [28.91665], "dist_to_dest": [52.02992], "xy_to_dest": [52.00492], "contact_force": [0.0]}
+{"step": 112, "obj_z": [0.85656], "speed": [28.98011], "dist_to_dest": [52.5672], "xy_to_dest": [52.54774], "contact_force": [0.0]}
+{"step": 113, "obj_z": [0.66619], "speed": [29.04477], "dist_to_dest": [53.11373], "xy_to_dest": [53.09925], "contact_force": [0.0]}
+{"step": 114, "obj_z": [0.46661], "speed": [29.1106], "dist_to_dest": [53.65766], "xy_to_dest": [53.64758], "contact_force": [0.0]}
+{"step": 115, "obj_z": [0.26867], "speed": [29.1776], "dist_to_dest": [54.19928], "xy_to_dest": [54.19274], "contact_force": [0.0]}
+{"step": 116, "obj_z": [0.06566], "speed": [29.24576], "dist_to_dest": [54.7458], "xy_to_dest": [54.74207], "contact_force": [0.0]}
+{"step": 117, "obj_z": [0.12382], "speed": [0.0], "lift": [0.0], "dist_to_dest": [0.2087], "xy_to_dest": [0.20784], "contact_force": [0.0]}
+{"step": 118, "obj_z": [0.12137], "speed": [0.1962], "lift": [-0.00245], "dist_to_dest": [0.20729], "xy_to_dest": [0.20643], "contact_force": [0.0]}
+{"step": 119, "obj_z": [0.11499], "speed": [0.3924], "lift": [-0.00883], "dist_to_dest": [0.20729], "xy_to_dest": [0.20643], "contact_force": [0.0]}
+{"step": 120, "obj_z": [0.10469], "speed": [0.5886], "lift": [-0.01913], "dist_to_dest": [0.20729], "xy_to_dest": [0.20643], "contact_force": [0.0]}
+{"step": 121, "obj_z": [0.10328], "speed": [0.84238], "lift": [-0.02054], "dist_to_dest": [0.20498], "xy_to_dest": [0.20251], "contact_force": [0.0]}
+{"step": 122, "obj_z": [0.11358], "speed": [0.83365], "lift": [-0.01024], "dist_to_dest": [0.20493], "xy_to_dest": [0.1959], "contact_force": [0.0]}
+{"step": 123, "obj_z": [0.12159], "speed": [0.7736], "lift": [-0.00224], "dist_to_dest": [0.20596], "xy_to_dest": [0.18513], "contact_force": [0.0]}
+{"step": 124, "obj_z": [0.12652], "speed": [0.76088], "lift": [0.00269], "dist_to_dest": [0.21086], "xy_to_dest": [0.17257], "contact_force": [0.0]}
+{"step": 125, "obj_z": [0.12741], "speed": [0.79775], "lift": [0.00358], "dist_to_dest": [0.21939], "xy_to_dest": [0.15822], "contact_force": [0.0]}
+{"step": 126, "obj_z": [0.12332], "speed": [0.87798], "lift": [-0.0005], "dist_to_dest": [0.23099], "xy_to_dest": [0.14258], "contact_force": [0.0]}
+{"step": 127, "obj_z": [0.11355], "speed": [0.99111], "lift": [-0.01027], "dist_to_dest": [0.24495], "xy_to_dest": [0.12651], "contact_force": [0.0]}
+{"step": 128, "obj_z": [0.09779], "speed": [1.12726], "lift": [-0.02603], "dist_to_dest": [0.26057], "xy_to_dest": [0.11116], "contact_force": [0.0]}
+{"step": 129, "obj_z": [0.07615], "speed": [1.27912], "lift": [-0.04767], "dist_to_dest": [0.27743], "xy_to_dest": [0.0977], "contact_force": [0.0]}
+{"step": 130, "obj_z": [0.0492], "speed": [1.44172], "lift": [-0.07462], "dist_to_dest": [0.2954], "xy_to_dest": [0.08718], "contact_force": [0.0]}
+{"step": 131, "obj_z": [0.01778], "speed": [1.61181], "lift": [-0.10604], "dist_to_dest": [0.3147], "xy_to_dest": [0.08028], "contact_force": [0.0]}
+{"step": 132, "obj_z": [-0.01716], "speed": [1.78727], "lift": [-0.14098], "dist_to_dest": [0.33574], "xy_to_dest": [0.07725], "contact_force": [0.0]}
+{"step": 133, "obj_z": [0.12382], "speed": [0.0], "lift": [0.0], "dist_to_dest": [0.28032], "xy_to_dest": [0.27968], "contact_force": [0.0]}
+{"step": 134, "obj_z": [0.12137], "speed": [0.1962], "lift": [-0.00245], "dist_to_dest": [0.19371], "xy_to_dest": [0.19279], "contact_force": [0.0]}
+{"step": 135, "obj_z": [0.11499], "speed": [0.3924], "lift": [-0.00883], "dist_to_dest": [0.19371], "xy_to_dest": [0.19279], "contact_force": [0.0]}
+{"step": 136, "obj_z": [0.10469], "speed": [0.5886], "lift": [-0.01913], "dist_to_dest": [0.19371], "xy_to_dest": [0.19279], "contact_force": [0.0]}
+{"step": 137, "obj_z": [0.10278], "speed": [0.77878], "lift": [-0.02104], "dist_to_dest": [0.19161], "xy_to_dest": [0.18905], "contact_force": [0.0]}
+{"step": 138, "obj_z": [0.11259], "speed": [0.70783], "lift": [-0.01124], "dist_to_dest": [0.1908], "xy_to_dest": [0.1814], "contact_force": [0.0]}
+{"step": 139, "obj_z": [0.12112], "speed": [0.6373], "lift": [-0.0027], "dist_to_dest": [0.19476], "xy_to_dest": [0.17283], "contact_force": [0.0]}
+{"step": 140, "obj_z": [0.12641], "speed": [0.62311], "lift": [0.00259], "dist_to_dest": [0.2026], "xy_to_dest": [0.16245], "contact_force": [0.0]}
+{"step": 141, "obj_z": [0.12814], "speed": [0.66886], "lift": [0.00431], "dist_to_dest": [0.21426], "xy_to_dest": [0.15028], "contact_force": [0.0]}
+{"step": 142, "obj_z": [0.12536], "speed": [0.76385], "lift": [0.00153], "dist_to_dest": [0.22887], "xy_to_dest": [0.13641], "contact_force": [0.0]}
+{"step": 143, "obj_z": [0.11725], "speed": [0.8925], "lift": [-0.00657], "dist_to_dest": [0.24549], "xy_to_dest": [0.12128], "contact_force": [0.0]}
+{"step": 144, "obj_z": [0.10325], "speed": [1.04242], "lift": [-0.02058], "dist_to_dest": [0.26324], "xy_to_dest": [0.1056], "contact_force": [0.0]}
+{"step": 145, "obj_z": [0.08313], "speed": [1.20569], "lift": [-0.04069], "dist_to_dest": [0.28149], "xy_to_dest": [0.09026], "contact_force": [0.0]}
+{"step": 146, "obj_z": [0.05706], "speed": [1.37759], "lift": [-0.06676], "dist_to_dest": [0.29994], "xy_to_dest": [0.0762], "contact_force": [0.0]}
+{"step": 147, "obj_z": [0.02558], "speed": [1.55525], "lift": [-0.09824], "dist_to_dest": [0.31864], "xy_to_dest": [0.06431], "contact_force": [0.0]}
+{"step": 148, "obj_z": [-0.01054], "speed": [1.7369], "lift": [-0.13436], "dist_to_dest": [0.33792], "xy_to_dest": [0.05539], "contact_force": [0.0]}
+{"step": 149, "obj_z": [0.12382], "speed": [0.0], "lift": [0.0], "dist_to_dest": [0.23846], "xy_to_dest": [0.23771], "contact_force": [0.0]}
+{"step": 150, "obj_z": [0.12137], "speed": [0.1962], "lift": [-0.00245], "dist_to_dest": [0.20741], "xy_to_dest": [0.20655], "contact_force": [0.0]}
+{"step": 151, "obj_z": [0.11499], "speed": [0.3924], "lift": [-0.00883], "dist_to_dest": [0.20741], "xy_to_dest": [0.20655], "contact_force": [0.0]}
+{"step": 152, "obj_z": [0.10469], "speed": [0.5886], "lift": [-0.01913], "dist_to_dest": [0.20741], "xy_to_dest": [0.20655], "contact_force": [0.0]}
+{"step": 153, "obj_z": [0.09047], "speed": [0.7848], "lift": [-0.03335], "dist_to_dest": [0.20741], "xy_to_dest": [0.20655], "contact_force": [0.0]}
+{"step": 154, "obj_z": [0.07588], "speed": [0.981], "lift": [-0.04794], "dist_to_dest": [0.2087], "xy_to_dest": [0.20749], "contact_force": [0.0]}
+{"step": 155, "obj_z": [0.05381], "speed": [1.1772], "lift": [-0.07002], "dist_to_dest": [0.2087], "xy_to_dest": [0.20749], "contact_force": [0.0]}
+{"step": 156, "obj_z": [0.02781], "speed": [1.3734], "lift": [-0.09601], "dist_to_dest": [0.2087], "xy_to_dest": [0.20749], "contact_force": [0.0]}
+{"step": 157, "obj_z": [-0.00211], "speed": [1.5696], "lift": [-0.12593], "dist_to_dest": [0.2087], "xy_to_dest": [0.20749], "contact_force": [0.0]}
+{"step": 158, "obj_z": [-0.03596], "speed": [1.7658], "lift": [-0.15978], "dist_to_dest": [0.2087], "xy_to_dest": [0.20749], "contact_force": [0.0]}
+{"step": 159, "obj_z": [0.12382], "speed": [0.0], "lift": [0.0], "dist_to_dest": [0.16224], "xy_to_dest": [0.16113], "contact_force": [0.0]}
+{"step": 160, "obj_z": [0.12137], "speed": [0.1962], "lift": [-0.00245], "dist_to_dest": [0.1656], "xy_to_dest": [0.16452], "contact_force": [0.0]}
+{"step": 161, "obj_z": [0.11499], "speed": [0.3924], "lift": [-0.00883], "dist_to_dest": [0.1656], "xy_to_dest": [0.16452], "contact_force": [0.0]}
+{"step": 162, "obj_z": [0.10469], "speed": [0.5886], "lift": [-0.01913], "dist_to_dest": [0.1656], "xy_to_dest": [0.16452], "contact_force": [0.0]}
+{"step": 163, "obj_z": [0.09047], "speed": [0.7848], "lift": [-0.03335], "dist_to_dest": [0.1656], "xy_to_dest": [0.16452], "contact_force": [0.0]}
+{"step": 164, "obj_z": [0.09298], "speed": [0.74295], "lift": [-0.03084], "dist_to_dest": [0.16279], "xy_to_dest": [0.15791], "contact_force": [0.0]}
+{"step": 165, "obj_z": [0.09483], "speed": [0.78507], "lift": [-0.02899], "dist_to_dest": [0.16265], "xy_to_dest": [0.14975], "contact_force": [0.0]}
+{"step": 166, "obj_z": [0.09434], "speed": [0.87045], "lift": [-0.02948], "dist_to_dest": [0.16425], "xy_to_dest": [0.13805], "contact_force": [0.0]}
+{"step": 167, "obj_z": [0.08898], "speed": [0.98794], "lift": [-0.03484], "dist_to_dest": [0.16726], "xy_to_dest": [0.1228], "contact_force": [0.0]}
+{"step": 168, "obj_z": [0.07655], "speed": [1.12754], "lift": [-0.04727], "dist_to_dest": [0.17136], "xy_to_dest": [0.10558], "contact_force": [0.0]}
+{"step": 169, "obj_z": [0.05596], "speed": [1.28205], "lift": [-0.06786], "dist_to_dest": [0.17626], "xy_to_dest": [0.08899], "contact_force": [0.0]}
+{"step": 170, "obj_z": [0.02763], "speed": [1.44671], "lift": [-0.09619], "dist_to_dest": [0.18204], "xy_to_dest": [0.07578], "contact_force": [0.0]}
+{"step": 171, "obj_z": [-0.00669], "speed": [1.61841], "lift": [-0.13051], "dist_to_dest": [0.18931], "xy_to_dest": [0.06764], "contact_force": [0.0]}
+{"step": 172, "obj_z": [-0.04455], "speed": [1.79514], "lift": [-0.16838], "dist_to_dest": [0.19924], "xy_to_dest": [0.06457], "contact_force": [0.0]}
+{"step": 173, "obj_z": [0.12382], "speed": [0.0], "lift": [0.0], "dist_to_dest": [0.18953], "xy_to_dest": [0.18858], "contact_force": [0.0]}
+{"step": 174, "obj_z": [0.12137], "speed": [0.1962], "lift": [-0.00245], "dist_to_dest": [0.26751], "xy_to_dest": [0.26684], "contact_force": [0.0]}
+{"step": 175, "obj_z": [0.11499], "speed": [0.3924], "lift": [-0.00883], "dist_to_dest": [0.26751], "xy_to_dest": [0.26684], "contact_force": [0.0]}
+{"step": 176, "obj_z": [0.10469], "speed": [0.5886], "lift": [-0.01913], "dist_to_dest": [0.26751], "xy_to_dest": [0.26684], "contact_force": [0.0]}
+{"step": 177, "obj_z": [0.10355], "speed": [0.79836], "lift": [-0.02027], "dist_to_dest": [0.2646], "xy_to_dest": [0.26266], "contact_force": [0.0]}
+{"step": 178, "obj_z": [0.11631], "speed": [0.87343], "lift": [-0.00752], "dist_to_dest": [0.26188], "xy_to_dest": [0.25422], "contact_force": [0.0]}
+{"step": 179, "obj_z": [0.12823], "speed": [0.74987], "lift": [0.0044], "dist_to_dest": [0.2639], "xy_to_dest": [0.24547], "contact_force": [0.0]}
+{"step": 180, "obj_z": [0.13739], "speed": [0.66237], "lift": [0.01357], "dist_to_dest": [0.27038], "xy_to_dest": [0.23594], "contact_force": [0.0]}
+{"step": 181, "obj_z": [0.14339], "speed": [0.62621], "lift": [0.01957], "dist_to_dest": [0.28107], "xy_to_dest": [0.22535], "contact_force": [0.0]}
+{"step": 182, "obj_z": [0.14574], "speed": [0.65003], "lift": [0.02192], "dist_to_dest": [0.29544], "xy_to_dest": [0.21355], "contact_force": [0.0]}
+{"step": 183, "obj_z": [0.14392], "speed": [0.72796], "lift": [0.0201], "dist_to_dest": [0.31284], "xy_to_dest": [0.20054], "contact_force": [0.0]}
+{"step": 184, "obj_z": [0.13743], "speed": [0.84516], "lift": [0.01361], "dist_to_dest": [0.33252], "xy_to_dest": [0.18647], "contact_force": [0.0]}
+{"step": 185, "obj_z": [0.12588], "speed": [0.98775], "lift": [0.00205], "dist_to_dest": [0.35381], "xy_to_dest": [0.17167], "contact_force": [0.0]}
+{"step": 186, "obj_z": [0.109], "speed": [1.1463], "lift": [-0.01483], "dist_to_dest": [0.37616], "xy_to_dest": [0.15655], "contact_force": [0.0]}
+{"step": 187, "obj_z": [0.08669], "speed": [1.31505], "lift": [-0.03713], "dist_to_dest": [0.39916], "xy_to_dest": [0.14159], "contact_force": [0.0]}
+{"step": 188, "obj_z": [0.05905], "speed": [1.49053], "lift": [-0.06477], "dist_to_dest": [0.42258], "xy_to_dest": [0.12732], "contact_force": [0.0]}
+{"step": 189, "obj_z": [0.02631], "speed": [1.67063], "lift": [-0.09751], "dist_to_dest": [0.44637], "xy_to_dest": [0.11421], "contact_force": [0.0]}
+{"step": 190, "obj_z": [-0.01114], "speed": [1.854], "lift": [-0.13497], "dist_to_dest": [0.47064], "xy_to_dest": [0.10269], "contact_force": [0.0]}
+{"step": 191, "obj_z": [0.12382], "speed": [0.0], "lift": [0.0], "dist_to_dest": [0.21006], "xy_to_dest": [0.20921], "contact_force": [0.0]}
+{"step": 192, "obj_z": [0.12137], "speed": [0.1962], "lift": [-0.00245], "dist_to_dest": [0.25258], "xy_to_dest": [0.25187], "contact_force": [0.0]}
+{"step": 193, "obj_z": [0.11499], "speed": [0.3924], "lift": [-0.00883], "dist_to_dest": [0.25258], "xy_to_dest": [0.25187], "contact_force": [0.0]}
+{"step": 194, "obj_z": [0.10469], "speed": [0.5886], "lift": [-0.01913], "dist_to_dest": [0.25258], "xy_to_dest": [0.25187], "contact_force": [0.0]}
+{"step": 195, "obj_z": [0.09047], "speed": [0.7848], "lift": [-0.03335], "dist_to_dest": [0.25258], "xy_to_dest": [0.25187], "contact_force": [0.0]}
+{"step": 196, "obj_z": [0.09161], "speed": [0.69809], "lift": [-0.03221], "dist_to_dest": [0.24978], "xy_to_dest": [0.24684], "contact_force": [0.0]}
+{"step": 197, "obj_z": [0.0931], "speed": [0.75689], "lift": [-0.03072], "dist_to_dest": [0.24625], "xy_to_dest": [0.23837], "contact_force": [0.0]}
+{"step": 198, "obj_z": [0.09209], "speed": [0.85758], "lift": [-0.03173], "dist_to_dest": [0.24127], "xy_to_dest": [0.22513], "contact_force": [0.0]}
+{"step": 199, "obj_z": [0.08544], "speed": [0.98741], "lift": [-0.03838], "dist_to_dest": [0.23465], "xy_to_dest": [0.20726], "contact_force": [0.0]}
+{"step": 200, "obj_z": [0.07071], "speed": [1.13644], "lift": [-0.05311], "dist_to_dest": [0.22709], "xy_to_dest": [0.18681], "contact_force": [0.0]}
+{"step": 201, "obj_z": [0.04715], "speed": [1.29808], "lift": [-0.07667], "dist_to_dest": [0.21997], "xy_to_dest": [0.16685], "contact_force": [0.0]}
+{"step": 202, "obj_z": [0.016], "speed": [1.46817], "lift": [-0.10782], "dist_to_dest": [0.21513], "xy_to_dest": [0.15032], "contact_force": [0.0]}
+{"step": 203, "obj_z": [-0.02004], "speed": [1.64409], "lift": [-0.14386], "dist_to_dest": [0.21449], "xy_to_dest": [0.13887], "contact_force": [0.0]}
+{"step": 204, "obj_z": [0.12382], "speed": [0.0], "lift": [0.0], "dist_to_dest": [0.23092], "xy_to_dest": [0.23014], "contact_force": [0.0]}
+{"step": 205, "obj_z": [0.12137], "speed": [0.1962], "lift": [-0.00245], "dist_to_dest": [0.2754], "xy_to_dest": [0.27475], "contact_force": [0.0]}
+{"step": 206, "obj_z": [0.11499], "speed": [0.3924], "lift": [-0.00883], "dist_to_dest": [0.2754], "xy_to_dest": [0.27475], "contact_force": [0.0]}
+{"step": 207, "obj_z": [0.10469], "speed": [0.5886], "lift": [-0.01913], "dist_to_dest": [0.2754], "xy_to_dest": [0.27475], "contact_force": [0.0]}
+{"step": 208, "obj_z": [0.11466], "speed": [0.96846], "lift": [-0.00917], "dist_to_dest": [0.27027], "xy_to_dest": [0.26681], "contact_force": [0.0]}
+{"step": 209, "obj_z": [0.13012], "speed": [0.99567], "lift": [0.0063], "dist_to_dest": [0.26903], "xy_to_dest": [0.25786], "contact_force": [0.0]}
+{"step": 210, "obj_z": [0.14631], "speed": [0.85327], "lift": [0.02249], "dist_to_dest": [0.27598], "xy_to_dest": [0.25089], "contact_force": [0.0]}
+{"step": 211, "obj_z": [0.16247], "speed": [0.81573], "lift": [0.03865], "dist_to_dest": [0.28832], "xy_to_dest": [0.24174], "contact_force": [0.0]}
+{"step": 212, "obj_z": [0.1754], "speed": [0.71919], "lift": [0.05158], "dist_to_dest": [0.30474], "xy_to_dest": [0.22994], "contact_force": [0.0]}
+{"step": 213, "obj_z": [0.18347], "speed": [0.66787], "lift": [0.05965], "dist_to_dest": [0.32405], "xy_to_dest": [0.21562], "contact_force": [0.0]}
+{"step": 214, "obj_z": [0.18546], "speed": [0.67221], "lift": [0.06164], "dist_to_dest": [0.34506], "xy_to_dest": [0.19936], "contact_force": [0.0]}
+{"step": 215, "obj_z": [0.18067], "speed": [0.7312], "lift": [0.05685], "dist_to_dest": [0.36701], "xy_to_dest": [0.18226], "contact_force": [0.0]}
+{"step": 216, "obj_z": [0.16916], "speed": [0.83333], "lift": [0.04533], "dist_to_dest": [0.38964], "xy_to_dest": [0.1657], "contact_force": [0.0]}
+{"step": 217, "obj_z": [0.15165], "speed": [0.96499], "lift": [0.02783], "dist_to_dest": [0.41327], "xy_to_dest": [0.15101], "contact_force": [0.0]}
+{"step": 218, "obj_z": [0.12941], "speed": [1.11578], "lift": [0.00559], "dist_to_dest": [0.43858], "xy_to_dest": [0.13918], "contact_force": [0.0]}
+{"step": 219, "obj_z": [0.10387], "speed": [1.27895], "lift": [-0.01995], "dist_to_dest": [0.46642], "xy_to_dest": [0.1306], "contact_force": [0.0]}
+{"step": 220, "obj_z": [0.07629], "speed": [1.45033], "lift": [-0.04753], "dist_to_dest": [0.49745], "xy_to_dest": [0.12495], "contact_force": [0.0]}
+{"step": 221, "obj_z": [0.04747], "speed": [1.62733], "lift": [-0.07635], "dist_to_dest": [0.5319], "xy_to_dest": [0.12118], "contact_force": [0.0]}
+{"step": 222, "obj_z": [0.0175], "speed": [1.80829], "lift": [-0.10632], "dist_to_dest": [0.56944], "xy_to_dest": [0.11785], "contact_force": [0.0]}
+{"step": 223, "obj_z": [-0.01418], "speed": [1.99214], "lift": [-0.13801], "dist_to_dest": [0.59298], "xy_to_dest": [0.11358], "contact_force": [0.0]}
+{"step": 224, "obj_z": [-0.04872], "speed": [2.17814], "lift": [-0.17254], "dist_to_dest": [0.55679], "xy_to_dest": [0.1078], "contact_force": [0.0]}
+{"step": 225, "obj_z": [0.12382], "speed": [0.0], "lift": [0.0], "dist_to_dest": [0.16765], "xy_to_dest": [0.16659], "contact_force": [0.0]}
+{"step": 226, "obj_z": [0.12137], "speed": [0.1962], "lift": [-0.00245], "dist_to_dest": [0.17683], "xy_to_dest": [0.17581], "contact_force": [0.0]}
+{"step": 227, "obj_z": [0.11499], "speed": [0.3924], "lift": [-0.00883], "dist_to_dest": [0.17683], "xy_to_dest": [0.17581], "contact_force": [0.0]}
+{"step": 228, "obj_z": [0.10469], "speed": [0.5886], "lift": [-0.01913], "dist_to_dest": [0.17683], "xy_to_dest": [0.17581], "contact_force": [0.0]}
+{"step": 229, "obj_z": [0.09047], "speed": [0.7848], "lift": [-0.03335], "dist_to_dest": [0.17683], "xy_to_dest": [0.17581], "contact_force": [0.0]}
+{"step": 230, "obj_z": [0.07991], "speed": [0.59907], "lift": [-0.04392], "dist_to_dest": [0.17954], "xy_to_dest": [0.17757], "contact_force": [0.0]}
+{"step": 231, "obj_z": [0.07875], "speed": [0.71669], "lift": [-0.04507], "dist_to_dest": [0.18186], "xy_to_dest": [0.17557], "contact_force": [0.0]}
+{"step": 232, "obj_z": [0.07632], "speed": [0.86335], "lift": [-0.04751], "dist_to_dest": [0.18088], "xy_to_dest": [0.16638], "contact_force": [0.0]}
+{"step": 233, "obj_z": [0.06634], "speed": [1.0267], "lift": [-0.05749], "dist_to_dest": [0.17571], "xy_to_dest": [0.15036], "contact_force": [0.0]}
+{"step": 234, "obj_z": [0.04488], "speed": [1.19993], "lift": [-0.07894], "dist_to_dest": [0.16781], "xy_to_dest": [0.13225], "contact_force": [0.0]}
+{"step": 235, "obj_z": [0.0128], "speed": [1.37932], "lift": [-0.11102], "dist_to_dest": [0.16063], "xy_to_dest": [0.118], "contact_force": [0.0]}
+{"step": 236, "obj_z": [-0.02481], "speed": [1.56276], "lift": [-0.14863], "dist_to_dest": [0.15858], "xy_to_dest": [0.11118], "contact_force": [0.0]}
+{"step": 237, "obj_z": [0.12382], "speed": [0.0], "lift": [0.0], "dist_to_dest": [0.2432], "xy_to_dest": [0.24247], "contact_force": [0.0]}
+{"step": 238, "obj_z": [0.12137], "speed": [0.1962], "lift": [-0.00245], "dist_to_dest": [0.26561], "xy_to_dest": [0.26494], "contact_force": [0.0]}
+{"step": 239, "obj_z": [0.11499], "speed": [0.3924], "lift": [-0.00883], "dist_to_dest": [0.26561], "xy_to_dest": [0.26494], "contact_force": [0.0]}
+{"step": 240, "obj_z": [0.10469], "speed": [0.5886], "lift": [-0.01913], "dist_to_dest": [0.26561], "xy_to_dest": [0.26494], "contact_force": [0.0]}
+{"step": 241, "obj_z": [0.09047], "speed": [0.7848], "lift": [-0.03335], "dist_to_dest": [0.26561], "xy_to_dest": [0.26494], "contact_force": [0.0]}
+{"step": 242, "obj_z": [0.0934], "speed": [0.66084], "lift": [-0.03042], "dist_to_dest": [0.26017], "xy_to_dest": [0.25708], "contact_force": [0.0]}
+{"step": 243, "obj_z": [0.09575], "speed": [0.69512], "lift": [-0.02807], "dist_to_dest": [0.25529], "xy_to_dest": [0.24703], "contact_force": [0.0]}
+{"step": 244, "obj_z": [0.09593], "speed": [0.77888], "lift": [-0.02789], "dist_to_dest": [0.25016], "xy_to_dest": [0.23318], "contact_force": [0.0]}
+{"step": 245, "obj_z": [0.0914], "speed": [0.89839], "lift": [-0.03243], "dist_to_dest": [0.24491], "xy_to_dest": [0.21571], "contact_force": [0.0]}
+{"step": 246, "obj_z": [0.0799], "speed": [1.04141], "lift": [-0.04392], "dist_to_dest": [0.24003], "xy_to_dest": [0.19616], "contact_force": [0.0]}
+{"step": 247, "obj_z": [0.06031], "speed": [1.19957], "lift": [-0.06351], "dist_to_dest": [0.2362], "xy_to_dest": [0.17692], "contact_force": [0.0]}
+{"step": 248, "obj_z": [0.03302], "speed": [1.36762], "lift": [-0.09081], "dist_to_dest": [0.23427], "xy_to_dest": [0.16024], "contact_force": [0.0]}
+{"step": 249, "obj_z": [-0.00023], "speed": [1.54233], "lift": [-0.12405], "dist_to_dest": [0.23516], "xy_to_dest": [0.14735], "contact_force": [0.0]}
+{"step": 250, "obj_z": [-0.03694], "speed": [1.72168], "lift": [-0.16076], "dist_to_dest": [0.23981], "xy_to_dest": [0.13804], "contact_force": [0.0]}
+{"step": 251, "obj_z": [0.12382], "speed": [0.0], "lift": [0.0], "dist_to_dest": [0.2059], "xy_to_dest": [0.20503], "contact_force": [0.0]}

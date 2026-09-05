@@ -1,10 +1,14 @@
 # Spatial Forcing with DA3METRIC-LARGE: Giving the G1 Policy Metric Range
 
 > [!IMPORTANT]
-> **Status**: IN PROGRESS, 2026-09-05. W1-W4 landed and pushed to
-> `boredengineering/Isaac-GR00T` at `dev/arena_v0.3.0-compat` (`e58bf16`; the branch's prior tip
-> `1979f93` is preserved at `dev/arena_v0.3.0-compat-old`); 22 unit tests pass, 1 skips without the DA3 package, and
-> `pre-commit` is clean. `DA3METRIC-LARGE` loads and emits 1024-wide features on the student's 8x11
+> **Status**: PARTLY SUPERSEDED, 2026-09-05. §W5, §W7 (gates G1/G2) and §2's teacher argument
+> are replaced by [`geometry_supervision_evidence_repair_plan.md`](geometry_supervision_evidence_repair_plan.md):
+> the ground-truth depth those gates rest on was never valid, and the alignment loss is
+> scale-invariant, so the metric-ness that selected this teacher cannot transfer through it.
+> §3, §4 and §8 below stand. W1-W4 landed and pushed to
+> `boredengineering/Isaac-GR00T` at `dev/arena_v0.3.0-compat` (`d78207d`; the branch's prior tip
+> `1979f93` is preserved at `dev/arena_v0.3.0-compat-old`); 24 unit tests pass with 0 skips in the
+> `.venv` interpreter that has the DA3 package, and `pre-commit` is clean. `DA3METRIC-LARGE` loads and emits 1024-wide features on the student's 8x11
 > grid, verified end to end. C6 is unstarted, W5-W7 unstarted. Three claims in the
 > original draft were wrong and are corrected in place: §4.1's truncation depth, W1's dependency
 > risk, and W2/§8.4's load path. Originally: PLAN, 2026-09-05. Implements Spatial Forcing ([arXiv:2510.12276](https://arxiv.org/abs/2510.12276),

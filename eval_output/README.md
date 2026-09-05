@@ -21,6 +21,21 @@ eval_output/
 │           └── env0_ep0_head_camera.mp4
 ```
 
+### Non-run artifacts
+
+Not every artifact is a timestamped rollout. Diagnostics, probes and renders belong in a named
+subfolder of the experiment they were taken for, never loose at the top level -- a file whose
+experiment cannot be identified is not evidence. The categories in use:
+
+| Subfolder | Holds |
+| :--- | :--- |
+| `<experiment>/reach_traces/` | Per-step `ReachTracer` JSONL: object pose, speed, contact force, hand-to-object error |
+| `<experiment>/probes/` | Modality-ablation, open-loop-fidelity, layout and seed-sweep measurements |
+| `<experiment>/head_cam_renders/` | Single-frame head-camera renders used to compare observation framing |
+| `<experiment>/depth_readout/` | Depth-readout probe reports (geometry-conditioning gate) |
+| `frames/` | `measure_embodiment_frames` output: measured body, manipuland and surface positions per scene |
+| `rerender/` | State-playback re-renders with ground-truth depth; `rerender/smoke/` for throwaway checks |
+
 ---
 
 ## 2. Core Artifacts Generated per Run
@@ -154,10 +169,10 @@ Generate a tabular leaderboard comparing success rates, episode counts, and comp
 ```cypher
 MATCH (ev:EvaluationRun)-[:EVALUATED_GRAPH]->(e:EnvironmentGraph)
 OPTIONAL MATCH (ev)-[:USED_POLICY]->(p:Policy)
-RETURN e.name AS Environment, 
-       p.name AS Policy, 
-       ev.success_rate AS SuccessRate, 
-       ev.num_episodes AS Episodes, 
+RETURN e.name AS Environment,
+       p.name AS Policy,
+       ev.success_rate AS SuccessRate,
+       ev.num_episodes AS Episodes,
        ev.ended_at AS CompletedAt
 ORDER BY ev.ended_at DESC
 ```
@@ -197,4 +212,3 @@ RETURN ev, e, rf, s, t
 1. **Statistical Stationarity Evaluator**: During the rollout, GPU tensor ring buffers track contact chattering and object drift ($>3\,\text{cm}$).
 2. **Reifier Fault Attribution**: If settling fails or objects slip off surfaces, `attribute_simulation_telemetry_to_reifiers()` maps the fault to the specific reifier edge (e.g., `<< :reifier_apple_table | :apple :PLACED_ON :table >>`).
 3. **Active Bayesian Prior Update**: On the next environment generation iteration, the agent queries Neo4j for prior failure history on that asset/relation pair and automatically adjusts surface friction, nominal placement heights, or standoff distances.
-

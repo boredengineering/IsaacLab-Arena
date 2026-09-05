@@ -112,6 +112,13 @@ import torchvision
 
 from isaaclab.sensors import CameraCfg
 
+from isaaclab_arena.utils.demo_playback import (
+    assert_recording_covers_scene,
+    frame_state_for_scene,
+    read_recorded_states,
+    state_playback_error,
+)
+
 DEPTH_DATA_TYPE = "distance_to_image_plane"
 
 
@@ -156,90 +163,6 @@ def pitched_camera_offset(offset: CameraCfg.OffsetCfg, pitch_deg: float, height_
     return CameraCfg.OffsetCfg(pos=position, rot=rotated, convention=offset.convention)
 
 
-def read_recorded_states(demo_group: h5py.Group) -> dict[str, dict[str, dict[str, np.ndarray]]]:
-    """Return the per-frame recorded state arrays for one demo, keyed by asset type and name.
-
-    Args:
-        demo_group: The ``data/demo_N`` group of a recording.
-
-    Returns:
-        Nested mapping ``{asset_type: {asset_name: {state_name: array of shape (T, D)}}}``.
-    """
-    states: dict[str, dict[str, dict[str, np.ndarray]]] = {}
-    for asset_type in ("articulation", "rigid_object"):
-        if asset_type not in demo_group["states"]:
-            continue
-        states[asset_type] = {}
-        for asset_name, asset_group in demo_group["states"][asset_type].items():
-            states[asset_type][asset_name] = {name: np.asarray(arr) for name, arr in asset_group.items()}
-    return states
-
-
-def frame_state_for_scene(
-    scene_state: dict[str, dict[str, dict[str, torch.Tensor]]],
-    recorded: dict[str, dict[str, dict[str, np.ndarray]]],
-    frame_index: int,
-    device: str,
-) -> dict[str, dict[str, dict[str, torch.Tensor]]]:
-    """Overlay one recorded frame onto the scene's current state, leaving unrecorded assets alone.
-
-    Starting from the live scene state rather than building a fresh dict means an asset the scene
-    has but the recording does not (an invisible support surface, say) keeps its own pose instead of
-    raising.
-
-    Args:
-        scene_state: Current scene state, as returned by ``InteractiveScene.get_state``.
-        recorded: Per-frame recorded arrays from :func:`read_recorded_states`.
-        frame_index: Frame to overlay.
-        device: Device to place the overlaid tensors on.
-
-    Returns:
-        A state dict in the format ``InteractiveScene.reset_to`` expects.
-    """
-    overlaid = {
-        asset_type: {asset_name: dict(entries) for asset_name, entries in assets.items()}
-        for asset_type, assets in scene_state.items()
-    }
-    for asset_type, assets in recorded.items():
-        for asset_name, entries in assets.items():
-            if asset_type not in overlaid or asset_name not in overlaid[asset_type]:
-                continue
-            for state_name, array in entries.items():
-                if state_name not in overlaid[asset_type][asset_name]:
-                    continue
-                value = torch.as_tensor(array[frame_index], dtype=torch.float32, device=device)
-                overlaid[asset_type][asset_name][state_name] = value.unsqueeze(0)
-    return overlaid
-
-
-def assert_recording_covers_scene(
-    scene_state: dict[str, dict[str, dict[str, torch.Tensor]]],
-    recorded: dict[str, dict[str, dict[str, np.ndarray]]],
-) -> list[str]:
-    """Assert the recording drives the robot, and report scene assets it does not drive.
-
-    Args:
-        scene_state: Current scene state.
-        recorded: Per-frame recorded arrays.
-
-    Returns:
-        Names of scene assets left at their live pose because the recording does not contain them.
-    """
-    recorded_articulations = set(recorded.get("articulation", {}))
-    scene_articulations = set(scene_state.get("articulation", {}))
-    assert scene_articulations & recorded_articulations, (
-        "The recording drives none of the scene's articulations, so playback would render a scene the"
-        f" recording never describes. Scene has {sorted(scene_articulations)}, recording has"
-        f" {sorted(recorded_articulations)}."
-    )
-    undriven = []
-    for asset_type, assets in scene_state.items():
-        for asset_name in assets:
-            if asset_name not in recorded.get(asset_type, {}):
-                undriven.append(f"{asset_type}/{asset_name}")
-    return sorted(undriven)
-
-
 def rgb_fidelity(rendered: np.ndarray, recorded: np.ndarray) -> dict[str, float]:
     """Compare a rendered frame against the recorded one.
 
@@ -255,32 +178,6 @@ def rgb_fidelity(rendered: np.ndarray, recorded: np.ndarray) -> dict[str, float]
     mean_squared_error = float(np.mean((lhs - rhs) ** 2))
     psnr = float("inf") if mean_squared_error == 0.0 else 10.0 * math.log10(255.0**2 / mean_squared_error)
     return {"mean_abs_diff": float(np.mean(np.abs(lhs - rhs))), "psnr_db": psnr}
-
-
-def state_playback_error(env, written: dict) -> dict[str, float]:
-    """Read the scene state back after a write and return the worst discrepancy per asset.
-
-    A silent mismatch here is the difference between "the recording did not apply" and "the scene
-    renders the recorded state differently", which are diagnosed in completely different places.
-
-    Args:
-        env: The unwrapped environment, already advanced with ``sim.forward()``.
-        written: The state dict that was handed to ``InteractiveScene.reset_to``.
-
-    Returns:
-        Mapping from ``"<asset_type>/<asset>/<state>"`` to the maximum absolute difference.
-    """
-    realised = env.scene.get_state(is_relative=True)
-    errors = {}
-    for asset_type, assets in written.items():
-        for asset_name, entries in assets.items():
-            for state_name, value in entries.items():
-                other = realised.get(asset_type, {}).get(asset_name, {}).get(state_name)
-                if other is None:
-                    continue
-                diff = (value.to(other.device).float() - other.float()).abs().max()
-                errors[f"{asset_type}/{asset_name}/{state_name}"] = float(diff)
-    return errors
 
 
 def configure_camera(
@@ -448,7 +345,7 @@ def main():
                     env.scene.reset_to(frame_state, env_ids, is_relative=True)
                     rgb_np, depth_np = render_frame(env, args_cli.renders_per_frame, rgb_key, depth_key)
                     if args_cli.validate_states:
-                        playback_errors.append(state_playback_error(env, frame_state))
+                        playback_errors.append(state_playback_error(env.scene, frame_state))
 
                     rgb_frames.append(rgb_np)
                     if depth_np is not None:

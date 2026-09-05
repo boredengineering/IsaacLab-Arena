@@ -19,7 +19,7 @@ Example:
         --model-path /models/isaaclab_arena/static_apple_tutorial/gn1x_tuned_static_apple \\
         --dataset-path /datasets/isaaclab_arena/static_apple_tutorial/lerobot \\
         --modality-config-path isaaclab_arena_gr00t/embodiments/g1/g1_sim_wbc_data_gr00t_n_1_7_config.py \\
-        --steps 0 60 120 --output eval_output/p2b_modality_ablation.json
+        --steps 0 60 120 --output eval_output/g1_tabletop_apple_to_plate/probes/modality_ablation.json
 """
 
 from __future__ import annotations

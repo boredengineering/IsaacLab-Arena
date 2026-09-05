@@ -10,16 +10,19 @@
 # whatever each invocation happened to be typed with. Runs identically on one local GPU and on a
 # cloud instance with up to eight, since only --nproc-per-node changes.
 #
-# Arms:
-#   baseline        RGB, single frame                     -- the control
-#   parallax        RGB, frames [-8, 0]                   -- motion parallax, no new data
-#   align           single frame + Spatial Forcing        -- geometry via alignment loss
-#   mix             single frame + 3D-Mix gated fusion    -- geometry as fused tokens
-#   align_parallax  frames [-8, 0] + Spatial Forcing      -- both
+# Arms (the teacher is per-arm; see --teacher to override):
+#   baseline        RGB, single frame                          -- the control
+#   parallax        RGB, frames [-8, 0]                        -- motion parallax, no new data
+#   align           single frame + SF, DA3METRIC-LARGE         -- metric geometry via alignment
+#   align_anyview   single frame + SF, DA3-BASE                -- prices multi-view aggregation
+#   align_cheap     single frame + SF, Depth-Anything-V2-Small -- the cheap floor
+#   mix             single frame + 3D-Mix gated fusion         -- geometry as fused tokens
+#   align_parallax  frames [-8, 0] + SF, DA3METRIC-LARGE       -- both
 #
 # Usage:
 #   ./finetune_n17_geometry.sh --arm align --nproc-per-node 8
 #   ./finetune_n17_geometry.sh --arm baseline --dry-run
+#   ./finetune_n17_geometry.sh --arm align --align-loss-coeff 1.0 --pe-std 0.5   # a sweep point
 
 set -euo pipefail
 
@@ -36,6 +39,16 @@ GR00T_ROOT="${GR00T_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../submodules/
 MODALITY_DIR="${MODALITY_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../embodiments/g1" && pwd)}"
 DRY_RUN=false
 
+# Teachers are cross-task assets, so they sit at the root of the models tree rather than under a
+# task. Deliberately NOT $MODELS_DIR: that variable is commonly exported pointing at a task
+# subdirectory (e.g. /models/isaaclab_arena/locomanipulation_tutorial), which would silently
+# resolve the teacher to a path that does not exist.
+TEACHER_ROOT="${GEOMETRY_TEACHER_ROOT:-/models/isaaclab_arena}"
+TEACHER=""
+ALIGN_SITE="post_vl_self_attention"
+ALIGN_LOSS_COEFF=""
+PE_STD=""
+
 usage() {
     sed -n '7,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
@@ -51,6 +64,10 @@ while [[ $# -gt 0 ]]; do
         --base-model) BASE_MODEL="$2"; shift 2 ;;
         --dataset-path) DATASET_PATH="$2"; shift 2 ;;
         --output-root) OUTPUT_ROOT="$2"; shift 2 ;;
+        --teacher) TEACHER="$2"; shift 2 ;;
+        --align-site) ALIGN_SITE="$2"; shift 2 ;;
+        --align-loss-coeff) ALIGN_LOSS_COEFF="$2"; shift 2 ;;
+        --pe-std) PE_STD="$2"; shift 2 ;;
         --dry-run) DRY_RUN=true; shift ;;
         -h|--help) usage 0 ;;
         *) echo "Unknown argument: $1" >&2; usage 1 ;;
@@ -68,14 +85,32 @@ fi
 MODALITY_SINGLE="${MODALITY_DIR}/g1_sim_wbc_data_gr00t_n_1_7_config.py"
 MODALITY_PARALLAX="${MODALITY_DIR}/g1_sim_wbc_data_gr00t_n_1_7_parallax_config.py"
 
+# ARM_TEACHER is the default for the arm; --teacher overrides it. Every geometry arm must name a
+# teacher explicitly, because the model-side default is Depth-Anything-V2-Small: an arm that forgets
+# to pass one trains against the cheap relative-depth encoder while its logs say "align", which is
+# indistinguishable from a real DA3METRIC-LARGE run until the results are compared.
 case "$ARM" in
-    baseline)       MODALITY="$MODALITY_SINGLE";   GEOMETRY_MODE=off   ; TUNE_VISUAL=false ;;
-    parallax)       MODALITY="$MODALITY_PARALLAX"; GEOMETRY_MODE=off   ; TUNE_VISUAL=false ;;
-    align)          MODALITY="$MODALITY_SINGLE";   GEOMETRY_MODE=align ; TUNE_VISUAL=true  ;;
-    mix)            MODALITY="$MODALITY_SINGLE";   GEOMETRY_MODE=mix   ; TUNE_VISUAL=true  ;;
-    align_parallax) MODALITY="$MODALITY_PARALLAX"; GEOMETRY_MODE=align ; TUNE_VISUAL=true  ;;
+    baseline)       MODALITY="$MODALITY_SINGLE";   GEOMETRY_MODE=off   ; TUNE_VISUAL=false; ARM_TEACHER="" ;;
+    parallax)       MODALITY="$MODALITY_PARALLAX"; GEOMETRY_MODE=off   ; TUNE_VISUAL=false; ARM_TEACHER="" ;;
+    align)          MODALITY="$MODALITY_SINGLE";   GEOMETRY_MODE=align ; TUNE_VISUAL=true ; ARM_TEACHER="${TEACHER_ROOT}/DA3METRIC-LARGE" ;;
+    align_anyview)  MODALITY="$MODALITY_SINGLE";   GEOMETRY_MODE=align ; TUNE_VISUAL=true ; ARM_TEACHER="${TEACHER_ROOT}/DA3-BASE" ;;
+    align_cheap)    MODALITY="$MODALITY_SINGLE";   GEOMETRY_MODE=align ; TUNE_VISUAL=true ; ARM_TEACHER="depth-anything/Depth-Anything-V2-Small-hf" ;;
+    mix)            MODALITY="$MODALITY_SINGLE";   GEOMETRY_MODE=mix   ; TUNE_VISUAL=true ; ARM_TEACHER="${TEACHER_ROOT}/DA3METRIC-LARGE" ;;
+    align_parallax) MODALITY="$MODALITY_PARALLAX"; GEOMETRY_MODE=align ; TUNE_VISUAL=true ; ARM_TEACHER="${TEACHER_ROOT}/DA3METRIC-LARGE" ;;
     *) echo "Unknown arm: $ARM" >&2; usage 1 ;;
 esac
+
+[[ -n "$TEACHER" ]] || TEACHER="$ARM_TEACHER"
+if [[ "$GEOMETRY_MODE" != "off" ]]; then
+    [[ -n "$TEACHER" ]] || { echo "Arm '$ARM' needs a teacher; pass --teacher" >&2; exit 1; }
+    # A local directory must exist; a bare HuggingFace id (no slash-prefixed path) is fetched by the
+    # loader itself, so only path-shaped values are checked here.
+    if [[ "$TEACHER" == /* && ! -d "$TEACHER" ]]; then
+        echo "Teacher not found: $TEACHER" >&2
+        echo "  fetch it with: hf download <repo> --local-dir $TEACHER" >&2
+        exit 1
+    fi
+fi
 
 for path in "$BASE_MODEL" "$DATASET_PATH" "$MODALITY" "$GR00T_ROOT/gr00t/experiment/launch_finetune.py"; do
     [[ -e "$path" ]] || { echo "Path does not exist: $path" >&2; exit 1; }
@@ -109,6 +144,12 @@ CMD=(
     --tune-diffusion-model
     "${COLOR_JITTER[@]}"
 )
+if [[ "$GEOMETRY_MODE" != "off" ]]; then
+    CMD+=(--geometry-encoder-id "$TEACHER" --geometry-align-site "$ALIGN_SITE")
+    [[ -n "$ALIGN_LOSS_COEFF" ]] && CMD+=(--geometry-align-loss-coeff "$ALIGN_LOSS_COEFF")
+    [[ -n "$PE_STD" ]] && CMD+=(--geometry-align-position-embedding-std "$PE_STD")
+fi
+
 if [[ "$TUNE_VISUAL" == "true" ]]; then
     CMD+=(--tune-visual)
 else
@@ -117,6 +158,7 @@ fi
 [[ -n "$LEARNING_RATE" ]] && CMD+=(--learning-rate "$LEARNING_RATE")
 
 echo "[finetune] arm=$ARM geometry_mode=$GEOMETRY_MODE tune_visual=$TUNE_VISUAL gpus=$NPROC"
+[[ "$GEOMETRY_MODE" != "off" ]] && echo "[finetune] teacher=$TEACHER align_site=$ALIGN_SITE"
 echo "[finetune] modality=$MODALITY"
 echo "[finetune] output=$OUTPUT_DIR"
 printf '[finetune] %q ' "${CMD[@]}"; echo

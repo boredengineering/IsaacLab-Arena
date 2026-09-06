@@ -1,5 +1,40 @@
 # Spatial Forcing with DA3METRIC-LARGE: Giving the G1 Policy Metric Range
 
+> [!NOTE]
+> **Role, 2026-09-06.** The build is now directed by
+> [`da3_spatial_forcing_pipeline_plan.md`](da3_spatial_forcing_pipeline_plan.md). This document
+> remains the **method reference** -- §3's upstream-faithful description, §4's N1.7 porting
+> analysis and §8's licence work are what the implementation was built from and still hold.
+> Five updates from running it for the first time:
+>
+> 1. **`align_loss_coeff` is no longer unknown.** §3.5's WARNING is retracted:
+>    `openvla-SF/vla-scripts/finetune_align.py` defines `align_loss_coeff: float = 0.5`, which is
+>    exactly Arena's default, so it is upstream's own value rather than a guess. Still worth
+>    sweeping -- upstream tuned it against OpenVLA's L1 action loss, not N1.7's flow-matching head
+>    -- but not as an unknown. Do not conflate with VEGA's `lambda = 0.1` (arXiv:2605.10485).
+> 2. **§3.4 is confirmed in its reasoning and only half-implemented.** The teacher does see the
+>    student's *geometric* crop: the processor emits `geometry_images` from `stacked_images`, which
+>    is post-augmentation, so positional alignment is meaningful as §3.4 requires. But the second
+>    half -- replaying the crop while **dropping colour ops** -- was never built. The teacher
+>    currently receives brightness and contrast jitter; the launcher only drops saturation and hue,
+>    and does so for the whole arm rather than for the teacher alone. Open item, not a blocker.
+> 3. **A consequence of (2) worth recording:** because the crop is stochastic per sample, a
+>    precomputed teacher-feature cache is **unsound** under this recipe -- cached features would sit
+>    under a different crop than the student's. This is why the pipeline plan keeps the online
+>    teacher as the default and gates `--emit-latents` behind a determinism requirement.
+> 4. **W5's metric-error budget must not use render-derived GT.** The ground truth it rests on comes
+>    from the simulator render, which W1 of the evidence-repair plan shows is frozen. Superseded by
+>    S1b of the pipeline plan: anchor the scale on **known scene geometry** -- the apple's 3.4 cm
+>    relief at ~0.5 m, a ratio that survives the scale error -- which needs no ground truth at all.
+> 5. **W6 could never have run, and now does.** Measuring the teacher's feature width is a forward
+>    pass, and `AutoModel.from_pretrained` builds the policy on the **meta device**, so
+>    `probe_feature_dim()` in `Gr00tN1d7.__init__` failed with "Cannot copy out of meta tensor"
+>    every time, for both `align` and `mix`. Fixed by probing before construction and carrying the
+>    width on the config as `geometry_feature_dim`. Two further defects surfaced immediately behind
+>    it: `align_loss` was computed and never logged, and the frozen teacher's 342 tensors were being
+>    written into every checkpoint. First working run: align 0.9916 -> 0.3969 -> 0.2564 with the
+>    action loss falling alongside.
+
 > [!IMPORTANT]
 > **Status**: PARTLY SUPERSEDED, 2026-09-05. §W5, §W7 (gates G1/G2) and §2's teacher argument
 > are replaced by [`geometry_supervision_evidence_repair_plan.md`](geometry_supervision_evidence_repair_plan.md):
@@ -133,10 +168,12 @@ ops are dropped. Note as a divergence from upstream and check it in the smoke te
 - Real robot: **+47.5 points** on stack-glass-cups from 40 demos.
 
 > [!WARNING]
-> **`align_loss_coeff` (α) is never given a number** in the paper body -- Appendix A is titled
-> "Weight Factor" but the value is not recoverable from the HTML, and it is not in the files fetched.
-> Treat α as unknown and sweep it. The `0.5` currently defaulted in Arena is a guess and should not
-> be reported as if it came from the paper.
+> **RETRACTED 2026-09-06.** This block said α "is never given a number" and that Arena's `0.5` was
+> a guess. The paper body indeed omits it -- Appendix A is titled "Weight Factor" and the value is
+> not recoverable from the HTML -- but the **reference implementation supplies it**:
+> `openvla-SF/vla-scripts/finetune_align.py` sets `align_loss_coeff: float = 0.5`. Arena's default
+> is therefore upstream's, not an invention. Sweep it because the transfer is uncertain (OpenVLA's
+> L1 action loss vs N1.7's flow matching), not because the value is unknown.
 
 ## 4. Porting to GR00T N1.7
 

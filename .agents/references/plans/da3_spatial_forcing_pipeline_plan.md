@@ -189,6 +189,36 @@ fitted global scalar reached 1.027x / 1.64 cm. The annotator therefore writes th
 *and* the converted metres *and* records every factor in `manifest.json`, asserting nothing about
 which is metres. Fitting that scalar is the remaining piece of S1.
 
+### S1a — Look at the annotation  *(done)*
+
+`isaaclab_arena_gr00t/scripts/preview_depth_annotation.py` renders recorded RGB beside colourised
+DA3 depth, colour scale fixed per episode so motion in the depth panel is real rather than
+per-frame renormalisation. Episodes 0/1/125/250 render at 154/168/155/189 frames, matching
+`episodes.jsonl`, depth spanning 0.33-1.06 m. Inspected: gripper and held apple nearest, the
+plate's relief resolves, table graduates near-to-far, shelf column reads far. DA3 rounds the flat
+plate into a dome -- normal monocular behaviour, harmless for alignment.
+
+**Rerun**: `isaaclab_arena_examples/tools/visualize_lerobot_dataset.py` writes a `.rrd`, but
+**`rerun` is installed in neither the devcontainer nor the GR00T image**. Generate inside the
+container without touching the project environment, then view on the **host**:
+
+```bash
+# generate (in the container -- uv --with keeps rerun out of the project env)
+docker exec gr00t-annotate bash -lc 'cd /workspace/gr00t && UV_LINK_MODE=copy \
+  uv run --with rerun-sdk --with opencv-python-headless \
+  python /workspaces/isaaclab_arena/isaaclab_arena_examples/tools/visualize_lerobot_dataset.py \
+    --dataset-dir /datasets/isaaclab_arena/static_apple_tutorial/lerobot \
+    --episode-index 0 --save-rrd /workspaces/isaaclab_arena/eval_output/viz/episode_000_rgb.rrd'
+
+# view (on the host, where the Rerun viewer runs)
+pip install rerun-sdk           # once
+rerun eval_output/viz/episode_000_rgb.rrd
+```
+
+The container path is for *generating* the recording; the viewer is a host-side GUI. The
+side-by-side mp4s from `preview_depth_annotation.py` need no viewer at all and are the faster
+check.
+
 ### S1b — Fit the one global metric scale  *(the remainder of S1)*
 
 **It does not gate S2.** Spatial Forcing's loss is `1 - cos`, which is scale-invariant, so the

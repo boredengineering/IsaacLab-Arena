@@ -1,7 +1,10 @@
 # Metric Range for the G1 Policy: Fix the Confounds, Then the Method
 
 > [!IMPORTANT]
-> **Status**: PLAN v2, 2026-09-05, replacing v1 of the same day in this file. Supersedes §W5, §W7
+> **Status**: PLAN v2.1, 2026-09-06. v2.1 adds §2.4's third removal, §2.8 (external corroboration
+> of the range/bearing asymmetry, and the cheapest perception remedy nobody costed), §2.9 (verified
+> absences), and a fifth branch to the decision tree; §2.6 gains the two published loss recipes. No
+> v2 finding is retracted. Originally: PLAN v2, 2026-09-05, replacing v1 of the same day. Supersedes §W5, §W7
 > (gates G1/G2) and §2's teacher argument in
 > [`spatial_forcing_da3_metric_alignment_plan.md`](spatial_forcing_da3_metric_alignment_plan.md);
 > that plan's §3, §4 and §8 stand. Written after four investigations on 2026-09-05 -- a source-level
@@ -139,6 +142,22 @@ position is that the representation is *probably* scale-free, for reasons of tra
 normalisation rather than of a clean post-hoc factorisation. **W5 settles it empirically in an
 afternoon**, and until it reports, treat this as the leading hypothesis rather than a finding.
 
+**A third removal, code-verified.** SF slices `agg_vggt_hidden[:, :, patch_start_idx:, :]`, keeping
+only patch tokens and **discarding the teacher's camera token** -- the one carrying its predicted
+intrinsics, and the only place a focal length could enter. Evo-0, by contrast, keeps camera, register
+*and* 3D tokens. Our `_forward_da3` inherits the same shape by a different route: it returns
+`net.backbone`, **discarding the DPT head**, and this monocular checkpoint emits no camera token to
+discard in the first place. So on both paths the one quantity that disambiguates metres is dropped
+before the loss sees anything.
+
+**And the loss-form question is unablated everywhere, not just in SF.** Upstream implements cosine and
+nothing else -- the `else` branch is `raise NotImplementedError`, so there is no reference MSE variant
+to copy. REPA, which SF builds on, compares only NT-Xent against negative cosine similarity -- **both
+scale-invariant** -- and never tests MSE. Meanwhile **GLaD uses unnormalised squared L2 against the
+same frozen VGGT** at the same LLM-hidden-state site and reports 94.1% LIBERO average, without ever
+ablating against cosine. So the magnitude-preserving variant is not exotic; it is in use and
+unmeasured against the variant we built. W5 is the cheap way to find out which side of that we are on.
+
 **Consequence either way: "metric teacher" is a weak differentiator.** The old plan's §2 selected
 `DA3METRIC-LARGE` for metric-ness that the loss cannot transmit and the representation probably does
 not hold. The `DA3MONO-LARGE` contrast arm is well designed to detect exactly this and should be
@@ -225,6 +244,18 @@ Our 1.64 cm is already inside that bar.
   fraction within 2 cm **44% → 97%**. It also reports that **layer 12 "degraded token-level
   separation after training"** -- directly relevant to our `backbone_layer_{6,9,12}` sweep. No code
   released.
+- **Two published recipes for W6's loss, and one cautionary tale.** DepthVLA is the closest
+  working example: a depth expert in a mixture-of-transformers, no sensor at inference, trained with
+  the **Eigen scale-invariant log loss at λ = 0.5** -- i.e. only *half* the scale term removed, so it
+  is partially scale-aware -- against **metric** pseudo-labels from UniDepthV2 and Depth-Anything-V2.
+  It gains **+16.0** on Simpler WidowX over its own π₀ re-implementation (58.8 → 74.8) with no action
+  pretraining. QDepth-VLA is the counterexample that names our problem: it quantises **relative**
+  depth into VQ-VAE tokens and concedes in its own ablation that "relative depth lacks absolute
+  positional encoding necessary for stable control" (−5.5% avg, −15.8% on one task). And DreamVLA is
+  the trap -- its auxiliary depth loss is a **deliberately scale-normalised MSE** that "removes the
+  global scale ambiguity ... while ignoring any arbitrary global scale shift", which is exactly the
+  mistake W6 exists to avoid. λ is therefore a **design decision, not a default**: at λ=1 the loss is
+  fully scale-invariant and W6 degenerates into §2.4.
 - **Our decisive advantage is that we have exact metric GT.** Every objection the literature raises
   to depth supervision is about pseudo-label noise. G³VLA measured a monocular teacher predicting a
   median 3.535 m against a simulator GT median of 0.027 m -- a **132.4x** ratio -- and concluded sim
@@ -273,6 +304,72 @@ Licence-clean candidates, if a teacher swap is ever justified, verified on tag, 
 > metric numbers, so it is usable for measurement only, never for shipping. Both corroborate the old
 > plan's finding that HF cards mis-state licences, and that the repo is authoritative.
 
+### 2.8 The range/bearing asymmetry is a documented class failure
+
+Our signature (bearing inside the apple's radius, range wrong) is not idiosyncratic. The one paper
+that decomposes imitation-policy error on exactly these two axes is
+[2605.28736](https://arxiv.org/html/2605.28736) -- ACT, Diffusion Policy, SmolVLA and π₀, 28 trained
+models -- and it separates "**lateral error** ... a failure in visual localization of the thread in
+the image plane" from "**depth error** ... does not reach far enough (undershoot) or extends too far
+past". Its findings, in order of relevance to us:
+
+- "**depth errors are the dominant failure mode**, accounting for 20-35% of all test episodes, while
+  lateral errors are markedly less frequent (0-25%)". Even its strongest model "fails almost
+  exclusively due to depth errors (20%) rather than lateral mislocalization (5%)" -- the policies
+  "have **largely solved the lateral localization problem** but continue to struggle" with range.
+- **More demonstrations do not fix it**: depth errors stay at 20-35% "even at 160 episodes for every
+  policy, suggesting that depth reasoning ... is **bottlenecked by the available perceptual signal
+  rather than by demonstration count**." This is a direct warning about W2: spatial variation is
+  necessary for a spatial objective to bind, but volume alone will not close a range gap.
+- **The camera ablation is the actionable part.** "On-arm only (no side camera) causes depth errors to
+  spike for every policy (**40-65%**), while side-cam only (no on-arm camera) shifts the failure mass
+  into lateral errors of 30-45%." The two axes are carried by *different views*: bearing by the
+  wrist/on-arm view, range by the side view.
+
+**Mechanistic corroboration from our own model family.** GR00T N1's only spatial auxiliary is an
+image-plane bearing loss and nothing else: it annotates target bounding boxes with OWL-v2, then
+supervises "the **normalized center coordinates** ... by dividing its x and y coordinates by the image
+width and height." There is **no range term anywhere in the objective**. A model trained to predict
+normalised image-plane centres and nothing else is precisely a model with good bearing and unanchored
+range. (Flagged: the causal link is ours; the paper draws no such conclusion, and N1.7 is a different
+backbone -- but N1.7's relative-EEF action space and 20K hours of monocular human-video pretraining
+supply no metric anchor either, so scale must come entirely from fine-tuning data.)
+
+**The remedy this implies is cheaper than every method in §2.6 and is not on our work list**: check
+whether the G1 head camera is the *only* view feeding the policy, and if so whether a second
+viewpoint with baseline against the approach axis is available in the embodiment config. Range from
+two views is triangulation, not inference. This should be priced before W6.
+
+### 2.9 Verified absences -- what the literature will not tell us
+
+Recorded so these are not re-searched. Each was looked for specifically and not found:
+
+- **No paper decomposes VLA reach error into latency vs perception vs calibration.** RTC
+  ([2506.07339](https://arxiv.org/html/2506.07339)) reports success rate, task-progress steps and
+  throughput only; its sole decomposition tables are *compute* latency by component (SigLIP 18 ms,
+  Gemma-2B prefill 44 ms, ...). It blames chunk **discontinuity** and distribution shift, not bias.
+  So §2.2's plateau argument has no published template -- W3 is building the decomposition, not
+  reproducing one.
+- **No paper reports a signed per-axis (x/y/z) end-effector bias in metres for a VLA.**
+  [2511.11298](https://arxiv.org/html/2511.11298) gets closest, naming "height (Z-axis) misalignment
+  on bag (**closes above surface**)" and attributing pre-grasp error to "visual grounding drift and
+  depth sensing noise" -- but unsigned and unquantified, and it explicitly warns that "ambiguities
+  between perception precision, control timing, and state estimation make root-cause diagnosis
+  non-trivial." G3's numbers will be the first of their kind we have seen; treat them as such.
+- **No arXiv technical report exists for GR00T N1.5, N1.6 or N1.7**, and no NVIDIA document of any
+  kind reports a vertical failure mode or per-axis error. N1 contains no failure analysis at all.
+- **FLARE is absent from our vendored `submodules/Isaac-GR00T`** -- `grep -rn -i flare` returns only
+  an unrelated CSS hit under `external_dependencies/depth-anything-3`. There is no upstream alignment
+  infrastructure to reuse; `gr00t/model/modules/geometry_conditioning.py` is the whole geometry path.
+- **No learned residual *calibration* correction for a learned policy exists.** The classical hand-eye
+  literature fits height-dependent calibration offsets; the residual-RL literature corrects in
+  *action* space. Nothing bridges them, so if W3 returns "calibration" the fix is ours to design.
+- **W6 is unpublished territory.** No auxiliary-loss experiment anywhere regresses metric depth in
+  metres and compares it against a scale-normalised target. OASIS varies a frozen *input*;
+  QDepth-VLA and DreamVLA use relative or scale-normalised targets exclusively. That is the
+  experiment our hypothesis calls for, and it means W6 has no baseline to inherit -- and, if it
+  works, is publishable.
+
 ## 3. The re-ordered thesis
 
 > The 7 cm is real and measured. Whether it is perceptual is not established, and the leading
@@ -287,9 +384,12 @@ Decision tree, in order:
 2. **W2** adds spatial variation. Without it no perception-side loss can help, and no gate is
    informative.
 3. **W3** discriminates scale from offset, and perception from calibration. *This decides the method.*
-4. If perception is implicated → **W6**, a separate depth branch regressing sim GT metres.
-   If calibration or memorisation is implicated → geometry supervision is the wrong tool and the
-   remedy is data variation plus a calibration fit.
+4. **W3b** prices a second viewpoint before any method is funded. §2.8 shows range and bearing are
+   carried by *different views*, and triangulation beats inference.
+5. If perception is implicated → **W6**, a separate depth branch regressing sim GT metres.
+   If calibration or memorisation is implicated → geometry supervision is the wrong tool: the remedy
+   is data variation plus a calibration fit, or **W9**'s residual, which is the one published fix for
+   our exact symptom.
 
 ## 4. Work items
 
@@ -315,6 +415,26 @@ seed/distance axis, not deck height, until `Z_deck` is derived from the fixture 
 irreproducible as the tables in §2.2. Add the falsification arm the record never ran: apply
 `cartesian_vertical_offset_adapter` and see whether a constant offset closes it -- if it does, the
 diagnosis is calibration, not perception.
+
+### W3b -- Make range observable: temporal parallax now, a second camera only with W2
+Per §2.8, range and bearing are carried by different views. **The feasibility question is already
+answered, and the answer is the expensive branch:** `G1CameraCfg` exposes exactly one camera,
+`robot_head_cam`, and the corpus recorded exactly one view,
+`observation.images.ego_view`. So a genuine *spatial* second view means changing the embodiment rig
+**and** re-recording all 251 episodes -- it folds into W2's cost and does not compete with it. It is
+not the cheapest remedy on the list.
+
+What *is* cheap and already built is **temporal** parallax: `g1_sim_wbc_data_gr00t_n_1_7_parallax_config.py`
+stacks the same camera at `delta_indices [-8, 0]`, and the `parallax` and `align_parallax` arms are
+already wired in the launcher. That makes range observable through *motion* rather than through a
+baseline, needs no new sensor and no re-record, and is the one item here that can run the moment W1
+lands. It is weaker than triangulation -- the baseline is whatever the head moved in 8 frames, which
+in a corpus this static may be almost nothing, and §2.3's `obj_z` spread of ~1 cm is a warning -- so
+measure the effective baseline before drawing conclusions from a null result.
+
+If W2 is funded, add a second camera with usable baseline against the approach axis **in the same
+re-record**, since the marginal cost there is small and §2.8 says it targets exactly our failing
+axis.
 
 ### W4 -- Re-derive the camera mount
 `calibrate_corpus_camera.py`'s fitted offset is likely an artifact of §2.1. Re-run after W1 and
@@ -347,6 +467,19 @@ measurement and for any scale-*aware* objective (W6); the cosine path in W8 does
 Only after W1-W3. `baseline`, the primary teacher chosen by relief fidelity (§2.5), and
 `DA3MONO-LARGE` as the contrast that tests §2.4's claim that metric-ness is not carried in the
 representation. The five-arm matrix and the site/coefficient sweeps stay deferred.
+
+### W9 -- If calibration or memorisation is implicated: an object-centric residual
+[2606.18953](https://arxiv.org/html/2606.18953) is the one published remedy for our literal symptom,
+on our base model family (GR00T-N1.5). Its Table 6 of shared sim/real failure modes reads, verbatim:
+"**Hovers above cube, misses grasp** → Residual Fix: **Pushes end-effector down to the cube**", and
+"Stops short of target → Moves end-effector closer." The residual is trained **only in simulation**
+against the frozen base policy's own failures, and transfers zero-shot because it "observes object
+pose, a representation invariant across domains" rather than pixels. That property is why it survives
+the §2.1 render bug and the §2.3 memorisation diagnosis alike: it never looks at an image. Cheaper
+than W6 and orthogonal to it -- it corrects the *action*, not the perception -- so it is the right
+first move if W3 returns "offset". Compare against the existing
+`cartesian_vertical_offset_adapter` falsification arm in W3: a constant offset is the zeroth-order
+version of the same idea, and if that closes the gap, W9 is unnecessary.
 
 ## 5. Gates
 
@@ -386,6 +519,13 @@ materially against the baseline policy's embeddings.
    actually feeds.
 5. **The truncation risk** is unchanged (effective depth 0.62 against upstream's best 0.75), and
    MVUCF's layer-12 finding suggests the shallow end of our sweep may be actively harmful.
+6. **W6 has no published baseline** (§2.9). Its λ, its tap site and its readout parameterisation are
+   all unmeasured in combination, and the closest published points disagree: DepthVLA succeeds at
+   λ=0.5 with a separate expert, DreamVLA neutralises scale on purpose, GLaD diverges outright with a
+   backbone head. Budget for a λ sweep, not a single run.
+7. **More data may not close a range gap** even with variation. §2.8's depth-error rate is flat from
+   40 to 160 episodes per task. If W3 says "perceptual-absolute", W2 alone will not be sufficient and
+   W3b or W6 becomes load-bearing.
 
 ## 8. Open decisions
 
@@ -397,3 +537,7 @@ materially against the baseline policy's embeddings.
    *current* corpus is cheap and still discriminating.
 4. **Whether to keep `align` at all** if W5 shows magnitude carries the scale and W3 says the error is
    perceptual-absolute. Then a separate metric branch is the whole intervention.
+5. **Is a second view genuinely unavailable?** (§2.8, W3b.) This is the cheapest remedy on the list
+   and the only one that makes range observable rather than inferred. It deserves an answer before
+   W6 is funded, and it is a different question from decision 2 -- a second *RGB* view needs no depth
+   sensor and so does not violate the deployment constraint.

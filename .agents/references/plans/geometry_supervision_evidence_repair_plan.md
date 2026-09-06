@@ -910,3 +910,47 @@ Behaviour on the measured numbers:
 difference test means anything until its own noise floor is measured. That applies directly to
 G2 and G3, which per the entry above need a stated minimum detectable difference and repeats rather
 than single-run deltas.
+
+### 2026-09-06 -- the repo already knew, and the graph's own prior is now falsified
+
+`isaaclab_arena/agentic_environment_generation/policy_capability_graph.py` carries all three pieces
+of this investigation, verified verbatim:
+
+| Entry | Line | Content |
+| :--- | ---: | :--- |
+| `harness_stale_observation` (prior 0.08) | 451 | "with fabric enabled, poses written through the PhysX tensor API only reach the renderer during a physics step, and `reset()` never steps physics ... `num_rerenders_on_reset` is the documented remedy and **is reported not to fix it** ... **Diagnose in pixel space, not from success rates.**" |
+| `stale_frame_assertion` (cost 0.05) | 606 | metric `reset_frame_prev_vs_self_distance_ratio` -- "Fresh frames give `d_prev >> d_self`; stale frames invert that." |
+| `force_physics_step_before_sensor_read` (**efficacy 0.9**) | 851 | "Step physics once (or otherwise flush the fabric transform buffer) between reset and the first camera read." |
+
+So "diagnose in pixel space" was written down before this session re-derived it over five simulator
+runs, and `stale_frame_assertion` is the instrument the `--determinism_probe` rebuilt badly. Note
+*why* the graph's version is better: a **ratio** of `d_prev` to `d_self` is scale-free, so it needs no
+absolute threshold and is immune to the noise-floor trap that defeated two successive versions of our
+own guard. The lesson we paid for twice was already encoded in the metric's shape.
+
+**Two things keep this from being a pure indictment.** The graph's failure mode is about the *first*
+observation after a reset; ours is a persistent freeze across every frame of a playback loop. Same
+suspected root cause, different symptom, so the match is close but not exact.
+
+**And the graph is wrong where it is most confident.** `--playback_step` *is*
+`force_physics_step_before_sensor_read` -- a genuine `sim.step()` between the write and the read. It
+was measured and it **failed**. A remediation carrying `expected_efficacy=0.9` measures **0.0** on
+this case, and the stated mechanism ("only reach the renderer during a physics step") is therefore
+incomplete: we stepped physics and the render stayed frozen. That, plus `--no_fabric` also failing,
+means the fabric-ordering story does not explain this instance.
+
+**The structural finding.** This session produced exactly the evidence the graph needs and there is no
+path for it to arrive. `rerender_demos.py` writes `rerender_summary.json`; the self-healing path reads
+`eval_telemetry.ttl`. Nothing routes a harness symptom into `policy_capability_graph.py`, and no
+measurement can correct an efficacy prior, so `force_physics_step_before_sensor_read` will still read
+0.9 tomorrow. The graph's knowledge also lives as prose inside `description=` strings, so a symptom
+grep -- which is how anyone actually starts -- lands in Isaac Lab's source rather than in our own
+recorded diagnosis.
+
+**Proposed, not done** (these are design changes on core package code, so they need a decision):
+tag the symptom surfaces with `mode_id`s so a grep lands in the graph; give the graph a
+`modes_for_symptom()` / `rank_diagnostics(capabilities)` entry point and name it in `AGENTS.md` as the
+first stop for a harness symptom; emit the TTL the oracle already reads from `rerender_summary.json`;
+and record measured efficacy against `technique_id` so a 0.9 prior drops on contact with evidence.
+The immediate one-line version is to correct `force_physics_step_before_sensor_read`'s prior and note
+the measurement beside it.

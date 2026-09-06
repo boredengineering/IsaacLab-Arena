@@ -145,7 +145,7 @@ Verified in `submodules/Isaac-GR00T` @ `d78207d` (branch `dev/arena_v0.3.0-compa
 
 ## 7. Stages
 
-### S1 — Annotate the corpus with DA3METRIC-LARGE  *(closes G1)* — **BUILT, running**
+### S1 — Annotate the corpus with DA3METRIC-LARGE  *(closes G1)* — **DONE**
 
 `isaaclab_arena_gr00t/scripts/annotate_dataset_depth.py`.
 
@@ -170,8 +170,18 @@ annotation and the online teacher cannot drift apart. Writes, per episode:
 * **Latents are exactly the student grid:** `(8, 88, 1024)` -- 8x11 tokens, 1024-dim for the
   ViT-L teacher -- at per-channel std **0.6495**, consistent with the 0.718 measured previously
   for `DA3METRIC-LARGE` layer-23 patch tokens.
-* Cost: ~375 KiB/frame compressed with depth at full resolution *and* latents, i.e. **13.5 GB**
-  for the whole corpus. Depth alone is ~7 GB; `--depth-downsample 2` cuts it 4x.
+* Cost: ~375 KiB/frame compressed with depth at full resolution *and* latents. Depth alone
+  measured at **7.4 GB**; `--depth-downsample 2` cuts it 4x.
+
+**Full corpus annotated (2026-09-06):** 208 episodes, **35 066 frames in 1515 s (23.1 fps)**, 7.4 GB
+at `/datasets/isaaclab_arena/static_apple_tutorial/depth_da3/`. Integrity verified per episode
+rather than by total: all 208 `.npz` files present, **every** per-episode frame count matches
+`episodes.jsonl` exactly, and the sum is 35 066 — i.e. every frame in the corpus is annotated,
+none duplicated or dropped. Written without latents, since the online teacher is the default (G4);
+`--emit-latents` adds them.
+
+Remaining in S1: fit the single global scale factor (`--fit-scale-to-metres`), which §2.5b puts at
+1.027x / 1.64 cm. The annotation is what that fit consumes, so it is unblocked.
 
 **The `focal/300` trap stands:** the raw output is *not* metres, and §2.5b measured it at 1.568x
 true on the table region, so applying the conversion makes it *worse* (2.566x / 79.5 cm) while one

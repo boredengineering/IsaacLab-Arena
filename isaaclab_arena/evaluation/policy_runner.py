@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import torch
 import tqdm
@@ -231,6 +232,8 @@ class ReachTracer:
         self._contact_sensor_name = contact_sensor_name
         self._rest_z: torch.Tensor | None = None
         self._step = 0
+        self._step_in_episode = 0
+        self._episode_index: torch.Tensor | None = None
         self._hand_indices = self._resolve_hand_bodies(hand_body_patterns)
 
     def _resolve_hand_bodies(self, patterns: tuple[str, ...]) -> dict[str, int]:
@@ -270,16 +273,31 @@ class ReachTracer:
         obj = self._pos(self._object_name)
         speed = wp.to_torch(self._env.scene[self._object_name].data.root_lin_vel_w).norm(dim=-1)
         z = obj[:, 2]
-        # Resting reference: first sample taken while essentially still.
-        if self._rest_z is None and bool((speed < 1e-2).all()):
-            self._rest_z = z.clone()
+
+        # Resting reference, captured per environment and re-captured after each reset. Two
+        # reasons it is not one shared sample taken once:
+        #
+        # - Waiting for *every* environment to be still, as this did, means one still-settling
+        #   environment withholds the reference from all of them, and ``lift`` then never appears.
+        # - The reference belongs to an episode. Carrying episode 0's resting height across a whole
+        #   rollout reports every later episode's lift against the wrong datum.
+        if self._rest_z is None:
+            self._rest_z = torch.full_like(z, float("nan"))
+            self._episode_index = torch.zeros_like(z, dtype=torch.long)
+        pending = torch.isnan(self._rest_z) & (speed < 1e-2)
+        self._rest_z[pending] = z[pending]
+
+        # ``lift`` is None where this episode's reference is not yet established, rather than the
+        # column being omitted: a missing key and a not-yet-known value are different facts, and a
+        # reader that sees the column appear halfway through cannot tell which it is looking at.
         row = {
             "step": self._step,
+            "step_in_episode": self._step_in_episode,
+            "episode": self._episode_index.tolist(),
             "obj_z": [round(v, 5) for v in z.tolist()],
             "speed": [round(v, 5) for v in speed.tolist()],
+            "lift": [None if math.isnan(v) else round(v, 5) for v in (z - self._rest_z).tolist()],
         }
-        if self._rest_z is not None:
-            row["lift"] = [round(v, 5) for v in (z - self._rest_z).tolist()]
         if self._destination_name is not None:
             dest = self._pos(self._destination_name)
             row["dist_to_dest"] = [round(v, 5) for v in (obj - dest).norm(dim=-1).tolist()]
@@ -307,6 +325,28 @@ class ReachTracer:
                 self._contact_sensor_name = None
         self._rows.append(json.dumps(row))
         self._step += 1
+        self._step_in_episode += 1
+
+    def begin_episode(self, env_ids: torch.Tensor | None = None) -> None:
+        """Mark an episode boundary so each episode's rows can be read on their own.
+
+        Without this the trace is one undifferentiated stream: the per-episode tables in the
+        evidence appendix could not be re-derived from it, because nothing recorded where one
+        episode ended and the next began.
+
+        Args:
+            env_ids: Environments that just reset. None treats every environment as reset.
+        """
+        if self._rest_z is None or self._episode_index is None:
+            # Nothing recorded yet, so there is no episode to close.
+            return
+        if env_ids is None:
+            self._rest_z[:] = float("nan")
+            self._episode_index += 1
+        else:
+            self._rest_z[env_ids] = float("nan")
+            self._episode_index[env_ids] += 1
+        self._step_in_episode = 0
 
     def close(self) -> None:
         """Write the buffered trace. Called on every rollout exit path, including exceptions."""
@@ -393,6 +433,8 @@ def rollout_policy(
                             obs = env.unwrapped.observation_manager.compute()
 
                     policy.reset(env_ids=env_ids)
+                    if tracer is not None:
+                        tracer.begin_episode(env_ids)
                     # Break if number of episodes is reached
                     completed_episodes = env_ids.shape[0]
                     num_episodes_completed += completed_episodes

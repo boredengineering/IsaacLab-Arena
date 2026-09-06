@@ -387,6 +387,30 @@ Closed-loop through `gr00t_remote_closedloop_policy.py` on
 `hand_z_minus_obj` at closest horizontal approach — the 7 cm gap is the quantity of interest, and
 success rate alone hides it.
 
+**Instrument repaired first (2026-09-06).** `ReachTracer` could not support this comparison, as the
+evidence appendix noted: it never reset and wrote no episode index, so a multi-episode trace was one
+undifferentiated stream. A second bug was found alongside it — the resting reference required
+**every** environment to be still (`(speed < 1e-2).all()`), so one still-settling environment
+withheld `lift` from all of them, and with a single environment a slow settle suppressed the column
+entirely.
+
+Both fixed in `isaaclab_arena/evaluation/policy_runner.py`: `begin_episode(env_ids)` is called at
+each reset from `rollout_policy`, the resting reference is captured and re-captured **per
+environment**, and every row now carries `episode` and `step_in_episode`. `lift` is `None` rather
+than absent before the reference exists, since a missing key and a not-yet-known value are
+different facts.
+
+> [!WARNING]
+> `isaaclab_arena/tests/test_reach_tracer.py` is written but **not yet run**. The module imports
+> `warp`, which the GR00T image lacks, and the Arena container is at `Exited (137)` (OOM). Starting
+> Isaac Sim while training holds 82 GB of 97 GB would risk OOM-killing the run. Run it once the GPU
+> frees:
+> ```bash
+> docker exec "$ARENA_CONTAINER" su $(id -un) -c \
+>   "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh -m pytest \
+>    isaaclab_arena/tests/test_reach_tracer.py -q"
+> ```
+
 Read the result against §4: on a zero-variation corpus a null result is informative, not a
 refutation of the method.
 

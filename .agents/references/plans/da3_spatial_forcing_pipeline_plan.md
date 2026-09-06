@@ -434,16 +434,9 @@ environment**, and every row now carries `episode` and `step_in_episode`. `lift`
 than absent before the reference exists, since a missing key and a not-yet-known value are
 different facts.
 
-> [!WARNING]
-> `isaaclab_arena/tests/test_reach_tracer.py` is written but **not yet run**. The module imports
-> `warp`, which the GR00T image lacks, and the Arena container is at `Exited (137)` (OOM). Starting
-> Isaac Sim while training holds 82 GB of 97 GB would risk OOM-killing the run. Run it once the GPU
-> frees:
-> ```bash
-> docker exec "$ARENA_CONTAINER" su $(id -un) -c \
->   "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh -m pytest \
->    isaaclab_arena/tests/test_reach_tracer.py -q"
-> ```
+`isaaclab_arena/tests/test_reach_tracer.py`: **5 passed** in the Arena container once the GPU
+freed after training (`/isaac-sim/python.sh -m pytest`). Covers the episode boundary, partial
+resets, whole-scene resets, the pre-record no-op, and that written rows carry the index.
 
 **Eval launcher:** `isaaclab_arena_gr00t/scripts/eval_s4_arm.sh --arm <arm> --episodes N`, which
 encodes the invocation once so it stops being retyped. Three things verified against

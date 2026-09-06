@@ -1,0 +1,149 @@
+{
+  "anchors": {
+    "apple_height_m": 0.068,
+    "apple_radius_m": 0.034
+  },
+  "frame": 0,
+  "plane_roi": [
+    260,
+    480,
+    120,
+    560
+  ],
+  "object_roi": [
+    295,
+    390,
+    50,
+    155
+  ],
+  "focal_px_native": 458.1245526127416,
+  "per_episode": [
+    {
+      "episode": 0,
+      "apparent_size": {
+        "apple_pixels": 3886,
+        "equivalent_diameter_px": 70.34066299688142,
+        "bbox_extent_px": 75.0,
+        "implied_true_range_m": 0.4428799537907055,
+        "measured_canonical_at_apple": 0.39892578125,
+        "scale_from_apparent_size": 1.1101813284741309
+      },
+      "plane_rms_canonical": 0.002036012332911185,
+      "plane_inlier_fraction": 0.5851342975206612,
+      "surface_range_canonical": 0.409912109375,
+      "object_pixels": 462,
+      "peak_relief_canonical": 0.009644436554385967,
+      "median_relief_canonical": 0.008559066165090196,
+      "peak_relief_fraction_of_range": 0.023528059634761716,
+      "median_relief_fraction_of_range": 0.020880247178206933,
+      "scale_from_peak_vs_height": 7.050697012369881,
+      "scale_from_median_vs_radius": 3.9723959768736887
+    },
+    {
+      "episode": 1,
+      "apparent_size": {
+        "apple_pixels": 4157,
+        "equivalent_diameter_px": 72.7520225661395,
+        "bbox_extent_px": 74.0,
+        "implied_true_range_m": 0.4282007355788005,
+        "measured_canonical_at_apple": 0.3486328125,
+        "scale_from_apparent_size": 1.228228440427708
+      },
+      "plane_rms_canonical": 0.0020053927749772416,
+      "plane_inlier_fraction": 0.6274173553719008,
+      "surface_range_canonical": 0.35693359375,
+      "object_pixels": 0,
+      "peak_relief_canonical": NaN,
+      "median_relief_canonical": NaN,
+      "peak_relief_fraction_of_range": NaN,
+      "median_relief_fraction_of_range": NaN,
+      "scale_from_peak_vs_height": NaN,
+      "scale_from_median_vs_radius": NaN
+    },
+    {
+      "episode": 40,
+      "apparent_size": {
+        "apple_pixels": 2634,
+        "equivalent_diameter_px": 57.91125072757813,
+        "bbox_extent_px": 66.0,
+        "implied_true_range_m": 0.5379346704876329,
+        "measured_canonical_at_apple": 0.324951171875,
+        "scale_from_apparent_size": 1.6554323142880123
+      },
+      "plane_rms_canonical": 0.0018203033124085275,
+      "plane_inlier_fraction": 0.6787603305785124,
+      "surface_range_canonical": 0.34130859375,
+      "object_pixels": 0,
+      "peak_relief_canonical": NaN,
+      "median_relief_canonical": NaN,
+      "peak_relief_fraction_of_range": NaN,
+      "median_relief_fraction_of_range": NaN,
+      "scale_from_peak_vs_height": NaN,
+      "scale_from_median_vs_radius": NaN
+    },
+    {
+      "episode": 125,
+      "apparent_size": {
+        "apple_pixels": 3668,
+        "equivalent_diameter_px": 68.33917361285968,
+        "bbox_extent_px": 71.0,
+        "implied_true_range_m": 0.45585083826363876,
+        "measured_canonical_at_apple": 0.34326171875,
+        "scale_from_apparent_size": 1.3279978901336162
+      },
+      "plane_rms_canonical": 0.0020638653156411155,
+      "plane_inlier_fraction": 0.667892561983471,
+      "surface_range_canonical": 0.347900390625,
+      "object_pixels": 3,
+      "peak_relief_canonical": NaN,
+      "median_relief_canonical": NaN,
+      "peak_relief_fraction_of_range": NaN,
+      "median_relief_fraction_of_range": NaN,
+      "scale_from_peak_vs_height": NaN,
+      "scale_from_median_vs_radius": NaN
+    },
+    {
+      "episode": 180,
+      "apparent_size": {
+        "apple_pixels": 3596,
+        "equivalent_diameter_px": 67.66512693306387,
+        "bbox_extent_px": 69.0,
+        "implied_true_range_m": 0.46039179987770174,
+        "measured_canonical_at_apple": 0.375244140625,
+        "scale_from_apparent_size": 1.2269126950546951
+      },
+      "plane_rms_canonical": 0.0019456785788298772,
+      "plane_inlier_fraction": 0.6886260330578512,
+      "surface_range_canonical": 0.40625,
+      "object_pixels": 0,
+      "peak_relief_canonical": NaN,
+      "median_relief_canonical": NaN,
+      "peak_relief_fraction_of_range": NaN,
+      "median_relief_fraction_of_range": NaN,
+      "scale_from_peak_vs_height": NaN,
+      "scale_from_median_vs_radius": NaN
+    },
+    {
+      "episode": 250,
+      "apparent_size": {
+        "apple_pixels": 4378,
+        "equivalent_diameter_px": 74.66085136703533,
+        "bbox_extent_px": 77.0,
+        "implied_true_range_m": 0.41725307182099775,
+        "measured_canonical_at_apple": 0.31201171875,
+        "scale_from_apparent_size": 1.3372993600773135
+      },
+      "plane_rms_canonical": 0.001708190115176013,
+      "plane_inlier_fraction": 0.6779855371900827,
+      "surface_range_canonical": 0.3212890625,
+      "object_pixels": 0,
+      "peak_relief_canonical": NaN,
+      "median_relief_canonical": NaN,
+      "peak_relief_fraction_of_range": NaN,
+      "median_relief_fraction_of_range": NaN,
+      "scale_from_peak_vs_height": NaN,
+      "scale_from_median_vs_radius": NaN
+    }
+  ],
+  "notes": "Anchored on known scene geometry, not on render-derived ground truth, because the simulator render is frozen. The two scales differ by construction: peak relief is the apple's full height, median relief is roughly its radius. Evidence appendix section 2.5b's fitted 0.655 is the comparison point."
+}

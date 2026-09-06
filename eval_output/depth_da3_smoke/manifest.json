@@ -1,0 +1,36 @@
+{
+  "teacher": "/models/isaaclab_arena/DA3METRIC-LARGE",
+  "teacher_kind": "da3",
+  "dataset_path": "/datasets/isaaclab_arena/static_apple_tutorial/lerobot",
+  "video_key": "observation.images.ego_view",
+  "episodes_written": 2,
+  "frames_written": 16,
+  "source_resolution_hw": [
+    480,
+    640
+  ],
+  "encoder_input_hw": [
+    518,
+    686
+  ],
+  "shorter_side": 518,
+  "depth_downsample": 1,
+  "focal_length_mm": 15.0,
+  "horizontal_aperture_mm": 20.955,
+  "focal_px_native": 458.1245526127416,
+  "focal_px_as_fed": 491.05225483178236,
+  "da3_canonical_focal": 300.0,
+  "metric_factor_focal_over_300": 1.6368408494392745,
+  "depth_scale_mm": 1000.0,
+  "dtype": "float32",
+  "latents": {
+    "token_grid": [
+      8,
+      11
+    ],
+    "feature_dim": 1024,
+    "stored_dtype": "float16",
+    "augmentation_contract": "Resampled from the clean recorded frame. Valid as a Spatial Forcing target only when training applies no stochastic geometric augmentation (crop_fraction=1.0); the train recipe's FractionalRandomCrop would otherwise move the student's crop out from under these features."
+  },
+  "notes": "canonical_depth is DA3's raw output. metric_depth_mm applies the model card's focal/300 conversion with the as-fed focal. Neither is trusted as metres: the evidence appendix measured raw at 1.568x true on the table region, so a fitted global scalar is still required. See geometry_supervision_evidence_repair_plan.md section 2.5b."
+}

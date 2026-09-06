@@ -1,6 +1,11 @@
 # DA3 + Spatial Forcing pipeline for the G1 apple pick-and-place
 
-**Status:** active, v1.0 (2026-09-06). Supersedes the *method-selection* question in
+**Status:** v1.1 (2026-09-06) -- **pipeline complete end to end; the method result is null.**
+Dataset -> DA3 depth annotation -> SF finetune -> RGB-only serving -> measured comparison all run.
+`align` is 0.86 cm *worse* than a matched control on vertical reach error, not significantly
+(Welch *t* = 1.24, n = 20/arm), with identical success rates. See S4. The corpus confounds (§4) and
+the teacher's low-rank alignment target (S2) both predicted it; W2 -- spawn variation -- is the next
+lever, not a method change. Supersedes the *method-selection* question in
 `geometry_supervision_evidence_repair_plan.md`; that document is retained as the measured
 evidence appendix (its §2.5/§2.5b teacher measurements and §2.2 reach tables are still the
 only numbers we have).
@@ -501,6 +506,59 @@ apple barely leaves the surface.
 
 Read the result against §4: on a zero-variation corpus a null result is informative, not a
 refutation of the method.
+
+#### Result (2026-09-06): **null. Spatial Forcing did not help on this corpus.**
+
+20 episodes per arm, same environment, same seeds, servers on port 5561.
+
+| | baseline (control) | align (SF) |
+| :--- | ---: | ---: |
+| success rate | 0.05 (1/20) | **0.05 (1/20)** |
+| object-moved rate | 0.95 | 0.90 |
+| `hand_z_minus_obj` median | **+0.0879 m** | **+0.0904 m** |
+| mean +/- sd | +0.0872 +/- 0.0204 | +0.0958 +/- 0.0234 |
+| range across episodes | +0.028 to +0.121 | +0.066 to +0.153 |
+
+align is **0.86 cm worse on the mean**, and the difference is **not significant**: Welch
+*t* = 1.24 (df ~ 37), Cohen's *d* = 0.39, distributions overlapping. Success rates identical.
+
+**This is not an underpowered null.** Minimum detectable difference at n=20 is ~1.94 cm, and the
+7 cm gap this work set out to close is **3.6x** that. Had SF closed the gap, or a third of it, this
+design would have seen it. What n=20 cannot resolve is a sub-2 cm effect.
+
+**Three measurements taken earlier predicted this**, which is why it is informative rather than
+disappointing:
+
+1. **§4** -- the corpus has no object spatial variation, so a perception-side auxiliary loss has
+   almost nothing to bind to.
+2. **S2's floor measurement** -- the alignment target is intrinsically low-rank (~9 of 1024
+   effective dimensions, constant-predictor floor 0.127), so most of the loss carries no geometry.
+3. **S2's cost** -- align settled at 1.62x baseline's action loss to buy that weak signal.
+
+A near-trivial target, on a corpus with nothing to generalise over, charged against action-loss
+capacity. A null is what that predicts.
+
+**What this does and does not establish.** It tests SF *on this corpus*, not SF in general. The
+confounds dominate, so **fix the corpus before re-testing the method** -- which is the evidence
+appendix's W2, and this is the strongest argument yet for doing it first: it is cheaper than any
+method change and is a precondition for measuring one. Secondary levers, in expected-value order:
+`--align-loss-coeff` below 0.5 (the 1.62x cost suggests it is too high), `--pe-std` above 0.02,
+then `--arm mix`, which keeps DA3 live at inference and so does not depend on a scale-invariant
+loss carrying scale.
+
+**Both traces are episode-indexed and verified** (`trace OK: 20 episodes, hand columns present`) --
+the first reach measurements here that are reproducible distributions rather than single global
+minima. Per-episode values in `eval_output/s4_comparison.json`.
+
+**Two setup defects found while running it**, both now encoded in `eval_s4_arm.sh`:
+
+* Ports **5555-5558 are all held** by host processes invisible from any container namespace
+  (found by parsing `/proc/net/tcp` and mapping socket inodes; `ss`/`netstat` are unavailable).
+  Use 5561 or above. This makes the debug plan's note that "the server in this setup is on 5557"
+  stale.
+* **`--policy_type` rejects the registered short name.** Its help says "either a registered policy
+  name or a path to a policy class", but `get_policy_cls` asserts `"." in policy_type`. The dotted
+  path is required. The help is wrong.
 
 ## 8. Risks
 

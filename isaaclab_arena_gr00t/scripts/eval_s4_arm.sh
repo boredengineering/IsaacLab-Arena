@@ -74,7 +74,10 @@ mkdir -p "$(dirname "$TRACE")"
 #                                grepping the CLI for them finds nothing
 CMD=(
     /isaac-sim/python.sh "${ARENA_ROOT}/isaaclab_arena/evaluation/policy_runner.py"
-    --policy_type gr00t_remote_closedloop
+    # A dotted import path, not the registered short name. `--policy_type`'s help says
+    # "either a registered policy name or a path to a policy class", but `get_policy_cls`
+    # asserts `"." in policy_type` and rejects the short name outright. The help is wrong.
+    --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy
     --policy_config_yaml_path "$POLICY_CONFIG"
     --remote_host "$HOST"
     --remote_port "$PORT"

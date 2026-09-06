@@ -189,11 +189,43 @@ fitted global scalar reached 1.027x / 1.64 cm. The annotator therefore writes th
 *and* the converted metres *and* records every factor in `manifest.json`, asserting nothing about
 which is metres. Fitting that scalar is the remaining piece of S1.
 
+### S1b — Fit the one global metric scale  *(the remainder of S1)*
+
+**It does not gate S2.** Spatial Forcing's loss is `1 - cos`, which is scale-invariant, so the
+fitted scalar cannot change the `align` run. It matters for two other things: knowing whether the
+teacher carries usable *absolute* range, and as the prerequisite for the depth-regression branch
+(evidence appendix W6). So S1b and S2 run in parallel.
+
+**Anchor on known scene geometry, not on a render.** §2.5b's 1.64 cm figure was fitted against a
+GT depth that came from the simulator render — the path W1 shows is frozen — so reproducing it that
+way would inherit the defect this plan exists to avoid. §2.5's method needs **no ground truth**:
+fit the table plane in 3D from the annotation, then anchor on the apple's known **3.4 cm relief at
+~0.5 m (+6.8% of range)**, which is a ratio and survives the scale error. The apple's diameter is a
+second, independent anchor.
+
+Fit `s` in `metric = s * canonical_depth`, per camera pose, by RANSAC on the table region. Expect
+`s ~ 0.655`: §2.5b measured raw at **1.568x** true, and 1/1.568 = 0.638. Write `s` and its residual
+into `manifest.json` beside the factors already recorded.
+
+**Do not use `metric_depth_mm` as metres.** The annotator writes it for completeness, but §2.5b
+measured that exact conversion (`f_proc/300 = 491.03/300`, which matches the annotator's computed
+491.05) as the **worst** of the four options at 2.566x / 79.5 cm. The raw canonical output is the
+better starting point, and `s` multiplies *it*.
+
+Acceptance: table-plane residual under ~2 cm at 0.5 m, and the fitted `s` within ~10% of 0.655
+independently on at least three episodes at differing pose. A wildly pose-dependent `s` means one
+global scalar is the wrong model and the fit should be per-pose.
+
 ### S2 — Finetune with Spatial Forcing
 
 ```bash
-isaaclab_arena_gr00t/scripts/finetune_n17_geometry.sh --arm align --nproc-per-node 1
+isaaclab_arena_gr00t/scripts/finetune_n17_geometry.sh --arm align    --nproc-per-node 1
+isaaclab_arena_gr00t/scripts/finetune_n17_geometry.sh --arm baseline --nproc-per-node 1
 ```
+
+Run **baseline first or in sequence on one GPU**, never concurrently: they would contend for VRAM
+and the timings would not be comparable. The two arms differ only in the geometry flags the
+launcher records, which is the point of routing both through it.
 
 Teacher `DA3METRIC-LARGE`, site `post_vl_self_attention`, `align_loss_coeff` 0.5 (now sourced),
 `--tune-visual` on. Run `--arm baseline` as the control; they differ only in the geometry flags.

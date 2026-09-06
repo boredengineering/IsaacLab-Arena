@@ -318,8 +318,27 @@ def main(argv: list[str] | None = None) -> int:
 
     feature = info["features"][args.video_key]
     height, width = int(feature["shape"][0]), int(feature["shape"][1])
-    total_episodes = int(info["total_episodes"])
-    episodes = total_episodes if args.episodes is None else min(args.episodes, total_episodes)
+
+    # Episode indices come from ``episodes.jsonl``, not ``info.json``'s ``total_episodes``. For
+    # this corpus the two disagree: ``total_episodes`` says 251 while only 208 episodes exist, with
+    # 43 gaps in the index range 0..250. ``episodes.jsonl``'s 208 entries sum to exactly the 35066
+    # frames ``total_frames`` reports, so the per-episode list is authoritative and the count is
+    # simply stale. Iterating ``range(total_episodes)`` would both miss episode 250 and emit 43
+    # spurious warnings.
+    episodes_path = args.dataset_path / "meta" / "episodes.jsonl"
+    assert episodes_path.is_file(), f"No episode index at {episodes_path}."
+    with open(episodes_path) as handle:
+        episode_indices = [json.loads(line)["episode_index"] for line in handle if line.strip()]
+    available = len(episode_indices)
+    declared = int(info.get("total_episodes", available))
+    if declared != available:
+        print(
+            f"[annotate] info.json declares {declared} episodes but episodes.jsonl lists"
+            f" {available}; using episodes.jsonl",
+            file=sys.stderr,
+        )
+    if args.episodes is not None:
+        episode_indices = episode_indices[: args.episodes]
 
     output_dir = args.output_dir or (args.dataset_path / "depth_da3")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -351,7 +370,7 @@ def main(argv: list[str] | None = None) -> int:
             # the buffers where they were constructed.
         ).to(device)
 
-    print(f"[annotate] {episodes}/{total_episodes} episodes, {width}x{height} -> DA3 at {input_width}x{input_height}")
+    print(f"[annotate] {len(episode_indices)} episodes, {width}x{height} -> DA3 at {input_width}x{input_height}")
     print(
         f"[annotate] focal: native {focal_native:.2f}px, as-fed {focal_as_fed:.2f}px, focal/300 = {metric_factor:.4f}"
     )
@@ -359,7 +378,7 @@ def main(argv: list[str] | None = None) -> int:
     video_root = args.dataset_path / "videos"
     written, frames_total, started = [], 0, time.time()
 
-    for episode in range(episodes):
+    for position, episode in enumerate(episode_indices):
         chunk = episode // int(info.get("chunks_size", 1000))
         video_path = video_root / f"chunk-{chunk:03d}" / args.video_key / f"episode_{episode:06d}.mp4"
         if not video_path.is_file():
@@ -403,7 +422,7 @@ def main(argv: list[str] | None = None) -> int:
         np.savez_compressed(destination, **payload)
         written.append(destination.name)
         frames_total += raw.shape[0]
-        if episode % 10 == 0 or episode == episodes - 1:
+        if position % 10 == 0 or position == len(episode_indices) - 1:
             print(f"[annotate] episode {episode}: {raw.shape[0]} frames -> {destination.name}")
 
     manifest = {
@@ -411,6 +430,8 @@ def main(argv: list[str] | None = None) -> int:
         "teacher_kind": "da3",
         "dataset_path": str(args.dataset_path),
         "video_key": args.video_key,
+        "episodes_declared_in_info_json": declared,
+        "episodes_in_episode_index": available,
         "episodes_written": len(written),
         "frames_written": frames_total,
         "source_resolution_hw": [height, width],

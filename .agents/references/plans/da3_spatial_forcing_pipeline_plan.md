@@ -50,8 +50,18 @@ inside the served artifact", that is `--arm mix`, and it is one flag.
   is only needed if we ever want fresh views.
 * **The teacher weights are already local:** `~/.cache/huggingface/hub/models--depth-anything--DA3METRIC-LARGE`
   (also `DA3-BASE`, `DA3MONO-LARGE`, `Depth-Anything-V2-Small-hf`).
-* **Corpus shape:** 251 episodes, 35 066 frames, 50 fps, one camera
+* **Corpus shape: 208 episodes, not 251.** 35 066 frames, 50 fps, one camera
   `observation.images.ego_view` at 480x640 h264, `robot_type: unitree_g1`. No depth key exists yet.
+
+  **`info.json`'s `total_episodes: 251` is stale.** Only 208 episodes exist — mp4 count, parquet
+  count and `episodes.jsonl` all agree on 208 — with 43 gaps in the index range 0..250 (69-71,
+  102-107, 134-156 partially, 186-202 partially). `total_frames` is *correct*: the 208 entries in
+  `episodes.jsonl` sum to exactly 35 066. So the per-episode list is authoritative and only the
+  count is wrong. The annotator reads `episodes.jsonl` and records both numbers in its manifest;
+  iterating `range(total_episodes)` would both miss episode 250 and emit 43 spurious warnings.
+
+  This corrects a figure that had propagated through the earlier plans, including the evidence
+  appendix's costing of a re-record as "251 episodes". It is 208.
 * **GPU:** one RTX PRO 6000 Blackwell, 97.9 GB — the teacher pass and the finetune both fit.
 
 ## 4. Known limiter, stated once and not re-argued

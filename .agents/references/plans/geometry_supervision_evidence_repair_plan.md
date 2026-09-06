@@ -1,10 +1,13 @@
 # Metric Range for the G1 Policy: Fix the Confounds, Then the Method
 
 > [!IMPORTANT]
-> **Status**: PLAN v2.1, 2026-09-06. v2.1 adds §2.4's third removal, §2.8 (external corroboration
-> of the range/bearing asymmetry, and the cheapest perception remedy nobody costed), §2.9 (verified
-> absences), and a fifth branch to the decision tree; §2.6 gains the two published loss recipes. No
-> v2 finding is retracted. Originally: PLAN v2, 2026-09-05, replacing v1 of the same day. Supersedes §W5, §W7
+> **Status**: PLAN v2.2, 2026-09-06. v2.2 **retracts one v2.1 claim of its own**: §2.8's assertion
+> that a second camera is the cheapest remedy was wrong -- it generalised the DROID *policy* config to
+> the G1 *embodiment rig*, and `G1CameraCfg` has exactly one camera, so a spatial second view costs a
+> rig change plus a 251-episode re-record. W3b now leads with temporal parallax instead. v2.1's
+> §2.4 "third removal" is also demoted: it is real upstream but **void for our monocular teacher**.
+> Surviving v2.1 additions: §2.6's two published loss recipes, §2.8's range/bearing corroboration,
+> §2.9 (verified absences), W9 (residual). No v2 finding is retracted. Originally: PLAN v2, 2026-09-05, replacing v1 of the same day. Supersedes §W5, §W7
 > (gates G1/G2) and §2's teacher argument in
 > [`spatial_forcing_da3_metric_alignment_plan.md`](spatial_forcing_da3_metric_alignment_plan.md);
 > that plan's §3, §4 and §8 stand. Written after four investigations on 2026-09-05 -- a source-level
@@ -24,8 +27,11 @@ findings reorder the work:
    plans told it. What is unmeasured is the *attribution* of the 7 cm to monocular range.
 3. **A competing diagnosis has more evidence behind it than the perception one**, and it would not be
    fixed by any depth teacher.
-4. **The teacher has no metres to give**, for a stronger reason than v1's: two independent removals,
-   not one. And the literature's only structural twin of our approach scores *below* baseline.
+4. **The teacher lacks an absolute anchor, not usable geometry.** Its relative structure is good to
+   **1.64 cm at 0.5 m** once one global scale is fitted -- inside the 7 cm target -- and v1's much
+   worse figure was an artifact of applying DA3's own `focal/300` transform, which doubles the error
+   here (§2.5b). What the cosine loss cannot transmit is that one scalar. And the literature's only
+   structural twin of our approach scores *below* baseline.
 
 So the plan is: unfreeze the render, fix the corpus, *discriminate the diagnosis*, and only then pick
 a method -- which, if perception is implicated, is probably not the one we built.
@@ -115,7 +121,7 @@ zero-variation corpus evaluated at a shifted pose.
 **A signed constant bias under a constant scene is weak evidence for monocular scale ambiguity**,
 which is multiplicative and should co-vary with range.
 
-### 2.4 The teacher has no metres to give -- two removals, not one
+### 2.4 The teacher has no absolute anchor to give -- two removals, not one
 
 v1 argued the loss is scale-invariant. True, and verified in our code
 (`(F.normalize(projected, dim=-1) * F.normalize(target, dim=-1)).sum(-1)`), but v1's "**by any
@@ -142,13 +148,26 @@ position is that the representation is *probably* scale-free, for reasons of tra
 normalisation rather than of a clean post-hoc factorisation. **W5 settles it empirically in an
 afternoon**, and until it reports, treat this as the leading hypothesis rather than a finding.
 
-**A third removal, code-verified.** SF slices `agg_vggt_hidden[:, :, patch_start_idx:, :]`, keeping
-only patch tokens and **discarding the teacher's camera token** -- the one carrying its predicted
-intrinsics, and the only place a focal length could enter. Evo-0, by contrast, keeps camera, register
-*and* 3D tokens. Our `_forward_da3` inherits the same shape by a different route: it returns
-`net.backbone`, **discarding the DPT head**, and this monocular checkpoint emits no camera token to
-discard in the first place. So on both paths the one quantity that disambiguates metres is dropped
-before the loss sees anything.
+**A third pathway is closed upstream -- but it is void for us, so the count stays at two.** SF slices
+`agg_vggt_hidden[:, :, patch_start_idx:, :]`, keeping only patch tokens and **discarding VGGT's
+camera token** -- the one carrying its predicted intrinsics, and the only place a focal length could
+enter its features. Evo-0, by contrast, keeps camera, register *and* 3D tokens. This is worth
+recording for one reason only: it is why **SF's published results cannot be read as evidence either
+way about metric transfer**, since upstream never gave its student a focal length to work with. It is
+**not** a third removal in our setup -- `DA3METRIC-LARGE` is monocular and emits no camera token, so
+`_forward_da3` has nothing of the kind to discard. Its one analogous choice is returning
+`net.backbone` and dropping the DPT head, and per §2.5b that head's output is not metric either
+without an anchor, so dropping it removes less than it appears to.
+
+> [!CAUTION]
+> **Do not over-argue this section; §2.5 and §2.5b cut the other way and they are measurements.**
+> Every teacher resolves the apple's relief with the correct sign, `DA3METRIC-LARGE` reproduces the
+> true +6.8%-of-range ratio to within **1.3x**, and one fitted global scale reaches **1.64 cm at
+> 0.5 m** -- inside the 7 cm target. So the features demonstrably carry good *relative* geometry.
+> What is missing is **one global scalar**, which §2.5b shows is fittable and W7b fits. Read "the
+> teacher has no metres" as "**no absolute anchor**", never as "no usable geometry" -- that
+> distinction is the difference between W6 being necessary and W7b being sufficient, and collapsing
+> it is how v1 talked itself into selecting a teacher on the wrong axis.
 
 **And the loss-form question is unablated everywhere, not just in SF.** Upstream implements cosine and
 nothing else -- the `else` branch is `raise NotImplementedError`, so there is no reference MSE variant
@@ -335,10 +354,19 @@ range. (Flagged: the causal link is ours; the paper draws no such conclusion, an
 backbone -- but N1.7's relative-EEF action space and 20K hours of monocular human-video pretraining
 supply no metric anchor either, so scale must come entirely from fine-tuning data.)
 
-**The remedy this implies is cheaper than every method in §2.6 and is not on our work list**: check
-whether the G1 head camera is the *only* view feeding the policy, and if so whether a second
-viewpoint with baseline against the approach axis is available in the embodiment config. Range from
-two views is triangulation, not inference. This should be priced before W6.
+> [!CAUTION]
+> **v2.1 drew the wrong conclusion here and it is retracted.** It claimed a second camera was "cheaper
+> than every method in §2.6", reasoning from `pov_cam_name_sim` accepting a list on the DROID path
+> (`["external_camera_rgb", "wrist_camera_rgb"]`). That is the *policy* config; the binding constraint
+> is the **rig**. `G1CameraCfg` exposes exactly one camera, `robot_head_cam`, and the corpus recorded
+> exactly one view, so a genuine spatial baseline costs an embodiment change **plus** a 251-episode
+> re-record. It is not cheap and it does not compete with W2 -- it folds into it.
+
+What survives is the *direction*: range is carried by baseline, not by inference from one view, so
+making range **observable** should be priced before any method that tries to infer it. **W3b** does
+that, leading with the cheap version -- **temporal** parallax from the already-wired
+`delta_indices [-8, 0]` arms -- and deferring a true second camera to W2's re-record, where its
+marginal cost is small.
 
 ### 2.9 Verified absences -- what the literature will not tell us
 
@@ -384,8 +412,9 @@ Decision tree, in order:
 2. **W2** adds spatial variation. Without it no perception-side loss can help, and no gate is
    informative.
 3. **W3** discriminates scale from offset, and perception from calibration. *This decides the method.*
-4. **W3b** prices a second viewpoint before any method is funded. §2.8 shows range and bearing are
-   carried by *different views*, and triangulation beats inference.
+4. **W3b** makes range *observable* before any method tries to infer it -- temporal parallax now
+   (already wired, no re-record), a spatial second camera only inside W2's re-record. §2.8 shows
+   range and bearing are carried by different baselines; it does **not** make a second camera cheap.
 5. If perception is implicated → **W6**, a separate depth branch regressing sim GT metres.
    If calibration or memorisation is implicated → geometry supervision is the wrong tool: the remedy
    is data variation plus a calibration fit, or **W9**'s residual, which is the one published fix for
@@ -537,7 +566,10 @@ materially against the baseline policy's embeddings.
    *current* corpus is cheap and still discriminating.
 4. **Whether to keep `align` at all** if W5 shows magnitude carries the scale and W3 says the error is
    perceptual-absolute. Then a separate metric branch is the whole intervention.
-5. **Is a second view genuinely unavailable?** (§2.8, W3b.) This is the cheapest remedy on the list
-   and the only one that makes range observable rather than inferred. It deserves an answer before
-   W6 is funded, and it is a different question from decision 2 -- a second *RGB* view needs no depth
-   sensor and so does not violate the deployment constraint.
+5. **Does temporal parallax carry enough baseline to be worth anything?** (§2.8, W3b.) It is the only
+   remedy that makes range *observable* without a re-record, and it is already wired -- but in a
+   corpus this static the effective baseline over 8 frames may be near zero, so measure it before
+   trusting a null result. A **spatial** second view is not the cheap option (W3b: rig change plus a
+   251-episode re-record); the live question is whether to bundle it into W2 if W2 is funded. Note
+   this is distinct from decision 2 -- a second *RGB* view needs no depth sensor, so it does not
+   violate the deployment constraint.

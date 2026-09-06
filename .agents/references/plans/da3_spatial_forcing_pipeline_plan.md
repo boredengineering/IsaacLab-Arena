@@ -246,6 +246,48 @@ Acceptance: table-plane residual under ~2 cm at 0.5 m, and the fitted `s` within
 independently on at least three episodes at differing pose. A wildly pose-dependent `s` means one
 global scalar is the wrong model and the fit should be per-pose.
 
+#### Outcome (2026-09-06): **does not converge. The scale is not established.**
+
+`isaaclab_arena_gr00t/scripts/fit_depth_metric_scale.py`. The scale-free check earned its place by
+failing twice before any number was believed.
+
+1. **The relief anchor is unusable.** With an apple-only window, relief measures **2.35% of range**
+   where the apple's 0.068 m height at ~0.40 m demands **17%**. DA3 smooths the apple into the
+   table: a relief anchor asks for a few-centimetre *depth difference* across ~70 px, which is
+   exactly what monocular depth blurs. This is a firm finding and it **partly contradicts §2.5 of
+   the evidence appendix**, which reports the ratio reproduced "to within 1.3x" -- not reproducible
+   here on frame 0. Kept as a diagnostic only.
+   *(A first attempt measured 7435 above-plane pixels: the window had been placed without looking
+   and was on the destination plate, which is far larger in pixels than the apple and sits
+   mid-table. Fixed by rendering frame 0 with a pixel grid and reading the apple's box off it --
+   x 55-150, y 300-385.)*
+2. **The apparent-size anchor is sound in principle and too noisy in practice.** Under a pinhole
+   camera a known width `W` spanning `p` px sits at `Z = focal * W / p`, which needs no depth
+   gradient. Measured across four episodes: **s = 1.11, 1.23, 1.33, 1.66 -- a 40% spread**, and
+   1.7-2.5x the appendix's 0.655. Three bias sources, none yet bounded: the colour segmentation
+   drops the apple's unlit side, so the silhouette underestimates and `s` overestimates; the median
+   depth over the mask includes edge pixels blurred onto the background, biasing the other way; and
+   **the apple's lateral dimensions were never recorded** -- `_USD_ORIGIN_ABOVE_BOTTOM_M` gives only
+   `min_z`/`max_z`, so its 0.068 m *height* stands in for its diameter.
+
+**Correction to this plan's own §S1b claim.** It said the fit "needs no ground truth" and so avoids
+W1. The *validation* does avoid the render, and that part holds. But a **trustworthy absolute
+scale does not**: three anchors now disagree by factors of 1.7-7 and nothing available adjudicates
+them. Settling the scale needs real GT depth, which needs the frozen render fixed. **S1b is
+blocked on W1** after all -- for a definitive number, though not for the diagnostics above.
+
+**Still does not block S2-S4**, for the reason already given: the alignment loss is scale-invariant,
+so `align` is unaffected either way. What is blocked is any claim that this pipeline reports metres,
+and the depth-regression branch that would consume them.
+
+**Incidental finding, which refines §4.** Across episodes at frame 0 the apple's apparent diameter
+spans 57.9-72.8 px and its canonical depth 0.325-0.399, even though `APPLE_SPAWN_XY_RANGE_M = 0.0`
+fixes its world position. So the corpus has **no object variation but real viewpoint variation** --
+the head pose differs per demo. §4's "constant scene" is therefore too strong: a spatial objective
+has *something* to bind to, just not object placement. It also means a fixed pixel window does not
+transfer across episodes, which is why episodes 1/40/125 yield zero above-plane pixels in episode
+0's window.
+
 ### S2 — Finetune with Spatial Forcing
 
 ```bash

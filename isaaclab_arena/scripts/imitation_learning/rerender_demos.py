@@ -79,6 +79,23 @@ parser.add_argument(
     "--fps", type=int, default=50, help="Frame rate written into the RGB videos. Must match the recording."
 )
 parser.add_argument(
+    "--guard_channel",
+    type=str,
+    default="auto",
+    choices=["auto", "rgb", "depth"],
+    help=(
+        "Which channel the frozen-render guard watches. 'auto' uses depth and disables the guard"
+        " when depth is off, because RGB is not deterministic on this renderer (measured: 42/255"
+        " max|diff| between two renders of one state) and would pass on noise. 'rgb' is a"
+        " diagnostic only -- it cannot establish that the scene changed."
+    ),
+)
+parser.add_argument(
+    "--determinism_probe",
+    action="store_true",
+    help="Render the same state twice and report per-channel differences, then exit. Diagnostic only.",
+)
+parser.add_argument(
     "--playback_step",
     action="store_true",
     help=(
@@ -284,7 +301,7 @@ def assert_render_not_frozen(prev_frame, frame, state_delta: float, frame_index:
         state_delta: Largest absolute change in the recorded state since the previous frame.
         frame_index: Index of the current frame, for the failure message.
     """
-    if prev_frame is None or state_delta <= 0.0:
+    if prev_frame is None or frame is None or state_delta <= 0.0:
         return
     assert not np.array_equal(prev_frame, frame), (
         f"Frame {frame_index} is bit-identical to frame {frame_index - 1} while the recorded state"
@@ -294,13 +311,37 @@ def assert_render_not_frozen(prev_frame, frame, state_delta: float, frame_index:
     )
 
 
+def measure_rgb_noise_floor(env, renders_per_frame: int, rgb_key: str, playback_step: bool) -> float:
+    """Return the mean absolute RGB difference between two renders of one unchanged state.
+
+    RTX colour is nondeterministic -- denoiser and accumulation make the same scene render
+    differently -- so any freeze test on RGB has to clear this floor to mean anything. Measured at
+    0.877 grey levels on this scene, which is above a naive 20%-of-recorded-motion threshold, so
+    without it a completely frozen render passes.
+
+    Args:
+        env: The unwrapped environment.
+        renders_per_frame: Number of RTX render calls per frame.
+        rgb_key: Observation key for the RGB image.
+        playback_step: Whether to step physics as part of the refresh.
+
+    Returns:
+        Mean absolute difference between two same-state renders, in grey levels.
+    """
+    first, _ = render_frame(env, renders_per_frame, rgb_key, None, playback_step)
+    second, _ = render_frame(env, renders_per_frame, rgb_key, None, playback_step)
+    return float(np.abs(first.astype(np.float64) - second.astype(np.float64)).mean())
+
+
 def assert_render_tracks_recording(
     prev_rendered,
     rendered,
     prev_recorded,
     recorded,
     frame_index: int,
-    min_motion_ratio: float = 0.2,
+    min_motion_ratio: float = 0.0,
+    noise_floor: float | None = None,
+    noise_margin: float = 2.0,
 ) -> None:
     """Fail when the render barely moves between frames that the recording shows moving.
 
@@ -314,7 +355,12 @@ def assert_render_tracks_recording(
         prev_recorded: Recorded RGB frame for the previous index, or None when unavailable.
         recorded: Recorded RGB frame for this index, or None when unavailable.
         frame_index: Index of the current frame, for the failure message.
-        min_motion_ratio: Smallest share of the recording's motion the render must reproduce.
+        min_motion_ratio: Optional extra floor as a share of the recording's motion. Defaults to
+            0, since differing materials make magnitude matching unreliable; ``noise_floor`` is the
+            real test.
+        noise_floor: Same-state RGB noise from ``measure_rgb_noise_floor``, or None to skip the
+            noise term -- which leaves the test unsound on a stochastic channel.
+        noise_margin: Multiple of ``noise_floor`` the render's motion must also clear.
     """
     if any(x is None for x in (prev_rendered, rendered, prev_recorded, recorded)):
         return
@@ -322,11 +368,27 @@ def assert_render_tracks_recording(
     if recorded_motion <= 0.0:
         return
     rendered_motion = float(np.abs(np.asarray(rendered, np.float32) - np.asarray(prev_rendered, np.float32)).mean())
-    assert rendered_motion >= min_motion_ratio * recorded_motion, (
+    # The sound invariant is "the render moves more than its own noise", not "the render moves as
+    # much as the recording": fallback materials legitimately reduce apparent motion, so matching
+    # the recording's magnitude is not required. When the recording itself moves no more than the
+    # noise, the frame pair cannot discriminate and is skipped rather than failed.
+    threshold = min_motion_ratio * recorded_motion
+    if noise_floor is not None:
+        if recorded_motion <= noise_margin * noise_floor:
+            return
+        threshold = max(threshold, noise_margin * noise_floor)
+    assert rendered_motion >= threshold, (
         f"Frame {frame_index} moved {rendered_motion:.4g} against the recording's"
-        f" {recorded_motion:.4g} ({rendered_motion / recorded_motion:.1%} of it, floor"
-        f" {min_motion_ratio:.0%}). The render is not tracking the recorded state. Bit-identity does"
-        " not catch this on RGB because RTX sampling noise keeps consecutive frames distinct."
+        f" {recorded_motion:.4g} ({rendered_motion / recorded_motion:.1%} of it), below the"
+        f" required {threshold:.4g}"
+        + (
+            f" (max of {min_motion_ratio:.0%} of recorded motion and {noise_margin:g}x the measured"
+            f" {noise_floor:.4g} same-state noise)"
+            if noise_floor is not None
+            else ""
+        )
+        + ". The render is not tracking the recorded state. Bit-identity does not catch this on RGB"
+        " because RTX sampling noise keeps consecutive frames distinct."
     )
 
 
@@ -460,6 +522,41 @@ def main():
                 depth_frames = []
                 fidelity_per_frame = []
                 playback_errors = []
+                if args_cli.determinism_probe:
+                    # Render the SAME state twice with no state write in between. Any difference is
+                    # renderer nondeterminism (denoiser/TAA/progressive accumulation), which would
+                    # make that channel useless as a "did the scene change?" witness.
+                    a_rgb, a_depth = render_frame(
+                        env, args_cli.renders_per_frame, rgb_key, depth_key, args_cli.playback_step
+                    )
+                    b_rgb, b_depth = render_frame(
+                        env, args_cli.renders_per_frame, rgb_key, depth_key, args_cli.playback_step
+                    )
+                    rgb_d = float(np.abs(a_rgb.astype(np.int32) - b_rgb.astype(np.int32)).max())
+                    rgb_mean = float(np.abs(a_rgb.astype(np.float64) - b_rgb.astype(np.float64)).mean())
+                    print(f"[Probe] same-state RGB max|diff| = {rgb_d}  (0 => deterministic)")
+                    print(f"[Probe] same-state RGB MEAN|diff| = {rgb_mean:.4f}  <-- noise floor of rgb_fidelity")
+                    print(f"[Probe] same-state RGB identical  = {np.array_equal(a_rgb, b_rgb)}")
+                    if a_depth is not None:
+                        dep_d = float(np.abs(a_depth - b_depth).max())
+                        print(f"[Probe] same-state depth max|diff| = {dep_d}")
+                        print(f"[Probe] same-state depth identical = {np.array_equal(a_depth, b_depth)}")
+                    raise SystemExit(0)
+
+                if args_cli.guard_channel == "auto" and depth_key is None:
+                    print(
+                        "[Rerender] NOTE: the bit-identity guard is off because depth is off; RGB"
+                        " cannot substitute for it, since this renderer is nondeterministic in RGB"
+                        " (measured same-state mean |diff| 0.877) and bit-identity would never fire."
+                        " The motion guard still applies, so the run is not unverified -- provided"
+                        " the camera pose is unperturbed and the recording has RGB to compare to."
+                    )
+                # Two extra renders per episode, so the RGB motion test has a floor to clear:
+                # a fraction of the recording's motion is not enough on its own when same-state
+                # noise can exceed it.
+                rgb_noise_floor = measure_rgb_noise_floor(
+                    env, args_cli.renders_per_frame, rgb_key, args_cli.playback_step
+                )
                 prev_state = None
                 prev_guard_frame = None
                 prev_rgb = None
@@ -475,16 +572,36 @@ def main():
                     if args_cli.validate_states:
                         playback_errors.append(state_playback_error(env.scene, frame_state))
 
-                    # Depth is the more sensitive witness -- it carries geometry directly and is not
-                    # smoothed by video encoding -- so prefer it and fall back to RGB under --no_depth.
-                    guard_frame = depth_np if depth_np is not None else rgb_np
+                    # Bit-identity is only a valid freeze test on a *deterministic* channel.
+                    # Measured here with `--determinism_probe`, rendering one state twice: depth is
+                    # bit-exact (max |diff| 0.0) while RGB differs by up to 42-60/255, mean 0.877 --
+                    # the RTX denoiser/TAA path is nondeterministic. Note that same-state RGB noise
+                    # (0.877) is *larger* than the consecutive-frame RGB difference measured on the
+                    # frozen run (0.4238), so RGB bit-identity can never fire and RGB "motion" at
+                    # that scale is indistinguishable from noise. Hence: depth for bit-identity,
+                    # and `assert_render_tracks_recording` below for the magnitude test that covers
+                    # RGB.
+                    if args_cli.guard_channel == "rgb":
+                        guard_frame = rgb_np
+                    elif args_cli.guard_channel == "depth":
+                        assert depth_np is not None, "--guard_channel depth requires depth rendering."
+                        guard_frame = depth_np
+                    else:
+                        guard_frame = depth_np
                     state_delta = 0.0 if prev_state is None else state_max_abs_delta(frame_state, prev_state)
                     assert_render_not_frozen(prev_guard_frame, guard_frame, state_delta, frame_index)
                     # Bit-identity alone passes a frozen RGB buffer, so also require the render to
                     # reproduce a share of the recording's own frame-to-frame motion.
                     this_recorded = np.asarray(recorded_rgb[frame_index]) if recorded_rgb is not None else None
                     if pose_is_unperturbed:
-                        assert_render_tracks_recording(prev_rgb, rgb_np, prev_recorded, this_recorded, frame_index)
+                        assert_render_tracks_recording(
+                            prev_rgb,
+                            rgb_np,
+                            prev_recorded,
+                            this_recorded,
+                            frame_index,
+                            noise_floor=rgb_noise_floor,
+                        )
                     prev_state, prev_guard_frame = frame_state, guard_frame
                     prev_rgb, prev_recorded = rgb_np, this_recorded
 

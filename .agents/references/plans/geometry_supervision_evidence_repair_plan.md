@@ -58,7 +58,12 @@ transforms to RTX is keyed on the physics step counter that only `step()` increm
   only into the pause/resume path.
 
 > [!IMPORTANT]
-> **Mechanism corrected, 2026-09-06 -- the break is Fabric/USD, not the push cadence.** The three
+> **Read the two callouts below together; the first was written before it was tested and its
+> conclusion did not survive.** The source audit in it is sound -- the push is dead at the leaf -- but
+> its proposed cause (Fabric/USD) was measured and refuted, along with two other candidates. See
+> "W1 results" in §9. What §2.1's own bullets and observation say still stands; the mechanism is open.
+>
+> **Source audit, 2026-09-06 -- the push is dead at the leaf.** The three
 > bullets above are all true but none of them is the operative cause, because the push is dead **at
 > the leaf**, not merely gated and deduped:
 >
@@ -84,9 +89,11 @@ transforms to RTX is keyed on the physics step counter that only `step()` increm
 > `reset_to` writes physics, Fabric serves reads from the physics buffers, **USD is never
 > synchronized**, and the renderer draws the last state USD actually saw. That is why
 > `--validate_states` reports exactly 0.0: it reads back through the same Fabric path that is
-> correct. **The fix is `use_fabric = False` for playback** (discriminator #4), now with a mechanism
-> rather than a hunch -- and it reframes Risk 1: this is a config change, not a re-plumbing of
-> `sim.step()`.
+> correct.
+>
+> **This predicted that `use_fabric = False` would fix it. It does not** -- measured, see §9. Nor does
+> adding a real `sim.step()`. So the Fabric/USD story above is a plausible-but-false lead: keep the
+> leaf-level `pass` finding, discard the causal conclusion.
 
 RTX therefore keeps drawing the transforms from the last real physics step -- `env.reset()` -- which
 is the default pose with arms raised and the apple at its authored spawn rather than its resolved
@@ -727,7 +734,13 @@ the renderer is not frozen and the defect is confined to the depth annotator -- 
 > guarded automatically; the *explanation* does not. Treat the mechanism as open until
 > `w1_rgbwitness` reports.
 
-### 2026-09-06 -- W1 ANSWERED: the renderer is not frozen; the depth annotator is
+### 2026-09-06 -- [SUPERSEDED, WRONG] "W1 answered: the renderer is not frozen; the depth annotator is"
+
+> [!WARNING]
+> **This entry's conclusion is wrong. Superseded by the next two entries.** Kept because the mistake
+> is instructive: it read a *nondeterministic* channel as evidence of state-following. Its measured
+> nulls (`--no_fabric`, `--playback_step`, transform push) and its source finding
+> (`IsaacRtxRenderer.update_transforms` is `pass`) do stand -- those are carried forward below.
 > [!WARNING]
 > **This entry's conclusion is superseded -- see "the RGB witness was unsound" below.** The RGB
 > witness passed a *bit-identity* test, which RTX sampling noise defeats. Measured afterwards, this
@@ -829,3 +842,71 @@ Fabric-off and a real physics step both fail to fix it. Next cheapest probes: wh
 itself moves (camera pose reaches RTX by direct USD writes, so it should), and whether a
 `scene.reset()` before the write, as `ManagerBasedEnv.reset_to` does and `render_frame` omits, is what
 actually unblocks it.
+
+### 2026-09-06 -- determinism measurement, and what it adds to the entry above
+
+The entry above was reached independently by another pass and its conclusion is the correct one; this
+entry keeps only what is **additive** and drops the duplicate narrative.
+
+**The sharpest number.** `--determinism_probe` renders one state twice with no write in between:
+
+| Channel | same-state max abs diff | same-state **mean** abs diff | identical? |
+| :--- | ---: | ---: | :--- |
+| RGB | **42.0**, then **60.0** on a repeat | **0.877** | **No** |
+| depth | **0.0** | 0.0 | **Yes** |
+
+Put beside the entry above: same-state RGB noise is **0.877**, while `w1_rgbwitness`'s
+consecutive-frame RGB difference was **0.4238**. **The noise exceeds the signal by ~2x**, so the RGB
+"motion" in the run that "passed" is not merely small relative to the recording's 2.722 -- it is
+*below RGB's own noise floor*. That closes the question rather than bounding it, and it is why
+bit-identity can never fire on this channel: RGB is never bit-identical to anything, frozen or not.
+
+**Confirmed with no simulator.** Every historical arm's saved `depth/*.npz` has all consecutive frames
+bit-identical -- `regression`, `smoke_pitch0`, `smoke_sceneupdate`, `smoke_validated`. The freeze is
+long-standing, not introduced by any recent change.
+
+**A consequence for gate design, and a retraction of my own inference.** `rgb_fidelity.mean_abs_diff`
+inherits that 0.877 noise floor. The five arms span 52.27-54.49 -- a spread of 2.2 on single episodes,
+only ~2.5x the floor. So **arm-to-arm comparisons at 1-2 point granularity are unreliable**, and
+earlier in this log I read `smoke_sceneupdate` 54.47 against `regression` 53.40 as "no better, exactly
+as §2.1 predicts". A 1.07 difference against a 0.88 floor supports no such conclusion; withdrawn.
+**G2/G3 should state a minimum detectable difference and use repeats plus multiple episodes**, not
+single-run deltas.
+
+**Code note.** `auto` now uses depth for bit-identity and prints a note when depth is off explaining
+that the *motion* guard still covers the run -- an earlier version of that message wrongly said the
+run was "unverified", which understated `assert_render_tracks_recording`.
+
+### 2026-09-06 -- the motion guard was itself defeated by the noise floor
+
+The determinism measurement above invalidates the first version of
+`assert_render_tracks_recording` as committed in `7c47c2503`. It required the render to move at least
+20% of the recording's motion: `0.2 x 2.722 = 0.544`, against a measured same-state noise floor of
+**0.877**. **Noise alone cleared the threshold**, so a completely frozen render would have passed
+in-process. It fired only on h264-decoded frames, where codec smoothing understates motion to
+0.4238 -- an accident of the measurement path, not a working test.
+
+Two further flaws in that formulation, both false-positive risks rather than false negatives:
+matching the recording's *magnitude* is not required for correctness, because fallback materials
+legitimately reduce apparent motion; and on a genuinely static episode segment the recording's own
+motion is small while a fixed noise-derived threshold is not, so it would fail a correct render.
+
+**Corrected invariant: the render must move more than its own noise, and the test is skipped when the
+recording moved no more than the noise.** `measure_rgb_noise_floor` renders one unchanged state twice
+at the start of each episode -- two extra renders -- and the guard requires
+`rendered_motion >= noise_margin x noise_floor` (default 2x), returning early when
+`recorded_motion <= noise_margin x noise_floor` because that frame pair cannot discriminate.
+`min_motion_ratio` survives as an optional extra floor, defaulted to 0.
+
+Behaviour on the measured numbers:
+
+| Case | rendered | recorded | Result |
+| :--- | ---: | ---: | :--- |
+| frozen, noise only | 0.877 | 2.722 | **fires** |
+| tracking, duller materials | 1.900 | 2.722 | passes |
+| genuinely static segment | 0.880 | 1.100 | skipped, cannot discriminate |
+
+**The lesson, for the gates as much as the guard**: on a stochastic channel, no freeze or
+difference test means anything until its own noise floor is measured. That applies directly to
+G2 and G3, which per the entry above need a stated minimum detectable difference and repeats rather
+than single-run deltas.

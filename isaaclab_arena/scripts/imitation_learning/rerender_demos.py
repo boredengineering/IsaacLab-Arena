@@ -79,6 +79,24 @@ parser.add_argument(
     "--fps", type=int, default=50, help="Frame rate written into the RGB videos. Must match the recording."
 )
 parser.add_argument(
+    "--playback_step",
+    action="store_true",
+    help=(
+        "Advance physics one dt after writing each state, instead of only refreshing kinematics."
+        " PhysX synchronizes state to USD while stepping, and the RTX renderer reads USD, so"
+        " without a step the written state never reaches the renderer. Use with --no_fabric."
+    ),
+)
+parser.add_argument(
+    "--no_fabric",
+    action="store_true",
+    help=(
+        "Disable Fabric so physics state stays synchronized to USD. Required for faithful playback:"
+        " the RTX renderer reads the USD scene directly, while Fabric (on by default) bypasses USD,"
+        " so written states reach physics but never reach the renderer."
+    ),
+)
+parser.add_argument(
     "--validate_states",
     action="store_true",
     help=(
@@ -230,7 +248,89 @@ def configure_camera(
     }
 
 
-def render_frame(env, renders_per_frame: int, rgb_key: str, depth_key: str | None):
+def state_max_abs_delta(state_a, state_b) -> float:
+    """Return the largest absolute difference between two nested scene-state dicts.
+
+    Args:
+        state_a: Scene state, as returned by ``InteractiveScene.get_state``.
+        state_b: Scene state to compare against, with the same structure.
+
+    Returns:
+        The maximum absolute elementwise difference over every shared leaf tensor.
+    """
+    if isinstance(state_a, dict):
+        shared = set(state_a) & set(state_b)
+        return max((state_max_abs_delta(state_a[k], state_b[k]) for k in shared), default=0.0)
+    return float(torch.as_tensor(state_a - state_b).abs().max().item())
+
+
+def assert_render_not_frozen(prev_frame, frame, state_delta: float, frame_index: int) -> None:
+    """Fail when the renderer emits a bit-identical frame for a state that actually moved.
+
+    This is the guard for the failure mode where the written state round-trips through physics
+    correctly -- so ``--validate_states`` reports zero error -- while RTX keeps drawing the
+    transforms of the last real physics step. Validating physics cannot detect it; only comparing
+    consecutive *rendered* frames against the state delta can.
+
+    Bit-identity is a sufficient test only for a **deterministic** channel such as
+    ``distance_to_image_plane``. RTX colour carries sampling noise, so consecutive RGB frames differ
+    even when the scene is completely frozen -- measured at 0.42 grey levels per frame against a
+    recording that moves 2.72. Pair this with :func:`assert_render_tracks_recording` whenever RGB is
+    the witness, or a frozen render passes.
+
+    Args:
+        prev_frame: The previously rendered frame, or None on the first frame of an episode.
+        frame: The frame just rendered.
+        state_delta: Largest absolute change in the recorded state since the previous frame.
+        frame_index: Index of the current frame, for the failure message.
+    """
+    if prev_frame is None or state_delta <= 0.0:
+        return
+    assert not np.array_equal(prev_frame, frame), (
+        f"Frame {frame_index} is bit-identical to frame {frame_index - 1} while the recorded state"
+        f" moved by {state_delta:.6g}. The renderer is frozen: the state reaches physics but not"
+        " RTX, so every frame draws the last real physics step. Do not trust this run's images or"
+        " depth -- see the transform-push guards in render_frame."
+    )
+
+
+def assert_render_tracks_recording(
+    prev_rendered,
+    rendered,
+    prev_recorded,
+    recorded,
+    frame_index: int,
+    min_motion_ratio: float = 0.2,
+) -> None:
+    """Fail when the render barely moves between frames that the recording shows moving.
+
+    The magnitude test that bit-identity cannot do. A frozen RTX colour buffer still yields
+    non-identical frames, so the only way to catch a frozen render on the RGB witness is to compare
+    how much it moved against how much the recording moved over the same frame pair.
+
+    Args:
+        prev_rendered: Previously rendered RGB frame, or None on an episode's first frame.
+        rendered: RGB frame just rendered.
+        prev_recorded: Recorded RGB frame for the previous index, or None when unavailable.
+        recorded: Recorded RGB frame for this index, or None when unavailable.
+        frame_index: Index of the current frame, for the failure message.
+        min_motion_ratio: Smallest share of the recording's motion the render must reproduce.
+    """
+    if any(x is None for x in (prev_rendered, rendered, prev_recorded, recorded)):
+        return
+    recorded_motion = float(np.abs(np.asarray(recorded, np.float32) - np.asarray(prev_recorded, np.float32)).mean())
+    if recorded_motion <= 0.0:
+        return
+    rendered_motion = float(np.abs(np.asarray(rendered, np.float32) - np.asarray(prev_rendered, np.float32)).mean())
+    assert rendered_motion >= min_motion_ratio * recorded_motion, (
+        f"Frame {frame_index} moved {rendered_motion:.4g} against the recording's"
+        f" {recorded_motion:.4g} ({rendered_motion / recorded_motion:.1%} of it, floor"
+        f" {min_motion_ratio:.0%}). The render is not tracking the recorded state. Bit-identity does"
+        " not catch this on RGB because RTX sampling noise keeps consecutive frames distinct."
+    )
+
+
+def render_frame(env, renders_per_frame: int, rgb_key: str, depth_key: str | None, playback_step: bool = False):
     """Render the current simulator state and return the camera observation the policy would see.
 
     Mirrors the refresh protocol ``ManagerBasedEnv.reset_to`` uses after writing state: sync
@@ -245,10 +345,26 @@ def render_frame(env, renders_per_frame: int, rgb_key: str, depth_key: str | Non
     Returns:
         Tuple of the RGB frame ``(H, W, 3)`` uint8 and the depth frame ``(H, W)`` float32 or None.
     """
-    env.sim.forward()
-    # InteractiveScene.update is what pushes the written transforms into the render context and
-    # marks the sensors outdated. Without it the buffers hold the new state while the renderer
-    # still draws the previous one, which validates as correct and renders as wrong.
+    # Getting the written state in front of the renderer is the whole difficulty here. Three layers
+    # were ruled out by source audit and by measurement, in this order:
+    #
+    # 1. `render_context.update_transforms` cannot help: `IsaacRtxRenderer.update_transforms` is
+    #    `pass` -- "No-op for Isaac RTX - uses USD scene directly" -- so every route into it is dead
+    #    at the leaf, whatever the `lazy_sensor_update` gate or the step-count dedupe do.
+    # 2. RTX reads the **USD** scene. `PhysXManager._load_fabric` sets `/physics/updateToUsd` to
+    #    `not use_fabric`, so `--no_fabric` does re-enable physics-to-USD synchronization.
+    # 3. But that synchronization is performed by PhysX *while stepping*. `sim.forward()` refreshes
+    #    kinematics without stepping, so nothing is ever written to USD and the renderer keeps
+    #    drawing the last stepped state -- which is why `--no_fabric` alone still renders frozen.
+    #
+    # Hence `--playback_step`: advance physics by a single `dt` after writing the state, so the
+    # physics-to-USD sync actually runs. The cost is that the rendered pose is the written state
+    # advanced by one `dt` rather than the written state exactly; `--validate_states` measures that
+    # drift, and it must be reported rather than assumed negligible.
+    if playback_step:
+        env.sim.step(render=False)
+    else:
+        env.sim.forward()
     env.scene.update(dt=env.physics_dt)
     for _ in range(renders_per_frame):
         env.sim.render()
@@ -298,6 +414,12 @@ def main():
     # Playback drives the state directly, so recorders and terminations have nothing to contribute.
     env_cfg.recorders = {}
     env_cfg.terminations = {}
+    if args_cli.no_fabric:
+        # Fabric reads physics buffers directly and skips USD synchronization; the RTX renderer
+        # reads USD. With Fabric on, `reset_to` therefore updates physics and leaves the rendered
+        # image on the last state USD actually saw. Playback cares about fidelity, not throughput.
+        env_cfg.sim.use_fabric = False
+        print("[Rerender] Fabric disabled: physics state will stay synchronized to USD for rendering.")
 
     env = gym.make(env_name, cfg=env_cfg, **env_kwargs)
     from isaaclab_arena.utils.isaaclab_utils.simulation_app import reapply_viewer_cfg
@@ -338,14 +460,33 @@ def main():
                 depth_frames = []
                 fidelity_per_frame = []
                 playback_errors = []
+                prev_state = None
+                prev_guard_frame = None
+                prev_rgb = None
+                prev_recorded = None
                 for frame_index in range(num_frames):
                     frame_state = frame_state_for_scene(
                         env.scene.get_state(is_relative=True), recorded_states, frame_index, str(env.device)
                     )
                     env.scene.reset_to(frame_state, env_ids, is_relative=True)
-                    rgb_np, depth_np = render_frame(env, args_cli.renders_per_frame, rgb_key, depth_key)
+                    rgb_np, depth_np = render_frame(
+                        env, args_cli.renders_per_frame, rgb_key, depth_key, args_cli.playback_step
+                    )
                     if args_cli.validate_states:
                         playback_errors.append(state_playback_error(env.scene, frame_state))
+
+                    # Depth is the more sensitive witness -- it carries geometry directly and is not
+                    # smoothed by video encoding -- so prefer it and fall back to RGB under --no_depth.
+                    guard_frame = depth_np if depth_np is not None else rgb_np
+                    state_delta = 0.0 if prev_state is None else state_max_abs_delta(frame_state, prev_state)
+                    assert_render_not_frozen(prev_guard_frame, guard_frame, state_delta, frame_index)
+                    # Bit-identity alone passes a frozen RGB buffer, so also require the render to
+                    # reproduce a share of the recording's own frame-to-frame motion.
+                    this_recorded = np.asarray(recorded_rgb[frame_index]) if recorded_rgb is not None else None
+                    if pose_is_unperturbed:
+                        assert_render_tracks_recording(prev_rgb, rgb_np, prev_recorded, this_recorded, frame_index)
+                    prev_state, prev_guard_frame = frame_state, guard_frame
+                    prev_rgb, prev_recorded = rgb_np, this_recorded
 
                     rgb_frames.append(rgb_np)
                     if depth_np is not None:

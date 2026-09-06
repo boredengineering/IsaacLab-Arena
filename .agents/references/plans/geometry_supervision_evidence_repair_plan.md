@@ -44,7 +44,10 @@ a method -- which, if perception is implicated, is probably not the one we built
 transforms to RTX is keyed on the physics step counter that only `step()` increments:
 
 - `RenderContext.update_transforms` returns early when `_last_transforms_step == physics_step_count`
-  (`renderers/render_context.py:112-120`) -- with a frozen counter, a permanent no-op.
+  (`renderers/render_context.py:112-120`) -- with a frozen counter, a permanent no-op. **Corrected
+  2026-09-06: this gate is moot.** `IsaacRtxRenderer.update_transforms` is itself `pass`, so the
+  push does nothing on this renderer whether the gate opens or not. The conclusion below survives;
+  this mechanism does not. See the execution log.
 - Its one scene-level call site is guarded by `if not self.cfg.lazy_sensor_update`
   (`scene/interactive_scene.py:634-635`), and `lazy_sensor_update` defaults to `True`
   (`scene/interactive_scene_cfg.py:80`) and is **never overridden anywhere in Arena**. The transform
@@ -53,6 +56,37 @@ transforms to RTX is keyed on the physics step counter that only `step()` increm
   sets. Under PhysX, Isaac Lab's own comment describes the FabricManager "causing articulation meshes
   to freeze visually while physics continues to run", with a `_re_sync_fabric()` workaround wired
   only into the pause/resume path.
+
+> [!IMPORTANT]
+> **Mechanism corrected, 2026-09-06 -- the break is Fabric/USD, not the push cadence.** The three
+> bullets above are all true but none of them is the operative cause, because the push is dead **at
+> the leaf**, not merely gated and deduped:
+>
+> ```python
+> # isaaclab_physx/renderers/isaac_rtx_renderer.py:381
+> def update_transforms(self) -> None:
+>     """No-op for Isaac RTX - uses USD scene directly."""
+>     pass
+> ```
+>
+> `IsaacRtxRenderer` inherits nothing better, so **every** route into
+> `render_context.update_transforms` -- gated, un-gated, deduped or cadence-reset -- terminates in
+> `pass`. Discriminators #1 and #2 are therefore not merely insufficient, they are **provably
+> incapable**, and this was confirmed empirically: option (a) of the W1 callout (cadence reset plus a
+> direct un-gated `update_transforms` call) left the render **bit-identical**, caught by the new
+> §2.1 guard on frame 1 against a state delta of 5.09.
+>
+> The actual chain is one line further out. RTX "uses USD scene directly", and
+> `SimulationCfg.use_fabric` (`simulation_cfg.py:262`, **default `True`**) is documented as: *"Enable/
+> disable reading of physics buffers directly ... updates in the states in the scene is normally
+> synchronized with USD. This leads to an overhead ... This flag allows **disabling the
+> synchronization** and reading the data directly from the physics buffers."* So on defaults,
+> `reset_to` writes physics, Fabric serves reads from the physics buffers, **USD is never
+> synchronized**, and the renderer draws the last state USD actually saw. That is why
+> `--validate_states` reports exactly 0.0: it reads back through the same Fabric path that is
+> correct. **The fix is `use_fabric = False` for playback** (discriminator #4), now with a mechanism
+> rather than a hunch -- and it reframes Risk 1: this is a config change, not a re-plumbing of
+> `sim.step()`.
 
 RTX therefore keeps drawing the transforms from the last real physics step -- `env.reset()` -- which
 is the default pose with arms raised and the apple at its authored spawn rather than its resolved
@@ -465,6 +499,38 @@ If W2 is funded, add a second camera with usable baseline against the approach a
 re-record**, since the marginal cost there is small and §2.8 says it targets exactly our failing
 axis.
 
+> [!IMPORTANT]
+> **W1 source audit, 2026-09-06 -- two of the four discriminators cannot work alone.** Both halves of
+> the mechanism are now confirmed verbatim in `submodules/IsaacLab`, and they compose in series, so
+> defeating either one by itself changes nothing:
+>
+> 1. **The call site is guarded off.** `interactive_scene.py:625-634` -- `scene.update()` calls
+>    `self.sim.render_context.update_transforms(self.sim.get_physics_step_count())` **only**
+>    `if not self.cfg.lazy_sensor_update`, and `interactive_scene_cfg.py:80` declares
+>    `lazy_sensor_update: bool = True`. `render_frame` already calls `env.scene.update(...)`, so the
+>    push it relies on is dead code today.
+> 2. **The callee dedupes on a frozen counter.** `render_context.py:112-120` -- `update_transforms`
+>    returns early when `self._last_transforms_step == physics_step_count`, and `sim.forward()` never
+>    increments that counter. `reset_transform_cadence()` (`:139-141`) sets it back to `None`.
+>
+> **Consequence for the four listed discriminators**: #1 (`_physics_step_count += 1`) and #2
+> (`reset_transform_cadence()`) each address only layer 2 and are **necessary but not sufficient** --
+> with the layer-1 guard still on, `update_transforms` is never reached whatever the counter says. A
+> null result from either, run alone, is uninformative rather than exculpatory. The two ways to
+> address both layers at once:
+>
+> - **(a) surgical, preferred** -- in `render_frame`, defeat the dedupe and call the push *directly*,
+>   bypassing the guard rather than changing it:
+>   `env.sim.render_context.reset_transform_cadence()` then
+>   `env.sim.render_context.update_transforms(env.sim.get_physics_step_count())`.
+> - **(b) config-level** -- `env_cfg.scene.lazy_sensor_update = False` **plus** a cadence reset. Wider
+>   blast radius: it also changes sensor-update semantics for every sensor in the scene, which is not
+>   what we want to be testing here.
+>
+> Discriminator #4 (`use_fabric = False`) is unaffected by this and remains the decisive test of
+> *where* the break is, but it is no longer the first thing to try. Order is now: (a), then #4, then
+> #3.
+
 ### W4 -- Re-derive the camera mount
 `calibrate_corpus_camera.py`'s fitted offset is likely an artifact of §2.1. Re-run after W1 and
 compare; if it collapses, the camera-pitch line of investigation needs revisiting too.
@@ -573,3 +639,193 @@ materially against the baseline policy's embeddings.
    251-episode re-record); the live question is whether to bundle it into W2 if W2 is funded. Note
    this is distinct from decision 2 -- a second *RGB* view needs no depth sensor, so it does not
    violate the deployment constraint.
+
+## 9. Execution log
+
+### 2026-09-06 -- W1 implemented
+
+**Environment.** `isaaclab_arena-latest` was `Exited (137)` as §W1 recorded. Restarted cleanly with
+63 GB of 91 GB available, so the earlier OOM was transient load, not a standing constraint.
+`import isaaclab_arena` verifies inside the container.
+
+**Source audit.** Both guards confirmed verbatim (see the W1 callout): the `lazy_sensor_update`
+gate on the call site, and the frozen-counter dedupe in the callee. This retired discriminators #1
+and #2 as standalone tests before spending a run on either. Corroborating evidence that the audit is
+right: an earlier `smoke_sceneupdate` arm already tried adding `env.scene.update(...)` and scored
+`rgb_fidelity.mean_abs_diff` **54.47**, no better than the `regression` arm's **53.40** -- exactly
+what §2.1 predicts, because `scene.update` cannot push transforms while the gate is on.
+
+**Change, option (a) -- surgical.** `rerender_demos.py::render_frame` now clears both layers before
+rendering, without touching scene-wide sensor semantics:
+
+```python
+env.sim.forward()
+env.sim.render_context.reset_transform_cadence()                              # defeat the dedupe
+env.sim.render_context.update_transforms(env.sim.get_physics_step_count())    # bypass the gate
+env.scene.update(dt=env.physics_dt)
+```
+
+**Guard added, per §2.1.** `assert_render_not_frozen` fails the run when a rendered frame is
+bit-identical to its predecessor *while the recorded state moved*, with `state_max_abs_delta`
+walking the nested state dict for the comparison. It prefers depth as the witness (geometry-bearing
+and not smoothed by video encoding) and falls back to RGB under `--no_depth`. This is the guard that
+`--validate_states` structurally could not provide: validation round-trips through physics, which is
+precisely the layer that was already correct.
+
+**Baselines to beat**, same dataset, episode 0, `renders_per_frame 2`, `depth_downsample 1`:
+`regression` 53.40, `smoke_pitch0` 52.27, `smoke_sceneupdate` 54.47 (`rgb_fidelity.mean_abs_diff`,
+lower is better; the recorded 10.26 dB PSNR is the same measurement). Smoke arm:
+`eval_output/rerender/smoke/w1_transformpush`, 12 frames, `--validate_states`.
+
+> [!NOTE]
+> **Interpreting the result.** A large drop in `mean_abs_diff` confirms §2.1 end to end and unblocks
+> W3/W5. A *null* result now means something specific and useful, because option (a) addresses both
+> layers: it would point at discriminator #4 (`use_fabric = False`), i.e. the break is in the Fabric
+> path rather than the transform-push cadence, and Risk 1 becomes live. The new guard should fire
+> loudly in that case rather than producing another quietly wrong corpus.
+
+### 2026-09-06 -- W1 results: three mechanisms ruled out by measurement
+
+All three runs used episode 0, 12 frames, `renders_per_frame 2`. **Every one failed identically**,
+with the new guard firing on frame 1 against a byte-identical state delta of **5.08701**:
+
+| Arm | What it addressed | Result |
+| :--- | :--- | :--- |
+| `w1_transformpush` | cadence reset **+** direct un-gated `update_transforms` | frozen |
+| `w1_nofabric` | `use_fabric = False` (re-enables `/physics/updateToUsd`) | frozen |
+| `w1_step_nofabric` | `--no_fabric` **+** `sim.step(render=False)` per frame | frozen |
+
+The third is the important one: it is the remedy Risk 1 anticipated -- a genuine physics step so the
+physics-to-USD sync actually runs -- and it **did not help either**. So the freeze survives every
+layer the §2.1 analysis identified, plus an actual step. `sim.step()` is not a plausible fix, and
+Risk 1's proposed remedy is closed rather than pending.
+
+**What the invariance of the failure tells us.** The state delta is byte-identical across all three
+arms, which is expected (it is a property of the recording, not the render), but the *frames* being
+bit-identical under three different flush mechanisms points away from a flush problem altogether. Two
+candidates survive, and they are cheap to separate:
+
+1. **The renderer is genuinely frozen** -- something upstream of all three mechanisms, e.g. the
+   annotator/Replicator pipeline caching per stage rather than per render call.
+2. **Only *depth* is stale.** The guard prefers depth as its witness, and nothing so far establishes
+   that RGB is frozen too. This matters because the three prior smoke arms scored `mean_abs_diff`
+   52-54 against recorded RGB -- a *non-zero* comparison, so RGB is being produced -- but no arm ever
+   checked whether RGB *changes between consecutive frames*. Note `depth_inf_fraction` is **0.0** in
+   every arm, so this is not a dead annotator returning `inf`; the depth values are real, just
+   possibly not refreshed.
+
+The `w1_rgbwitness` arm settles it: `--no_depth` makes the guard fall back to RGB. If it **passes**,
+the renderer is not frozen and the defect is confined to the depth annotator -- which would rewrite
+§2.1 again and would be much better news, since RGB fidelity is what the corpus is scored on. If it
+**fails**, candidate 1 holds and the search moves upstream of the transform/USD layer entirely.
+
+> [!CAUTION]
+> **§2.1's mechanism is now unsupported, and should stop being cited as established.** Its three
+> bullets are accurate readings of the source, but the causal claim built on them -- that defeating
+> the gate, the dedupe or the Fabric/USD sync would unfreeze the render -- is refuted by all three
+> arms above. The *observation* (rendered frames do not follow the written state) stands and is now
+> guarded automatically; the *explanation* does not. Treat the mechanism as open until
+> `w1_rgbwitness` reports.
+
+### 2026-09-06 -- W1 ANSWERED: the renderer is not frozen; the depth annotator is
+> [!WARNING]
+> **This entry's conclusion is superseded -- see "the RGB witness was unsound" below.** The RGB
+> witness passed a *bit-identity* test, which RTX sampling noise defeats. Measured afterwards, this
+> very run's frames move 0.42 grey levels against the recording's 2.72, so RGB was frozen too and
+> all three consequences below are withdrawn. Kept in place because the three measured nulls it
+> established are still valid and valuable.
+
+`w1_rgbwitness` (`--no_depth`, so the guard falls back to RGB) **rendered all 12 frames and the guard
+never fired**. Consecutive RGB frames differ. Combined with the three depth-witness arms, all of
+which fired on frame 1:
+
+| Witness | Consecutive frames | Verdict |
+| :--- | :--- | :--- |
+| **RGB** | **differ** | follows the written state |
+| **depth** (`distance_to_image_plane`) | **bit-identical**, `depth_inf_fraction` 0.0 | stale, with real-valued contents |
+
+**§2.1's diagnosis is wrong and is retracted.** The render is not frozen, the transforms do reach
+RTX, and `reset_to` is visible in the image. The defect is **confined to the depth annotator**, which
+returns real but unrefreshed values. That is why no flush mechanism moved it: the gate, the dedupe,
+`use_fabric`, and a genuine `sim.step()` all operate on the transform/USD path, and the transform/USD
+path was never the broken one.
+
+**Three consequences, two of them good news.**
+
+1. **The corpus RGB is usable.** Nothing about RGB playback needs repairing, which unblocks anything
+   scored on images rather than on geometry.
+2. **§2.1's contamination claim is refuted.** It held that
+   `calibrate_corpus_camera.py`'s fitted offset "is likely an artifact" and that the camera-pitch
+   investigation is "downstream of the same bug". That script fits on **RGB only** -- `_render_rgb`
+   against `_recorded_rgb` (`:211-216`, `:281-282`, `:395`) -- and RGB was never frozen. Its search
+   was responsive to scene state throughout, so its offset stands until shown otherwise and **W4
+   loses its motivation**. Demote it.
+3. **The GT-depth conclusion survives, with a different cause.** Rendered depth is still invalid, so
+   §2.5b's retraction, and the W5/G1/G2 gates that rest on GT depth, remain correct as written -- but
+   the repair is "fix the depth annotator refresh", not "re-plumb state playback". This is a far
+   smaller and better-scoped job than Risk 1 feared, and Risk 1's `sim.step()` remedy is closed
+   (measured, no effect).
+
+**What is now unexplained.** RGB `mean_abs_diff` against the recording is 52-54 across every arm
+including this one (54.49 here). The freeze was the standing explanation for that gap and it is gone.
+**Risk 4 is now the leading candidate**: `galileo_locomanip` textures 404 on both buckets and 61 MDL
+shader nodes fail to resolve per run, which would make the rerender differ from the recording
+everywhere without any per-frame staleness. That is a materials/asset problem, not a playback
+problem, and it should be the next thing tested -- it is also cheap, since §2.1 already priced the
+same-geometry material swap at a median 52.7 cm of teacher-prediction movement.
+
+**W1 restated.** Not "unfreeze the render" but: **find why `distance_to_image_plane` does not refresh
+while `rgb` does.** Both come from the same camera and the same
+`observation_manager.compute()["camera_obs"]` call, so the divergence is inside the annotator or its
+caching, not in the scene or the transform pipeline. Start by comparing the two annotators' update
+paths for that camera; the `render_frame` docstring's assumptions no longer apply.
+
+**Code landed** (`isaaclab_arena/scripts/imitation_learning/rerender_demos.py`): the
+`assert_render_not_frozen` / `state_max_abs_delta` guard, which is what produced every result above
+and should stay -- it converts this class of bug from a silently wrong corpus into a hard failure.
+`--no_fabric` and `--playback_step` are retained as measured-null diagnostics, both **off by
+default**; the no-op transform-push edit was reverted, with the reason recorded in `render_frame`.
+
+### 2026-09-06 -- the RGB witness was unsound; the render is frozen on both channels
+
+**`assert_render_not_frozen` tests `np.array_equal`.** Bit-identity is a valid freeze test only for a
+**deterministic** channel. `distance_to_image_plane` is deterministic, so a frozen scene makes it
+bit-identical and the guard fires. RTX colour carries sampling noise, so a frozen scene still yields
+distinct frames and the guard passes. The RGB pass measured renderer determinism, not state-following.
+
+Measured directly, mean absolute difference between consecutive frames, greyscale:
+
+| Sequence | consecutive mean | max | bit-identical pairs |
+| :--- | ---: | ---: | ---: |
+| `w1_rgbwitness` (the run that "passed") | **0.4238** | 1.0051 | **0** |
+| `probe_set` rerender | 0.177 | 0.962 | 0 |
+| **the recording itself** | **2.722** | 15.879 | -- |
+
+The render moves at **16% of the recording's motion** in its own best case, over frames whose recorded
+joint positions move up to 1.1034 rad. So **§2.1's conclusion stands: the render is frozen, on both
+channels.** All three consequences of the superseded entry are withdrawn -- the corpus RGB is **not**
+usable, `calibrate_corpus_camera.py`'s contamination concern **stands** (it fits rendered RGB against
+recorded RGB, and the rendered side is frozen), and the repair is **not** confined to the depth
+annotator. The `mean_abs_diff` of 52-54 that the entry called "unexplained" is not a separate mystery:
+it is the freeze, which was the standing explanation before it was discarded.
+
+**What that pass did establish, and it is worth keeping.** Three remedies are now measured nulls --
+`--no_fabric`, a genuine `--playback_step`, and the transform push -- which closes Risk 1's own
+proposed remedy by experiment. And one source fact corrects §2.1's *mechanism*:
+`IsaacRtxRenderer.update_transforms` is literally `pass`, documented "No-op for Isaac RTX - uses USD
+scene directly". So the `lazy_sensor_update` gate and the `RenderContext` dedupe that §2.1 named
+**cannot be the cause** -- they gate a call that does nothing on this renderer. §2.1 was right that
+the render is frozen and right that physics is fine, and **wrong about which gate does it**. The
+transforms reach RTX through USD directly, and every mechanism tried so far operates elsewhere.
+
+**Guard strengthened.** `assert_render_tracks_recording` adds the magnitude test bit-identity cannot
+do: the render must reproduce at least a floor share (default 20%) of the recording's own
+frame-to-frame motion. On the numbers above it fires at 0.156. Bit-identity is kept as the
+deterministic-channel test, with the limitation documented in both docstrings.
+
+**W1 restated, again.** Not "why does depth not refresh while RGB does" -- both are frozen. The
+question is why body transforms do not reach the RTX USD scene when `sim.forward()` runs, given that
+Fabric-off and a real physics step both fail to fix it. Next cheapest probes: whether the camera prim
+itself moves (camera pose reaches RTX by direct USD writes, so it should), and whether a
+`scene.reset()` before the write, as `ManagerBasedEnv.reset_to` does and `render_frame` omits, is what
+actually unblocks it.

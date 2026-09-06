@@ -263,8 +263,9 @@ failing twice before any number was believed.
    x 55-150, y 300-385.)*
 2. **The apparent-size anchor is sound in principle and too noisy in practice.** Under a pinhole
    camera a known width `W` spanning `p` px sits at `Z = focal * W / p`, which needs no depth
-   gradient. Measured across four episodes: **s = 1.11, 1.23, 1.33, 1.66 -- a 40% spread**, and
-   1.7-2.5x the appendix's 0.655. Three bias sources, none yet bounded: the colour segmentation
+   gradient. Measured across six episodes (0, 1, 40, 125, 180, 250): **s = 1.11, 1.23, 1.66,
+   1.33, 1.23, 1.34 -> mean 1.314 +/- 0.170, a 41.5% spread**, and ~2x the appendix's 0.655.
+   Three bias sources, none yet bounded: the colour segmentation
    drops the apple's unlit side, so the silhouette underestimates and `s` overestimates; the median
    depth over the mask includes edge pixels blurred onto the background, biasing the other way; and
    **the apple's lateral dimensions were never recorded** -- `_USD_ORIGIN_ABOVE_BOTTOM_M` gives only

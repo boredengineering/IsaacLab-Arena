@@ -191,6 +191,13 @@ class Da3DepthTeacher:
 
         Returns:
             Depth as ``(N, H, W)`` float32, in DA3's canonical units.
+
+        The value is **z-depth along the optical axis**, not ray distance, so it needs no cosine
+        correction off-centre. Verified in DA3's own unprojection: ``pixel_space_to_camera_space``
+        builds the ray as ``inverse_intrinsic_matrix(K) @ [u, v, 1]``, whose third component is 1
+        rather than being normalised to unit length, and then multiplies by this value -- so the
+        product's z *is* this value. Getting that backwards would misplace the frame corners by
+        ~33% at this camera's field of view.
         """
         source_height, source_width = frames.shape[1:3]
         pixels = torch.from_numpy(np.ascontiguousarray(frames)).to(self.device)

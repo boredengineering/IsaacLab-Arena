@@ -100,6 +100,33 @@ Verified in `submodules/Isaac-GR00T` @ `d78207d` (branch `dev/arena_v0.3.0-compa
   with the caveat that upstream tuned 0.5 against OpenVLA's L1 action loss rather than N1.7's
   flow-matching head, so it is still worth sweeping -- just not as an unknown. (`alpha` is the paper's name for it, Table 3 is its
   ablation. Do **not** conflate with VEGA's `lambda = 0.1`, a different paper.)
+* **G5 — the `align` arm had never run, and could not have.** Measuring the teacher's width is a
+  forward pass, and `AutoModel.from_pretrained` constructs the policy under transformers'
+  **meta-device** init, where a forward cannot run. So `probe_feature_dim()` inside
+  `Gr00tN1d7.__init__` failed with `NotImplementedError: Cannot copy out of meta tensor` before
+  training could start — every time, for both `align` and `mix`. The infrastructure was complete
+  and untested end to end. Fix: `Gr00tN1d7FinetunePipeline._resolve_geometry_feature_dim()` probes
+  once on a real device *before* construction and passes the width in on the config; the
+  `__init__` fallback now raises an instruction instead of a meta-tensor error.
+
+  This is also why G2's fix was worth doing for its own sake rather than only as an optimisation:
+  the recorded width is what lets construction avoid the probe at all.
+
+* **G6 — `align_loss` was computed and then made invisible.** The model adds it into the reported
+  `loss` and HF's trainer logs only the total, so a Spatial Forcing run contributing nothing looks
+  identical to one that works. Given risk 2 — the target positional embedding starts at 2.8% of
+  the teacher's feature scale — that is a live failure mode, not a hypothetical. Fixed:
+  `Gr00tTrainer.compute_loss` now gathers and logs `align_loss` separately.
+
+* **G7 — every `align` checkpoint carried the frozen teacher as dead payload.** The teacher is a
+  registered submodule (for device/dtype handling), so training wrote all ~300 of its tensors into
+  the policy checkpoint — 1.3 GB for `DA3METRIC-LARGE` — and loading then discarded them with a
+  several-hundred-tensor "weights not used" warning that is indistinguishable at a glance from a
+  real architecture mismatch. Fixed: `FrozenGeometryEncoder.state_dict` omits `_model.*`. Nothing
+  is lost, because the teacher is frozen and rebuilt from `encoder_id` on first use. **Measured:**
+  342 `geometry_encoder.*` tensors -> 0, checkpoint 13.82 GB -> 12.61 GB, with the 7 real
+  `geometry_conditioning.*` tensors retained.
+
 * **G4 — a feature cache is not sound under the current recipe, and that must be written down.**
   The processor emits `geometry_images` **post-augmentation**, and the *train* transform includes
   `FractionalRandomCrop` — a stochastic geometric crop per sample. A per-frame teacher cache would
@@ -155,6 +182,20 @@ Acceptance: `align_loss` is logged, starts near 1.0 and **decreases**; the actio
 diverge relative to baseline. A flat `align_loss` means the target positional embedding is a no-op
 at `pe_std = 0.02` — sweep it before concluding anything about the method.
 
+**Met on a 30-step smoke (2026-09-06):** teacher width measured as 1024 before construction;
+the 7 `geometry_conditioning.*` tensors initialise fresh as expected; and both losses fall
+together —
+
+| step | `align_loss` | action `loss` |
+|---|---|---|
+| 0  | 0.9916 | 0.3901 |
+| 10 | 0.3969 | 0.1951 |
+| 20 | 0.2564 | 0.1562 |
+
+`align_loss` starting at 0.9916 is right for a `1 - cos` objective on a fresh random projector.
+This is the **first** end-to-end `align` run: see G5 for why it could not have worked before.
+A full-length run is the remaining compute decision, not an open question.
+
 ### S3 — Serve RGB-only  *(closes G2)*
 
 ```bash
@@ -163,8 +204,22 @@ at `pe_std = 0.02` — sweep it before concluding anything about the method.
 ```
 
 Acceptance: the server loads the checkpoint and returns actions from RGB alone; in `align` mode
-`nvidia-smi` shows **no DA3 resident** and startup carries no DA3 load. For `--arm mix`, DA3 *is*
-resident and that is correct.
+**no DA3 resident** and startup carries no DA3 load. For `--arm mix`, DA3 *is* resident and that is
+correct.
+
+**Met (2026-09-06)**, loading the smoke checkpoint through `Gr00tPolicy`:
+
+```
+geometry_mode            = align
+geometry_feature_dim     = 1024      <- read from the checkpoint, so no probe
+geometry_encoder built   = True      <- constructed, for strict weight loading
+DA3 weights materialised = False     <- never loaded
+projector params         = 7,346,176
+cuda allocated           = 6.32 GB
+```
+
+The teacher is genuinely absent from the served policy, which is the property that makes `align`
+the right default for "RGB in, no depth sensor".
 
 ### S4 — Evaluate against the control
 

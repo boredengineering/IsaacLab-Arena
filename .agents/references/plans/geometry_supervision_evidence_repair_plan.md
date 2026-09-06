@@ -1,5 +1,23 @@
 # Metric Range for the G1 Policy: Fix the Confounds, Then the Method
 
+> [!NOTE]
+> **Role changed 2026-09-06.** This document is now the **measured evidence appendix**, not the
+> active plan. The build is directed by
+> [`da3_spatial_forcing_pipeline_plan.md`](da3_spatial_forcing_pipeline_plan.md): annotate the
+> recorded corpus with `DA3METRIC-LARGE`, finetune N1.7 with Spatial Forcing, serve RGB-only.
+>
+> What stays load-bearing here: §2.2's reach tables, §2.5/§2.5b's teacher measurements (the
+> `focal/300` pairing trap and the fitted-scale result), §2.8's range/bearing asymmetry, §2.9's
+> verified absences, and §19-23 of `session_memory.md`. **§20's ranked method shortlist and the
+> W-series work items are no longer the plan of record** -- the method is chosen. W2 (spawn
+> variation) survives as the next lever and is restated as §4 of the pipeline plan.
+>
+> One §2.5b loose end is now closed: the empirically measured 1.64x `focal/300` factor is
+> **explained**, not merely observed. The focal that belongs in DA3's conversion is the focal at
+> the resolution the network is fed, and 458.1px x (518/480) / 300 = **1.637**, which the
+> annotator now computes and prints. The formula was right; the raw output was already 1.568x
+> large, which is why applying it made the error worse.
+
 > [!IMPORTANT]
 > **Status**: PLAN v2.2, 2026-09-06. v2.2 **retracts one v2.1 claim of its own**: §2.8's assertion
 > that a second camera is the cheapest remedy was wrong -- it generalised the DROID *policy* config to

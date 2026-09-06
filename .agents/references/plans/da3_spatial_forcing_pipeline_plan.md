@@ -411,6 +411,44 @@ different facts.
 >    isaaclab_arena/tests/test_reach_tracer.py -q"
 > ```
 
+**Comparison script:** `isaaclab_arena_gr00t/scripts/compare_reach_traces.py` takes two or more
+traces and reports `hand_z_minus_obj` at closest horizontal approach per arm. It refuses to present
+a per-episode mean from a trace with no episode index, reporting a single global sample and saying
+so instead.
+
+#### The "baseline to beat" does not survive contact with the surviving traces
+
+Run against the three historical traces that carry hand columns — the only ones that do, out of
+thirteen, and **none of the thirteen has an episode index**:
+
+| trace | `hand_z_minus_obj` at closest approach | horizontal distance there | max lift |
+| :--- | ---: | ---: | ---: |
+| `v28_handtrace` | **+0.0692 m** | 0.0072 m | +0.0141 m |
+| `v29_chunk8` | **+0.0877 m** | 0.0016 m | +0.0077 m |
+| `v30_chunk4` | **+0.0721 m** | 0.0092 m | +0.0170 m |
+
+This plan and the evidence appendix both quote "**+0.1286 m at chunk 16, ~0.0795 m at chunk 8**" and
+a "16 → 8 → 4 plateau (4.9 cm then 0.7 cm)". Neither reproduces:
+
+* Chunk 8 measures **+0.0877 m**, not 0.0795.
+* If `v28` is the chunk-16 run, it measures **+0.0692 m**, not 0.1286 — and is then the *best* of
+  the three, which inverts the claimed monotone improvement.
+* Chunk 4 (+0.0721) sits **above** chunk 8's 0.0877 only by going down, and the ordering across all
+  three shows no monotone trend at all.
+
+Most likely the historical figures used a different statistic (at grasp, or averaged over a
+window) rather than the closest-approach minimum. But the statistic was never recorded, and the
+appendix already states these tables "cannot be re-derived" — this confirms it with numbers.
+
+**Consequence: there is no trustworthy prior for the vertical error.** Every one of these is a
+single global minimum over a multi-episode stream with no spread, so none of them supports a
+comparison. The S4 baseline must be measured fresh with the repaired tracer, from the
+`baseline` arm now training, and no target from the older plans should be quoted as the number to
+beat.
+
+Max lift of 0.008–0.017 m across all three is consistent with the "closes on air" diagnosis: the
+apple barely leaves the surface.
+
 Read the result against §4: on a zero-variation corpus a null result is informative, not a
 refutation of the method.
 

@@ -411,6 +411,29 @@ different facts.
 >    isaaclab_arena/tests/test_reach_tracer.py -q"
 > ```
 
+**Eval launcher:** `isaaclab_arena_gr00t/scripts/eval_s4_arm.sh --arm <arm> --episodes N`, which
+encodes the invocation once so it stops being retyped. Three things verified against
+`test_gr00t_remote_closedloop_policy_runner.py` — the only written-down working invocation — rather
+than assumed:
+
+* the flag is **`--policy_type`**, not `--policy`;
+* **`--policy_config_yaml_path`** is required, and `g1_static_apple_gr00t_closedloop_config.yaml`
+  already exists for this task;
+* **`--headless --enable_cameras`** are needed — a vision policy with no cameras produces nothing,
+  and the run must not try to open a GUI.
+
+`--remote_host`/`--remote_port` are contributed by the policy rather than by `policy_runner_cli`,
+which is why grepping the CLI for them finds nothing while the invocation still needs them. Two
+recorded gotchas are baked in: every main-parser flag must precede the environment subcommand
+(putting `--output_base_dir` after it exits 2 with no message), and omitting the remote flags
+silently defaults to `localhost:5555`.
+
+**The launcher checks its own output.** After the rollout it asserts the trace is non-empty, carries
+the `hand_*` columns, and carries an `episode` index — the three ways the historical traces are
+unusable, each of which looked like a successful run at the time. `ReachTracer` resolves hand bodies
+by substring against the robot's body names and returns an empty mapping when none match, which
+omits the columns with no error at all.
+
 **Comparison script:** `isaaclab_arena_gr00t/scripts/compare_reach_traces.py` takes two or more
 traces and reports `hand_z_minus_obj` at closest horizontal approach per arm. It refuses to present
 a per-episode mean from a trace with no episode index, reporting a single global sample and saying

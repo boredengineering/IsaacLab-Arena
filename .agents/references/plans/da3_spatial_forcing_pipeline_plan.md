@@ -353,7 +353,41 @@ together —
 
 `align_loss` starting at 0.9916 is right for a `1 - cos` objective on a fresh random projector.
 This is the **first** end-to-end `align` run: see G5 for why it could not have worked before.
-A full-length run is the remaining compute decision, not an open question.
+
+#### The acceptance criterion above is wrong, and is corrected here
+
+"Starts near 1.0 and decreases" is satisfied by a model that learned **nothing but the teacher's
+mean direction**. `align_loss` is `1 - cos`, and cosine compares only directions, so if the
+teacher's per-token features all point much the same way then a projector that ignores its input
+and emits the mean already scores well.
+
+Measured with `isaaclab_arena_gr00t/scripts/measure_align_target_floor.py` on
+`DA3METRIC-LARGE` layer 23:
+
+| grid | tokens | cos(token, mean) | **constant-predictor floor** | eff. rank | dims @ 90% var |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| student 8x11 | 264 | 0.8731 | **0.1269** | 8.6 | 21 |
+| DA3 native 37x49 | 5439 | 0.8554 | **0.1446** | 11.3 | 37 |
+
+So the teacher's features occupy roughly **9 effective dimensions out of 1024** and sit 0.87
+aligned to their own mean. **Most of `align_loss`'s dynamic range — 0.99 down to ~0.13 — measures
+nothing about geometry.** The informative range is the remaining ~0.13.
+
+*A hypothesis of mine that the measurement killed:* the collapse looked like it must be the
+resampling, since 37x49 DA3 patches averaged onto an 8x11 grid is ~28 patches per token. It is not
+— native-grid features are barely higher rank (11.3 vs 8.6) and their floor is only 0.018 worse.
+The low-rank structure is **intrinsic to the teacher at this layer**, not an artefact of how we
+sample it.
+
+**Corrected criterion: `align_loss` must fall clearly below the floor for the student's grid
+(0.1269), not merely below 1.0.** Observed on the live run: 0.8797 (step 29) -> 0.7326 (40) ->
+0.1009 (121) -> **0.0795 (212)**, i.e. 0.047 below the floor. So the alignment is learning
+per-token structure and not only the mean — but the margin, not the headline drop, is the evidence.
+
+This also reframes SF's own encoder ablation (base 92.7, SigLIP 94.0, DINOv2 94.1, VGGT 96.9): if
+targets of this kind are largely low-rank, "every target beats base" is consistent with the
+alignment acting mostly as a weak regulariser, with the teacher's identity worth comparatively
+little. Not a refutation of the paper — a caution about reading its margins as geometry transfer.
 
 ### S3 — Serve RGB-only  *(closes G2)*
 

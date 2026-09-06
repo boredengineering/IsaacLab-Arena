@@ -23,6 +23,7 @@
 #   ./finetune_n17_geometry.sh --arm align --nproc-per-node 8
 #   ./finetune_n17_geometry.sh --arm baseline --dry-run
 #   ./finetune_n17_geometry.sh --arm align --align-loss-coeff 1.0 --pe-std 0.5   # a sweep point
+#   ./finetune_n17_geometry.sh --arm baseline --tune-visual --reduced-color-jitter  # isolating control
 
 set -euo pipefail
 
@@ -48,6 +49,8 @@ TEACHER=""
 ALIGN_SITE="post_vl_self_attention"
 ALIGN_LOSS_COEFF=""
 PE_STD=""
+TUNE_VISUAL_OVERRIDE=""
+REDUCED_JITTER_OVERRIDE=""
 
 usage() {
     sed -n '7,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -68,6 +71,10 @@ while [[ $# -gt 0 ]]; do
         --align-site) ALIGN_SITE="$2"; shift 2 ;;
         --align-loss-coeff) ALIGN_LOSS_COEFF="$2"; shift 2 ;;
         --pe-std) PE_STD="$2"; shift 2 ;;
+        --tune-visual) TUNE_VISUAL_OVERRIDE=true; shift ;;
+        --no-tune-visual) TUNE_VISUAL_OVERRIDE=false; shift ;;
+        --reduced-color-jitter) REDUCED_JITTER_OVERRIDE=true; shift ;;
+        --full-color-jitter) REDUCED_JITTER_OVERRIDE=false; shift ;;
         --dry-run) DRY_RUN=true; shift ;;
         -h|--help) usage 0 ;;
         *) echo "Unknown argument: $1" >&2; usage 1 ;;
@@ -101,6 +108,20 @@ case "$ARM" in
 esac
 
 [[ -n "$TEACHER" ]] || TEACHER="$ARM_TEACHER"
+
+# Visual tuning is a per-arm default, not a property of the arm, and the two are easy to confuse.
+# The geometry arms enable it because the alignment loss acts on the backbone's image tokens; the
+# RGB arms do not. That makes `baseline` vs `align` a comparison of *two* changes at once -- the
+# geometry loss and whether the visual encoder is trainable -- so it cannot attribute a difference
+# to Spatial Forcing. Overriding it is what makes an isolating control possible:
+#
+#   --arm baseline --tune-visual     the control for `align`: same trainable set, no geometry loss
+#   --arm baseline                   the arm as originally defined, for continuity
+#
+# Recorded in the run line below either way, so a log says which was used.
+if [[ -n "$TUNE_VISUAL_OVERRIDE" ]]; then
+    TUNE_VISUAL="$TUNE_VISUAL_OVERRIDE"
+fi
 if [[ "$GEOMETRY_MODE" != "off" ]]; then
     [[ -n "$TEACHER" ]] || { echo "Arm '$ARM' needs a teacher; pass --teacher" >&2; exit 1; }
     # A local directory must exist; a bare HuggingFace id (no slash-prefixed path) is fetched by the
@@ -119,10 +140,26 @@ done
 # Colour jitter perturbs the very images the geometry encoder reads, so saturation and hue -- which
 # have no depth meaning -- are dropped for the geometry arms while brightness and contrast stay.
 # The RGB arms keep the full set so they are not quietly given weaker augmentation.
-if [[ "$GEOMETRY_MODE" == "off" ]]; then
-    COLOR_JITTER=(--color-jitter-params brightness 0.3 contrast 0.4 saturation 0.5 hue 0.08)
+#
+# That fairness argument holds for each arm on its own, but it makes the arms differ in *two* ways
+# at once, and augmentation strength moves success rate by itself. `--reduced-color-jitter` forces
+# the geometry arms' weaker set onto an RGB arm, so a control can match `align` on augmentation as
+# well as on the trainable set:
+#
+#   --arm baseline --tune-visual --reduced-color-jitter
+#
+# is the arm that differs from `align` in the geometry loss and nothing else.
+if [[ -n "$REDUCED_JITTER_OVERRIDE" ]]; then
+    REDUCED_JITTER="$REDUCED_JITTER_OVERRIDE"
+elif [[ "$GEOMETRY_MODE" == "off" ]]; then
+    REDUCED_JITTER=false
 else
+    REDUCED_JITTER=true
+fi
+if [[ "$REDUCED_JITTER" == "true" ]]; then
     COLOR_JITTER=(--color-jitter-params brightness 0.3 contrast 0.4)
+else
+    COLOR_JITTER=(--color-jitter-params brightness 0.3 contrast 0.4 saturation 0.5 hue 0.08)
 fi
 
 OUTPUT_DIR="${OUTPUT_ROOT}/${ARM}"
@@ -157,7 +194,7 @@ else
 fi
 [[ -n "$LEARNING_RATE" ]] && CMD+=(--learning-rate "$LEARNING_RATE")
 
-echo "[finetune] arm=$ARM geometry_mode=$GEOMETRY_MODE tune_visual=$TUNE_VISUAL gpus=$NPROC"
+echo "[finetune] arm=$ARM geometry_mode=$GEOMETRY_MODE tune_visual=$TUNE_VISUAL reduced_color_jitter=$REDUCED_JITTER gpus=$NPROC"
 [[ "$GEOMETRY_MODE" != "off" ]] && echo "[finetune] teacher=$TEACHER align_site=$ALIGN_SITE"
 echo "[finetune] modality=$MODALITY"
 echo "[finetune] output=$OUTPUT_DIR"

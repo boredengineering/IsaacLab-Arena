@@ -253,9 +253,43 @@ isaaclab_arena_gr00t/scripts/finetune_n17_geometry.sh --arm align    --nproc-per
 isaaclab_arena_gr00t/scripts/finetune_n17_geometry.sh --arm baseline --nproc-per-node 1
 ```
 
-Run **baseline first or in sequence on one GPU**, never concurrently: they would contend for VRAM
-and the timings would not be comparable. The two arms differ only in the geometry flags the
-launcher records, which is the point of routing both through it.
+Run **in sequence on one GPU**, never concurrently: measured 82 GB of 97 GB at batch 64, so two
+would not fit, and the timings would not be comparable anyway.
+
+**Two confounds in the arm definitions, found when launching and now fixable.** The claim that the
+arms "differ only in the geometry flags" was wrong — `baseline` vs `align` differed in **three**
+things:
+
+| | `baseline` (as defined) | `align` |
+|---|---|---|
+| geometry loss | off | on |
+| `--tune-visual` | **false** | **true** |
+| colour jitter | **full** (+saturation, hue) | **reduced** |
+
+Visual tuning and augmentation strength each move success rate on their own, so that comparison
+cannot attribute a difference to Spatial Forcing. Both are now overridable, and the isolating
+control is:
+
+```bash
+finetune_n17_geometry.sh --arm baseline --tune-visual --reduced-color-jitter   # control
+finetune_n17_geometry.sh --arm align                                          # treatment
+```
+
+which differ in the geometry loss and nothing else. The arm defaults are unchanged, so `--arm
+baseline` alone still reproduces the original definition; the run line now prints
+`tune_visual=` and `reduced_color_jitter=` so a log records which was used.
+
+**Budget: 5000 steps at batch 64, measured 1.40 s/it → ~1.9 h/arm, ~3.9 h for the pair.** Chosen
+over the launcher's 20000 default for three reasons: 20000 is **36.5 epochs** over 35 066 frames
+from a base already tuned on this task, which mostly memorises a corpus with zero spatial
+variation (§4); `save_steps=1000` with `save_total_limit=5` means a 20000-step run **deletes every
+checkpoint before step 16000**, while 5000 retains all five, so the best can be chosen; and SF's
+own published curve (2K→72.7, 5K→87.5, 20K→93.7 on LIBERO) makes *faster convergence* the claim,
+which is measured early. Override with `--max-steps 20000` for the full protocol. Both arms get the
+same budget either way, which is what the comparison needs.
+
+Both land in `geometry_arms/{baseline,align}`; within that root, `baseline` **is** the isolating
+control, not the original arm definition.
 
 Teacher `DA3METRIC-LARGE`, site `post_vl_self_attention`, `align_loss_coeff` 0.5 (now sourced),
 `--tune-visual` on. Run `--arm baseline` as the control; they differ only in the geometry flags.

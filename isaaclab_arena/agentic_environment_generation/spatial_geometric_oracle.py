@@ -8,12 +8,10 @@
 from __future__ import annotations
 
 import math
-from typing import Any
 import numpy as np
 
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 from isaaclab_arena.relations.spatial_factor_graph import SpatialFactorGraph
-
 
 KNOWN_FIXTURE_BOUNDS: dict[str, tuple[float, float, float, float, float]] = {
     # Note: maple_table / maple_table_robolab USD mesh is offset from its prim origin: X in [0.20, 0.90], Y in [-0.50, 0.50], Z_deck=0.0
@@ -285,8 +283,8 @@ def validate_depth_alignment(
     if pred_depth > 0.8:
         errors.append(
             f"[DepthAlignmentOracle] Manipuland '{manipuland.id}' is {pred_depth:.2f}m from head camera, "
-            f"which is likely too far for the training distribution (typical range 0.3–0.6m). "
-            f"Move object closer to robot or adjust robot base position."
+            "which is likely too far for the training distribution (typical range 0.3–0.6m). "
+            "Move object closer to robot or adjust robot base position."
         )
 
     return errors
@@ -412,21 +410,22 @@ def validate_kinematic_reachability(spec: ArenaEnvGraphSpec) -> list[str]:
                 errors.append(
                     f"[KinematicOracle] Task object '{obj.id}' is at distance {dist:.2f}m from robot base, "
                     f"exceeding max arm reach of {max_reach:.2f}m. Move '{obj.id}' closer to workspace center "
-                    f"or adjust robot base position."
+                    "or adjust robot base position."
                 )
             elif dist < min_reach:
                 errors.append(
-                    f"[KinematicOracle] Task object '{obj.id}' is at distance {dist:.2f}m (too close, within robot body collider). "
-                    f"Maintain minimum distance of {min_reach:.2f}m."
+                    f"[KinematicOracle] Task object '{obj.id}' is at distance {dist:.2f}m (too close, within robot body"
+                    f" collider). Maintain minimum distance of {min_reach:.2f}m."
                 )
             if is_humanoid and len(emb_pos) >= 3 and len(obj_pos) >= 3:
                 pelvis_z = emb_pos[2] + 0.75 if emb_pos[2] < 0.2 else emb_pos[2]
                 rel_z = obj_pos[2] - pelvis_z
                 if rel_z > 0.45 or rel_z < -0.35:
                     errors.append(
-                        f"[KinematicOracle] Humanoid '{spec.embodiment.id}' pelvis height Z={pelvis_z:.2f}m is misaligned "
-                        f"with object '{obj.id}' at Z={obj_pos[2]:.2f}m (relative delta {rel_z:.2f}m outside reachable range [-0.35m, +0.45m]). "
-                        f"Adjust robot standing elevation or workstation surface height."
+                        f"[KinematicOracle] Humanoid '{spec.embodiment.id}' pelvis height Z={pelvis_z:.2f}m is"
+                        f" misaligned with object '{obj.id}' at Z={obj_pos[2]:.2f}m (relative delta {rel_z:.2f}m"
+                        " outside reachable range [-0.35m, +0.45m]). Adjust robot standing elevation or workstation"
+                        " surface height."
                     )
     return errors
 
@@ -442,7 +441,7 @@ def validate_relational_completeness(spec: ArenaEnvGraphSpec) -> list[str]:
         if not is_furniture and obj.id not in referenced_subjects:
             errors.append(
                 f"[RelationalOracle] Object '{obj.id}' has no support relation (e.g. 'on' or 'inside'). "
-                f"It will spawn floating ungrounded. Add an explicit 'on' relation to the support fixture."
+                "It will spawn floating ungrounded. Add an explicit 'on' relation to the support fixture."
             )
     return errors
 
@@ -468,7 +467,11 @@ def relax_spec_spatial_factor_graph(spec: ArenaEnvGraphSpec) -> tuple[ArenaEnvGr
         obj_lower = f"{obj.id} {obj.registry_name}".lower()
         if any(k in obj_lower for k in ("shelf", "shelving", "table", "counter", "desk", "rack")):
             furniture_ids.add(obj.id)
-            init_p = obj.params.get("initial_pose", {}).get("position_xyz", [0.0, 0.6, floor_z]) if obj.params else [0.0, 0.6, floor_z]
+            init_p = (
+                obj.params.get("initial_pose", {}).get("position_xyz", [0.0, 0.6, floor_z])
+                if obj.params
+                else [0.0, 0.6, floor_z]
+            )
             fg.add_variable(obj.id, [init_p[0], init_p[1], init_p[2], 0.0], is_fixed=False)
             fg.add_ground_factor(obj.id, floor_z=floor_z)
         elif any(k in obj_lower for k in ("bin", "basket", "tray", "box")):
@@ -477,7 +480,11 @@ def relax_spec_spatial_factor_graph(spec: ArenaEnvGraphSpec) -> tuple[ArenaEnvGr
     # 3. Add Robot Embodiment
     if spec.embodiment:
         emb_id = spec.embodiment.id
-        init_emb = spec.embodiment.params.get("initial_pose", {}).get("position_xyz", [-0.55, 0.0, floor_z]) if spec.embodiment.params else [-0.55, 0.0, floor_z]
+        init_emb = (
+            spec.embodiment.params.get("initial_pose", {}).get("position_xyz", [-0.55, 0.0, floor_z])
+            if spec.embodiment.params
+            else [-0.55, 0.0, floor_z]
+        )
         fg.add_variable(emb_id, [init_emb[0], init_emb[1], init_emb[2], 0.0], is_fixed=False)
         fg.add_ground_factor(emb_id, floor_z=floor_z)
 
@@ -485,7 +492,11 @@ def relax_spec_spatial_factor_graph(spec: ArenaEnvGraphSpec) -> tuple[ArenaEnvGr
     for obj in spec.objects:
         if obj.id in furniture_ids:
             continue
-        init_p = obj.params.get("initial_pose", {}).get("position_xyz", [0.0, 0.0, floor_z + 0.75]) if obj.params else [0.0, 0.0, floor_z + 0.75]
+        init_p = (
+            obj.params.get("initial_pose", {}).get("position_xyz", [0.0, 0.0, floor_z + 0.75])
+            if obj.params
+            else [0.0, 0.0, floor_z + 0.75]
+        )
         fg.add_variable(obj.id, [init_p[0], init_p[1], init_p[2], 0.0], is_fixed=False)
 
     # 5. Connect Factors from Relations
@@ -498,7 +509,9 @@ def relax_spec_spatial_factor_graph(spec: ArenaEnvGraphSpec) -> tuple[ArenaEnvGr
             )
             sector = rel.params.get("surface_sector") if rel.params else None
             # On tabletop environments, default unassigned manipulands to front_center and receptacles to front_left
-            if not sector and ("table" in parent_reg.lower() or "desk" in parent_reg.lower() or "counter" in parent_reg.lower()):
+            if not sector and (
+                "table" in parent_reg.lower() or "desk" in parent_reg.lower() or "counter" in parent_reg.lower()
+            ):
                 sector = "front_left" if rel.subject in receptacle_ids else "front_center"
             bounds = get_fixture_sector_bounds(parent_reg, sector)
             fg.add_support_factor(rel.subject, rel.reference, bounds, edge_margin=0.04)
@@ -545,6 +558,178 @@ def relax_spec_spatial_factor_graph(spec: ArenaEnvGraphSpec) -> tuple[ArenaEnvGr
             f"[FactorGraphOracle] Dynamic LBP relaxation residual energy={result.total_energy:.3f}. "
             f"Conflicting factors: {', '.join(result.conflicting_factors)}"
         )
+
+    return spec, diagnostics
+
+
+def relax_spec_active_inference(
+    spec: ArenaEnvGraphSpec,
+    parent_env_name: str | None = None,
+    eval_id: str | None = None,
+    temperature: float = 0.08,
+    cooling_rate: float = 0.98,
+    max_iters: int = 150,
+) -> tuple[ArenaEnvGraphSpec, list[str]]:
+    """Active Inference relaxation conditioned on Neo4j empirical reach feedback with Langevin SGLD.
+
+    Queries the most recent [:FEEDBACK_MUTATION] loopback edge from Neo4j to bias continuous
+    relaxation toward the policy's verified empirical reach basin. If vertical crown pinch
+    is detected (dz > +0.02m with drops), it automatically relaxes the target height
+    toward the equatorial caging manifold.
+    """
+    diagnostics: list[str] = []
+    if not spec.background:
+        return spec, diagnostics
+
+    # Query empirical feedback mutation from Neo4j
+    feedback = None
+    query_env = parent_env_name or spec.env_name
+    try:
+        from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import fetch_recurrent_feedback_from_neo4j
+
+        feedback = fetch_recurrent_feedback_from_neo4j(env_name=query_env, eval_id=eval_id)
+    except Exception as exc:
+        diagnostics.append(f"[ActiveInferenceOracle] Neo4j feedback query failed: {exc}")
+
+    bg_name = spec.background.id
+    bg_lower = f"{bg_name} {spec.background.registry_name}".lower()
+    floor_z = -0.795 if "galileo" in bg_lower or "room" in bg_lower else 0.0
+
+    fg = SpatialFactorGraph()
+    # 1. Ground scene background anchor at origin
+    fg.add_variable(bg_name, [0.0, 0.0, floor_z, 0.0], is_fixed=True)
+
+    # 2. Add Furniture Fixtures
+    furniture_ids = set()
+    receptacle_ids = set()
+    for obj in spec.objects:
+        obj_lower = f"{obj.id} {obj.registry_name}".lower()
+        if any(k in obj_lower for k in ("shelf", "shelving", "table", "counter", "desk", "rack")):
+            furniture_ids.add(obj.id)
+            init_p = (
+                obj.params.get("initial_pose", {}).get("position_xyz", [0.0, 0.6, floor_z])
+                if obj.params
+                else [0.0, 0.6, floor_z]
+            )
+            fg.add_variable(obj.id, [init_p[0], init_p[1], init_p[2], 0.0], is_fixed=False)
+            fg.add_ground_factor(obj.id, floor_z=floor_z)
+        elif any(k in obj_lower for k in ("bin", "basket", "tray", "box")):
+            receptacle_ids.add(obj.id)
+
+    # 3. Add Robot Embodiment
+    if spec.embodiment:
+        emb_id = spec.embodiment.id
+        init_emb = (
+            spec.embodiment.params.get("initial_pose", {}).get("position_xyz", [-0.55, 0.0, floor_z])
+            if spec.embodiment.params
+            else [-0.55, 0.0, floor_z]
+        )
+        fg.add_variable(emb_id, [init_emb[0], init_emb[1], init_emb[2], 0.0], is_fixed=False)
+        fg.add_ground_factor(emb_id, floor_z=floor_z)
+
+    # 4. Add Manipulands & Receptacles
+    for obj in spec.objects:
+        if obj.id in furniture_ids:
+            continue
+        init_p = (
+            obj.params.get("initial_pose", {}).get("position_xyz", [0.0, 0.0, floor_z + 0.75])
+            if obj.params
+            else [0.0, 0.0, floor_z + 0.75]
+        )
+        fg.add_variable(obj.id, [init_p[0], init_p[1], init_p[2], 0.0], is_fixed=False)
+
+    # 5. Connect Factors from Relations
+    for rel in spec.relations:
+        if rel.kind == "on" and rel.reference:
+            parent_reg = (
+                spec.background.registry_name
+                if rel.reference == bg_name
+                else next((o.registry_name for o in spec.objects if o.id == rel.reference), "table")
+            )
+            sector = rel.params.get("surface_sector") if rel.params else None
+            if not sector and (
+                "table" in parent_reg.lower() or "desk" in parent_reg.lower() or "counter" in parent_reg.lower()
+            ):
+                sector = "front_left" if rel.subject in receptacle_ids else "front_center"
+            bounds = get_fixture_sector_bounds(parent_reg, sector)
+            fg.add_support_factor(rel.subject, rel.reference, bounds, edge_margin=0.04)
+
+    # 6. Add Non-Overlap Clearance between all placed items
+    placeable_objs = [o.id for o in spec.objects if o.id not in furniture_ids]
+    for i in range(len(placeable_objs)):
+        for j in range(i + 1, len(placeable_objs)):
+            fg.add_clearance_factor(placeable_objs[i], placeable_objs[j], min_distance=0.22)
+
+    # 7. Add Reachability Factors to Robot
+    if spec.embodiment:
+        for obj_id in placeable_objs:
+            fg.add_reachability_factor(spec.embodiment.id, obj_id, target_distance=0.60, tolerance=0.20)
+        for furn_id in furniture_ids:
+            fg.add_clearance_factor(spec.embodiment.id, furn_id, min_distance=0.45)
+
+    # 8. Inject Empirical Likelihood Factor if feedback exists
+    if feedback and spec.embodiment:
+        manipuland_id = None
+        if spec.task and spec.task.subtasks:
+            manipuland_id = spec.task.subtasks[0].params.get("pick_up_object")
+        if not manipuland_id and placeable_objs:
+            manipuland_id = placeable_objs[0]
+
+        if manipuland_id and manipuland_id in fg.variables:
+            dx = float(feedback.get("dx", 0.0))
+            dy = float(feedback.get("dy", 0.0))
+            dz = float(feedback.get("dz", 0.0))
+
+            # If vertical approach shows crown pinch (dz > 0.02m), bias dz target to center on equator
+            equatorial_bias_z = -0.025 if dz > 0.02 else 0.0
+            eff_dz = dz + equatorial_bias_z
+
+            fg.add_empirical_reach_likelihood_factor(
+                robot_name=spec.embodiment.id,
+                target_name=manipuland_id,
+                measured_reach_delta=(dx, dy, eff_dz),
+                sigma=(0.012, 0.012, 0.015),
+                weight=300.0,
+            )
+            diagnostics.append(
+                f"[ActiveInferenceOracle] Injected EmpiricalReachLikelihoodFactor for '{manipuland_id}' with prior"
+                f" error delta=({dx:+.4f}, {dy:+.4f}, {dz:+.4f})m, equatorial_bias_z={equatorial_bias_z:+.4f}m."
+            )
+
+    # 9. Perform Stochastic SGLD Relaxation
+    result = fg.relax_stochastic(
+        max_iters=max_iters,
+        lr=0.03,
+        temperature=temperature,
+        cooling_rate=cooling_rate,
+    )
+
+    # 10. Apply Relaxed Poses back to Spec
+    for obj in spec.objects:
+        if obj.id in result.poses:
+            p = result.poses[obj.id]
+            if not obj.params:
+                obj.params = {}
+            obj.params["initial_pose"] = {
+                "position_xyz": [p[0], p[1], p[2]],
+                "rotation_xyzw": [0.0, 0.0, 0.0, 1.0],
+            }
+
+    if spec.embodiment and spec.embodiment.id in result.poses:
+        ep = result.poses[spec.embodiment.id]
+        if not spec.embodiment.params:
+            spec.embodiment.params = {}
+        spec.embodiment.params["initial_pose"] = {
+            "position_xyz": [ep[0], ep[1], ep[2]],
+            "rotation_xyzw": [0.0, 0.0, 0.0, 1.0],
+        }
+
+    diagnostics.append(
+        f"[ActiveInferenceOracle] SGLD relaxation finished in {result.iterations} iters, "
+        f"residual free energy={result.total_energy:.4f}, converged={result.converged}."
+    )
+    if not result.converged and result.conflicting_factors:
+        diagnostics.append(f"[ActiveInferenceOracle] Conflicting factors: {', '.join(result.conflicting_factors)}")
 
     return spec, diagnostics
 

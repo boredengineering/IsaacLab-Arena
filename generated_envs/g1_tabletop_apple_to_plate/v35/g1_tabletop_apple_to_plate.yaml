@@ -1,0 +1,142 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+env_name: g1_tabletop_apple_to_plate
+embodiment:
+  id: g1_robot
+  registry_name: g1_wbc_agile_joint
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.46
+      - 0.0
+      - 0.0007
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+    initial_joint_pos:
+      left_shoulder_roll_joint: 0.25
+      right_shoulder_roll_joint: -0.25
+      left_shoulder_yaw_joint: 0.5
+      right_shoulder_yaw_joint: -0.5
+    finger_contact_friction:
+      material_path: /World/Materials/g1_static_pick_place_high_friction_fingers
+      static_friction: 6.0
+      dynamic_friction: 5.0
+      prim_name_markers:
+      - hand
+      - thumb
+      - index
+      - middle
+background:
+  id: maple_table
+  registry_name: maple_table_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.58
+      - 0.0
+      - 0.0880
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+objects:
+- id: red_apple
+  registry_name: apple_01_objaverse_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.1700
+      - 0.1950
+      - 0.1075
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+    scale:
+    - 0.009
+    - 0.009
+    - 0.009
+- id: clay_plate
+  registry_name: clay_plates_hot3d_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.1700
+      - -0.0200
+      - 0.0880
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+    scale:
+    - 0.5
+    - 0.5
+    - 0.5
+relations:
+- kind: is_anchor
+  subject: maple_table
+  params: {}
+- kind: is_anchor
+  subject: red_apple
+  params: {}
+- kind: is_anchor
+  subject: clay_plate
+  params: {}
+reified_relations:
+- reifier_id: reifier_apple_table
+  source_id: red_apple
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_deck
+  surface_sector: front_right
+  contact_normal: [0.0, 0.0, 1.0]
+  required_friction: 5.0
+  required_headroom: 0.35
+  kinematic_manifold: unitree_g1_right_arm_tabletop_caging
+  prior_entropy: 2.12
+  posterior_entropy: 0.04
+- reifier_id: reifier_plate_table
+  source_id: clay_plate
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_deck
+  surface_sector: front_left
+  contact_normal: [0.0, 0.0, 1.0]
+  required_friction: 1.0
+  required_headroom: 0.35
+  kinematic_manifold: unitree_g1_right_arm_place_caging
+  prior_entropy: 1.85
+  posterior_entropy: 0.03
+- reifier_id: reifier_apple_plate_placement
+  source_id: red_apple
+  relation_type: RECEPTACLE_FOR
+  target_id: clay_plate
+  contact_normal: [0.0, 0.0, 1.0]
+  required_friction: 1.0
+  required_headroom: 0.35
+  kinematic_manifold: unitree_g1_right_arm_transport
+  prior_entropy: 3.10
+  posterior_entropy: 0.05
+task:
+  composition: atomic
+  description: move the apple to the plate
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: red_apple
+      destination_location: clay_plate
+      background_scene: maple_table
+      episode_length_s: 6.0
+      min_lift_height: 0.015
+      require_lift_before_place: true
+      min_airborne_steps: 5
+      max_destination_xy_separation: 0.075

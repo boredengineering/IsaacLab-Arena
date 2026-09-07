@@ -6,16 +6,14 @@
 from __future__ import annotations
 
 import math
-import pytest
-import torch
 
-from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
     relax_spec_spatial_factor_graph,
     validate_kinematic_reachability,
     validate_spatial_geometry,
     validate_support_containment,
 )
+from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 from isaaclab_arena.relations.spatial_factor_graph import SpatialFactorGraph
 
 
@@ -48,13 +46,17 @@ class TestSpatialFactorGraph:
         poses = result.poses
 
         # Verify robot moved within reach
-        d_mustard = math.hypot(poses["droid"][0] - poses["mustard_bottle"][0], poses["droid"][1] - poses["mustard_bottle"][1])
+        d_mustard = math.hypot(
+            poses["droid"][0] - poses["mustard_bottle"][0], poses["droid"][1] - poses["mustard_bottle"][1]
+        )
         d_bin = math.hypot(poses["droid"][0] - poses["grey_bin"][0], poses["droid"][1] - poses["grey_bin"][1])
         assert 0.40 <= d_mustard <= 0.80
         assert 0.40 <= d_bin <= 0.80
 
         # Verify separation between mustard and bin
-        d_sep = math.hypot(poses["mustard_bottle"][0] - poses["grey_bin"][0], poses["mustard_bottle"][1] - poses["grey_bin"][1])
+        d_sep = math.hypot(
+            poses["mustard_bottle"][0] - poses["grey_bin"][0], poses["mustard_bottle"][1] - poses["grey_bin"][1]
+        )
         assert d_sep >= 0.20
 
         # Verify both are on table surface (X in [-0.40, 0.40], Y in [-0.25, 0.25])
@@ -62,6 +64,34 @@ class TestSpatialFactorGraph:
         assert -0.27 <= poses["mustard_bottle"][1] <= 0.27
         assert -0.42 <= poses["grey_bin"][0] <= 0.42
         assert -0.27 <= poses["grey_bin"][1] <= 0.27
+
+    def test_spatial_factor_graph_stochastic_relaxation_with_empirical_reach(self):
+        """Test stochastic Langevin relaxation with empirical reach likelihood factor shifts target into verified reach basin."""
+        fg = SpatialFactorGraph()
+        fg.add_variable("table", [0.0, 0.0, 0.0, 0.0], is_fixed=True)
+        fg.add_variable("g1", [-0.55, 0.0, 0.0, 0.0], is_fixed=True)
+        # Apple initially placed at X=-0.13, Y=0.20
+        fg.add_variable("apple", [-0.13, 0.20, 0.75, 0.0], is_fixed=False)
+
+        # Support on table
+        fg.add_support_factor("apple", "table", [-0.45, 0.45, -0.30, 0.30, 0.75])
+
+        # Empirical reach feedback: hand stopped -0.04m short in X
+        fg.add_empirical_reach_likelihood_factor(
+            robot_name="g1",
+            target_name="apple",
+            measured_reach_delta=(-0.04, 0.0, 0.0),
+            sigma=(0.01, 0.01, 0.01),
+            weight=300.0,
+        )
+
+        result = fg.relax_stochastic(max_iters=150, lr=0.03, temperature=0.05)
+
+        assert result.converged
+        assert result.total_energy < 0.1
+        apple_pos = result.poses["apple"]
+        # Initial X was -0.13, delta was -0.04 -> target optimum is -0.17
+        assert -0.175 <= apple_pos[0] <= -0.165
 
     def test_relax_spec_places_objects_in_front_sectors(self):
         """Test spec relaxation with semantic sectors places objects in the front working sector near the robot."""
@@ -107,16 +137,14 @@ class TestSpatialFactorGraph:
             "task": {
                 "composition": "atomic",
                 "description": "Place rubiks cube into bin",
-                "subtasks": [
-                    {
-                        "kind": "PickAndPlaceTask",
-                        "params": {
-                            "pick_up_object": "rubiks_cube",
-                            "destination_location": "bin_b04",
-                            "background_scene": "maple_table",
-                        },
-                    }
-                ],
+                "subtasks": [{
+                    "kind": "PickAndPlaceTask",
+                    "params": {
+                        "pick_up_object": "rubiks_cube",
+                        "destination_location": "bin_b04",
+                        "background_scene": "maple_table",
+                    },
+                }],
             },
         }
 
@@ -126,9 +154,9 @@ class TestSpatialFactorGraph:
         cube_pos = relaxed_spec.objects[0].params["initial_pose"]["position_xyz"]
         bin_pos = relaxed_spec.objects[1].params["initial_pose"]["position_xyz"]
 
-        # Assert both objects are relaxed into the robot-facing front half of the table (X in [-0.35, -0.05])
-        assert -0.35 <= cube_pos[0] <= -0.05
-        assert -0.35 <= bin_pos[0] <= -0.05
+        # Assert both objects are relaxed into the front working sector of the table (X in [0.20, 0.65])
+        assert 0.20 <= cube_pos[0] <= 0.65
+        assert 0.20 <= bin_pos[0] <= 0.65
 
         # Assert bin is to the left (Y > 0.05) and cube is centered (Y around 0.0)
         assert bin_pos[1] > 0.05
@@ -171,16 +199,14 @@ class TestSpatialGeometricOracle:
             "task": {
                 "composition": "atomic",
                 "description": "Place mustard into bin",
-                "subtasks": [
-                    {
-                        "kind": "PickAndPlaceTask",
-                        "params": {
-                            "pick_up_object": "mustard_bottle",
-                            "destination_location": "grey_bin",
-                            "background_scene": "maple_table",
-                        },
-                    }
-                ],
+                "subtasks": [{
+                    "kind": "PickAndPlaceTask",
+                    "params": {
+                        "pick_up_object": "mustard_bottle",
+                        "destination_location": "grey_bin",
+                        "background_scene": "maple_table",
+                    },
+                }],
             },
         }
 

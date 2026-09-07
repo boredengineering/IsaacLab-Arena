@@ -512,3 +512,242 @@ def sync_eval_telemetry_to_neo4j(
     finally:
         if owns_driver:
             driver.close()
+
+
+def sync_recurrent_feedback_to_neo4j(
+    eval_id: str,
+    env_name: str,
+    reach_traces_path: str,
+    timestamp: str | None = None,
+    driver: neo4j.Driver | None = None,
+) -> dict[str, Any]:
+    """Ingests per-step reach traces and binds the recurrent [:FEEDBACK_MUTATION] loopback edge."""
+    import json
+    import numpy as np
+    from pathlib import Path
+
+    p = Path(reach_traces_path)
+    if not p.exists():
+        return {}
+
+    lines = [json.loads(line) for line in p.read_text().splitlines() if line.strip()]
+    if not lines:
+        return {}
+
+    closest_steps = []
+    max_lifts = []
+    max_forces = []
+
+    # Parse episode closest approaches
+    episodes: dict[int, list[dict[str, Any]]] = {}
+    for r in lines:
+        ep_val = r.get("episode", [0])[0] if isinstance(r.get("episode"), list) else r.get("episode", 0)
+        episodes.setdefault(ep_val, []).append(r)
+
+    for ep, steps in episodes.items():
+        valid = [
+            s
+            for s in steps
+            if s.get("hand_dist_to_obj")
+            and (s["hand_dist_to_obj"][0] if isinstance(s["hand_dist_to_obj"], list) else s["hand_dist_to_obj"])
+            is not None
+        ]
+        if valid:
+            closest_steps.append(
+                min(
+                    valid,
+                    key=lambda s: (
+                        s["hand_dist_to_obj"][0] if isinstance(s["hand_dist_to_obj"], list) else s["hand_dist_to_obj"]
+                    ),
+                )
+            )
+        max_lifts.append(
+            max(
+                (s.get("lift", [0.0])[0] or 0.0) if isinstance(s.get("lift"), list) else (s.get("lift", 0.0) or 0.0)
+                for s in steps
+            )
+        )
+        max_forces.append(
+            max(
+                (
+                    (s.get("contact_force", [0.0])[0] or 0.0)
+                    if isinstance(s.get("contact_force"), list)
+                    else (s.get("contact_force", 0.0) or 0.0)
+                )
+                for s in steps
+            )
+        )
+
+    if not closest_steps:
+        return {}
+
+    dx_vals = [
+        (s["hand_x_minus_obj"][0] if isinstance(s["hand_x_minus_obj"], list) else s["hand_x_minus_obj"])
+        for s in closest_steps
+    ]
+    dy_vals = [
+        (s["hand_y_minus_obj"][0] if isinstance(s["hand_y_minus_obj"], list) else s["hand_y_minus_obj"])
+        for s in closest_steps
+    ]
+    dz_vals = [
+        (s["hand_z_minus_obj"][0] if isinstance(s["hand_z_minus_obj"], list) else s["hand_z_minus_obj"])
+        for s in closest_steps
+    ]
+
+    dx_mean = float(np.mean(dx_vals))
+    dy_mean = float(np.mean(dy_vals))
+    dz_mean = float(np.mean(dz_vals))
+    force_max = float(np.max(max_forces)) if max_forces else 0.0
+    lift_rate = float(np.mean([1.0 if ml > 0.015 else 0.0 for ml in max_lifts])) if max_lifts else 0.0
+
+    owns_driver = False
+    if driver is None:
+        driver = get_neo4j_driver()
+        owns_driver = True
+
+    try:
+        with driver.session() as session:
+            # 1. Update EvaluationRun with granular reach posterior metrics
+            session.run(
+                """
+                MERGE (ev:EvaluationRun {id: $eval_id})
+                SET ev.cartesian_dx_mean = $dx_mean,
+                    ev.cartesian_dy_mean = $dy_mean,
+                    ev.cartesian_dz_mean = $dz_mean,
+                    ev.max_contact_force = $force_max,
+                    ev.lift_rate = $lift_rate
+                """,
+                eval_id=eval_id,
+                dx_mean=dx_mean,
+                dy_mean=dy_mean,
+                dz_mean=dz_mean,
+                force_max=force_max,
+                lift_rate=lift_rate,
+            )
+
+            # 2. Inject the Recurrent FEEDBACK_MUTATION Edge to ReifiedRelation
+            ts_clause = "datetime($ts)" if timestamp else "datetime()"
+            session.run(
+                f"""
+                MATCH (ev:EvaluationRun {{id: $eval_id}})
+                MATCH (env:EnvironmentGraph {{name: $env_name}})
+                MERGE (ev)-[:EVALUATED_GRAPH]->(env)
+                WITH ev, env
+                MATCH (env)-[:HAS_REIFIER]->(rf:ReifiedRelation)
+                MERGE (ev)-[f:FEEDBACK_MUTATION]->(rf)
+                SET f.cartesian_dx = $dx_mean,
+                    f.cartesian_dy = $dy_mean,
+                    f.cartesian_dz = $dz_mean,
+                    f.contact_force_max = $force_max,
+                    f.lift_rate = $lift_rate,
+                    f.timestamp = {ts_clause}
+                """,
+                eval_id=eval_id,
+                env_name=env_name,
+                dx_mean=dx_mean,
+                dy_mean=dy_mean,
+                dz_mean=dz_mean,
+                force_max=force_max,
+                lift_rate=lift_rate,
+                ts=timestamp or "",
+            )
+
+            return {
+                "eval_id": eval_id,
+                "env_name": env_name,
+                "dx_mean": dx_mean,
+                "dy_mean": dy_mean,
+                "dz_mean": dz_mean,
+                "lift_rate": lift_rate,
+                "force_max": force_max,
+            }
+    finally:
+        if owns_driver:
+            driver.close()
+
+
+def fetch_recurrent_feedback_from_neo4j(
+    env_name: str,
+    eval_id: str | None = None,
+    driver: neo4j.Driver | None = None,
+) -> dict[str, Any] | None:
+    """Query the most recent empirical feedback mutation for a given environment."""
+    owns_driver = False
+    if driver is None:
+        driver = get_neo4j_driver()
+        owns_driver = True
+
+    try:
+        with driver.session() as session:
+            if eval_id:
+                record = session.run(
+                    """
+                    MATCH (e:EnvironmentGraph {name: $env_name})<-[:EVALUATED_GRAPH]-(ev:EvaluationRun {id: $eval_id})-[f:FEEDBACK_MUTATION]->(rf:ReifiedRelation)
+                    RETURN f.cartesian_dx AS dx,
+                           f.cartesian_dy AS dy,
+                           f.cartesian_dz AS dz,
+                           f.lift_rate AS lift_rate,
+                           f.contact_force_max AS force_max,
+                           ev.id AS eval_id,
+                           rf.reifier_id AS reifier_id
+                    LIMIT 1
+                    """,
+                    env_name=env_name,
+                    eval_id=eval_id,
+                ).single()
+            else:
+                record = session.run(
+                    """
+                    MATCH (e:EnvironmentGraph {name: $env_name})<-[:EVALUATED_GRAPH]-(ev:EvaluationRun)-[f:FEEDBACK_MUTATION]->(rf:ReifiedRelation)
+                    RETURN f.cartesian_dx AS dx,
+                           f.cartesian_dy AS dy,
+                           f.cartesian_dz AS dz,
+                           f.lift_rate AS lift_rate,
+                           f.contact_force_max AS force_max,
+                           ev.id AS eval_id,
+                           rf.reifier_id AS reifier_id
+                    ORDER BY coalesce(ev.ended_at, f.timestamp) DESC, f.timestamp DESC
+                    LIMIT 1
+                    """,
+                    env_name=env_name,
+                ).single()
+            if record:
+                return dict(record)
+            return None
+    finally:
+        if owns_driver:
+            driver.close()
+
+
+def sync_environment_evolution_to_neo4j(
+    parent_env_name: str,
+    child_env_name: str,
+    delta_position_xyz: list[float] | None = None,
+    delta_rotation_xyzw: list[float] | None = None,
+    driver: neo4j.Driver | None = None,
+) -> None:
+    """Record an evolutionary step between two EnvironmentGraphs in the DCRG active inference loop."""
+    owns_driver = False
+    if driver is None:
+        driver = get_neo4j_driver()
+        owns_driver = True
+
+    try:
+        with driver.session() as session:
+            session.run(
+                """
+                MATCH (parent:EnvironmentGraph {name: $parent_name})
+                MATCH (child:EnvironmentGraph {name: $child_name})
+                MERGE (parent)-[r:EVOLVES_TO]->(child)
+                SET r.delta_position_xyz = $delta_pos,
+                    r.delta_rotation_xyzw = $delta_rot,
+                    r.timestamp = datetime()
+                """,
+                parent_name=parent_env_name,
+                child_name=child_env_name,
+                delta_pos=delta_position_xyz or [0.0, 0.0, 0.0],
+                delta_rot=delta_rotation_xyzw or [0.0, 0.0, 0.0, 1.0],
+            )
+    finally:
+        if owns_driver:
+            driver.close()

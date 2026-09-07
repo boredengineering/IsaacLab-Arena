@@ -1,9 +1,9 @@
 # Graph Topology Proof & RDF-star Graph-RAG flywheel Analysis
 
-**Date**: 2026-09-07  
-**System**: IsaacLab-Arena Knowledge Graph (Neo4j LPG + RDF-star / W3C PROV-O)  
-**Database**: Neo4j Community v5 (`bolt://localhost:7688`)  
-**Domain**: Unitree G1 Tabletop Apple-to-Plate Locomanipulation  
+**Date**: 2026-09-07
+**System**: IsaacLab-Arena Knowledge Graph (Neo4j LPG + RDF-star / W3C PROV-O)
+**Database**: Neo4j Community v5 (`bolt://localhost:7688`)
+**Domain**: Unitree G1 Tabletop Apple-to-Plate Locomanipulation
 
 ---
 
@@ -278,4 +278,3 @@ We parsed the full per-episode Cartesian reach traces from all 20 episodes for `
 2. **Lateral Position**: Retain $Y = +0.1900\text{ m}$ (where lateral error is minimal).
 3. **Equatorial Vertical Caging**: Lower the hand approach or raise the apple support contact slightly ($\Delta Z \approx +0.015\text{ m}$) so fingers cage the apple's equator ($Z \in [0.07, 0.09]\text{ m}$) rather than pinching the tapering top crown.
 4. **Action Chunking**: Retain `action_chunk_length: 32` to allow full finger closure before transport velocity triggers.
-

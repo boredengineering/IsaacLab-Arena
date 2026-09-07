@@ -47,10 +47,10 @@ When interacting with a local or remote Neo4j database:
 ```cypher
 // Query scene entities and reified relationship properties
 MATCH (obj:RigidObject)-[rel:PLACED_ON]->(fixture:Fixture)
-RETURN obj.id AS object_id, 
-       fixture.id AS fixture_id, 
-       rel.surface_anchor AS anchor, 
-       rel.nominal_height AS height, 
+RETURN obj.id AS object_id,
+       fixture.id AS fixture_id,
+       rel.surface_anchor AS anchor,
+       rel.nominal_height AS height,
        rel.bound_x AS bounds_x;
 ```
 
@@ -66,3 +66,65 @@ After executing a simulation rollout with `policy_runner.py`:
     arena:taskSuccess "true"^^xsd:boolean ;
     arena:meanZeroMQLatencyMs "18.2"^^xsd:float .
 ```
+
+---
+
+## 5. DCRG Recurrent Active Inference & Self-Healing Loopback
+
+A static Directed Acyclic Graph (D-DAG) terminates at evaluation sinks (`EvaluationRun`, out-degree = 0). To enable closed-loop active inference, the system transitions to a **Directed Cyclic Stochastic Graph (DCRG)** by injecting recurrent loopback edges:
+
+```cypher
+// 1. Backpropagate empirical evaluation likelihood into reified relation factor
+MATCH (ev:EvaluationRun {id: $eval_id}), (rf:ReifiedRelation {reifier_id: $reifier_id})
+MERGE (ev)-[f:FEEDBACK_MUTATION]->(rf)
+SET f.cartesian_dx = $dx,
+    f.cartesian_dy = $dy,
+    f.cartesian_dz = $dz,
+    f.contact_force = $contact_force,
+    f.iteration = $iteration,
+    f.timestamp = datetime();
+
+// 2. Reified relation proposes continuous relaxation for the next iteration
+MATCH (rf:ReifiedRelation {reifier_id: $reifier_id}), (next_e:EnvironmentGraph {name: $next_env})
+MERGE (rf)-[m:PROPOSES_RELAXATION]->(next_e)
+SET m.delta_pose = $delta_pose,
+    m.confidence = $confidence;
+```
+
+---
+
+## 6. Stochastic Factor Graph Relaxation vs. The Deterministic Schema Trap
+
+A rigid deterministic schema traps the agent in a finite discrete vocabulary, preventing it from discovering continuous physical contact basins (such as equatorial caging vs. fingertip pinching).
+
+Use stochastic continuous relaxation:
+```python
+from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
+    relax_spec_spatial_factor_graph,
+)
+from isaaclab_arena.agentic_environment_generation.policy_capability_graph import (
+    PolicyProfile,
+    DistributionShift,
+)
+
+# Perturb continuous poses guided by reach trace likelihoods rather than discrete grid slots
+relaxed_spec = relax_spec_spatial_factor_graph(
+    spec=current_spec,
+    measured_reach_delta={"dx": -0.0006, "dy": 0.0122, "dz": -0.025},
+    temperature=0.15,
+)
+```
+
+---
+
+## 7. Guardrails & Physical Invariant Rules
+
+1. **Digital Twin Fidelity**:
+   Never resolve grasp failures by inflating physics friction parameters (`static_friction`, `dynamic_friction`). In SPARQL queries, this is formally blocked by:
+   ```sparql
+   FILTER NOT EXISTS { ?remediation arena:invalidatedBy arena:sim_to_real_gap . }
+   ```
+2. **Coordinate Centroid Grounding**:
+   Always audit pelvis-relative offsets $(\Delta X, \Delta Y, \Delta Z)$ against demonstration corpus `TrainingInvariant`s before running rollouts.
+3. **Equatorial Caging Over Crown Pinching**:
+   Ensure the approach trajectory brings the hand to the sphere equator ($dZ \approx 0\text{ m}$ relative to object center) rather than pinching tapering crowns.

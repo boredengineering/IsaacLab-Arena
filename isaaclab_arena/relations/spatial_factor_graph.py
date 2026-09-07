@@ -7,10 +7,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+import math
 import numpy as np
 import torch
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -162,6 +163,36 @@ class SpatialFactorGraph:
         })
         return fid
 
+    def add_empirical_reach_likelihood_factor(
+        self,
+        robot_name: str,
+        target_name: str,
+        measured_reach_delta: tuple[float, float, float] | list[float],
+        sigma: tuple[float, float, float] | list[float] = (0.015, 0.015, 0.015),
+        weight: float = 250.0,
+        factor_id: str | None = None,
+    ) -> str:
+        """Add empirical reach error likelihood factor from simulation telemetry.
+
+        Shifts the target variable node toward the verified reach basin of the policy.
+        """
+        fid = factor_id or f"psi_empirical_reach_{robot_name}_to_{target_name}"
+        # Target should shift by measured_reach_delta (hand_pos_minus_obj_pos)
+        target_var = self.variables[target_name]
+        init_pos = target_var.mu.detach().clone()[:3]
+        target_opt = init_pos + torch.tensor(measured_reach_delta, dtype=torch.float32, device=self.device)
+
+        self.factors.append({
+            "id": fid,
+            "type": "empirical_reach",
+            "robot": robot_name,
+            "target": target_name,
+            "optimal_pos": target_opt,
+            "sigma": torch.tensor(sigma, dtype=torch.float32, device=self.device),
+            "weight": float(weight),
+        })
+        return fid
+
     def compute_energies(self) -> tuple[torch.Tensor, dict[str, float]]:
         """Compute total potential energy and per-factor energy breakdown."""
         total_energy = torch.tensor(0.0, device=self.device)
@@ -172,7 +203,14 @@ class SpatialFactorGraph:
             fid = factor["id"]
             e = torch.tensor(0.0, device=self.device)
 
-            if ftype == "support":
+            if ftype == "empirical_reach":
+                target = self.variables[factor["target"]]
+                target_pos_opt = factor["optimal_pos"]
+                sigma = factor["sigma"]
+                diff = (target.mu[:3] - target_pos_opt[:3]) / sigma
+                e = factor["weight"] * torch.sum(diff**2)
+
+            elif ftype == "support":
                 child = self.variables[factor["child"]]
                 parent = self.variables[factor["parent"]]
                 bounds = factor["bounds"]
@@ -270,14 +308,87 @@ class SpatialFactorGraph:
             total_energy.backward()
             optimizer.step()
 
-        formatted_poses: dict[str, list[float]] = {}
-        for name, pose_tensor in best_poses.items():
+        conflicts = [fid for fid, fe in final_factor_energies.items() if fe > 0.05]
+        converged = best_energy < 0.1
+
+        return FactorGraphRelaxationResult(
+            converged=converged,
+            iterations=step + 1,
+            total_energy=float(round(best_energy, 4)),
+            poses=self._format_poses(best_poses),
+            factor_energies=final_factor_energies,
+            conflicting_factors=conflicts,
+        )
+
+    def _format_poses(self, poses: dict[str, torch.Tensor]) -> dict[str, list[float]]:
+        """Format tensor poses to degrees and rounded float coordinates."""
+        formatted: dict[str, list[float]] = {}
+        for name, pose_tensor in poses.items():
             arr = pose_tensor.numpy().tolist()
             if len(arr) == 3:
                 arr.append(0.0)
             elif len(arr) >= 4:
                 arr[3] = float(np.degrees(arr[3]))
-            formatted_poses[name] = [float(round(val, 4)) for val in arr]
+            formatted[name] = [float(round(val, 4)) for val in arr]
+        return formatted
+
+    def relax_stochastic(
+        self,
+        max_iters: int = 150,
+        lr: float = 0.03,
+        temperature: float = 0.10,
+        cooling_rate: float = 0.98,
+        energy_tol: float = 1e-3,
+    ) -> FactorGraphRelaxationResult:
+        """Perform Stochastic Gradient Langevin Dynamics (SGLD) relaxation.
+
+        Injects annealed Gaussian thermal noise to gradients during energy minimization,
+        allowing escape from shallow discrete local minima and continuous exploration
+        of optimal reach basins.
+        """
+        optim_vars = [v.mu for v in self.variables.values() if not v.is_fixed]
+        if not optim_vars:
+            _, factor_energies = self.compute_energies()
+            return FactorGraphRelaxationResult(
+                converged=True,
+                iterations=0,
+                total_energy=0.0,
+                poses=self._format_poses({name: v.mu.detach().cpu() for name, v in self.variables.items()}),
+                factor_energies=factor_energies,
+                conflicting_factors=[],
+            )
+
+        optimizer = torch.optim.Adam(optim_vars, lr=lr)
+        current_temp = float(temperature)
+        best_energy = float("inf")
+        best_poses = {name: v.mu.detach().cpu().clone() for name, v in self.variables.items()}
+        final_factor_energies: dict[str, float] = {}
+
+        for step in range(max_iters):
+            optimizer.zero_grad()
+            total_energy, factor_energies = self.compute_energies()
+            final_factor_energies = factor_energies
+
+            energy_val = float(total_energy.detach().cpu().item())
+            if energy_val < best_energy:
+                best_energy = energy_val
+                best_poses = {name: v.mu.detach().cpu().clone() for name, v in self.variables.items()}
+
+            if energy_val < energy_tol:
+                break
+
+            total_energy.backward()
+
+            # Inject Langevin stochastic noise to non-fixed variables
+            if current_temp > 1e-5:
+                with torch.no_grad():
+                    for v in self.variables.values():
+                        if not v.is_fixed and v.mu.grad is not None:
+                            noise = torch.randn_like(v.mu) * math.sqrt(2.0 * lr * current_temp)
+                            v.mu.grad.add_(noise)
+
+            optimizer.step()
+            current_temp *= cooling_rate
 
         conflicts = [fid for fid, fe in final_factor_energies.items() if fe > 0.05]
         converged = best_energy < 0.1
@@ -286,7 +397,7 @@ class SpatialFactorGraph:
             converged=converged,
             iterations=step + 1,
             total_energy=float(round(best_energy, 4)),
-            poses=formatted_poses,
+            poses=self._format_poses(best_poses),
             factor_energies=final_factor_energies,
             conflicting_factors=conflicts,
         )

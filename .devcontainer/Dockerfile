@@ -109,10 +109,13 @@ RUN curl -fsSL -o /tmp/tf-mcp.zip https://releases.hashicorp.com/terraform-mcp-s
 # Layer 3: Autonomous Terminal AI Agent CLIs & Model Context Protocol (MCP) Packages
 RUN npm install -g \
         @anthropic-ai/claude-code \
+        @openai/codex \
         @modelcontextprotocol/server-filesystem \
         @ansible/ansible-mcp-server \
         @google-cloud/gcloud-mcp \
         @executeautomation/playwright-mcp-server && \
+    (curl -fsSL https://chatgpt.com/codex/install.sh | bash || true) && \
+    (ln -sf /root/.local/bin/codex /usr/local/bin/codex 2>/dev/null || true) && \
     (curl -fsSL https://antigravity.google/cli/install.sh | bash || true) && \
     (ln -sf /root/.local/bin/agy /usr/local/bin/agy 2>/dev/null || true) && \
     (curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --skip-browser || true)

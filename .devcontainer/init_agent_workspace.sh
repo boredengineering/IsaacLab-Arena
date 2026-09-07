@@ -442,8 +442,8 @@ EOF_DOC
   echo "  ✓ Generated .agents/references/docs/debugging_arena_gr00t.md"
 fi
 
-# 15. Agent MCP Servers Configuration (Antigravity, VS Code, Cursor, Claude Code)
-mkdir -p /root/.gemini/config "${TARGET_DIR}/.vscode" "${TARGET_DIR}/.cursor"
+# 15. Agent MCP Servers Configuration (Antigravity, VS Code, Cursor, Claude Code, OpenAI Codex)
+mkdir -p /root/.gemini/config "${TARGET_DIR}/.vscode" "${TARGET_DIR}/.cursor" /root/.codex
 
 # Master MCP configuration (ansible, gcp-cloud, playwright, terraform, filesystem)
 cat <<'EOF_MCP' > /root/.gemini/config/mcp_config.json
@@ -486,7 +486,32 @@ cp /root/.gemini/config/mcp_config.json "${TARGET_DIR}/.cursor/mcp.json"
 cp /root/.gemini/config/mcp_config.json /root/.claude.json
 chmod 644 /root/.claude.json
 
-echo "  ✓ Configured MCP servers for Antigravity, VS Code, Cursor, and Claude Code"
+# OpenAI Codex global MCP configuration (~/.codex/config.toml)
+cat <<'EOF_CODEX' > /root/.codex/config.toml
+# Auto-generated MCP server definitions for OpenAI Codex
+[mcp_servers.ansible]
+command = "ansible-mcp-server"
+args = ["--stdio"]
+
+[mcp_servers.gcp-cloud]
+command = "gcloud-mcp"
+args = []
+
+[mcp_servers.playwright]
+command = "playwright-mcp-server"
+args = []
+
+[mcp_servers.terraform]
+command = "/usr/local/bin/terraform-mcp-server"
+args = []
+
+[mcp_servers.filesystem]
+command = "mcp-server-filesystem"
+args = ["/workspaces"]
+EOF_CODEX
+chmod 644 /root/.codex/config.toml
+
+echo "  ✓ Configured MCP servers for Antigravity, VS Code, Cursor, Claude Code, and OpenAI Codex"
 
 # 16. Verify Persistent Mounts & Dataset/Model Directories
 echo "🔍 Verifying mounted storage volumes..."

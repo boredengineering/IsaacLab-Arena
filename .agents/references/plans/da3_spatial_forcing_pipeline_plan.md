@@ -3,9 +3,14 @@
 **Status:** v1.1 (2026-09-06) -- **pipeline complete end to end; the method result is null.**
 Dataset -> DA3 depth annotation -> SF finetune -> RGB-only serving -> measured comparison all run.
 `align` is 0.86 cm *worse* than a matched control on vertical reach error, not significantly
-(Welch *t* = 1.24, n = 20/arm), with identical success rates. See S4. The corpus confounds (§4) and
-the teacher's low-rank alignment target (S2) both predicted it; W2 -- spawn variation -- is the next
-lever, not a method change. Supersedes the *method-selection* question in
+(Welch *t* = 1.24, n = 20/arm), with identical success rates. See S4.
+
+**And the base-model control shows the programme's premise was wrong.** The finetunes changed
+nothing (+0.2 mm lateral, +1.7 mm vertical vs the base checkpoint), so the null is valid -- but the
+base policy is over the apple in only 4/20 episodes, so "accurate bearing, wrong range" -- the
+diagnosis that justified a *metric depth* teacher aimed at the *vertical* axis -- does not hold. The
+hand reaches the right height and the right lateral position at different moments and never both,
+which no depth supervision addresses. W2 (spawn variation) is the lever; the method was not. Supersedes the *method-selection* question in
 `geometry_supervision_evidence_repair_plan.md`; that document is retained as the measured
 evidence appendix (its §2.5/§2.5b teacher measurements and §2.2 reach tables are still the
 only numbers we have).
@@ -549,6 +554,48 @@ loss carrying scale.
 **Both traces are episode-indexed and verified** (`trace OK: 20 episodes, hand columns present`) --
 the first reach measurements here that are reproducible distributions rather than single global
 minima. Per-episode values in `eval_output/s4_comparison.json`.
+
+#### The base-model control (2026-09-07): the premise of this whole programme is wrong
+
+`gn1x_tuned_static_apple` -- the checkpoint both arms were finetuned *from* -- run through the
+identical 20-episode protocol.
+
+| arm | n | lateral | vert @ closest | min abs(vert) | over apple (3.4 cm) | success | moved |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **base** (control) | 20 | **0.0506** | **+0.0862** | 0.0080 | **4/20** | 0.05 | 0.75 |
+| baseline | 20 | 0.0508 | +0.0879 | 0.0041 | 6/20 | 0.05 | 0.95 |
+| align | 20 | 0.0478 | +0.0904 | 0.0099 | 5/20 | 0.05 | 0.90 |
+
+**1. The finetunes changed nothing.** baseline - base is **+0.2 mm lateral, +1.7 mm vertical**, far
+inside noise. So the S4 null is a *valid* comparison, not a comparison of two degraded models, and
+the earlier worry that 5000 steps damaged the policy is **refuted**. No shorter retrain is needed.
+
+**2. The record's reach figures do not reproduce for the base model either.** The debug plan gives
+1.6 cm lateral / 4.95 cm vertical at home; the base checkpoint measures **5.06 cm / 8.62 cm**. This
+is the **third** set of reach numbers from the prior plans that fails to reproduce, alongside
+"+0.1286 m at chunk 16" and "~0.0795 m at chunk 8".
+
+**3. "Accurate bearing, wrong range" is false, and it was the premise for this entire programme.**
+That diagnosis is what justified attacking the *vertical* axis with a *metric* depth teacher. But
+the base policy is over the apple in only **4 of 20** episodes -- bearing was never accurate.
+
+Note `min abs(vert)` of 0.4-1.0 cm across all three arms: the hand *does* reach the right height at
+some moment, and the right lateral position at some *other* moment, but **never both at once**. It
+sweeps past the apple. That is a trajectory/coordination failure. Neither a depth input nor a
+geometry-aligned representation addresses it, which is why the S4 null was overdetermined --
+Spatial Forcing was aimed at an axis that is not the binding constraint.
+
+**Consequence for the transfer goal.** The stated aim is to transfer this policy from
+`galileo_g1_static_pick_and_place` to a generated environment. Measured across 60 episodes and
+three checkpoints, the policy does not perform the task at home (1/20, and that single success is
+suspect given the record's history of false-positive place gates -- see `6433fc6a1`). On the
+generated env v25 it never contacts the apple at all (object-moved 0.0 over 2 episodes, against
+0.75-0.95 at home). The debug plan already said it: *"if the policy cannot place at home, no amount
+of target-scene work can produce a placement."* That is now measured, not inferred.
+
+**The lever is the corpus, not the method.** One apple position, one scene, 208 episodes: a policy
+trained that way memorises a sweep. Spawn variation (W2) is the precondition for home performance
+*and* for transfer, and no auxiliary loss substitutes for it.
 
 **Two setup defects found while running it**, both now encoded in `eval_s4_arm.sh`:
 

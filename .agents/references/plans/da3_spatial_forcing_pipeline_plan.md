@@ -621,3 +621,152 @@ trained that way memorises a sweep. Spawn variation (W2) is the precondition for
    workspace, `/models` and the HF cache only. S1 needs the corpus, so either a datasets mount is
    added there (a change under `docker/`, which AGENTS.md says to ask about first) or the
    annotation runs via its own launcher. Taking the second route for now.
+
+---
+
+## 9. Re-evaluation against the literature (2026-09-07)
+
+Written after the three-arm measurement, with a web survey of how the field handles each of the
+three problems the measurement exposed. **Two of my own earlier conclusions are retracted here.**
+
+### 9.1 The metric scale is NOT blocked on W1 — the robot is the calibration target
+
+**Retraction.** §S1b concluded "a definitive scale needs GT depth and therefore the frozen render
+fixed, so S1b is blocked on W1". That is wrong, and the fix is a standard technique I did not
+consider: **visual-kinematic scale recovery**. The survey's phrasing is exact — *"the robot arm
+itself is a metrically known object already in the scene"* (KineDepth and the visual-kinematic
+line).
+
+We have everything needed and never used it:
+
+* `observation.state` is 43-dim joint state on all **35 066** frames.
+* Forward kinematics gives the gripper's **exact** 3D position in camera frame, per frame.
+* The gripper is prominently visible in the ego view -- confirmed by eye in the frame-0 render
+  (`eval_output/viz/frame0_grid.png`), where the hand occupies a large, well-lit region.
+
+So: project the FK gripper position into the image, read `canonical_depth` at those pixels, and fit
+`s`. That yields **exact per-frame anchors, 35 066 of them, with no renderer, no depth sensor, and
+no dependency on W1.** It also fixes the two weaknesses that made the apparent-size anchor noisy
+(§S1b): no reliance on colour segmentation, and no dependence on the apple's unrecorded lateral
+dimensions.
+
+[MOMA](https://arxiv.org/abs/2506.17110) -- already cited in the evidence appendix §20 -- is the
+one-shot version of this, doing scale-shift-**rotation** alignment from sparse GT depth points at
+calibration time. FK supplies those points for free, and its reported numbers are the target:
+DAM RMSE 12.3 -> 1.6 cm.
+
+**One caution the survey is explicit about:** a single global scale-shift *"assumes uniform scale
+and shift biases, an assumption often violated in real scenes with diverse objects and depth
+ranges"*, and *"metric recovery ultimately depends on anchor informativeness, degrading when
+anchors lack spatial coverage or diversity."* The gripper sweeps the workspace over an episode, so
+coverage is reasonable -- but if a single `s` still fails to fit, the 2026 refinements are
+[image-adaptive scale fields](https://arxiv.org/html/2605.07418) (basis maps + least squares under
+sparse anchors) and [factor-graph depth grounding](https://arxiv.org/pdf/2605.02667) (explicitly
+avoiding GT-depth supervision).
+
+### 9.2 Our success gate is the textbook false-positive class
+
+The literature converges on a four-part gate, precisely to stop what bit us:
+
+1. displacement threshold -- **lift >= 5 cm**;
+2. a **dwell/hold of 3-5 s**, not a single timestep;
+3. a **no-slip / pose-drift** check;
+4. for placement, a **final-pose tolerance verified after release**;
+
+plus **staged key-node checks so contact alone can never register as success**.
+
+Ours is the failure mode they name: `object_on_destination` fires on a **0.1 N force threshold** --
+a *"pure contact predicate that can fire without a force-closure grasp"*. That is exactly the
+`6433fc6a1` false positive (plate rim grazing the apple, 0.28 s / 14-frame episode). The remedy in
+[RoboWM-Bench](https://arxiv.org/html/2604.19092v1) is the staged gating above; *"momentary
+success"* at a single timestep is called out as a weak notion because a trajectory is more likely
+to pass through the goal by accident than to stabilise there.
+
+**Also: report Wilson score intervals, not bare proportions.** At n=20 with 1 success, the point
+estimate 0.05 carries an interval wide enough to be consistent with 0. Every success rate in this
+plan should be re-reported that way, and `0.05` should not be spoken of as different from `0.0`.
+
+**Action, no GPU needed:** re-score the three existing traces under a lift+dwell+pose gate. All
+three carry `obj_z`, `lift`, `speed`, `dist_to_dest` and `contact_force` per step, so this is a
+pure re-analysis. Expect 1/20 to become 0/20.
+
+### 9.3 The corpus is the lever — and it does NOT require a re-record
+
+The diagnosis is textbook. With one demonstrated pose *"a policy succeeds merely at the
+demonstrated pose but fails to generalize"*, because *"the robot may learn to focus on spurious
+correlations between the pixels and the demonstrated actions"*. More precisely for us: models
+*"overfit to absolute information (e.g., coordinates) rather than the relational information
+between objects ... as a result, the models perform poorly in novel object location setups"*
+([Position-Invariant Regularization](https://openreview.net/forum?id=N00uQFLlvHC)).
+
+On how much variation: no published constant, but the working rule is that **training positions
+must span at least the deployment range**, with tabletop evaluations typically varying initial
+object position by **+/- 20 cm in x and y**. IL interpolates far better than it extrapolates.
+
+**The cost objection that deferred W2 is void.** The evidence appendix costed spatial variation as
+a 208-episode re-record. The literature's answer is synthetic spatial data generation from an
+*existing* demo set -- MimicGen, DemoGen, and
+[R2RGen](https://arxiv.org/pdf/2510.08547), whose stated goal is *"to train a spatially generalized
+visuomotor policy purely from a single collected demonstration set"*. **And `isaaclab_mimic` is
+already vendored in `submodules/IsaacLab/source/`, with Arena-side coverage in
+`isaaclab_arena/tests/test_sequential_task_mimic_data_generation.py`.** So spatial variation is a
+data-generation run over the demos we have, not a re-record.
+
+Two cheap complements from the same survey:
+
+* **Random-crop augmentation** improves generalisation to spatial factors *and* to distractors and
+  textures. We already apply `FractionalRandomCrop` -- worth checking whether `crop_fraction` is
+  aggressive enough to be doing anything.
+* [Decomposing the Generalization Gap](https://arxiv.org/html/2307.03659) ranks 11 factors by
+  difficulty, consistently across sim and real: **new camera positions are the hardest**, new
+  backgrounds the easiest. Relevant because our corpus already has viewpoint variation (§S1b's
+  incidental finding: apparent apple diameter spans 57.9-72.8 px) but zero object variation -- i.e.
+  it varies the hard factor and fixes the easy one, which is backwards.
+
+### 9.4 The failure we measured is a named mode with known fixes
+
+The field's decomposition matches ours exactly. [RoboFAC](https://arxiv.org/pdf/2505.12224)
+formalises motion-planning failure as **"Position Deviation": a 3D offset `dp` in R^3** on the
+end-effector, which *"is what lets you decompose the failure into lateral (XY) versus vertical (Z)
+components"* -- the decomposition this session performed.
+
+Our specific signature is documented in strong baselines:
+
+* [Any3D-VLA](https://arxiv.org/pdf/2602.00807): pi-0.5, GraspVLA and SpatialVLA *"often exhibit
+  horizontal grasp-position drift ... indicating spatial localization errors"* and *"reliance on
+  non-robust spatial shortcut cues"*.
+* [AnoleVLA](https://arxiv.org/pdf/2603.15046) separates *"position recognition error"* (arm moves
+  to a location not corresponding to the object) from *"grasping point prediction error"*, and finds
+  **position recognition error most frequent, with motions toward incorrect regions or empty
+  space** -- our 4/20-over-the-apple result.
+* [Benchmarking VLAs](https://arxiv.org/pdf/2511.11298) treats *"trajectory/state drift ...
+  accumulated deviation over long horizons"* as its own category -- the closest analogue to
+  "sweeps past", and consistent with our `min|vert|` of 0.4-1.0 cm coinciding with ~8.6 cm vertical
+  error at closest lateral approach.
+
+The fixes, in the order the survey ranks them: **dimension-specific additive bias correction**,
+**re-staging/retry at the subtask level**, and **3D or multi-view geometric grounding**.
+
+Note the first is already half-built here: `cartesian_vertical_offset_adapter` is the zeroth-order
+version of dimension-specific bias correction -- **for the vertical axis only**. The measurement
+says the lateral axis needs one at least as much.
+
+### 9.5 Revised plan of record
+
+Ordered by evidence-per-hour, not by novelty. Items 1-2 need no GPU.
+
+| # | Item | Cost | Why first |
+| :-- | :--- | :--- | :--- |
+| **1** | **Re-score the three traces** under a lift+dwell+pose gate; report Wilson intervals | hours, CPU | The current 1/20 is probably 0/20. Every downstream comparison rests on the gate. |
+| **2** | **Fit `s` from FK gripper anchors** (§9.1) | hours, CPU | Unblocks the metric scale without W1; retires an open question. |
+| **3** | **Spatial variation via `isaaclab_mimic`** over the existing 208 demos | days, GPU | The lever. Precondition for home performance *and* transfer. No re-record. |
+| **4** | **Retrain and re-measure base / baseline / align** on the varied corpus | ~5 h GPU | The only condition under which the S4 comparison means anything. |
+| **5** | Lateral **and** vertical bias adapters, measured separately | days | Named fix for the measured mode; half already exists. |
+| **6** | Revisit geometry supervision *only after 3-4* -- and prefer `mix` over `align` | days | `align`'s loss is scale-invariant, so it cannot carry metric scale by construction. |
+
+**What is now closed:** the S4 comparison ran and is valid; the arms are not degraded; the vertical
+axis is not the binding constraint; the "accurate bearing / wrong range" premise is refuted; and
+Spatial Forcing on this corpus is measured, null, and explained.
+
+**What W1 still blocks:** fresh rendered views, and any depth-regression target that needs GT depth
+maps rather than sparse anchors. It no longer blocks the metric scale.

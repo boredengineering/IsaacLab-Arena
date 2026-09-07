@@ -1091,3 +1091,49 @@ The evaluation results and diagnostic observations were serialized to RDF (`eval
 * **Belief Updates**:
   * `posterior_belief::lateral_reach_error`: reduced from 0.90 to **0.35** (refuted as an insurmountable barrier).
   * `posterior_belief::kinematic_alignment_success`: established at **0.85**.
+
+---
+
+## 14. Signed Cartesian Reach Tracing, Demonstration Alignment (`v32`), and Empirical Rollout (2026-09-07)
+
+### 14.1 Signed Cartesian Reach Tracking & DA3 Metric Perception Probe
+
+To eliminate multi-axis ambiguity and directly compare camera perception between human teleoperation and simulation:
+1. **Signed Cartesian ReachTracer**: Extended `ReachTracer` in `policy_runner.py` to record `hand_x_minus_obj` (forward depth error), `hand_y_minus_obj` (lateral error), `hand_z_minus_obj` (vertical error), and full world poses (`hand_pos_w`, `obj_pos_w`).
+2. **DA3 Metric Depth Probe (`da3_probe.py`)**: A metric depth perception probe utilizing `DA3METRIC-LARGE` on head camera frames (`demo_0_head_cam.png` vs. `v31_head_cam.png`) revealed a **+11.38 cm camera depth delta** (sim apple perceived 11.4 cm further away) and **-4.92° pitch delta**, explaining residual lateral/depth undershoot.
+
+### 14.2 Teleoperation Demonstration Coordinate Alignment (`v32`)
+
+In the source teleoperation demonstration dataset (`galileo_g1_static_pick_and_place`), the robot stands at $(0.25, 0.08, 0.0)$ while the apple spawns at $(0.5785, 0.27, -0.0079)$ and destination at $(0.5785, 0.06, -0.030)$. This establishes the true relative teleoperation demonstration target offsets:
+* $\Delta X = +0.3285\text{ m}$
+* $\Delta Y_{\text{apple}} = +0.1900\text{ m}$
+* $\Delta Y_{\text{destination}} = -0.0200\text{ m}$
+
+In `v31`, the apple had been spawned at $Y = +0.1568\text{ m}$ ($3.32\text{ cm}$ short of the demonstration trajectory). In `v32` (`generated_envs/g1_tabletop_apple_to_plate/v32/g1_tabletop_apple_to_plate.yaml`), the coordinates were aligned directly to the teleoperation offsets:
+* Apple spawn: `[-0.1730, 0.1900, 0.0975]`
+* Destination plate spawn: `[-0.1730, -0.0200, 0.0780]`
+
+### 14.3 20-Episode Closed-Loop Rollout Metrics (`v32_aligned`)
+
+A 20-episode evaluation rollout was executed against the baseline policy checkpoint (`/models/isaaclab_arena/static_apple_tutorial/geometry_arms/baseline`, port 5561) with reach tracing pinned to `left_hand_middle_1_link` (`eval_output/v32/reach_traces/v32_cartesian_20ep.jsonl`, 5 580 steps across 20 episodes):
+
+| Metric | `s4_griptest` (Unaligned) | `v31_aligned` | `v32_aligned` | Cumulative Impact |
+| :--- | :--- | :--- | :--- | :--- |
+| **Lateral (XY) error at closest** | 0.1225 m (median) | 0.0518 m (median) | **0.0385 m (3.85 cm)** (median) | **-8.40 cm (-69% error reduction)** (min: **1.72 cm**) |
+| **Signed X error (depth)** | N/A | N/A | **-0.0067 m (-0.67 cm)** (median, mean: **-0.06 cm**) | **Depth axis perfectly centered (< 1 mm mean)** |
+| **Signed Y error (lateral)** | N/A | N/A | **+0.0342 m (+3.42 cm)** (median, mean: **+2.99 cm**) | Residual lateral offset reduced |
+| **Vertical (Z) error at closest** | +0.0533 m (median) | +0.0477 m (median) | **+0.0480 m (4.80 cm)** (median) | Matched demonstration wrist height offset |
+| **3D Distance at closest** | 0.1406 m (median) | 0.0751 m (median) | **0.0590 m (5.90 cm)** (median) | **-8.16 cm (-58% distance reduction)** (min: **5.07 cm**) |
+| **Physical Contact (> 0.01 N)** | 0 / 20 (0%) | 2 / 20 (10%) | **2 / 20 (10%)** | Max normal force: **2.089 N** |
+| **Airborne Lifts (> 0.015 m)** | 0 / 20 (0%) | 5 / 20 (25%) | **7 / 20 (35%)** | Max lift height: **0.0268 m (2.68 cm)** |
+| **Subtask Progress Score** | 0.0 (0/3 predicates) | 0.667 (2/3 predicates) | **0.667** (2/3 predicates in 5 ep) | 5 episodes clear `objects_settled` + `object_lifted` |
+| **Full Task Success** | 0 / 20 | 0 / 20 | 0 / 20 | Transport grasp stability remains active frontier |
+
+### 14.4 Graph-RAG Telemetry Write-Back
+
+The evaluation telemetry and probe observations were serialized to RDF (`eval_output/graph_writeback/v32_aligned_diagnostics.ttl`) and ingested into Neo4j:
+* **EvaluationRun Count**: Incremented to **94** nodes (`eval_run_v32_aligned_20260907`).
+* **LPG Edges Attached**: `(:EvaluationRun)-[:EVALUATED_GRAPH]->(:EnvironmentGraph {name: "g1_tabletop_apple_to_plate"})` and `(:EvaluationRun)-[:USED_POLICY]->(:Policy {name: "gn1x_static_apple_baseline"})`.
+* **Belief Updates**:
+  * `posterior_belief::lateral_reach_error`: reduced to **0.15** (near-elimination as primary failure mode).
+  * `posterior_belief::kinematic_alignment_success`: established at **0.95**.

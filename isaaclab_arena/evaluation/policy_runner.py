@@ -352,9 +352,13 @@ class ReachTracer:
             closure = joint_pos[:, indices].abs().mean(dim=-1)
             row["gripper_closure"] = [round(v, 5) for v in closure.tolist()]
             row["gripper_joint_count"] = len(indices)
+            row["hand_x_minus_obj"] = [round(v, 5) for v in (hand[:, 0] - obj[:, 0]).tolist()]
+            row["hand_y_minus_obj"] = [round(v, 5) for v in (hand[:, 1] - obj[:, 1]).tolist()]
             row["hand_xy_to_obj"] = [round(v, 5) for v in (hand[:, :2] - obj[:, :2]).norm(dim=-1).tolist()]
             row["hand_z_minus_obj"] = [round(v, 5) for v in (hand[:, 2] - obj[:, 2]).tolist()]
             row["hand_dist_to_obj"] = [round(v, 5) for v in (hand - obj).norm(dim=-1).tolist()]
+            row["hand_pos_w"] = [[round(coord, 5) for coord in v] for v in hand.tolist()]
+            row["obj_pos_w"] = [[round(coord, 5) for coord in v] for v in obj.tolist()]
         if self._contact_sensor_name is not None:
             try:
                 sensor = self._env.scene[self._contact_sensor_name]
@@ -392,6 +396,7 @@ class ReachTracer:
 
     def close(self) -> None:
         """Write the buffered trace. Called on every rollout exit path, including exceptions."""
+        os.makedirs(os.path.dirname(os.path.abspath(self._path)), exist_ok=True)
         with open(self._path, "w") as fh:
             fh.write("\n".join(self._rows) + "\n")
 

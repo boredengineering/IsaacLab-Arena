@@ -74,6 +74,13 @@
 > overdetermined. Do not resume geometry-teacher work from this document until the reachability
 > question is settled against a *measured* G1 reach envelope and `ReachTracer` is pinned to a
 > single, named frame.
+>
+> **Update (2026-09-07 Diagnostic Resolution):**
+> 1. `ReachTracer` was pinned to `--trace_reach_hand_body left_hand_middle_1_link` with signed Cartesian tracking.
+> 2. The startup bounce was identified and fixed: `verify_and_settle_scene` now tracks robot root velocity and enforces a 40-step minimum damping window, eliminating the $1.03\text{ m/s}$ upward thrust and $\pm 8\text{ cm}$ hand oscillation.
+> 3. Evaluating the 251 demonstration dataset revealed the true training centroid: $\Delta X = +0.3285\text{ m}, \Delta Y = +0.1900\text{ m}, \Delta Z = -0.0104\text{ m}$ ($\sigma = 0.0000\text{ m}$).
+> 4. In `v32`, correcting the Y coordinate to $\Delta Y = +0.1900\text{ m}$ collapsed lateral error from $12.25\text{ cm} \to 3.85\text{ cm}$ and achieved a **45% lift rate (9/20 episodes)**.
+> 5. Grasp failure in `v32` is caused by a $4.15\text{ cm}$ forward depth ($X$) discrepancy and action chunk staleness (chunk 16 vs 32), producing a fingertip pinch instead of equatorial caging. Friction inflation ($\mu = 6.0$) is strictly rejected to preserve digital twin fidelity.
 
 > [!IMPORTANT]
 > **Status**: PARTLY SUPERSEDED, 2026-09-05. §W5, §W7 (gates G1/G2) and §2's teacher argument

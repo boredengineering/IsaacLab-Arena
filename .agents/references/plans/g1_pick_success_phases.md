@@ -20,7 +20,10 @@ identified in the artefacts.
 | Phase | Name | Status | Gates | Detail |
 | :--- | :--- | :--- | :--- | :--- |
 | **P0** | Harness integrity | ✅ **DONE** 2026-09-04 | everything | impl §12.1 |
+| **P0.1** | Robot Settle Damping Gate | ✅ **DONE** 2026-09-07 | P1–P7 | `policy_runner.py` tracks robot root vel |
 | **P1** | Distribution-violation corrections (config) | ✅ **DONE** 2026-09-04 — but see §P1 retraction | — | impl §12.2 |
+| **P1.1** | Lateral Centroid Alignment (Y-offset) | ✅ **DONE** 2026-09-07 | P7 | `v32` $\Delta Y = 0.19\text{m}$, 45% lift rate |
+| **P1.2** | Action Chunk Horizon Tuning | ✅ **DONE** 2026-09-07 | P7 | `action_chunk_length: 32` |
 | **P2a** | Ground truth: open-loop fidelity | ✅ **DONE** 2026-09-04 (measured, not inferred) | P3–P6 | impl §13 |
 | **P2b** | Fix `object_on_destination` false positive | ✅ **DONE** 2026-09-04 — commit `6433fc6a1` | every rate | run log |
 | **P2c** | Ground truth: modality ablation | ✅ **DONE** 2026-09-04 | **P4 vs P5** | run log |
@@ -28,6 +31,7 @@ identified in the artefacts.
 | **P4** | Photometric alignment (nuisance parameters) | ⏸ pending P3 — **indicated by P2c** | — | impl §16, strategic §5b.I1 |
 | **P5** | Augmented re-finetune on existing corpus | ⏸ **deprioritised by P2c** | — | impl §17, strategic §5b.I2 |
 | **P6** | Few-shot on target demos — **last resort** | ⏸ | — | strategic §5b.I3 |
+| **P7** | Forward Depth ($X$) Alignment & Equatorial Caging | ⏳ **PLAN READY FOR REVIEW** | pick success | Section 7 implementation plan |
 | **PX** | Height sweep — **demoted, off critical path** | ⏸ optional | nothing | strategic §3 |
 | **F1-F5** | **Monocular-depth / camera-pitch fixes** | ⏳ **NEXT — supersedes P3/P4** | the grasp itself | [depth debug record](g1_monocular_depth_and_camera_pitch_debug.md) |
 

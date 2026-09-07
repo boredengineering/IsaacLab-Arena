@@ -137,8 +137,11 @@ def add_policy_runner_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--settle_steps",
         type=int,
-        default=10,
-        help="Number of initial simulation steps to allow objects to settle onto surfaces before policy rollout.",
+        default=50,
+        help=(
+            "Number of initial simulation steps to allow objects and robot to settle onto surfaces before policy"
+            " rollout."
+        ),
     )
     parser.add_argument(
         "--settle_lin_vel_thresh",

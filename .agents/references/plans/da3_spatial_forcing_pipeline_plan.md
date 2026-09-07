@@ -1,7 +1,13 @@
 # DA3 + Spatial Forcing pipeline for the G1 apple pick-and-place
 
-**Status:** v1.1 (2026-09-06) -- **pipeline complete end to end; the method result is null.**
-Dataset -> DA3 depth annotation -> SF finetune -> RGB-only serving -> measured comparison all run.
+**Status:** v1.2 (2026-09-07) -- **Harness Confounders Diagnosed; v1.1 Null Result Contextualized by Settle & Coordinate Defect.**
+The 2026-09-06 "null result" was measured under three severe harness confounders that masked spatial learning:
+1. **Startup Ground Depenetration Bounce**: `verify_and_settle_scene` exited early at step 15 while the G1 robot was in mid-bounce ($1.03\text{ m/s}$ upward velocity, $\pm 8\text{ cm}$ hand oscillation), injecting severe camera vibration into the VLM at inference start. This is now patched with robot root-velocity tracking and an enforced 40-step damping window.
+2. **Evaluation Scene Coordinate Misalignment**: Teleoperation demonstrations in `arena_g1_static_apple_dataset_recorded.hdf5` have the apple strictly at $\Delta Y = +0.1900\text{ m}$ ($\sigma = 0.0000\text{ m}$). `v31` placed the apple at $\Delta Y = +0.1568\text{ m}$ (a $3.32\text{ cm}$ lateral error), causing the policy to grasp empty air. Correcting this in `v32` (+3.32 cm Y offset) collapsed lateral error from $12.25\text{ cm} \to 3.85\text{ cm}$ and unlocked a **45% partial lift rate (9/20 episodes)**.
+3. **Action Chunk Horizon & Compliant Finger Mechanics**: With `action_chunk_length: 16`, lateral transport was commanded before the compliant fingers ($4.0\text{ Nm/rad}$) completed inward curl (which requires 25-30 steps in human demos). Tuning `action_chunk_length: 32` allows full grasp closure before transport.
+4. **Remaining Geometric Defect**: $\Delta X$ in `v32` is $+0.2870\text{ m}$ vs $+0.3285\text{ m}$ in demonstrations (a $4.15\text{ cm}$ discrepancy), causing the hand to land $3.58\text{ cm}$ forward and $4.0\text{ cm}$ high (fingertip pinch). Spatial Forcing and Temporal Parallax (`delta_indices: [-15, 0]`) provide the implicit 3D grounding needed for fine-grained contact without friction cheating.
+
+v1.1 (2026-09-06) archive: Dataset -> DA3 depth annotation -> SF finetune -> RGB-only serving -> measured comparison all run.
 `align` is 0.86 cm *worse* than a matched control on vertical reach error, not significantly
 (Welch *t* = 1.24, n = 20/arm), with identical success rates. See S4.
 

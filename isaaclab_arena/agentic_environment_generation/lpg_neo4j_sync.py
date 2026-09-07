@@ -38,7 +38,7 @@ def get_neo4j_driver(
     # ship it, and a hard top-level import made them fail at collection time.
     import neo4j
 
-    uri = uri or os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+    uri = uri or os.environ.get("NEO4J_URI", "bolt://localhost:7688")
     user = user or os.environ.get("NEO4J_USER", "neo4j")
     password = password or os.environ.get("NEO4J_PASSWORD", "isaaclab_arena_password")
     return neo4j.GraphDatabase.driver(uri, auth=(user, password))

@@ -126,15 +126,21 @@ def verify_and_settle_scene(
     scene = base_env.scene
 
     movable_objects = []
+    robot_asset = None
     for name in scene.keys():
-        if name in ("robot", "terrain", "ground", "maple_table", "table") or "robot" in name:
+        if name in ("terrain", "ground", "maple_table", "table"):
+            continue
+        if name in ("robot",) or "robot" in name:
+            asset = scene[name]
+            if hasattr(asset, "data") and hasattr(asset.data, "root_lin_vel_w"):
+                robot_asset = (name, asset)
             continue
         asset = scene[name]
         if hasattr(asset, "data") and hasattr(asset.data, "root_lin_vel_w"):
             movable_objects.append(name)
 
     obs = None
-    max_steps = max(settle_steps, 25)
+    max_steps = max(settle_steps, 50)
     if max_steps > 0:
         hold_action = build_neutral_hold_action(base_env)
         for step_idx in range(max_steps):
@@ -152,7 +158,9 @@ def verify_and_settle_scene(
                     flush=True,
                 )
                 break
-            if step_idx >= 15:
+            # Bipedal humanoid robots (e.g. Unitree G1 WBC) require ~35-45 steps to damp out
+            # startup ground contact depenetration and reach steady standing balance.
+            if step_idx >= 40:
                 curr_settled = True
                 for name in movable_objects:
                     asset = scene[name]
@@ -163,16 +171,25 @@ def verify_and_settle_scene(
                     if lin_v > lin_vel_thresh or ang_v > ang_vel_thresh:
                         curr_settled = False
                         break
+                if curr_settled and robot_asset is not None:
+                    _, r_asset = robot_asset
+                    r_lin_v = wp.to_torch(r_asset.data.root_lin_vel_w).norm(dim=-1).max().item()
+                    r_ang_v = wp.to_torch(r_asset.data.root_ang_vel_w).norm(dim=-1).max().item()
+                    if r_lin_v > lin_vel_thresh or r_ang_v > ang_vel_thresh:
+                        curr_settled = False
                 if curr_settled:
                     break
 
     settle_status = {}
     all_settled = True
+    tracked_entities = list(movable_objects)
+    if robot_asset is not None:
+        tracked_entities.append(robot_asset[0])
     print(
-        f"[policy_runner] 🔍 Phase 1 Settle Verification: Checking {len(movable_objects)} scene objects for"
-        " stationarity..."
+        f"[policy_runner] 🔍 Phase 1 Settle Verification: Checking {len(tracked_entities)} entities (objects + robot)"
+        " for stationarity..."
     )
-    for name in movable_objects:
+    for name in tracked_entities:
         asset = scene[name]
         # Worst env, not the average: the report decides whether inference starts on a still
         # scene, and one object in free fall makes that false regardless of the other envs.
@@ -198,9 +215,12 @@ def verify_and_settle_scene(
             all_settled = False
 
     if all_settled:
-        print("[policy_runner] ✅ All scene objects are physically settled. Proceeding to policy inference.")
+        print(
+            "[policy_runner] ✅ All scene entities (including robot) are physically settled. Proceeding to policy"
+            " inference."
+        )
     else:
-        print("[policy_runner] ⚠️ Warning: One or more objects are NOT sitting still at inference start!")
+        print("[policy_runner] ⚠️ Warning: One or more entities are NOT sitting still at inference start!")
 
     report = {"all_objects_settled": all_settled, "object_settle_status": settle_status}
     base_env.settle_report = report

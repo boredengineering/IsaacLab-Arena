@@ -170,6 +170,18 @@ def add_policy_runner_arguments(parser: argparse.ArgumentParser) -> None:
         help="Scene name of the manipuland to trace. Required when --trace_reach is set.",
     )
     parser.add_argument(
+        "--trace_reach_hand_body",
+        type=str,
+        default=None,
+        help=(
+            "Pin the reach metric to one named end-effector body, e.g. 'left_hand_middle_1_link'. "
+            "Without it the tracer reports the nearest matching body each step, which is a "
+            "selection bias rather than a measurement: the minimum over several links is smaller "
+            "than any single link's distance, and the reported frame changes between steps. "
+            "Measured on this repo's traces, that understated lateral error by 3-5 cm."
+        ),
+    )
+    parser.add_argument(
         "--trace_reach_destination",
         type=str,
         default=None,

@@ -514,7 +514,7 @@ container, where the data is but `tyro` is not; the complete training environmen
 **Recommended fix: add the dataset mount to `gr00t-server`.** It is four lines in
 `docker/run_gr00t_server.sh`, exactly mirroring the `/models` handling already there, including the
 DevContainer host-path detection that inspects the devcontainer's own mounts by destination:
-
+a
 ```diff
  HOST_MODELS_DIR="${MODELS_DIR:-$HOME/models}"
 +HOST_DATASETS_DIR="${DATASET_DIR:-$HOME/datasets}"

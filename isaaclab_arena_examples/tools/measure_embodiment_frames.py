@@ -132,10 +132,16 @@ def _standing_actions(env) -> torch.Tensor:
     Mirrors the locomanip and static G1 tests: a plain zero action is interpreted as "squat to the
     floor", which would put every measured frame at the wrong height.
     """
+    unwrapped = env.unwrapped
     actions = torch.zeros(
-        (env.unwrapped.num_envs,) + env.unwrapped.single_action_space.shape,
-        device=env.unwrapped.device,
+        (unwrapped.num_envs,) + unwrapped.single_action_space.shape,
+        device=unwrapped.device,
     )
+    if hasattr(unwrapped, "action_manager") and "g1_action" in unwrapped.action_manager.active_terms:
+        term = unwrapped.action_manager.get_term("g1_action")
+        if "robot" in unwrapped.scene.articulations:
+            robot = unwrapped.scene["robot"]
+            actions[:, : term._num_joints] = robot.data.default_joint_pos[:, term._joint_ids]
     if actions.shape[-1] >= 4:
         actions[:, -4] = 0.75
     return actions

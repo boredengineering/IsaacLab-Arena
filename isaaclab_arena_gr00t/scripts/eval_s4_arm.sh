@@ -41,6 +41,7 @@ OBJECT="apple_01_objaverse_robolab"
 DESTINATION="clay_plates_hot3d_robolab"
 ARENA_ROOT="${ARENA_ROOT:-/workspaces/isaaclab_arena}"
 POLICY_CONFIG="${POLICY_CONFIG:-isaaclab_arena_gr00t/policy/config/g1_static_apple_gr00t_closedloop_config.yaml}"
+HAND_BODY="${HAND_BODY:-left_hand_middle_1_link}"
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
@@ -53,6 +54,7 @@ while [[ $# -gt 0 ]]; do
         --destination) DESTINATION="$2"; shift 2 ;;
         --output-root) OUTPUT_ROOT="$2"; shift 2 ;;
         --policy-config) POLICY_CONFIG="$2"; shift 2 ;;
+        --hand-body) HAND_BODY="$2"; shift 2 ;;
         --dry-run) DRY_RUN=true; shift ;;
         -h|--help) sed -n '7,27p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
@@ -88,6 +90,8 @@ CMD=(
     --trace_reach "$TRACE"
     --trace_reach_object "$OBJECT"
     --trace_reach_destination "$DESTINATION"
+    # Pinned: see policy_runner_cli's note. Unpinned understates lateral error by 3-5 cm.
+    --trace_reach_hand_body "$HAND_BODY"
     "$ENVIRONMENT"
     --embodiment "$EMBODIMENT"
 )

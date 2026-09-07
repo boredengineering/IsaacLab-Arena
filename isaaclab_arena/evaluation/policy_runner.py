@@ -224,6 +224,7 @@ class ReachTracer:
         contact_sensor_name: str | None = None,
         hand_body_patterns: tuple[str, ...] = ("wrist", "hand"),
         hand_body_name: str | None = None,
+        gripper_joint_patterns: tuple[str, ...] = ("hand_index", "hand_middle", "hand_thumb"),
     ):
         self._path = path
         self._rows: list[str] = []
@@ -236,6 +237,11 @@ class ReachTracer:
         self._step_in_episode = 0
         self._episode_index: torch.Tensor | None = None
         self._hand_body_name = hand_body_name
+        # Finger-joint indices, so a trace can say *when* the hand closed relative to where it
+        # was. Without this, premature closure is untestable: the contact sensor reads ~0 N on
+        # these scenes even while object_moved_rate is 0.75-0.95, so contact cannot time it
+        # either.
+        self._gripper_indices = self._resolve_gripper_joints(gripper_joint_patterns)
         self._hand_indices = self._resolve_hand_bodies(hand_body_patterns)
         if hand_body_name is not None:
             # Pinning to one named body. Without this the tracer minimises over every matching
@@ -261,6 +267,21 @@ class ReachTracer:
         except Exception:
             return {}
         return {name: i for i, name in enumerate(body_names) if any(p in name.lower() for p in patterns)}
+
+    def _resolve_gripper_joints(self, patterns: tuple[str, ...]) -> dict[str, int]:
+        """Map finger-joint names to their index in the robot's joint array.
+
+        Args:
+            patterns: Substrings identifying finger joints.
+
+        Returns:
+            Mapping of joint name to index; empty when none match, which omits the columns.
+        """
+        try:
+            names = self._env.scene["robot"].joint_names
+        except Exception:
+            return {}
+        return {n: i for i, n in enumerate(names) if any(p in n.lower() for p in patterns)}
 
     def _pos(self, name):
         return wp.to_torch(self._env.scene[name].data.root_pos_w)
@@ -325,6 +346,12 @@ class ReachTracer:
             name, hand = nearest
             row["hand_body"] = name
             row["hand_frame_mode"] = "pinned" if self._hand_body_name else "nearest_of_matching"
+        if self._gripper_indices:
+            joint_pos = wp.to_torch(self._env.scene["robot"].data.joint_pos)
+            indices = list(self._gripper_indices.values())
+            closure = joint_pos[:, indices].abs().mean(dim=-1)
+            row["gripper_closure"] = [round(v, 5) for v in closure.tolist()]
+            row["gripper_joint_count"] = len(indices)
             row["hand_xy_to_obj"] = [round(v, 5) for v in (hand[:, :2] - obj[:, :2]).norm(dim=-1).tolist()]
             row["hand_z_minus_obj"] = [round(v, 5) for v in (hand[:, 2] - obj[:, 2]).tolist()]
             row["hand_dist_to_obj"] = [round(v, 5) for v in (hand - obj).norm(dim=-1).tolist()]
@@ -381,6 +408,7 @@ def rollout_policy(
     trace_reach: str | None = None,
     trace_reach_object: str | None = None,
     trace_reach_destination: str | None = None,
+    trace_reach_hand_body: str | None = None,
 ) -> MetricsDataCollection | None:
     assert num_steps is not None or num_episodes is not None, "Either num_steps or num_episodes must be provided"
     assert num_steps is None or num_episodes is None, "Only one of num_steps or num_episodes must be provided"
@@ -412,6 +440,7 @@ def rollout_policy(
                 object_name=trace_reach_object,
                 destination_name=trace_reach_destination,
                 contact_sensor_name=f"contact_sensor_{trace_reach_object}",
+                hand_body_name=trace_reach_hand_body,
             )
 
         # Setup progress bar based on num_steps or num_episodes
@@ -633,6 +662,7 @@ def main():
             trace_reach=getattr(args_cli, "trace_reach", None),
             trace_reach_object=getattr(args_cli, "trace_reach_object", None),
             trace_reach_destination=getattr(args_cli, "trace_reach_destination", None),
+            trace_reach_hand_body=getattr(args_cli, "trace_reach_hand_body", None),
             lin_vel_thresh=getattr(args_cli, "settle_lin_vel_thresh", 0.1),
             ang_vel_thresh=getattr(args_cli, "settle_ang_vel_thresh", 1.0),
         )

@@ -453,7 +453,8 @@ def sync_eval_telemetry_to_neo4j(
     success_rate = float(success_rate_val[0]) if success_rate_val else 0.0
 
     num_episodes_val = list(g.objects(eval_runs[0], ARENA.metric_num_episodes)) if eval_runs else []
-    num_episodes = int(num_episodes_val[0]) if num_episodes_val else 0
+    # via float() so an xsd:float literal ("20.0") parses; int() alone raises on it.
+    num_episodes = int(float(num_episodes_val[0])) if num_episodes_val else 0
 
     payload_val = list(g.objects(eval_runs[0], ARENA.metricsPayload)) if eval_runs else []
     metrics_payload = str(payload_val[0]) if payload_val else "{}"

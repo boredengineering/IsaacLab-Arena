@@ -889,3 +889,87 @@ Inserted ahead of §9.5:
 
 Then §9.5's items 1-6. **§9.5's item 1 (re-score success) is the graph's
 `success_progress_consistency_check`; run it through the registry rather than ad hoc.**
+
+
+---
+
+## 11. Items 0a-0d executed (2026-09-07)
+
+Run graph-first, per the `arena-session-startup` skill. All CPU; no GPU container was started.
+
+### 11.1 (0c) `kinematic_unreachable` is REFUTED, and the oracle's band is mis-calibrated
+
+The measured wrist envelope over all 208 demos, relative to the *commanded* pelvis:
+
+| | value |
+| :--- | ---: |
+| deepest reach-down | **-0.9115 m** |
+| per-episode deepest, mean | -0.6235 m |
+| highest | **-0.4236 m** |
+| oracle's modelled band | -0.35 .. +0.45 |
+
+**The entire measured envelope lies outside the oracle's band** -- even the *highest* wrist
+position, -0.4236 m, is below the modelled lower bound of -0.35 m. The band would declare all 208
+working demonstrations unreachable, and the deepest reach is **2.60x** deeper than modelled.
+
+The apple requires -0.7279 m at the commanded pelvis of 0.72, which sits comfortably inside the
+measured envelope. So **the apple is reachable**, `kinematic_unreachable` is refuted on measured
+evidence, and §10.3's categorical hypothesis is closed.
+
+**Defect found, not fixed:** `validate_kinematic_reachability`'s humanoid band `[-0.35, +0.45]` is
+a false positive generator for the G1 -- it rejects this environment's own corpus. Its
+`max_reach`/`min_reach` horizontal bounds passed fine. Widening the band needs a measured G1
+envelope rather than another guess, and it is generation-time validation used elsewhere, so it is
+recorded here rather than changed unilaterally.
+
+### 11.2 (0a) The frame was understating lateral error by half
+
+`ReachTracer` now takes `hand_body_name` to pin one frame; unpinned behaviour is unchanged, and a
+typo asserts rather than silently tracking everything. Every row records `hand_frame_mode`.
+
+Re-derived from the existing traces, pinned to `left_hand_middle_1_link`:
+
+| arm | lateral (mixed -> pinned) | vertical (pinned) | sd |
+| :--- | ---: | ---: | ---: |
+| base | 0.0506 -> **0.1023** | +0.0698 | 0.035 |
+| baseline | 0.0508 -> **0.0829** | +0.0940 | 0.038 |
+| align | 0.0478 -> **0.0924** | +0.0892 | 0.033 |
+
+Pinning moves lateral by **+3.2 to +5.2 cm**. Minimising over six links is a selection bias, not a
+measurement: the minimum over six is smaller than any single link's distance. **Lateral error
+(8-10 cm) now clearly exceeds vertical (7-9 cm)** -- the opposite of the premise this programme was
+built on. The arms remain indistinguishable.
+
+### 11.3 (0d) The loop is closed, and it was writing false priors
+
+Writing the three runs back exposed the concrete form of the "open at both ends" defect:
+`emit_diagnostic_state_rdf` emitted only the `observationMetric`/`observationValue` vocabulary,
+while `sync_eval_telemetry_to_neo4j` reads `arena:metric_<name>`, `arena:metricsPayload`, and the
+timestamp and policy off a `prov:Activity`. **Zero overlap.** Ingesting a 20-episode run at 0.05
+therefore recorded `success_rate=0.0, num_episodes=0, metrics_payload={}, policy=unknown_policy` --
+indistinguishable from a genuine total failure, and a false prior for the next session. Several of
+the 85 pre-existing runs carry `num_episodes: 0`, so this may already have corrupted history.
+
+Fixed on both sides:
+
+* `emit_diagnostic_state_rdf` gained `metrics` and `ended_at`, emits `arena:metric_<name>` plus
+  `metricsPayload`, and emits a `prov:Activity` with `prov:used` -> the policy. Integral values are
+  typed `xsd:integer`, because a count emitted as `xsd:float` serialises to `"20.0"` and the
+  reader's `int()` raises on that string.
+* `sync_eval_telemetry_to_neo4j` now parses counts via `int(float(...))`, tolerating either typing.
+
+All three runs are in Neo4j with correct values (85 -> 88 `EvaluationRun` nodes), each linked to its
+own `Policy` node, with lateral and vertical medians in the payload. TTL in
+`eval_output/graph_writeback/`.
+
+**Known gap:** the `EVALUATED_GRAPH` edge does not attach, because `galileo_g1_static_pick_and_place`
+is a Python-defined environment with no `EnvironmentGraph` node. Hand-written environments are
+absent from the LPG, so graph-RAG retrieval cannot rank them alongside generated ones.
+
+### 11.4 (0b) Still owed
+
+The one-frame rollout-vs-demo comparison remains open. The demos expose `observation.eef_pose` (a
+wrist frame); the traces expose finger links. Comparing them requires the tracer to log the
+`eef_pose` frame too, which needs one re-run with `--trace_reach` and the pinned tracer -- the only
+GPU item among 0a-0d. Until then, the demo figure (wrist never below z=+0.0721) and the rollout
+figures (finger links) must not be compared.

@@ -273,8 +273,28 @@ def emit_diagnostic_state_rdf(
     next_technique_id: str | None = None,
     remediation_id: str | None = None,
     graph: rdflib.Graph | None = None,
+    metrics: dict[str, float] | None = None,
+    ended_at: str | None = None,
 ) -> rdflib.Graph:
-    """Emit an evaluation run's posterior beliefs, evidence, and selected next steps."""
+    """Emit an evaluation run's posterior beliefs, evidence, and selected next steps.
+
+    Args:
+        eval_run_id: Identifier for the run.
+        env_name: Environment graph the run evaluated.
+        profile: Policy profile for the checkpoint under test.
+        state: Belief state, applied techniques and probe observations.
+        next_technique_id: Diagnostic selected to run next, if any.
+        remediation_id: Remediation selected, if any.
+        graph: Graph to add to. A fresh one is created when omitted.
+        metrics: Run-level scalars such as ``success_rate`` and ``num_episodes``. **Required for
+            the Neo4j ingester to record anything.** Omitting them is not a no-op: it writes a
+            run with ``success_rate=0.0`` and ``num_episodes=0``, which is indistinguishable from
+            a genuine total failure and becomes a false prior for the next session.
+        ended_at: ISO timestamp for the run, emitted on a ``prov:Activity``.
+
+    Returns:
+        The graph, with the run's beliefs, observations and metrics added.
+    """
     graph = graph if graph is not None else rdflib.Graph()
     _bind_prefixes(graph)
 
@@ -282,6 +302,30 @@ def emit_diagnostic_state_rdf(
     graph.add((run_uri, RDF.type, ARENA.EvaluationRun))
     graph.add((run_uri, ARENA.evaluatedGraph, INSTANCES[env_name]))
     graph.add((run_uri, ARENA.evaluatedPolicy, INSTANCES[f"policy_{profile.policy_id}"]))
+
+    # The Neo4j ingester (``sync_eval_telemetry_to_neo4j``) reads run-level metrics under
+    # ``arena:metric_<name>`` plus ``arena:metricsPayload``, and takes the timestamp and policy
+    # name off a ``prov:Activity``. Emitting only the ProbeObservation vocabulary above leaves all
+    # of those absent, and the ingester substitutes zeros -- so a 20-episode run at 0.05 lands as
+    # 0 episodes at 0.0. The two halves have to share one vocabulary or the loop silently
+    # falsifies its own history.
+    if metrics:
+        import json as _json
+
+        for key, value in metrics.items():
+            # Integral values are typed as integers: a count emitted as xsd:float serialises to
+            # "20.0", and a reader doing int() on that string raises rather than rounding.
+            datatype = XSD.integer if float(value).is_integer() else XSD.float
+            literal = int(value) if datatype == XSD.integer else float(value)
+            graph.add((run_uri, ARENA[f"metric_{key}"], Literal(literal, datatype=datatype)))
+        graph.add((run_uri, ARENA.metricsPayload, Literal(_json.dumps(metrics), datatype=XSD.string)))
+
+    activity_uri = INSTANCES[f"activity_{eval_run_id}"]
+    graph.add((activity_uri, RDF.type, PROV.Activity))
+    graph.add((activity_uri, PROV.used, INSTANCES[f"policy_{profile.policy_id}"]))
+    graph.add((activity_uri, PROV.generated, run_uri))
+    if ended_at:
+        graph.add((activity_uri, PROV.endedAtTime, Literal(ended_at, datatype=XSD.dateTime)))
 
     for technique_id in state.applied_techniques:
         graph.add((run_uri, ARENA.appliedTechnique, INSTANCES[f"diagnostic_{technique_id}"]))

@@ -102,3 +102,76 @@ def test_close_writes_rows_carrying_the_episode_index(tmp_path):
 
     rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     assert [row["episode"] for row in rows] == [[0], [1]]
+
+
+class _BodyEnv:
+    """An environment exposing named robot bodies, so hand resolution can be exercised."""
+
+    def __init__(self, names):
+        self._names = names
+
+    @property
+    def scene(self):
+        outer = self
+
+        class _Scene:
+            def __getitem__(self, key):
+                assert key == "robot", f"only the robot is stubbed, got {key!r}"
+
+                class _Robot:
+                    body_names = outer._names
+
+                return _Robot()
+
+        return _Scene()
+
+
+_BODIES = [
+    "left_wrist_yaw_link",
+    "left_hand_palm_link",
+    "left_hand_middle_1_link",
+    "left_hand_thumb_2_link",
+    "torso_link",
+]
+
+
+def test_pinning_restricts_tracking_to_one_body(tmp_path):
+    """Pinning must leave exactly one tracked body, so the metric cannot change frame per step.
+
+    Minimising over several links is a selection bias rather than a measurement: the minimum over
+    six links is smaller than any single link's distance, and the frame silently changes between
+    steps. On this repo's own traces that understated lateral error by 3.2-5.2 cm.
+    """
+    tracer = ReachTracer(
+        str(tmp_path / "t.jsonl"),
+        _BodyEnv(_BODIES),
+        object_name="apple",
+        destination_name=None,
+        hand_body_name="left_hand_middle_1_link",
+    )
+
+    assert list(tracer._hand_indices) == ["left_hand_middle_1_link"]
+
+
+def test_unpinned_tracks_every_matching_body(tmp_path):
+    """The default keeps the old behaviour, so existing callers are unchanged."""
+    tracer = ReachTracer(str(tmp_path / "t.jsonl"), _BodyEnv(_BODIES), object_name="apple", destination_name=None)
+
+    assert set(tracer._hand_indices) == {
+        "left_wrist_yaw_link",
+        "left_hand_palm_link",
+        "left_hand_middle_1_link",
+        "left_hand_thumb_2_link",
+    }
+
+
+def test_pinning_an_unknown_body_fails_loudly(tmp_path):
+    """A typo must not silently fall back to tracking everything."""
+    with pytest.raises(AssertionError, match="is not a tracked body"):
+        ReachTracer(
+            str(tmp_path / "t.jsonl"),
+            _BodyEnv(_BODIES),
+            object_name="apple",
+            destination_name=None,
+            hand_body_name="left_hand_middle_9_link",
+        )

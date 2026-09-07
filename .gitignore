@@ -114,6 +114,7 @@ skills-lock.json
 
 # Whitelist core first-party Arena skills (always tracked)
 !.agents/skills/agentic-rdf-star-env-gen/
+!.agents/skills/arena-session-startup/
 !.agents/skills/commit-and-pr/
 !.agents/skills/dev-container/
 !.agents/skills/install-nvidia-skills/

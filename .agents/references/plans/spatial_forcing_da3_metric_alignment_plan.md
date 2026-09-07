@@ -35,6 +35,46 @@
 >    written into every checkpoint. First working run: align 0.9916 -> 0.3969 -> 0.2564 with the
 >    action loss falling alongside.
 
+> [!CAUTION]
+> **The premise is refuted, and the knowledge graph said so first (2026-09-07).**
+> This plan exists to close a vertical range gap with a metric depth teacher. Three measurements
+> now say the vertical axis is not the binding constraint, and Arena's own
+> `policy_capability_graph.py` ranked the diagnostics that would have shown it at **cost 0.05,
+> no rollout, no GPU** -- before any of the work in this plan was done.
+>
+> 1. **The reachability oracle fires categorically.** Robot base `(0.25, 0.08, 0.0)`, apple at
+>    `(0.5785, 0.27, -0.0079)`. Horizontal distance 0.379 m is fine (band 0.25-0.95), but
+>    pelvis-relative `rel_z = -0.758 m` against a band of `[-0.35, +0.45]`. The plate is worse at
+>    -0.775 m. `KinematicManifold`'s docstring: such a mismatch is **categorical -- "no
+>    policy-config patch closes it."**
+> 2. **The corpus never crouches.** `teleop.base_height_command` spans **0.72-1.00 m** across all
+>    208 episodes / 35 066 frames, and `navigate_command` and `torso_orientation_rpy_command` are
+>    identically zero. Satisfying the band would need a pelvis at <= 0.342 m, a 0.66 m crouch that
+>    never occurs. So the violation is not an artefact of an assumed standing pose.
+> 3. **`ReachTracer` never measured one frame.** It picks the nearest matching body each step and
+>    across the three arms tracked **six different links** -- `left_hand_middle_1_link` (~3.5 k
+>    rows), `thumb_2`, `middle_0`, `index_1`, `palm`, `wrist_yaw`. Every historical reach figure
+>    ("12.9 cm too high", "+0.1286 m at chunk 16", "~0.0795 m at chunk 8", "1.6 cm lateral /
+>    4.95 cm vertical") is therefore irreproducible **by construction**, which is exactly what
+>    happened when each was re-measured.
+>
+> **Two caveats, stated so this is not over-read.** The oracle's `[-0.35, +0.45]` band is a
+> *heuristic* in a pure-math preflight, not a measured G1 envelope; and the 208 demos carry
+> `next.reward = 1.0` each, so the task is presumably feasible -- which argues the band is too
+> strict for a WBC that pitches the torso. Separately, the demo-side figure below uses
+> `observation.eef_pose` (a wrist frame) while the traces use finger links; **those frames are not
+> comparable** and an apples-to-apples measurement is still owed.
+>
+> What *is* firm: the demos' `eef_pose` never descends below **z = +0.0721** while the apple sits
+> at **-0.0079**, and **0 of 208** episodes bring it within the apple's 3.4 cm radius in height.
+>
+> **Consequence for this plan.** §1's "accurate bearing, wrong range" framing is not supported;
+> the base policy is over the apple in only 4/20 episodes. Spatial Forcing was aimed at an axis
+> that is not the binding constraint, which is why S4 came out null and why the null was
+> overdetermined. Do not resume geometry-teacher work from this document until the reachability
+> question is settled against a *measured* G1 reach envelope and `ReachTracer` is pinned to a
+> single, named frame.
+
 > [!IMPORTANT]
 > **Status**: PARTLY SUPERSEDED, 2026-09-05. §W5, §W7 (gates G1/G2) and §2's teacher argument
 > are replaced by [`geometry_supervision_evidence_repair_plan.md`](geometry_supervision_evidence_repair_plan.md):

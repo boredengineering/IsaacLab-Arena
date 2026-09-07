@@ -770,3 +770,122 @@ Spatial Forcing on this corpus is measured, null, and explained.
 
 **What W1 still blocks:** fresh rendered views, and any depth-regression target that needs GT depth
 maps rather than sparse anchors. It no longer blocks the metric scale.
+
+---
+
+## 10. The knowledge graph said it first (2026-09-07)
+
+Arena carries two knowledge systems. **Neither was used during any of the work above**, and both
+would have reordered it. Recorded here so the next session starts differently; the operational
+procedure is the `arena-session-startup` skill.
+
+### 10.1 What was already registered
+
+`isaaclab_arena/agentic_environment_generation/policy_capability_graph.py` is pure Python -- no
+torch, no GPU, no simulator. Its docstring states the point directly: the registries exist so
+`select_next_diagnostic` can *"pick the cheapest measurement that actually reduces uncertainty
+instead of running the whole battery."* This plan ran the whole battery.
+
+Three conclusions reached above were already nodes:
+
+| reached above | already registered |
+| :--- | :--- |
+| the 0.1 N contact gate is suspect (§9.2, from a web survey) | **`harness_false_success`**, prior 0.04: *"a contact sensor triggered by an object nudged against its destination ... the success flag disagrees with the progress objective score"* |
+| re-score success against progress (§9.2, item 1 of §9.5) | **`success_progress_consistency_check`**, cost **0.05** |
+| the base-model control (S4, framed as new reasoning) | **`reference_scene_control_run`**, cost **0.7**, *"partitions the hypothesis space in one shot"* |
+
+`plan_diagnostic_sequence` on a fresh state ranks, all at cost 0.05:
+`pre_flight_geometry_oracle`, `depth_fingerprint_preflight`,
+`success_progress_consistency_check`, `stale_frame_assertion`. The first two need **no rollout and
+no GPU**. `reference_scene_control_run` -- which this plan ran *last*, after ~4 GPU-hours -- is
+14x that cost.
+
+`depth_fingerprint_preflight` discriminates **`vertical_reach_ood`**: the single hypothesis this
+entire programme rested on was testable for 0.05, without a GPU.
+
+### 10.2 The graph-RAG already held the answer
+
+`graph_rag.py` is Neo4j-backed experience memory *"ranked by measured evaluation outcome"*. It had
+been down 31 hours. Brought up, it holds **85 `EvaluationRun` nodes, 61 with episodes, 653
+episodes**, 25 `EnvironmentGraph` and 4 `Policy` nodes -- and the multi-episode signature is
+`success_rate: 0.0` with `object_moved_rate: 1.0`, i.e. the policy touches but never places.
+**That is what §S4 spent 35 066 frames of annotation, ~4 GPU-hours and three 20-episode
+evaluations to establish.**
+
+Practical notes: it publishes on **7475/7689**, not the defaults (7474/7687 are held here), so
+`NEO4J_URI=bolt://localhost:7689` is required; and it must be queried from
+`isaaclab_arena-latest`, since the devcontainer lacks `neo4j` and `pydantic`.
+
+**A trap the code documents and I fell into anyway.** My first query used `max(success_rate)` and
+nearly reported "best recorded success: 1.0". `graph_rag.py`'s comment warns that independent
+maxima *"would pair the best rate with an unrelated run's episode count and report, say, '1.0 over
+4 episodes' when the 1.0 came from a single-episode run."* Checked: the 1.0s are almost all
+`num_episodes: 1` -- very likely `harness_false_success`. Always pair a rate with its n.
+
+### 10.3 The reachability oracle, run (cost 0.05, no GPU)
+
+`validate_kinematic_reachability` on this environment's own constants:
+
+| object | xy-dist (band 0.25-0.95) | pelvis-relative Z (band -0.35..+0.45) | verdict |
+| :--- | ---: | ---: | :--- |
+| apple | 0.379 m | **-0.758 m** | **VIOLATION** |
+| plate | 0.329 m | **-0.775 m** | **VIOLATION** |
+
+Base `(0.25, 0.08, 0.0)`; apple `(0.5785, 0.27, -0.0079)` from `SHELF_SURFACE_Z + SHELF_AIRGAP +
+_USD_ORIGIN_ABOVE_BOTTOM_M`. And the corpus **never crouches**:
+`teleop.base_height_command` spans **0.72-1.00 m** over all 208 episodes / 35 066 frames, with
+`navigate_command` and `torso_orientation_rpy_command` identically zero. The band would need a
+pelvis <= 0.342 m -- a 0.66 m crouch that never happens.
+
+**Do not treat this as settled.** The `[-0.35, +0.45]` band is a heuristic in a pure-math
+preflight, not a measured G1 envelope, and all 208 demos carry `next.reward = 1.0`, so the task is
+presumably feasible -- which argues the band is too strict for a WBC that pitches the torso. The
+oracle's value here is that it flags a **categorical** hypothesis, for 0.05, that no amount of
+depth supervision or corpus variation would address, and that this plan never tested.
+
+### 10.4 `ReachTracer` was never measuring one frame
+
+Across the three arms it tracked **six different bodies**, choosing the nearest each step:
+`left_hand_middle_1_link` (~3.4-3.7 k rows), `left_hand_thumb_2_link`, `left_hand_middle_0_link`,
+`left_hand_index_1_link`, `left_hand_palm_link`, `left_wrist_yaw_link`.
+
+So every reach figure in these plans is a **mixture over links**, and irreproducible by
+construction -- which is precisely what happened to "12.9 cm too high", "+0.1286 m at chunk 16",
+"~0.0795 m at chunk 8", and "1.6 cm lateral / 4.95 cm vertical" when each was re-measured.
+`_nearest_hand_to`'s docstring argues for choosing the nearest body so the working arm is tracked;
+that is reasonable for *which arm* and wrong for *which link*.
+
+**Fix before any further reach measurement:** pin the metric to one named frame -- the grasp point
+-- and record the frame name in the manifest. Until then, no vertical or lateral reach number from
+this repository should be compared against another.
+
+### 10.5 The demonstrations do not bring the wrist to the apple
+
+Over all 208 episodes, `observation.eef_pose` never descends below **z = +0.0721** while the apple
+sits at **-0.0079**, and **0 of 208** episodes bring it within the apple's 3.4 cm radius in
+height. Per-episode lowest wrist z averages **+0.1049**. Every episode nonetheless carries
+`next.reward = 1.0` and one `next.done`.
+
+**This is not yet an apples-to-apples comparison with the rollouts** and must not be reported as
+one: the demo figure is the `eef_pose` wrist frame, while the traces use finger links (§10.4). The
+hand extends below the wrist, so a wrist 8 cm above the apple is consistent with fingers on it.
+
+What it does establish is the next measurement: **compute the rollout's `eef_pose` against the
+demos' `eef_pose`, in one frame.** If the policy's wrist sits materially above the demonstrations'
+wrist floor, the shortfall is imitation fidelity. If it matches, the vertical axis is fine and the
+lateral 5 cm is the whole story. That is a CPU-only re-analysis and it precedes everything in
+§9.5.
+
+### 10.6 Revised order, graph-first
+
+Inserted ahead of §9.5:
+
+| # | Item | Cost |
+| :-- | :--- | :--- |
+| **0a** | Pin `ReachTracer` to one named frame; re-derive all three arms (§10.4) | hours, CPU |
+| **0b** | Compare rollout vs demo `eef_pose` in one frame (§10.5) | hours, CPU |
+| **0c** | Settle reachability against a *measured* G1 envelope, not the heuristic band (§10.3) | hours |
+| **0d** | Write the three runs back to the graph (`policy_diagnostics_sync.py`) | hours |
+
+Then §9.5's items 1-6. **§9.5's item 1 (re-score success) is the graph's
+`success_progress_consistency_check`; run it through the registry rather than ad hoc.**

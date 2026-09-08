@@ -82,6 +82,32 @@ def object_is_lifted_obs(
     return (obj_z > minimal_height).float()
 
 
+def pick_and_place_rl_success(
+    env: ManagerBasedRLEnv,
+    minimal_height: float,
+    max_xy_distance: float,
+    object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
+    destination_cfg: SceneEntityCfg = SceneEntityCfg("destination"),
+    rl_training: bool = False,
+) -> torch.Tensor:
+    """Evaluate success termination for pick-and-place.
+
+    During RL training mode, returns all False to prevent premature episode termination while
+    maintaining an active 'success' term in the termination manager required by SuccessRecorder.
+    During evaluation, checks placement on the destination within tolerance.
+    """
+    if rl_training:
+        return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+    object_instance: RigidObject = env.scene[object_cfg.name]
+    destination_instance: RigidObject = env.scene[destination_cfg.name]
+    obj_pos_w = wp.to_torch(object_instance.data.root_pos_w)[:, :3]
+    dest_pos_w = wp.to_torch(destination_instance.data.root_pos_w)[:, :3]
+    distance_xy = torch.norm(obj_pos_w[:, :2] - dest_pos_w[:, :2], dim=1)
+    is_lifted = obj_pos_w[:, 2] > minimal_height
+    return (distance_xy < max_xy_distance) & is_lifted
+
+
 @configclass
 class PickAndPlaceObservationsCfg:
     """Observation specifications for Pick and Place RL."""
@@ -232,8 +258,8 @@ class PickAndPlaceTerminationsCfg:
     object_dropped: TerminationTermCfg = MISSING
     """Termination when object falls below floor/table threshold."""
 
-    success: TerminationTermCfg | None = None
-    """Optional success termination."""
+    success: TerminationTermCfg = MISSING
+    """Success termination."""
 
 
 @register_task
@@ -329,7 +355,16 @@ class PickAndPlaceTaskRL(PickAndPlaceTask):
                 "asset_cfg": SceneEntityCfg(self.pick_up_object.name),
             },
         )
-        success = None if self.rl_training_mode else self.termination_cfg.success
+        success = TerminationTermCfg(
+            func=pick_and_place_rl_success,
+            params={
+                "minimal_height": self.min_lift_height,
+                "max_xy_distance": self.max_destination_xy_separation or 0.075,
+                "object_cfg": SceneEntityCfg(self.pick_up_object.name),
+                "destination_cfg": SceneEntityCfg(self.destination_location.name),
+                "rl_training": self.rl_training_mode,
+            },
+        )
         return PickAndPlaceTerminationsCfg(
             time_out=TerminationTermCfg(func=mdp_isaac_lab.time_out),
             object_dropped=object_dropped,

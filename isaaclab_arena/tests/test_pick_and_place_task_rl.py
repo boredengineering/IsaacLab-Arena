@@ -59,7 +59,7 @@ def _test_g1_apple_to_plate_rl_environment_build(simulation_app):
     term_cfg = arena_env.task.get_termination_cfg()
     assert hasattr(term_cfg, "time_out")
     assert hasattr(term_cfg, "object_dropped")
-    assert term_cfg.success is None, "In RL training mode, early success termination should be None"
+    assert term_cfg.success is not None, "RL termination must include dynamic success term for SuccessRecorder"
 
     return True
 

@@ -12,7 +12,7 @@
 > should be read against §5c first.
 
 > [!NOTE]
-> **Phase numbering in this document is superseded by [`g1_pick_success_phases.md`](g1_pick_success_phases.md)** (canonical `P0`-`P6` tracker, 2026-09-04). The sections here remain valid as detail; cite phases from the tracker.
+> **Phase numbering in this document is superseded by [`g1_pick_success_phases.md`](g1_pick_success_phases.md)** (canonical `P0`-`P6` tracker, 2026-09-04). For the parallel Reinforcement Learning and Meta-Learning trajectory generation track (PPO / Diff-IK / RAPTOR), see [`g1_manipulation_trajectory_and_meta_learning_plan.md`](g1_manipulation_trajectory_and_meta_learning_plan.md). The sections here remain valid as detail; cite phases from the tracker.
 
 ---
 

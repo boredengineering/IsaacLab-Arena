@@ -12,6 +12,7 @@ import isaaclab.envs.mdp as mdp_isaac_lab
 import warp as wp
 from isaaclab.assets import Articulation, RigidObject
 from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.managers import EventTermCfg
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg, SceneEntityCfg, TerminationTermCfg
@@ -40,6 +41,23 @@ def ee_position_in_robot_root(
         wp.to_torch(robot.data.root_pos_w), wp.to_torch(robot.data.root_quat_w), ee_pos_w
     )
     return ee_pos_b
+
+
+def ee_orientation_in_robot_root(
+    env: ManagerBasedRLEnv,
+    ee_link_name: str,
+    robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Quaternion orientation of the robot end-effector in the robot's root frame."""
+    robot: Articulation = env.scene[robot_cfg.name]
+    assert ee_link_name in robot.data.body_names, f"Link {ee_link_name} not found in robot {robot_cfg.name}"
+    link_idx = robot.data.body_names.index(ee_link_name)
+    ee_pos_w = wp.to_torch(robot.data.body_pos_w)[:, link_idx, :]
+    ee_quat_w = wp.to_torch(robot.data.body_quat_w)[:, link_idx, :]
+    _, ee_quat_b = subtract_frame_transforms(
+        wp.to_torch(robot.data.root_pos_w), wp.to_torch(robot.data.root_quat_w), ee_pos_w, ee_quat_w
+    )
+    return ee_quat_b
 
 
 def ee_to_object_vector(
@@ -162,6 +180,13 @@ class PickAndPlaceObservationsCfg:
                     "ee_link_name": ee_link_name,
                 },
             )
+            ee_orientation = ObsTerm(
+                func=ee_orientation_in_robot_root,
+                params={
+                    "robot_cfg": SceneEntityCfg(robot_name),
+                    "ee_link_name": ee_link_name,
+                },
+            )
             ee_to_object = ObsTerm(
                 func=ee_to_object_vector,
                 params={
@@ -199,6 +224,12 @@ class PickAndPlaceRewardCfg:
     reaching_object: RewardTermCfg = MISSING
     """Reward for reaching the object."""
 
+    approach_alignment: RewardTermCfg = MISSING
+    """Reward for aligning end-effector approach axis toward object."""
+
+    finger_grasp_enclosure: RewardTermCfg = MISSING
+    """Reward for closing fingers near object and opening when far."""
+
     lifting_object: RewardTermCfg = MISSING
     """Reward for lifting the object."""
 
@@ -207,6 +238,9 @@ class PickAndPlaceRewardCfg:
 
     placed_bonus: RewardTermCfg = MISSING
     """Reward bonus for placing object on destination."""
+
+    excess_velocity: RewardTermCfg = MISSING
+    """Penalize excessive object linear speed to prevent swatting."""
 
     action_rate: RewardTermCfg = MISSING
     """Regularization penalty on action rate change."""
@@ -224,6 +258,24 @@ class PickAndPlaceRewardCfg:
             func=pick_and_place_rewards.object_ee_distance,
             params={
                 "std": 0.1,
+                "ee_link_name": ee_link_name,
+                "object_cfg": SceneEntityCfg(pick_up_object.name),
+                "robot_cfg": SceneEntityCfg(robot_name),
+            },
+            weight=2.0,
+        )
+        self.approach_alignment = RewardTermCfg(
+            func=pick_and_place_rewards.ee_approach_vector_alignment,
+            params={
+                "ee_link_name": ee_link_name,
+                "object_cfg": SceneEntityCfg(pick_up_object.name),
+                "robot_cfg": SceneEntityCfg(robot_name),
+            },
+            weight=1.5,
+        )
+        self.finger_grasp_enclosure = RewardTermCfg(
+            func=pick_and_place_rewards.finger_grasp_enclosure,
+            params={
                 "ee_link_name": ee_link_name,
                 "object_cfg": SceneEntityCfg(pick_up_object.name),
                 "robot_cfg": SceneEntityCfg(robot_name),
@@ -271,6 +323,17 @@ class PickAndPlaceRewardCfg:
             func=pick_and_place_rewards.action_rate_l2,
             weight=-0.001,
         )
+
+
+@configclass
+class PickAndPlaceEventsCfg:
+    """Event terms for Pick and Place RL to ensure object reset across episodes."""
+
+    reset_object: EventTermCfg = MISSING
+    """Reset the pick-up object to its default root state upon episode reset."""
+
+    reset_destination: EventTermCfg = MISSING
+    """Reset the destination object to its default root state upon episode reset."""
 
 
 @configclass
@@ -370,6 +433,32 @@ class PickAndPlaceTaskRL(PickAndPlaceTask):
             max_destination_xy_distance=self.max_destination_xy_separation or 0.075,
         )
         self.termination_cfg = self.make_rl_termination_cfg()
+        self.events_cfg = self.make_rl_events_cfg()
+
+    def make_rl_events_cfg(self) -> PickAndPlaceEventsCfg:
+        """Create event terms to guarantee object and destination reset across episodes."""
+        reset_object = EventTermCfg(
+            func=mdp_isaac_lab.reset_root_state_uniform,
+            mode="reset",
+            params={
+                "pose_range": {},
+                "velocity_range": {},
+                "asset_cfg": SceneEntityCfg(self.pick_up_object.name),
+            },
+        )
+        reset_destination = EventTermCfg(
+            func=mdp_isaac_lab.reset_root_state_uniform,
+            mode="reset",
+            params={
+                "pose_range": {},
+                "velocity_range": {},
+                "asset_cfg": SceneEntityCfg(self.destination_location.name),
+            },
+        )
+        return PickAndPlaceEventsCfg(
+            reset_object=reset_object,
+            reset_destination=reset_destination,
+        )
 
     def make_rl_termination_cfg(self) -> PickAndPlaceTerminationsCfg:
         """Create termination terms tailored for RL training."""
@@ -408,3 +497,7 @@ class PickAndPlaceTaskRL(PickAndPlaceTask):
     def get_termination_cfg(self) -> PickAndPlaceTerminationsCfg:
         """Return termination terms for RL."""
         return self.termination_cfg
+
+    def get_events_cfg(self) -> PickAndPlaceEventsCfg:
+        """Return event configuration for RL."""
+        return self.events_cfg

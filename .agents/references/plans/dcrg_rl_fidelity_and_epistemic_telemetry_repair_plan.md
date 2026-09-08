@@ -9,6 +9,7 @@
   3. Ground RL Reward & Termination Functions in Physical Realism (Eliminate Ballistic Flyby Gaming)
   4. Train & Validate a New RSL-RL Policy Checkpoint
   5. Audit, Curate, and Clean the `.agents/references/` Documentation Library
+  6. Trajectory & Action Architecture Next Steps: see [`g1_manipulation_trajectory_and_meta_learning_plan.md`](g1_manipulation_trajectory_and_meta_learning_plan.md) (Task-Space Diff-IK, Keypoint Guidance, RAPTOR Meta-Learning Distillation)
 
 ---
 

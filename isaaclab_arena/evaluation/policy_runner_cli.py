@@ -130,7 +130,7 @@ def add_policy_runner_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--check_settling",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
         help="Check that all movable scene objects physically settle before/during policy inference.",
     )

@@ -167,11 +167,16 @@ def verify_and_settle_scene(
             # consuming it: an object that cannot survive a posture-hold has a scene problem, and
             # continuing to step only produces more phantom episodes.
             if terminated is not None and bool(torch.as_tensor(terminated).any()):
+                term_details = {}
+                if hasattr(base_env, "termination_manager"):
+                    tm = base_env.termination_manager
+                    for i, name in enumerate(getattr(tm, "_term_names", [])):
+                        term_details[name] = tm._term_dones[:, i].tolist()
                 print(
-                    f"[policy_runner] ⚠️  Scene terminated during settling at step {step_idx} "
-                    f"(terminated={torch.as_tensor(terminated).tolist()}). The scene is not stable "
-                    "under a posture hold; the episodes recorded here are settle artefacts, not "
-                    "policy rollouts.",
+                    "[policy_runner] ⚠️  Scene terminated during settling at step"
+                    f" {step_idx} (terminated={torch.as_tensor(terminated).tolist()}, details={term_details}). The"
+                    " scene is not stable under a posture hold; the episodes recorded here are settle artefacts, not"
+                    " policy rollouts.",
                     flush=True,
                 )
                 raise RuntimeError(f"Scene terminated during settling at step {step_idx}; reject this rollout")
@@ -518,14 +523,14 @@ def rollout_policy(
                         pbar.update(1)
                         break
                     if check_settling:
-                        verify_and_settle_scene(
+                        _, settle_obs = verify_and_settle_scene(
                             env,
                             settle_steps=settle_steps,
                             lin_vel_thresh=lin_vel_thresh,
                             ang_vel_thresh=ang_vel_thresh,
                         )
-                        if hasattr(env.unwrapped, "observation_manager"):
-                            obs = env.unwrapped.observation_manager.compute()
+                        if settle_obs is not None:
+                            obs = settle_obs
 
                     policy.reset(env_ids=env_ids)
                     if tracer is not None:

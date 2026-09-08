@@ -112,3 +112,83 @@ def object_excess_velocity_penalty(
 def action_rate_l2(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Penalize large changes in consecutive actions for policy smoothness."""
     return torch.sum(torch.square(env.action_manager.action - env.action_manager.prev_action), dim=1)
+
+
+def ee_approach_vector_alignment(
+    env: ManagerBasedRLEnv,
+    ee_link_name: str,
+    object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
+    robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward alignment between the end-effector approach axis and the vector toward the target object.
+
+    Args:
+        env: The RL environment instance.
+        ee_link_name: Name of the end-effector body link.
+        object_cfg: Scene entity configuration for the target object.
+        robot_cfg: Scene entity configuration for the robot.
+
+    Returns:
+        Cosine alignment score clamped to [0, 1].
+    """
+    from isaaclab.utils.math import quat_apply
+
+    robot: Articulation = env.scene[robot_cfg.name]
+    object: RigidObject = env.scene[object_cfg.name]
+    assert ee_link_name in robot.data.body_names, f"Link {ee_link_name} not found in robot {robot_cfg.name}"
+    link_idx = robot.data.body_names.index(ee_link_name)
+    ee_pos_w = wp.to_torch(robot.data.body_pos_w)[:, link_idx, :]
+    ee_quat_w = wp.to_torch(robot.data.body_quat_w)[:, link_idx, :]
+    obj_pos_w = wp.to_torch(object.data.root_pos_w)[:, :3]
+
+    to_obj = obj_pos_w - ee_pos_w
+    dist = torch.norm(to_obj, dim=-1, keepdim=True).clamp(min=1e-6)
+    target_dir = to_obj / dist
+
+    local_axis = torch.tensor([0.0, 0.0, 1.0], device=ee_pos_w.device).repeat(ee_pos_w.shape[0], 1)
+    hand_dir = quat_apply(ee_quat_w, local_axis)
+
+    cos_sim = torch.sum(hand_dir * target_dir, dim=-1)
+    return torch.clamp(cos_sim, min=0.0)
+
+
+def finger_grasp_enclosure(
+    env: ManagerBasedRLEnv,
+    ee_link_name: str,
+    object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
+    robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward finger enclosure when near the object and open aperture when approaching.
+
+    Args:
+        env: The RL environment instance.
+        ee_link_name: Name of the end-effector link for proximity testing.
+        object_cfg: Scene entity configuration for the target object.
+        robot_cfg: SceneEntityCfg for the robot.
+
+    Returns:
+        Continuous grasp conditioning reward in [0, 1].
+    """
+    robot: Articulation = env.scene[robot_cfg.name]
+    object: RigidObject = env.scene[object_cfg.name]
+    assert ee_link_name in robot.data.body_names, f"Link {ee_link_name} not found in robot {robot_cfg.name}"
+    link_idx = robot.data.body_names.index(ee_link_name)
+    ee_pos_w = wp.to_torch(robot.data.body_pos_w)[:, link_idx, :]
+    obj_pos_w = wp.to_torch(object.data.root_pos_w)[:, :3]
+    distance = torch.norm(obj_pos_w - ee_pos_w, dim=-1)
+
+    finger_indices = [
+        i
+        for i, name in enumerate(robot.data.joint_names)
+        if any(marker in name for marker in ["hand", "thumb", "index", "middle"]) and "left" in name
+    ]
+    if not finger_indices:
+        return torch.zeros_like(distance)
+
+    finger_pos = wp.to_torch(robot.data.joint_pos)[:, finger_indices]
+    mean_flexion = torch.mean(torch.clamp(finger_pos, min=0.0), dim=-1)
+
+    near_mask = distance < 0.08
+    close_reward = (1.0 - torch.tanh(distance / 0.08)) * torch.clamp(mean_flexion, 0.0, 1.0)
+    open_reward = torch.tanh(distance / 0.15) * torch.clamp(1.0 - mean_flexion, 0.0, 1.0)
+    return torch.where(near_mask, close_reward, open_reward)

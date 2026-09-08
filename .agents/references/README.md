@@ -81,8 +81,8 @@ These documents form the theoretical and operational foundation of the agentic g
 Execution plans record technical interventions. Use this status guide to distinguish active vs historical plans:
 
 #### Active / Current Plans:
-- **[g1_manipulation_trajectory_and_meta_learning_plan.md](file:///workspaces/IsaacLab-Arena/.agents/references/plans/g1_manipulation_trajectory_and_meta_learning_plan.md)**: **[ACTIVE TRAJECTORY & META-LEARNING PLAN]** Resolving the trajectory generation, contact exploration, and action space dimensionality bottlenecks using Task-Space Diff-IK ($\mathbb{R}^7$), Multi-Keypoint Guidance, and RAPTOR-style Privileged Teacher $\to$ Recurrent In-Context Student Distillation.
-- **[dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md](file:///workspaces/IsaacLab-Arena/.agents/references/plans/dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md)**: **[ACTIVE TELEMETRY PLAN]** Autopsy and complete implementation of grounded RL rewards, anti-swatting regularization, JSONL predicate ingestion to Neo4j, and SHACL evaluation integrity invariants.
+- **[g1_manipulation_trajectory_and_meta_learning_plan.md](file:///workspaces/IsaacLab-Arena/.agents/references/plans/g1_manipulation_trajectory_and_meta_learning_plan.md)**: **[ACTIVE TRAJECTORY & META-LEARNING PLAN]** Resolving the trajectory generation, contact exploration, and action space dimensionality bottlenecks using Task-Space Diff-IK ($\mathbb{R}^7$), Multi-Keypoint Guidance, and RAPTOR-style Privileged Teacher $\to$ Recurrent In-Context Student Distillation. *Milestones M1 (7-D Diff-IK), M2 (Multi-Keypoint Guidance), and M3 (150-iter Validation Training) are COMPLETED and empirically validated on NVIDIA RTX PRO 6000 Blackwell.*
+- **[dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md](file:///workspaces/IsaacLab-Arena/.agents/references/plans/dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md)**: **[COMPLETED TELEMETRY PLAN]** Autopsy and complete implementation of grounded RL rewards, anti-swatting regularization, JSONL predicate ingestion to Neo4j, and SHACL evaluation integrity invariants. Merged and active in Neo4j DCRG graph.
 - **[autonomous_evaluation_self_healing_flywheel_plan.md](file:///workspaces/IsaacLab-Arena/.agents/references/plans/autonomous_evaluation_self_healing_flywheel_plan.md)**: Self-healing evaluation flywheel architecture.
 - **[codex_devcontainer_integration_plan.md](file:///workspaces/IsaacLab-Arena/.agents/references/plans/codex_devcontainer_integration_plan.md)**: Docker devcontainer execution protocols.
 - **[g1_pick_success_phases.md](file:///workspaces/IsaacLab-Arena/.agents/references/plans/g1_pick_success_phases.md)**: Humanoid tabletop pick-and-place roadmap (P0–P7).
@@ -122,7 +122,7 @@ Execution plans record technical interventions. Use this status guide to disting
 docker exec -it -w /workspaces/isaaclab_arena -e DISPLAY=:1 -e OMNICLIENT_HUB_MODE=disabled isaaclab_arena-latest \
   /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
   --policy_type rsl_rl \
-  --checkpoint_path logs/rsl_rl/g1_apple_to_plate_rl/<timestamp>/model_<iteration>.pt \
+  --checkpoint_path logs/rsl_rl/g1_diff_ik_7d_validation/2026-09-08_21-20-25/model_149.pt \
   --num_episodes 5 \
   --viz kit \
   g1_apple_to_plate_rl
@@ -134,10 +134,11 @@ docker exec -it -w /workspaces/isaaclab_arena -e OMNICLIENT_HUB_MODE=disabled is
   /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
   --livestream 1 \
   --policy_type rsl_rl \
-  --checkpoint_path logs/rsl_rl/g1_apple_to_plate_rl/<timestamp>/model_<iteration>.pt \
+  --checkpoint_path logs/rsl_rl/g1_diff_ik_7d_validation/2026-09-08_21-20-25/model_149.pt \
   --num_episodes 5 \
   g1_apple_to_plate_rl
 ```
+
 Open `http://localhost:8211/streaming/client/` in any browser.
 
 ### 3. Training an RSL-RL Policy

@@ -1,8 +1,10 @@
 # DCRG Epistemic Telemetry Repair, Grounded RL Manipulation, and Reference Knowledge Base Modernization Plan
 
 - **Date**: 2026-09-08
-- **Status**: ACTIVE / EXECUTION READY
+- **Status**: COMPLETED & MERGED INTO DCRG GRAPH
 - **Author**: Antigravity Agentic Systems Team
+- **Validation Checkpoint**: `logs/rsl_rl/g1_diff_ik_7d_validation/2026-09-08_21-20-25/model_149.pt`
+- **Successor Plan**: [`g1_manipulation_trajectory_and_meta_learning_plan.md`](g1_manipulation_trajectory_and_meta_learning_plan.md) (Task-Space Diff-IK, Keypoint Guidance, RAPTOR Meta-Learning Distillation)
 - **Scope**:
   1. Fix Telemetry Ingestion Gap & Ingest Physical Predicates (`episode_results_rank*.jsonl` $\to$ `eval_telemetry.ttl` $\to$ Neo4j)
   2. Implement W3C SHACL Evaluation Integrity Invariant (`arena:EvaluationRunIntegrityShape`)

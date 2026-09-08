@@ -36,6 +36,7 @@ from isaaclab_arena.utils.cameras import ArenaCameraCfg
 from isaaclab_arena.utils.pose import Pose
 from isaaclab_arena_g1.g1_env.mdp import g1_events as g1_events_mdp
 from isaaclab_arena_g1.g1_env.mdp import g1_observations as g1_observations_mdp
+from isaaclab_arena_g1.g1_env.mdp.actions.g1_decoupled_wbc_diff_ik_action_cfg import G1DecoupledWBCDiffIKActionCfg
 from isaaclab_arena_g1.g1_env.mdp.actions.g1_decoupled_wbc_joint_action_cfg import G1DecoupledWBCJointActionCfg
 from isaaclab_arena_g1.g1_env.mdp.actions.g1_decoupled_wbc_pink_action_cfg import G1DecoupledWBCPinkActionCfg
 
@@ -206,6 +207,27 @@ class G1WBCAgileJointEmbodiment(G1EmbodimentBase):
         super().__init__(enable_cameras, initial_pose)
         self.scene_config = G1AgileSceneCfg()
         self.action_config = G1WBCAgileJointActionCfg()
+        self.observation_config = G1WBCJointObservationsCfg()
+        self.observation_config.policy.concatenate_terms = self.concatenate_observation_terms
+        self.observation_config.wbc.concatenate_terms = self.concatenate_observation_terms
+        self.event_config = G1WBCJointEventCfg()
+
+
+@register_asset
+class G1WBCAgileDiffIKEmbodiment(G1EmbodimentBase):
+    """Embodiment for the G1 robot with AGILE WBC policy and GPU Differential IK upperbody control."""
+
+    name = "g1_wbc_agile_diff_ik"
+
+    def __init__(
+        self,
+        enable_cameras: bool = False,
+        initial_pose: Pose | None = None,
+        lock_waist: bool = False,
+    ):
+        super().__init__(enable_cameras, initial_pose)
+        self.scene_config = G1AgileSceneCfg()
+        self.action_config = G1WBCAgileDiffIKActionCfg()
         self.observation_config = G1WBCJointObservationsCfg()
         self.observation_config.policy.concatenate_terms = self.concatenate_observation_terms
         self.observation_config.wbc.concatenate_terms = self.concatenate_observation_terms
@@ -767,6 +789,17 @@ class G1WBCAgilePinkActionCfg:
         wbc_version="agile",
         upperbody_active_joint_groups=["arms"],
         upperbody_extra_active_joints=["waist_roll_joint", "waist_yaw_joint", "waist_pitch_joint"],
+    )
+
+
+@configclass
+class G1WBCAgileDiffIKActionCfg:
+    """Action specifications for the MDP, for G1 AGILE WBC with Differential IK upper body."""
+
+    g1_action: ActionTermCfg = G1DecoupledWBCDiffIKActionCfg(
+        asset_name="robot",
+        joint_names=[".*"],
+        wbc_version="agile",
     )
 
 

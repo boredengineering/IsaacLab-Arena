@@ -230,6 +230,9 @@ class PickAndPlaceRewardCfg:
     finger_grasp_enclosure: RewardTermCfg = MISSING
     """Reward for closing fingers near object and opening when far."""
 
+    multi_keypoint_guidance: RewardTermCfg = MISSING
+    """Reward for multi-keypoint enclosure of the object by hand links."""
+
     lifting_object: RewardTermCfg = MISSING
     """Reward for lifting the object."""
 
@@ -281,6 +284,15 @@ class PickAndPlaceRewardCfg:
                 "robot_cfg": SceneEntityCfg(robot_name),
             },
             weight=2.0,
+        )
+        self.multi_keypoint_guidance = RewardTermCfg(
+            func=pick_and_place_rewards.multi_keypoint_grasp_guidance,
+            params={
+                "std": 0.08,
+                "object_cfg": SceneEntityCfg(pick_up_object.name),
+                "robot_cfg": SceneEntityCfg(robot_name),
+            },
+            weight=3.0,
         )
         self.lifting_object = RewardTermCfg(
             func=pick_and_place_rewards.object_is_lifted,

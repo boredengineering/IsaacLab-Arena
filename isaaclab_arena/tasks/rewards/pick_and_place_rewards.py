@@ -177,18 +177,61 @@ def finger_grasp_enclosure(
     obj_pos_w = wp.to_torch(object.data.root_pos_w)[:, :3]
     distance = torch.norm(obj_pos_w - ee_pos_w, dim=-1)
 
-    finger_indices = [
-        i
-        for i, name in enumerate(robot.data.joint_names)
-        if any(marker in name for marker in ["hand", "thumb", "index", "middle"]) and "left" in name
-    ]
-    if not finger_indices:
-        return torch.zeros_like(distance)
+    joint_pos_all = wp.to_torch(robot.data.joint_pos)
+    flexions = []
+    for i, name in enumerate(robot.data.joint_names):
+        if "left_hand" in name:
+            pos = joint_pos_all[:, i]
+            if "index" in name or "middle" in name:
+                # Closed curl is negative (down to -1.2 rad), open is 0.0
+                flexions.append(torch.clamp(-pos / 1.0, 0.0, 1.0))
+            elif "thumb_1" in name or "thumb_2" in name:
+                # Closed curl is positive (up to +0.7 rad), open is 0.0
+                flexions.append(torch.clamp(pos / 0.7, 0.0, 1.0))
 
-    finger_pos = wp.to_torch(robot.data.joint_pos)[:, finger_indices]
-    mean_flexion = torch.mean(torch.clamp(finger_pos, min=0.0), dim=-1)
+    if flexions:
+        mean_flexion = torch.mean(torch.stack(flexions, dim=-1), dim=-1)
+    else:
+        mean_flexion = torch.zeros_like(distance)
 
     near_mask = distance < 0.08
     close_reward = (1.0 - torch.tanh(distance / 0.08)) * torch.clamp(mean_flexion, 0.0, 1.0)
     open_reward = torch.tanh(distance / 0.15) * torch.clamp(1.0 - mean_flexion, 0.0, 1.0)
     return torch.where(near_mask, close_reward, open_reward)
+
+
+def multi_keypoint_grasp_guidance(
+    env: ManagerBasedRLEnv,
+    object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
+    robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    std: float = 0.08,
+) -> torch.Tensor:
+    """Reward multi-keypoint enclosure of the object by hand links.
+
+    Args:
+        env: The RL environment instance.
+        object_cfg: Scene entity configuration for the target object.
+        robot_cfg: Scene entity configuration for the robot.
+        std: Gaussian kernel bandwidth (standard deviation in meters).
+
+    Returns:
+        Mean exponential keypoint proximity score in [0, 1].
+    """
+    robot: Articulation = env.scene[robot_cfg.name]
+    object: RigidObject = env.scene[object_cfg.name]
+    obj_pos_w = wp.to_torch(object.data.root_pos_w)[:, :3]
+
+    keypoint_links = [
+        "left_wrist_yaw_link",
+        "left_hand_thumb_2_link",
+        "left_hand_index_1_link",
+        "left_hand_middle_1_link",
+    ]
+    avail_indices = [robot.data.body_names.index(name) for name in keypoint_links if name in robot.data.body_names]
+    if not avail_indices:
+        return torch.zeros(env.num_envs, device=obj_pos_w.device)
+
+    body_pos = wp.to_torch(robot.data.body_pos_w)[:, avail_indices, :]
+    dists = torch.norm(body_pos - obj_pos_w.unsqueeze(1), dim=-1)
+    keypoint_scores = torch.exp(-torch.square(dists) / (2.0 * std * std))
+    return torch.mean(keypoint_scores, dim=-1)

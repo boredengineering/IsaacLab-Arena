@@ -26,6 +26,7 @@ def _test_g1_apple_to_plate_rl_environment_build(simulation_app):
     arena_env = factory.build(cfg)
 
     assert arena_env.name == "g1_apple_to_plate_rl"
+    assert arena_env.embodiment.name == "g1_wbc_agile_diff_ik"
     assert isinstance(arena_env.task, PickAndPlaceTaskRL)
     assert arena_env.rl_framework_entry_point == "rsl_rl_cfg_entry_point"
     assert "RLPolicyCfg" in arena_env.rl_policy_cfg
@@ -49,17 +50,38 @@ def _test_g1_apple_to_plate_rl_environment_build(simulation_app):
     assert hasattr(rew_cfg, "transporting_object")
     assert hasattr(rew_cfg, "placed_bonus")
     assert hasattr(rew_cfg, "action_rate")
+    assert hasattr(rew_cfg, "multi_keypoint_guidance")
     assert rew_cfg.reaching_object.weight == 2.0
     assert rew_cfg.lifting_object.weight == 10.0
     assert rew_cfg.transporting_object.weight == 15.0
     assert rew_cfg.placed_bonus.weight == 20.0
     assert rew_cfg.action_rate.weight == -0.001
+    assert rew_cfg.multi_keypoint_guidance.weight == 3.0
 
     # Check RL termination terms
     term_cfg = arena_env.task.get_termination_cfg()
     assert hasattr(term_cfg, "time_out")
     assert hasattr(term_cfg, "object_dropped")
     assert term_cfg.success is not None, "RL termination must include dynamic success term for SuccessRecorder"
+
+    # Verify environment instantiation and 7-D Diff-IK action stepping
+    import torch
+
+    from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
+    from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
+
+    builder = ArenaEnvBuilder(arena_env, ArenaEnvBuilderCfg(num_envs=2))
+    env = builder.make_registered()
+    obs, _ = env.reset()
+    assert (
+        env.unwrapped.action_manager.total_action_dim == 7
+    ), f"Expected action dim 7 for Diff-IK, got {env.unwrapped.action_manager.total_action_dim}"
+
+    action = torch.zeros((2, 7), device=env.unwrapped.device)
+    obs, rew, term, trunc, info = env.step(action)
+    assert obs["policy"].shape[0] == 2
+    assert not torch.isnan(rew).any(), "Rewards contain NaNs"
+    env.close()
 
     return True
 

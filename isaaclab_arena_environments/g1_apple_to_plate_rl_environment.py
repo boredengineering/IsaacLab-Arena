@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class G1AppleToPlateRLEnvironmentCfg(ArenaEnvironmentCfg):
     """Configure the G1 tabletop apple to plate RL training environment."""
 
-    embodiment: str = "g1_wbc_agile_joint"
+    embodiment: str = "g1_wbc_agile_diff_ik"
     """The robot embodiment to use."""
 
     pick_up_object: str = "apple_01_objaverse_robolab"

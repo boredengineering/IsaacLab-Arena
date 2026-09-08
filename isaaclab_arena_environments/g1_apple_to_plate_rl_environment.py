@@ -37,7 +37,7 @@ class G1AppleToPlateRLEnvironmentCfg(ArenaEnvironmentCfg):
     episode_length_s: float = 6.0
     """Episode duration in seconds."""
 
-    rl_training_mode: bool = True
+    rl_training_mode: bool = False
     """Whether to run in RL training mode (no early success termination)."""
 
 

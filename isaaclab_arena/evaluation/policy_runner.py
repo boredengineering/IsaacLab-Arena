@@ -67,6 +67,23 @@ def is_distributed(args_cli: argparse.Namespace) -> bool:
     )
 
 
+def make_recorded_environment(arena_builder, output_dir: str, render_mode: str | None):
+    """Build the environment with HDF5 metrics in this run's writable artifact directory.
+
+    Args:
+        arena_builder: Builder for the configured scene and policy task.
+        output_dir: Evaluation run directory, also used for JSON and video results.
+        render_mode: Gymnasium render mode for the video recorder.
+
+    Returns:
+        Registered, wrapped environment with unchanged task and physics configuration.
+    """
+    env_cfg, env_kwargs = arena_builder.compose_manager_cfg()
+    if getattr(env_cfg, "recorders", None) is not None:
+        env_cfg.recorders.dataset_export_dir_path = output_dir
+    return arena_builder.make_registered(env_cfg=env_cfg, env_kwargs=env_kwargs, render_mode=render_mode)
+
+
 def build_neutral_hold_action(base_env) -> torch.Tensor:
     """Build an action that holds the robot's current posture, for use while the scene settles.
 
@@ -157,7 +174,7 @@ def verify_and_settle_scene(
                     "policy rollouts.",
                     flush=True,
                 )
-                break
+                raise RuntimeError(f"Scene terminated during settling at step {step_idx}; reject this rollout")
             # Bipedal humanoid robots (e.g. Unitree G1 WBC) require ~35-45 steps to damp out
             # startup ground contact depenetration and reach steady standing balance.
             if step_idx >= 40:
@@ -491,6 +508,15 @@ def rollout_policy(
                         f" and truncated env_ids: {truncated.nonzero().flatten()}"
                     )
                     env_ids = (terminated | truncated).nonzero().flatten()
+                    completed_episodes = env_ids.shape[0]
+                    num_episodes_completed += completed_episodes
+                    if num_episodes is not None:
+                        pbar.update(completed_episodes)
+                        if num_episodes_completed >= num_episodes:
+                            break
+                    if num_steps is not None and num_steps_completed + 1 >= num_steps:
+                        pbar.update(1)
+                        break
                     if check_settling:
                         verify_and_settle_scene(
                             env,
@@ -504,19 +530,12 @@ def rollout_policy(
                     policy.reset(env_ids=env_ids)
                     if tracer is not None:
                         tracer.begin_episode(env_ids)
-                    # Break if number of episodes is reached
-                    completed_episodes = env_ids.shape[0]
-                    num_episodes_completed += completed_episodes
                     if hasattr(env.unwrapped.cfg, "metrics") and env.unwrapped.cfg.metrics is not None:
                         metrics = env.unwrapped.compute_metrics()
                         tqdm.tqdm.write(
                             f"[Rank {get_local_rank()}/{get_world_size()}] Metrics:"
                             f" {metrics_to_plain_python_types(metrics)}"
                         )
-                    if num_episodes is not None:
-                        pbar.update(completed_episodes)
-                        if num_episodes_completed >= num_episodes:
-                            break
                 # Break if number of steps is reached
                 num_steps_completed += 1
                 if num_steps is not None:
@@ -646,7 +665,7 @@ def main():
             record_camera_video=args_cli.record_camera_video,
             video_base_dir=output_dir,
         )
-        env = arena_builder.make_registered(render_mode=video_cfg.render_mode)
+        env = make_recorded_environment(arena_builder, output_dir, video_cfg.render_mode)
 
         # Write per-episode results to disk.
         results_path = os.path.join(output_dir, f"episode_results_rank{local_rank}.jsonl")

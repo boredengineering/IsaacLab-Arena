@@ -2,7 +2,13 @@
 
 **Date**: 2026-09-07
 **Location**: `.agents/references/agentic_env_generation/dcrg_active_inference_paradigm_shift.md`
-**Status**: Production-Grade Architectural Implementation Plan
+**Status**: Historical research proposal; not a production-readiness claim.
+
+Current implementation architecture and merge gates live in
+[`docs/pages/concepts/dcrg.rst`](../../../docs/pages/concepts/dcrg.rst).
+The plan below is retained as research history. Its claims about SGLD, Bethe
+inference, predicted transfer rates, and v35 success are not verified acceptance
+criteria. Use the current architecture and measured run artifacts instead.
 **Related Files**:
 - [`graph_topology_and_rdf_star_proof.md`](graph_topology_and_rdf_star_proof.md)
 - [`spatial_factor_graph.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/relations/spatial_factor_graph.py)

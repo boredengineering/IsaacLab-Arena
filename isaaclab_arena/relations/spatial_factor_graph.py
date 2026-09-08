@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Continuous Spatial Factor Graph & Dynamic Loopy Belief Propagation (LBP) Relaxation."""
+"""Continuous spatial factor energies and deterministic or stochastic Adam relaxation."""
 
 from __future__ import annotations
 
@@ -45,6 +45,26 @@ class SpatialFactorGraph:
         self.variables: dict[str, VariableNode] = {}
         self.factors: list[dict[str, Any]] = []
 
+    def _finite_tensor(self, values: Any, name: str) -> torch.Tensor:
+        """Convert numerical inputs while rejecting nonfinite float32 representations."""
+        tensor = torch.tensor(values, dtype=torch.float32, device=self.device)
+        assert torch.isfinite(tensor).all(), f"{name} must contain finite float32 values"
+        return tensor
+
+    @staticmethod
+    def _nonnegative(value: float, name: str) -> None:
+        """Validate a finite, nonnegative scalar parameter."""
+        assert math.isfinite(value) and value >= 0.0, f"{name} must be finite and nonnegative"
+
+    @staticmethod
+    def _validate_relaxation(max_iters: int, lr: float, energy_tol: float) -> None:
+        """Validate optimizer controls before any early return or state mutation."""
+        assert (
+            isinstance(max_iters, int) and not isinstance(max_iters, bool) and max_iters >= 0
+        ), "max_iters must be a nonnegative integer"
+        assert math.isfinite(lr) and lr > 0.0, "lr must be finite and positive"
+        SpatialFactorGraph._nonnegative(energy_tol, "energy_tol")
+
     def add_variable(
         self,
         name: str,
@@ -53,7 +73,12 @@ class SpatialFactorGraph:
         bounds: tuple[float, float, float, float] | None = None,
     ) -> None:
         """Register an entity pose as a continuous variable node."""
-        init_tensor = torch.tensor(initial_pose, dtype=torch.float32, device=self.device)
+        init_tensor = self._finite_tensor(initial_pose, "initial_pose")
+        assert init_tensor.ndim == 1 and init_tensor.numel() in (3, 4), "initial_pose must have 3 or 4 coordinates"
+        if bounds is not None:
+            bound_tensor = self._finite_tensor(bounds, "bounds")
+            assert bound_tensor.shape == (4,), "bounds must be (xmin, xmax, ymin, ymax)"
+            assert bounds[0] <= bounds[1] and bounds[2] <= bounds[3], "bounds must be ordered"
         if not is_fixed:
             init_tensor.requires_grad_(True)
         self.variables[name] = VariableNode(
@@ -73,13 +98,19 @@ class SpatialFactorGraph:
         factor_id: str | None = None,
     ) -> str:
         """Add a support containment factor keeping child within parent surface [xmin, xmax, ymin, ymax, z_deck]."""
+        self._nonnegative(weight, "weight")
+        self._nonnegative(edge_margin, "edge_margin")
+        surface = self._finite_tensor(surface_bounds, "surface_bounds")
+        assert surface.shape == (5,), "surface_bounds must have 5 coordinates"
+        assert surface_bounds[0] + edge_margin <= surface_bounds[1] - edge_margin, "empty support X interval"
+        assert surface_bounds[2] + edge_margin <= surface_bounds[3] - edge_margin, "empty support Y interval"
         fid = factor_id or f"psi_support_{child_name}_on_{parent_name}"
         self.factors.append({
             "id": fid,
             "type": "support",
             "child": child_name,
             "parent": parent_name,
-            "bounds": torch.tensor(surface_bounds, dtype=torch.float32, device=self.device),
+            "bounds": surface,
             "margin": float(edge_margin),
             "weight": float(weight),
         })
@@ -95,6 +126,9 @@ class SpatialFactorGraph:
         factor_id: str | None = None,
     ) -> str:
         """Add a kinematic reachability factor keeping robot base within dexterity envelope of target."""
+        self._nonnegative(weight, "weight")
+        self._nonnegative(target_distance, "target_distance")
+        self._nonnegative(tolerance, "tolerance")
         fid = factor_id or f"psi_reach_{robot_name}_to_{target_name}"
         self.factors.append({
             "id": fid,
@@ -116,6 +150,8 @@ class SpatialFactorGraph:
         factor_id: str | None = None,
     ) -> str:
         """Add a collision avoidance factor repelling entity_a and entity_b."""
+        self._nonnegative(weight, "weight")
+        self._nonnegative(min_distance, "min_distance")
         fid = factor_id or f"psi_clear_{entity_a}_{entity_b}"
         self.factors.append({
             "id": fid,
@@ -135,6 +171,8 @@ class SpatialFactorGraph:
         factor_id: str | None = None,
     ) -> str:
         """Add a ground snapping factor locking z-elevation to floor terrain."""
+        self._nonnegative(weight, "weight")
+        assert math.isfinite(floor_z), "floor_z must be finite"
         fid = factor_id or f"psi_ground_{entity_name}"
         self.factors.append({
             "id": fid,
@@ -153,6 +191,7 @@ class SpatialFactorGraph:
         factor_id: str | None = None,
     ) -> str:
         """Add an orientation factor directing subject's forward heading toward target."""
+        self._nonnegative(weight, "weight")
         fid = factor_id or f"psi_facing_{subject_name}_to_{target_name}"
         self.factors.append({
             "id": fid,
@@ -176,11 +215,17 @@ class SpatialFactorGraph:
 
         Shifts the target variable node toward the verified reach basin of the policy.
         """
+        self._nonnegative(weight, "weight")
+        delta_tensor = self._finite_tensor(measured_reach_delta, "measured_reach_delta")
+        sigma_tensor = self._finite_tensor(sigma, "sigma")
+        assert delta_tensor.shape == (3,), "measured_reach_delta must have 3 coordinates"
+        assert sigma_tensor.shape == (3,) and (sigma_tensor > 0).all(), "sigma must have 3 positive coordinates"
         fid = factor_id or f"psi_empirical_reach_{robot_name}_to_{target_name}"
         # Target should shift by measured_reach_delta (hand_pos_minus_obj_pos)
         target_var = self.variables[target_name]
         init_pos = target_var.mu.detach().clone()[:3]
-        target_opt = init_pos + torch.tensor(measured_reach_delta, dtype=torch.float32, device=self.device)
+        target_opt = init_pos + delta_tensor
+        assert torch.isfinite(target_opt).all(), "empirical optimal position must be finite"
 
         self.factors.append({
             "id": fid,
@@ -188,7 +233,7 @@ class SpatialFactorGraph:
             "robot": robot_name,
             "target": target_name,
             "optimal_pos": target_opt,
-            "sigma": torch.tensor(sigma, dtype=torch.float32, device=self.device),
+            "sigma": sigma_tensor,
             "weight": float(weight),
         })
         return fid
@@ -274,50 +319,104 @@ class SpatialFactorGraph:
         momentum: float = 0.5,
         energy_tol: float = 1e-3,
     ) -> FactorGraphRelaxationResult:
-        """Perform continuous Loopy Belief Propagation relaxation via damped gradient energy minimization."""
+        """Minimize factor energy with Adam, projecting free poses onto their XY bounds.
+
+        Args:
+            max_iters: Maximum number of updates; zero evaluates the bounded initial state.
+            lr: Adam learning rate.
+            momentum: Adam's first-moment decay coefficient.
+            energy_tol: Early-stop threshold; reported convergence retains energy < 0.1.
+
+        Returns:
+            Best evaluated state, restored in the graph, with matching unrounded energies,
+            poses rounded to four decimals (yaw in degrees), and actual update count.
+            Nonfinite updates or gradients stop optimization and retain the best finite state.
+        """
+        self._validate_relaxation(max_iters, lr, energy_tol)
+        assert math.isfinite(momentum) and 0.0 <= momentum < 1.0, "momentum must be in [0, 1)"
         optim_vars = [v.mu for v in self.variables.values() if not v.is_fixed]
         if not optim_vars:
-            _, factor_energies = self.compute_energies()
-            return FactorGraphRelaxationResult(
-                converged=True,
-                iterations=0,
-                total_energy=0.0,
-                poses={name: v.mu.detach().cpu().tolist() for name, v in self.variables.items()},
-                factor_energies=factor_energies,
-                conflicting_factors=[],
-            )
+            return self._current_result(iterations=0)
 
         optimizer = torch.optim.Adam(optim_vars, lr=lr, betas=(momentum, 0.999))
+        return self._relax_adam(optimizer, max_iters, lr, energy_tol)
+
+    def _relax_adam(
+        self,
+        optimizer: torch.optim.Optimizer,
+        max_iters: int,
+        lr: float,
+        energy_tol: float,
+        temperature: float = 0.0,
+        cooling_rate: float = 1.0,
+        generator: torch.Generator | None = None,
+    ) -> FactorGraphRelaxationResult:
+        """Minimize energy and restore the best evaluated state, including the last update."""
+        self._project_bounds()
         best_energy = float("inf")
-        best_poses = {name: v.mu.detach().cpu().clone() for name, v in self.variables.items()}
-        final_factor_energies: dict[str, float] = {}
-
-        for step in range(max_iters):
+        best_poses = {name: v.mu.detach().clone() for name, v in self.variables.items()}
+        iterations = 0
+        for step in range(max_iters + 1):
             optimizer.zero_grad()
-            total_energy, factor_energies = self.compute_energies()
-            final_factor_energies = factor_energies
-
-            energy_val = float(total_energy.detach().cpu().item())
-            if energy_val < best_energy:
-                best_energy = energy_val
-                best_poses = {name: v.mu.detach().cpu().clone() for name, v in self.variables.items()}
-
-            if energy_val < energy_tol:
+            total_energy, _ = self.compute_energies()
+            energy = float(total_energy.detach().cpu().item())
+            finite_state = math.isfinite(energy) and all(torch.isfinite(v.mu).all() for v in self.variables.values())
+            assert step != 0 or finite_state, "initial poses and energy must be finite"
+            if not finite_state:
                 break
-
+            if energy < best_energy:
+                best_energy = energy
+                best_poses = {name: v.mu.detach().clone() for name, v in self.variables.items()}
+            if step == max_iters or energy < energy_tol or not total_energy.requires_grad:
+                break
             total_energy.backward()
+            if temperature > 0.0:
+                with torch.no_grad():
+                    for v in self.variables.values():
+                        if not v.is_fixed and v.mu.grad is not None:
+                            noise = torch.randn(v.mu.shape, dtype=v.mu.dtype, device=v.mu.device, generator=generator)
+                            v.mu.grad.add_(noise * math.sqrt(2.0 * lr * temperature))
+            if any(
+                v.mu.grad is not None and not torch.isfinite(v.mu.grad).all()
+                for v in self.variables.values()
+                if not v.is_fixed
+            ):
+                break
             optimizer.step()
+            self._project_bounds()
+            temperature *= cooling_rate
+            iterations = step + 1
 
-        conflicts = [fid for fid, fe in final_factor_energies.items() if fe > 0.05]
-        converged = best_energy < 0.1
+        with torch.no_grad():
+            for name, v in self.variables.items():
+                if not v.is_fixed:
+                    v.mu.copy_(best_poses[name])
+        optimizer.zero_grad()
+        return self._current_result(iterations)
 
+    def _project_bounds(self) -> None:
+        """Project free XY coordinates without modifying fixed anchors or yaw radians."""
+        with torch.no_grad():
+            for v in self.variables.values():
+                if not v.is_fixed and v.bounds is not None:
+                    xmin, xmax, ymin, ymax = v.bounds
+                    v.mu[0].clamp_(xmin, xmax)
+                    v.mu[1].clamp_(ymin, ymax)
+
+    def _current_result(self, iterations: int) -> FactorGraphRelaxationResult:
+        """Report energies and formatted poses from the same graph state."""
+        total, energies = self.compute_energies()
+        energy = float(total.detach().cpu().item())
+        assert math.isfinite(energy) and all(
+            torch.isfinite(v.mu).all() for v in self.variables.values()
+        ), "result poses and energy must be finite"
         return FactorGraphRelaxationResult(
-            converged=converged,
-            iterations=step + 1,
-            total_energy=float(round(best_energy, 4)),
-            poses=self._format_poses(best_poses),
-            factor_energies=final_factor_energies,
-            conflicting_factors=conflicts,
+            converged=energy < 0.1,
+            iterations=iterations,
+            total_energy=energy,
+            poses=self._format_poses({name: v.mu.detach().cpu() for name, v in self.variables.items()}),
+            factor_energies=energies,
+            conflicting_factors=[fid for fid, value in energies.items() if value > 0.05],
         )
 
     def _format_poses(self, poses: dict[str, torch.Tensor]) -> dict[str, list[float]]:
@@ -339,65 +438,40 @@ class SpatialFactorGraph:
         temperature: float = 0.10,
         cooling_rate: float = 0.98,
         energy_tol: float = 1e-3,
+        seed: int | None = None,
     ) -> FactorGraphRelaxationResult:
-        """Perform Stochastic Gradient Langevin Dynamics (SGLD) relaxation.
+        """Minimize energy with annealed gradient-noise Adam and XY-bound projection.
 
-        Injects annealed Gaussian thermal noise to gradients during energy minimization,
-        allowing escape from shallow discrete local minima and continuous exploration
-        of optimal reach basins.
+        At step t, Adam receives g + sqrt(2 * lr * temperature * cooling_rate**t)
+        times independent standard Gaussian noise. This is a heuristic optimizer,
+        not Langevin dynamics, belief propagation, or posterior sampling.
+
+        Args:
+            max_iters: Maximum number of optimizer updates; zero evaluates the initial state.
+            lr: Adam learning rate.
+            temperature: Initial gradient-noise scale parameter; zero disables noise.
+            cooling_rate: Multiplicative decay of temperature per update.
+            energy_tol: Early-stop energy threshold (reported convergence remains energy < 0.1).
+            seed: Local generator seed; None uses local nondeterministic seeding. Neither
+                choice changes global torch random state.
+
+        Returns:
+            Best evaluated state with matching energies and poses formatted in degrees.
         """
+        self._validate_relaxation(max_iters, lr, energy_tol)
+        self._nonnegative(temperature, "temperature")
+        assert math.isfinite(cooling_rate) and 0.0 <= cooling_rate <= 1.0, "cooling_rate must be in [0, 1]"
+        assert seed is None or (
+            isinstance(seed, int) and not isinstance(seed, bool) and 0 <= seed < 2**64
+        ), "seed must be an integer in [0, 2**64) or None"
         optim_vars = [v.mu for v in self.variables.values() if not v.is_fixed]
         if not optim_vars:
-            _, factor_energies = self.compute_energies()
-            return FactorGraphRelaxationResult(
-                converged=True,
-                iterations=0,
-                total_energy=0.0,
-                poses=self._format_poses({name: v.mu.detach().cpu() for name, v in self.variables.items()}),
-                factor_energies=factor_energies,
-                conflicting_factors=[],
-            )
+            return self._current_result(iterations=0)
 
         optimizer = torch.optim.Adam(optim_vars, lr=lr)
-        current_temp = float(temperature)
-        best_energy = float("inf")
-        best_poses = {name: v.mu.detach().cpu().clone() for name, v in self.variables.items()}
-        final_factor_energies: dict[str, float] = {}
-
-        for step in range(max_iters):
-            optimizer.zero_grad()
-            total_energy, factor_energies = self.compute_energies()
-            final_factor_energies = factor_energies
-
-            energy_val = float(total_energy.detach().cpu().item())
-            if energy_val < best_energy:
-                best_energy = energy_val
-                best_poses = {name: v.mu.detach().cpu().clone() for name, v in self.variables.items()}
-
-            if energy_val < energy_tol:
-                break
-
-            total_energy.backward()
-
-            # Inject Langevin stochastic noise to non-fixed variables
-            if current_temp > 1e-5:
-                with torch.no_grad():
-                    for v in self.variables.values():
-                        if not v.is_fixed and v.mu.grad is not None:
-                            noise = torch.randn_like(v.mu) * math.sqrt(2.0 * lr * current_temp)
-                            v.mu.grad.add_(noise)
-
-            optimizer.step()
-            current_temp *= cooling_rate
-
-        conflicts = [fid for fid, fe in final_factor_energies.items() if fe > 0.05]
-        converged = best_energy < 0.1
-
-        return FactorGraphRelaxationResult(
-            converged=converged,
-            iterations=step + 1,
-            total_energy=float(round(best_energy, 4)),
-            poses=self._format_poses(best_poses),
-            factor_energies=final_factor_energies,
-            conflicting_factors=conflicts,
-        )
+        generator = torch.Generator(device=self.device)
+        if seed is None:
+            generator.seed()
+        else:
+            generator.manual_seed(seed)
+        return self._relax_adam(optimizer, max_iters, lr, energy_tol, temperature, cooling_rate, generator)

@@ -42,24 +42,12 @@ categorical: no policy-config patch closes it.** Check it before proposing any m
 
 ## 2. Graph-RAG experience memory — needs Neo4j, on a non-default port
 
-Neo4j-backed, ranked by measured evaluation outcome. As of 2026-09-07 it holds **85
-EvaluationRun nodes, 653 episodes**, 25 `EnvironmentGraph` and 4 `Policy` nodes.
-
-```bash
-docker start neo4j-arena          # often Exited; check `docker ps -a`
-# It publishes 7475/7689, NOT the defaults -- 7474/7687 are held by other processes here.
-docker exec isaaclab_arena-latest bash -lc \
-  'cd /workspaces/isaaclab_arena && NEO4J_URI=bolt://localhost:7689 /isaac-sim/python.sh -c "
-from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import get_neo4j_driver
-d=get_neo4j_driver()
-with d.session() as s:
-    for r in s.run(\"MATCH (n) UNWIND labels(n) AS l RETURN l, count(*) AS c ORDER BY c DESC\"):
-        print(r[\"l\"], r[\"c\"])
-d.close()"'
-```
-
-Query from `isaaclab_arena-latest` (host-networked, has `neo4j` and `pydantic`); the VS Code
-devcontainer has neither.
+Discover the database and its published Bolt port from Docker inspection; do not
+trust historical port numbers or node counts. Set `NEO4J_URI` to that verified
+endpoint and query through the simulation container's non-root runtime. The
+editor container is not the simulation runtime. See
+`docs/pages/example_workflows/agentic_env_gen/dcrg.rst` for verified commands and
+cache/permission prerequisites.
 
 **Pair every rate with its episode count.** `graph_rag.py`'s own comment warns that independent
 maxima "would pair the best rate with an unrelated run's episode count and report, say, '1.0 over
@@ -67,6 +55,40 @@ maxima "would pair the best rate with an unrelated run's episode count and repor
 `num_episodes: 1` -- very likely `harness_false_success`.
 
 ## 3. Close the loop
+
+### Discovering and selecting DCRG
+
+For refinement or evaluation of an existing environment spec, read
+`docs/pages/concepts/dcrg.rst` and
+`docs/pages/example_workflows/agentic_env_gen/dcrg.rst`, then use the bounded CLI
+`isaaclab_arena_examples/agentic_environment_generation/dcrg_runner.py`.
+The implementation is under `isaaclab_arena/agentic_environment_generation/dcrg/`.
+
+Before proposing another experiment, query
+`GraphRAGRetriever.retrieve_refinement_history(source_env_name, policy_identity, accepted_only=False)`.
+Inspect rejected trials for diagnostic work; use the default accepted-only filter
+when looking for accepted refinements. Keep the exact deciding run's counts/rates.
+An accepted lift improvement is not automatically a successful pick-and-place.
+
+For same-scene controller assistance, also query
+`GraphRAGRetriever.retrieve_controller_trials(source_env_name, checkpoint_identity, experiment_id=None)`.
+These records use explicit controller/source/weight fingerprints and composite
+policy identities; they are not XY environment proposals. Inspect the actual
+controller config, privilege label, per-run counts, and video evidence before
+repeating a trial. A height-dwell event can accompany a slip rather than retained
+transport. Check whether a gate released on geometry or merely timed out.
+See `.agents/references/quick_notes/c1_controller_assistance_results.md` and the
+controller-assistance section of the DCRG runbook for the measured comparison.
+
+Identify records by original scenario name, canonical spec SHA-256, exact policy
+identity, evaluation ID, and target support reifier. `graph_identity` computes the
+immutable graph name and version; do not guess these from `latest` or version-folder
+names. Feedback must be fetched for that exact version/run/reifier and body frame.
+
+This is explicit agent guidance and an executable CLI, not automatic LLM routing.
+`EnvironmentGenerationAgent` still calls `retrieve_prior_subgraphs` for prompt
+generation; it does not automatically call the DCRG history API. A coding agent
+must deliberately choose refinement and invoke the documented workflow.
 
 The evidence loop has been observed **open at both ends**: runs write `rerender_summary.json`
 while the self-healing path reads `eval_telemetry.ttl`, so no measurement can correct a prior.

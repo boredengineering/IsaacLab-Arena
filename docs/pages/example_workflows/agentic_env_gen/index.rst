@@ -14,7 +14,11 @@ layout, tasks, and spatial relations.
 
 :docker_run_default:
 
-.. todo:: add concept overview page
+For the experimental closed-loop refinement architecture, see
+:doc:`../../concepts/dcrg`. DCRG controls evaluation and bounded proposals;
+the existing Graph-RAG retriever remains responsible for reading prior experience.
+See :doc:`dcrg` for the bounded CLI, runtime prerequisites, artifact layout, and
+the measured C1 pilot outcome.
 
 
 Prompt to Environment Graph Spec
@@ -162,6 +166,7 @@ Follow the steps below to complete the workflow:
    gui_runner
    eval_with_gr00t
    eval_with_openpi
+   dcrg
 
 Warnings
 --------

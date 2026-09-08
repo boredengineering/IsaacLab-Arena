@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import math
 import numpy as np
+from collections.abc import Callable, Collection
 
+from isaaclab_arena.agentic_environment_generation.policy_capability_graph import frame_height
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 from isaaclab_arena.relations.spatial_factor_graph import SpatialFactorGraph
 
@@ -186,7 +188,7 @@ def validate_depth_alignment(
     """
     errors: list[str] = []
     ref = DATASET_DEPTH_FINGERPRINTS.get(dataset_key)
-    if not ref or not spec.embodiment:
+    if not ref or not spec.embodiment or "g1" not in spec.embodiment.registry_name.lower().split("_"):
         return errors
 
     # --- Resolve robot base position ---
@@ -197,8 +199,8 @@ def validate_depth_alignment(
 
     # --- Estimate camera world position ---
     cam = _G1_HEAD_CAM
-    # For humanoid embodiments with WBC, pelvis height at runtime stands at ~0.72m
-    base_z = emb_pos[2] if emb_pos[2] > 0.2 else 0.72
+    # G1's articulation root is the pelvis, even when its world Z is near zero.
+    base_z = frame_height(emb_pos, "pelvis")
     cam_world = (
         emb_pos[0] + cam["offset_xyz"][0],
         emb_pos[1] + cam["offset_xyz"][1],
@@ -386,8 +388,8 @@ def validate_kinematic_reachability(spec: ArenaEnvGraphSpec) -> list[str]:
     if emb_pos is None or len(emb_pos) < 2:
         return errors
 
-    emb_name_lower = f"{spec.embodiment.id} {spec.embodiment.registry_name}".lower()
-    is_humanoid = "g1" in emb_name_lower or "gr1" in emb_name_lower
+    embodiment_tokens = spec.embodiment.registry_name.lower().split("_")
+    is_humanoid = "g1" in embodiment_tokens or "gr1" in embodiment_tokens
     max_reach = 0.95 if is_humanoid else 0.85
     min_reach = 0.25
 
@@ -418,7 +420,11 @@ def validate_kinematic_reachability(spec: ArenaEnvGraphSpec) -> list[str]:
                     f" collider). Maintain minimum distance of {min_reach:.2f}m."
                 )
             if is_humanoid and len(emb_pos) >= 3 and len(obj_pos) >= 3:
-                pelvis_z = emb_pos[2] + 0.75 if emb_pos[2] < 0.2 else emb_pos[2]
+                if "g1" in spec.embodiment.registry_name.lower().split("_"):
+                    pelvis_z = frame_height(emb_pos, "pelvis")
+                else:
+                    # Preserve the legacy GR1 assumption; G1 metadata is not a GR1 contract.
+                    pelvis_z = emb_pos[2] + 0.75 if emb_pos[2] < 0.2 else emb_pos[2]
                 rel_z = obj_pos[2] - pelvis_z
                 if rel_z > 0.45 or rel_z < -0.35:
                     errors.append(
@@ -562,6 +568,38 @@ def relax_spec_spatial_factor_graph(spec: ArenaEnvGraphSpec) -> tuple[ArenaEnvGr
     return spec, diagnostics
 
 
+def _proposal_supports(spec: ArenaEnvGraphSpec, target_id: str) -> list[tuple[str, dict]]:
+    """Resolve explicit support contracts, falling back only to the task's named background."""
+    supports = [
+        (rel.reference, rel.params)
+        for rel in spec.relations
+        if rel.kind == "on" and rel.subject == target_id and rel.reference
+    ]
+    supports.extend(
+        (
+            rel.target_id,
+            {
+                "surface_sector": rel.surface_sector,
+                "surface_anchor": rel.surface_anchor,
+                "contact_normal": rel.contact_normal,
+                "delta_z": (rel.delta_z.min_val, rel.delta_z.max_val),
+            },
+        )
+        for rel in spec.reified_relations or []
+        if rel.relation_type == "PLACED_ON" and rel.source_id == target_id
+    )
+    if not supports:
+        # Saved C1 v32 declares anchored poses, not an `on` relation. Its task names the table.
+        backgrounds = {
+            task.params.get("background_scene")
+            for task in spec.task.subtasks
+            if task.params.get("pick_up_object") == target_id
+        }
+        if backgrounds == {spec.background.id}:
+            supports.append((spec.background.id, {}))
+    return supports
+
+
 def relax_spec_active_inference(
     spec: ArenaEnvGraphSpec,
     parent_env_name: str | None = None,
@@ -569,168 +607,206 @@ def relax_spec_active_inference(
     temperature: float = 0.08,
     cooling_rate: float = 0.98,
     max_iters: int = 150,
+    *,
+    feedback: dict | None = None,
+    allowed_mutations: Collection[str] = (),
+    allow_anchor_motion: bool = False,
+    max_displacement_m: float = 0.02,
+    seed: int | None = None,
+    feedback_fetcher: Callable[..., dict | None] | None = None,
+    env_version: str | None = None,
+    reifier_id: str | None = None,
 ) -> tuple[ArenaEnvGraphSpec, list[str]]:
-    """Active Inference relaxation conditioned on Neo4j empirical reach feedback with Langevin SGLD.
+    """Return an unverified, copy-on-write XY proposal, not a causal correction or accepted scene.
 
-    Queries the most recent [:FEEDBACK_MUTATION] loopback edge from Neo4j to bias continuous
-    relaxation toward the policy's verified empirical reach basin. If vertical crown pinch
-    is detected (dz > +0.02m with drops), it automatically relaxes the target height
-    toward the equatorial caging manifold.
+    Args:
+        spec: Immutable source scene; only a deep copy can be changed.
+        parent_env_name: Exact environment name used by the legacy feedback reader.
+        eval_id: Optional evaluation identity passed to the feedback reader.
+        temperature: Gradient-noise scale (not a calibrated posterior temperature).
+        cooling_rate: Per-step noise decay.
+        max_iters: Numerical proposal iteration budget.
+        feedback: Injected dx/dy/dz mapping; an empty mapping means no feedback.
+        allowed_mutations: Must explicitly name only the unique task pick target.
+        allow_anchor_motion: Explicitly permit that target's anchored pose to change.
+        max_displacement_m: Positive XY Euclidean trust radius in metres.
+        seed: Local solver seed; does not modify the global random state.
+        feedback_fetcher: Optional read-only feedback provider; None uses the Neo4j reader.
+        env_version: Immutable graph version required by the Neo4j reader.
+        reifier_id: Exact target support relation required by the Neo4j reader.
+
+    Returns:
+        Independent spec copy and diagnostics. Rejected proposals leave the copy unchanged.
+        All proposals require simulator validation; task, physics, Z and rotations are preserved.
     """
+    assert (
+        math.isfinite(max_displacement_m) and max_displacement_m > 0
+    ), "max_displacement_m must be finite and positive"
     diagnostics: list[str] = []
+    spec = spec.model_copy(deep=True)
     if not spec.background:
         return spec, diagnostics
 
     # Query empirical feedback mutation from Neo4j
-    feedback = None
     query_env = parent_env_name or spec.env_name
     try:
-        from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import fetch_recurrent_feedback_from_neo4j
+        if feedback is None:
+            if feedback_fetcher is None:
+                from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import (
+                    fetch_recurrent_feedback_from_neo4j,
+                )
 
-        feedback = fetch_recurrent_feedback_from_neo4j(env_name=query_env, eval_id=eval_id)
+                feedback_fetcher = fetch_recurrent_feedback_from_neo4j
+            qualifiers = {}
+            if env_version is not None:
+                qualifiers["env_version"] = env_version
+            if reifier_id is not None:
+                qualifiers["reifier_id"] = reifier_id
+            feedback = feedback_fetcher(env_name=query_env, eval_id=eval_id, **qualifiers)
     except Exception as exc:
         diagnostics.append(f"[ActiveInferenceOracle] Neo4j feedback query failed: {exc}")
 
-    bg_name = spec.background.id
-    bg_lower = f"{bg_name} {spec.background.registry_name}".lower()
-    floor_z = -0.795 if "galileo" in bg_lower or "room" in bg_lower else 0.0
+    if not feedback:
+        diagnostics.append("[ActiveInferenceOracle] No feedback; unchanged proposal.")
+        return spec, diagnostics
+
+    try:
+        measured = np.asarray([feedback[key] for key in ("dx", "dy", "dz")], dtype=float)
+        assert measured.shape == (3,) and np.isfinite(measured).all(), "expected finite dx/dy/dz"
+    except (AssertionError, KeyError, TypeError, ValueError) as exc:
+        diagnostics.append(f"[ActiveInferenceOracle] Rejected feedback: {exc}.")
+        return spec, diagnostics
+
+    anchors = {rel.subject for rel in spec.relations if rel.kind == "is_anchor"}
+    if not allowed_mutations or (not allow_anchor_motion and anchors.intersection(allowed_mutations)):
+        diagnostics.append("[ActiveInferenceOracle] No permitted motion; anchors remain fixed by default.")
+        return spec, diagnostics
+
+    task_targets = {task.params.get("pick_up_object") for task in spec.task.subtasks}
+    task_targets.discard(None)
+    if len(task_targets) != 1 or set(allowed_mutations) != task_targets:
+        diagnostics.append("[ActiveInferenceOracle] Rejected: only the unique task pick target may move.")
+        return spec, diagnostics
+    target_id = next(iter(task_targets))
+    assert isinstance(target_id, str), "pick target must be an object id"
+    target = next((obj for obj in spec.objects if obj.id == target_id), None)
+    if target is None:
+        diagnostics.append("[ActiveInferenceOracle] Rejected: pick target is not an object.")
+        return spec, diagnostics
+
+    reifier_ids = {rel.reifier_id for rel in spec.reified_relations or [] if rel.source_id == target_id}
+    if feedback.get("reifier_id") is not None and feedback["reifier_id"] not in reifier_ids:
+        diagnostics.append("[ActiveInferenceOracle] Rejected feedback for an unknown or different target relation.")
+        return spec, diagnostics
+
+    assets = {asset.id: asset for asset in [spec.background, spec.embodiment, *spec.objects]}
+    positions = {}
+    try:
+        for asset in assets.values():
+            position = np.asarray(asset.params["initial_pose"]["position_xyz"], dtype=float)
+            assert position.shape == (3,) and np.isfinite(position).all(), f"invalid pose for '{asset.id}'"
+            positions[asset.id] = position
+    except (AssertionError, KeyError, TypeError, ValueError) as exc:
+        diagnostics.append(f"[ActiveInferenceOracle] Rejected missing or invalid scene pose: {exc}.")
+        return spec, diagnostics
+    initial = positions[target_id]
+    xy_min = initial[:2] - max_displacement_m
+    xy_max = initial[:2] + max_displacement_m
+    support_factors = []
+    supports = _proposal_supports(spec, target_id)
+    try:
+        assert supports, "support is unresolved"
+        for parent_id, params in supports:
+            parent = assets[parent_id]
+            parent_pose = parent.params["initial_pose"]
+            parent_xyz = np.asarray(parent_pose["position_xyz"], dtype=float)
+            quat = np.asarray(parent_pose.get("rotation_xyzw", [0, 0, 0, 1]), dtype=float)
+            assert np.isfinite(parent_xyz).all(), "non-finite support pose"
+            assert (
+                quat.shape == (4,) and np.allclose(quat[:3], 0) and np.isclose(abs(quat[3]), 1)
+            ), "rotated support requires measured geometry"
+            assert any(key in parent.registry_name.lower() for key in KNOWN_FIXTURE_BOUNDS), "unknown support geometry"
+            assert np.allclose(
+                params.get("contact_normal", (0, 0, 1)), (0, 0, 1)
+            ), "only horizontal support is implemented"
+            sector = params.get("surface_sector") or params.get("surface_anchor")
+            if sector:
+                assert any(
+                    sector in sectors
+                    for name, sectors in FIXTURE_SECTOR_BOUNDS.items()
+                    if name in parent.registry_name.lower()
+                ), "unresolved support sector or anchor"
+            bounds = get_fixture_sector_bounds(parent.registry_name, sector)
+            margin = max(0.04, float(params.get("edge_margin_m", 0.04)))
+            xy_min = np.maximum(xy_min, parent_xyz[:2] + [bounds[0] + margin, bounds[2] + margin])
+            xy_max = np.minimum(xy_max, parent_xyz[:2] + [bounds[1] - margin, bounds[3] - margin])
+            deck_z = float(params.get("nominal_height", parent_xyz[2] + bounds[4]))
+            z_min, z_max = params.get("delta_z", (0.0, 0.10))
+            assert z_min - 1e-6 <= initial[2] - deck_z <= z_max + 1e-6, "support height conflicts with fixed object Z"
+            assert np.all(initial[:2] >= xy_min) and np.all(
+                initial[:2] <= xy_max
+            ), "initial target lies outside support bounds"
+            # Preserve the existing object-origin/contact offset rather than snapping its center to the deck.
+            support_factors.append((parent_id, (*bounds[:4], initial[2] - parent_xyz[2]), margin))
+    except (AssertionError, KeyError, TypeError, ValueError) as exc:
+        diagnostics.append(f"[ActiveInferenceOracle] Rejected support contract: {exc}.")
+        return spec, diagnostics
+
+    delta = measured.copy()
+    delta[2] = 0.0
+    length = math.hypot(*delta[:2])
+    if length > max_displacement_m:
+        delta *= max_displacement_m / length
+    delta[:2] = np.clip(initial[:2] + delta[:2], xy_min, xy_max) - initial[:2]
+    if not np.any(delta):
+        diagnostics.append("[ActiveInferenceOracle] No XY feedback; unchanged proposal (Z is fixed).")
+        return spec, diagnostics
 
     fg = SpatialFactorGraph()
-    # 1. Ground scene background anchor at origin
-    fg.add_variable(bg_name, [0.0, 0.0, floor_z, 0.0], is_fixed=True)
-
-    # 2. Add Furniture Fixtures
-    furniture_ids = set()
-    receptacle_ids = set()
-    for obj in spec.objects:
-        obj_lower = f"{obj.id} {obj.registry_name}".lower()
-        if any(k in obj_lower for k in ("shelf", "shelving", "table", "counter", "desk", "rack")):
-            furniture_ids.add(obj.id)
-            init_p = (
-                obj.params.get("initial_pose", {}).get("position_xyz", [0.0, 0.6, floor_z])
-                if obj.params
-                else [0.0, 0.6, floor_z]
-            )
-            fg.add_variable(obj.id, [init_p[0], init_p[1], init_p[2], 0.0], is_fixed=False)
-            fg.add_ground_factor(obj.id, floor_z=floor_z)
-        elif any(k in obj_lower for k in ("bin", "basket", "tray", "box")):
-            receptacle_ids.add(obj.id)
-
-    # 3. Add Robot Embodiment
-    if spec.embodiment:
-        emb_id = spec.embodiment.id
-        init_emb = (
-            spec.embodiment.params.get("initial_pose", {}).get("position_xyz", [-0.55, 0.0, floor_z])
-            if spec.embodiment.params
-            else [-0.55, 0.0, floor_z]
-        )
-        fg.add_variable(emb_id, [init_emb[0], init_emb[1], init_emb[2], 0.0], is_fixed=False)
-        fg.add_ground_factor(emb_id, floor_z=floor_z)
-
-    # 4. Add Manipulands & Receptacles
-    for obj in spec.objects:
-        if obj.id in furniture_ids:
-            continue
-        init_p = (
-            obj.params.get("initial_pose", {}).get("position_xyz", [0.0, 0.0, floor_z + 0.75])
-            if obj.params
-            else [0.0, 0.0, floor_z + 0.75]
-        )
-        fg.add_variable(obj.id, [init_p[0], init_p[1], init_p[2], 0.0], is_fixed=False)
-
-    # 5. Connect Factors from Relations
-    for rel in spec.relations:
-        if rel.kind == "on" and rel.reference:
-            parent_reg = (
-                spec.background.registry_name
-                if rel.reference == bg_name
-                else next((o.registry_name for o in spec.objects if o.id == rel.reference), "table")
-            )
-            sector = rel.params.get("surface_sector") if rel.params else None
-            if not sector and (
-                "table" in parent_reg.lower() or "desk" in parent_reg.lower() or "counter" in parent_reg.lower()
-            ):
-                sector = "front_left" if rel.subject in receptacle_ids else "front_center"
-            bounds = get_fixture_sector_bounds(parent_reg, sector)
-            fg.add_support_factor(rel.subject, rel.reference, bounds, edge_margin=0.04)
-
-    # 6. Add Non-Overlap Clearance between all placed items
-    placeable_objs = [o.id for o in spec.objects if o.id not in furniture_ids]
-    for i in range(len(placeable_objs)):
-        for j in range(i + 1, len(placeable_objs)):
-            fg.add_clearance_factor(placeable_objs[i], placeable_objs[j], min_distance=0.22)
-
-    # 7. Add Reachability Factors to Robot
-    if spec.embodiment:
-        for obj_id in placeable_objs:
-            fg.add_reachability_factor(spec.embodiment.id, obj_id, target_distance=0.60, tolerance=0.20)
-        for furn_id in furniture_ids:
-            fg.add_clearance_factor(spec.embodiment.id, furn_id, min_distance=0.45)
-
-    # 8. Inject Empirical Likelihood Factor if feedback exists
-    if feedback and spec.embodiment:
-        manipuland_id = None
-        if spec.task and spec.task.subtasks:
-            manipuland_id = spec.task.subtasks[0].params.get("pick_up_object")
-        if not manipuland_id and placeable_objs:
-            manipuland_id = placeable_objs[0]
-
-        if manipuland_id and manipuland_id in fg.variables:
-            dx = float(feedback.get("dx", 0.0))
-            dy = float(feedback.get("dy", 0.0))
-            dz = float(feedback.get("dz", 0.0))
-
-            # If vertical approach shows crown pinch (dz > 0.02m), bias dz target to center on equator
-            equatorial_bias_z = -0.025 if dz > 0.02 else 0.0
-            eff_dz = dz + equatorial_bias_z
-
-            fg.add_empirical_reach_likelihood_factor(
-                robot_name=spec.embodiment.id,
-                target_name=manipuland_id,
-                measured_reach_delta=(dx, dy, eff_dz),
-                sigma=(0.012, 0.012, 0.015),
-                weight=300.0,
-            )
-            diagnostics.append(
-                f"[ActiveInferenceOracle] Injected EmpiricalReachLikelihoodFactor for '{manipuland_id}' with prior"
-                f" error delta=({dx:+.4f}, {dy:+.4f}, {dz:+.4f})m, equatorial_bias_z={equatorial_bias_z:+.4f}m."
-            )
-
-    # 9. Perform Stochastic SGLD Relaxation
+    for asset_id, position in positions.items():
+        bounds = (xy_min[0], xy_max[0], xy_min[1], xy_max[1]) if asset_id == target_id else None
+        fg.add_variable(asset_id, position.tolist(), is_fixed=asset_id != target_id, bounds=bounds)
+    for parent_id, bounds, margin in support_factors:
+        fg.add_support_factor(target_id, parent_id, bounds, edge_margin=margin)
+    fg.add_empirical_reach_likelihood_factor(
+        spec.embodiment.id,
+        target_id,
+        tuple(delta),
+        sigma=(0.05, 0.05, 0.05),
+        weight=1.0,
+    )
     result = fg.relax_stochastic(
         max_iters=max_iters,
-        lr=0.03,
+        lr=0.0003,
         temperature=temperature,
         cooling_rate=cooling_rate,
+        seed=seed,
     )
+    candidate = np.asarray(result.poses.get(target_id, []), dtype=float)
+    if (
+        not result.converged
+        or not math.isfinite(result.total_energy)
+        or candidate.size < 3
+        or not np.isfinite(candidate).all()
+    ):
+        diagnostics.append("[ActiveInferenceOracle] Rejected unconverged or non-finite solver proposal.")
+        return spec, diagnostics
 
-    # 10. Apply Relaxed Poses back to Spec
-    for obj in spec.objects:
-        if obj.id in result.poses:
-            p = result.poses[obj.id]
-            if not obj.params:
-                obj.params = {}
-            obj.params["initial_pose"] = {
-                "position_xyz": [p[0], p[1], p[2]],
-                "rotation_xyzw": [0.0, 0.0, 0.0, 1.0],
-            }
-
-    if spec.embodiment and spec.embodiment.id in result.poses:
-        ep = result.poses[spec.embodiment.id]
-        if not spec.embodiment.params:
-            spec.embodiment.params = {}
-        spec.embodiment.params["initial_pose"] = {
-            "position_xyz": [ep[0], ep[1], ep[2]],
-            "rotation_xyzw": [0.0, 0.0, 0.0, 1.0],
-        }
-
+    shift = np.clip(candidate[:2], xy_min, xy_max) - initial[:2]
+    length = float(np.linalg.norm(shift))
+    if length > max_displacement_m:
+        shift *= max_displacement_m / length
+    # The solver supplies an XY proposal, never a change to the support height or orientation.
+    target.params["initial_pose"]["position_xyz"] = [
+        float(initial[0] + shift[0]),
+        float(initial[1] + shift[1]),
+        float(initial[2]),
+    ]
     diagnostics.append(
-        f"[ActiveInferenceOracle] SGLD relaxation finished in {result.iterations} iters, "
-        f"residual free energy={result.total_energy:.4f}, converged={result.converged}."
+        f"[ActiveInferenceOracle] Unverified bounded XY proposal for '{target_id}'; "
+        "hand residual is not a causal object displacement. Requires simulator re-evaluation; "
+        "robot, fixtures, camera, receptacles, Z, rotations, task and physics are unchanged."
     )
-    if not result.converged and result.conflicting_factors:
-        diagnostics.append(f"[ActiveInferenceOracle] Conflicting factors: {', '.join(result.conflicting_factors)}")
-
     return spec, diagnostics
 
 

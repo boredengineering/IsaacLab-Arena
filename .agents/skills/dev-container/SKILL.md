@@ -6,7 +6,10 @@ allowed-tools: Bash(./docker/run_docker.sh *) Bash(docker exec *) Bash(docker im
 
 # Dev Container
 
-Arena uses a single Docker container as the dev, test, training, and eval environment. There is no separate dev container.
+Arena package execution uses the simulation container. This checkout also supports a separate
+editor/agent devcontainer, a GR00T policy server, and Neo4j. Do not mistake a running editor
+container for a working simulator. The current DCRG runtime procedure is documented in
+`docs/pages/example_workflows/agentic_env_gen/dcrg.rst`.
 
 Each clone of the repo on the host machine gets its own container, so separate clones can run in parallel. The image (`isaaclab_arena:latest`) is shared, but the container name is `isaaclab_arena-latest` for the folder named `IsaacLab-Arena` and `isaaclab_arena-latest-<suffix>` for folders named `IsaacLab-Arena_<suffix>` (`run_docker.sh` derives the suffix automatically).
 
@@ -67,3 +70,19 @@ docker exec "$ARENA_CONTAINER" su $(id -un) -c \
 ```
 
 prints a path under `/workspaces/isaaclab_arena/`.
+
+## Nested-container discovery and non-root runtime
+
+- Inside an editor devcontainer, `git rev-parse --show-toplevel` is a container path,
+  not necessarily the host source path used by Docker. Inspect the editor's mounts to
+  obtain the host clone path, then select the simulator mounting that same source.
+- Inspect `/isaac-sim` permissions and use the image's read group with the non-root
+  user when necessary. An inaccessible directory can make extension discovery report
+  `SimulationApp=None` even though the extension is installed.
+- Give non-root runs a user-owned `TMPDIR` for public USD downloads. A root-owned
+  cached USD may otherwise be reused and fail as an apparently missing rigid body.
+- Use Kit's documented `--portable --portable-root <writable-directory>` through
+  `--kit_args` for writable runtime caches. If Hub startup fails, the documented
+  per-process `OMNICLIENT_HUB_MODE=disabled` setting is an alternative.
+- Verify an actual scene launch after imports. A container healthcheck that only
+  searches for an old Kit log is not proof of current simulator readiness.

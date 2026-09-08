@@ -1,5 +1,13 @@
 # Agentic Environment Generation & Multi-Embodiment Test Suite Matrix
 
+> Historical scenario catalog. C1's right-arm wording remains its semantic request,
+> but the geometry constants and launch examples below are not the current runtime
+> contract. In particular, do not assume a foot-level G1 root or treat the historical
+> left-hand v32 baseline as right-arm success. Use
+> [`docs/pages/concepts/dcrg.rst`](../../../docs/pages/concepts/dcrg.rst) and
+> [`docs/pages/example_workflows/agentic_env_gen/dcrg.rst`](../../../docs/pages/example_workflows/agentic_env_gen/dcrg.rst)
+> for the current architecture, executable commands, and measured C1 pilot status.
+
 This document defines the comprehensive evaluation catalog, testing matrix, prompt library, and physical constraints for testing the **Agentic Active Inference Environment Generation & Self-Healing Pipeline** across different robotic embodiments, background fixtures, interactable objects, and Vision-Language-Action (VLA) foundation policies (NVIDIA Isaac-GR00T N1.6/N1.7, Unitree G1 WBC, Fourier GR1, and Franka DROID).
 
 ---

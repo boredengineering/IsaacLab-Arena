@@ -1,0 +1,127 @@
+{
+  "title": "C1 calibrated grasp: hypothesis and prerequisite test protocol",
+  "status": "prerequisites_partially_executed_blocked_at_T01",
+  "execution": {
+    "run_id": "20260908T030344Z",
+    "artifact_root": "/eval/isaaclab_arena/c1_calibrated_grasp/20260908T030344Z",
+    "reference_policy_completed_episodes": 5,
+    "reference_policy_task_gate_successes": 2,
+    "independent_release_certified": false,
+    "native_replay_attempts": 1,
+    "native_replay_steps": 155,
+    "native_replay_fidelity_passed": false,
+    "corrected_validator_offline_recheck": "native_demo0/validation_recheck_v3.json",
+    "offline_recheck_gate_decisions_unchanged": true,
+    "focused_regression_tests_passed": 463,
+    "blocked_gate": "T01",
+    "calibration_started": false,
+    "downstream_controller_trials_started": false,
+    "remaining_protocol_tests": "not executed; helper unit tests do not certify physical gates"
+  },
+  "plan": "c1_calibrated_grasp_and_graph_guided_transfer_experiment.md",
+  "scope": "privileged_state_left_hand_v32_feasibility_before_graph_attribution",
+  "budget": {
+    "reference_policy_attempts": 5,
+    "calibration_and_validation_replay_attempts": 5,
+    "development_conditions": 4,
+    "development_attempts_per_condition": 3,
+    "validation_conditions": 2,
+    "validation_cases_per_condition": 10,
+    "maximum_task_episode_or_replay_attempts": 42,
+    "maximum_separate_commissioning_launches": 6,
+    "maximum_steps_per_commissioning_launch": 150,
+    "maximum_commissioning_simulation_steps": 900,
+    "graph_attribution_study_included": false,
+    "failed_and_interrupted_attempts_consume_budget": true
+  },
+  "frozen_conditions": [
+    "align/checkpoint-5000 and exact serving/processor/weight fingerprints",
+    "existing left-hand G1 joint-control/WBC interface",
+    "v32 physics, camera, friction, object scale and original task predicates",
+    "six-second task clock including settling; no reset/extension during assistance",
+    "matched simulator initial states; remote diffusion seed explicitly uncontrolled",
+    "privileged object pose and diagnostic contacts available equally to applicable controller conditions"
+  ],
+  "calibration_parameters_required_before_development": {
+    "runtime_rigid_hand_frame_and_quaternion_conventions": null,
+    "validated_object_relative_grasp_modes": null,
+    "position_and_orientation_tracking_tolerances": null,
+    "clearance_and_solver_feasibility_limits": null,
+    "contact_noise_thresholds_and_partner_inventory": null,
+    "retention_relative_motion_tolerances": null,
+    "phase_deadlines_and_handover_slew_bounds": null
+  },
+  "launch_rule": "Block development until required calibration parameters are measured, frozen and hashed, and prerequisite tests pass. Null is unknown, not a default.",
+  "tests": [
+    {
+      "id": "T01", "hypothesis": "H01", "kind": "engineering_prerequisite",
+      "claim": "Reference records can support a trustworthy native replay and a separately validated joint/WBC replay.",
+      "procedure": "Audit original HDF5, source scene provenance, 23D native actions, 43D processed targets, 50D runtime mapping and sample alignment. Evaluate replay with active independent task/retention diagnostics.",
+      "pass": "All selected calibration/validation replays have explicit scene/action provenance and hard-bounded replay errors; success is independently observed.",
+      "failure_action": "Do not fit calibration from reward=1, success attributes alone, or printed replay warnings. Resolve mapping or collect new provenance-complete reference data."
+    },
+    {
+      "id": "T02", "hypothesis": "H02", "kind": "engineering_prerequisite",
+      "claim": "The selected grasp frame is rigid and its object-relative target is geometrically consistent.",
+      "procedure": "Verify actual USD frames; finger sweep with fixed wrist; FK/Jacobian finite differences; quaternion round trip; common-world-transform invariance. Fit three verified demonstrations, validate on two disjoint ones.",
+      "pass": "Rigid-frame and transform tests meet preregistered tolerances; held-out demonstrations enter their retained grasp modes without post-hoc fitting.",
+      "failure_action": "Reject frame/mode calibration, not silently increase positional tolerance."
+    },
+    {
+      "id": "T03", "hypothesis": "H03", "kind": "engineering_prerequisite",
+      "claim": "The retention observer distinguishes capture from support, touch, tilt and release.",
+      "procedure": "Separate apple-hand and apple-support diagnostic channels without changing apple-plate scoring. Check support-only, hand-table/no-apple, unilateral touch, captured hold, tilt/bounce and released-object cases.",
+      "pass": "Negative controls cannot satisfy audited retention; captured positive control passes; unresolved/overflowed channels return unknown and prevent certification.",
+      "failure_action": "Stop scored controller trials until observer validity is restored."
+    },
+    {
+      "id": "T04", "hypothesis": "H04", "kind": "engineering_prerequisite",
+      "claim": "Controller takeover and resumption neither consume stale chunks nor corrupt WBC/episode state.",
+      "procedure": "Use tagged synthetic actions/observations, including delayed responses. Assert no base chunk consumption during owned phases, local invalidation on handover, fresh post-intervention observation ID, bounded command continuity and unchanged episode clock.",
+      "pass": "No pre-takeover queued action executes after handover; no unwanted remote/episode/WBC reset; inactive joints/tail and per-step WBC remain valid.",
+      "failure_action": "Fix scheduler/lifecycle contract before robot testing; do not call blending alone RTC."
+    },
+    {
+      "id": "T05", "hypothesis": "H05", "kind": "mechanistic_ablation",
+      "null": "Calibrated retargeting does not reduce closure-time grasp-pose error relative to raw policy.",
+      "alternative": "Calibrated retargeting reduces closure-time translation/orientation error without forbidden contacts.",
+      "comparison": "B spatial-only versus A raw; original finger timing preserved in B.",
+      "endpoint": "Pose error at actual closure; alignment rate; retained grasp and task success reported separately.",
+      "interpretation": "Three development attempts per condition are mechanism screening, not a powered hypothesis test."
+    },
+    {
+      "id": "T06", "hypothesis": "H06", "kind": "mechanistic_ablation",
+      "null": "Coordinated phase control adds no retained-grasp benefit beyond spatial retargeting.",
+      "alternative": "Coordinated phases improve audited retention at the same calibrated target.",
+      "comparison": "D combined versus B spatial-only; C coordination-only uses the policy-selected arm goal, not an unreachable calibrated-goal requirement.",
+      "endpoint": "Audited retention, phase failures, closure timing and original task success; log every timeout as failure rather than readiness.",
+      "interpretation": "Coordination is a package including chunk ownership and measured tracking; do not call its effect a pure finger-delay effect."
+    },
+    {
+      "id": "T07", "hypothesis": "H07", "kind": "conditional_handover_diagnostic",
+      "null": "Fresh policy resumption fails to preserve an already verified grasp.",
+      "alternative": "The frozen policy preserves retention and completes transport after assistance relinquishes control.",
+      "procedure": "For every verified hold, record pre/post-handover contact, object-hand motion, executed command jump and first fresh-chunk finger targets.",
+      "endpoint": "Retained-to-lost transition and audited placement within the unchanged task horizon.",
+      "failure_action": "Separate grasp-controller success from policy-transfer failure; do not covertly extend supervisor transport authority."
+    },
+    {
+      "id": "T08", "hypothesis": "H08", "kind": "held_out_pilot_comparison",
+      "null": "The selected assisted controller provides no audited-placement improvement over unassisted policy on held-out layouts.",
+      "alternative": "The frozen selected controller improves audited placement on held-out layouts.",
+      "design": "Ten cases per condition: original pose plus four feasible unseen apple-XY layouts, two simulator seeds each. Report original-pose cases separately from eight held-out cases. Freeze cases before development.",
+      "endpoint": "Original task success AND separately audited retained transport/release; report counts, layout-level differences and uncertainty.",
+      "advance_rule": "Engineering milestone only: at least one audited placement at original v32 and on at least two distinct held-out layouts, observed held-out improvement over baseline, and no serious safeguard violation.",
+      "interpretation": "Not a significance/power guarantee. No post-hoc extra trials to obtain a desired p-value."
+    },
+    {
+      "id": "T09", "hypothesis": "H09", "kind": "separate_future_graph_attribution_study",
+      "null": "Relational graph retrieval provides no budgeted adaptation advantage over matched flat retrieval or no-history search.",
+      "alternative": "Graph-informed selection improves audited placement per simulation budget across held-out scene families.",
+      "design": "Same controller, calibration corpus, observations, parameter bounds, proposer and trial budget. Compare relational graph, flat-memory retrieval with the same facts, and no-history search; optionally shuffled relations as a negative control.",
+      "endpoint": "Budget-indexed audited success, attempts to first success, final held-out performance and intervention burden; failures/timeouts consume budget.",
+      "leakage_rule": "Freeze initial memory; each search strategy owns its own development updates. No cross-arm or test-outcome leakage. Group splits by source demonstration and scene family.",
+      "interpretation": "Not covered by the 42-attempt feasibility budget and not evidence supplied by successful graph writes."
+    }
+  ]
+}

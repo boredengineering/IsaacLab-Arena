@@ -514,153 +514,389 @@ def sync_eval_telemetry_to_neo4j(
             driver.close()
 
 
+def _feedback_index(value: Any, field: str) -> int:
+    """Validate an explicit nonnegative environment or episode index."""
+    if type(value) is not int or value < 0:
+        raise ValueError(f"{field} must be a nonnegative integer")
+    return value
+
+
+def _feedback_number(value: Any) -> float | None:
+    """Keep missing or nonfinite measurements unknown rather than imputing zero."""
+    import math
+
+    if type(value) not in (int, float):
+        return None
+    try:
+        return float(value) if math.isfinite(value) else None
+    except OverflowError:
+        return None
+
+
+def _feedback_samples(rows: list[dict[str, Any]], hand_body_name: str):
+    """Yield validated environment/episode keys and numeric samples from fixed-body traces."""
+    fields = ("hand_dist_to_obj", "hand_x_minus_obj", "hand_y_minus_obj", "hand_z_minus_obj", "lift", "contact_force")
+    batch_width = None
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("Trace rows must be objects")
+        if row.get("hand_body") != hand_body_name or row.get("hand_frame_mode") != "pinned":
+            raise ValueError("Every trace row must name the same pinned hand body")
+        batch = isinstance(row.get("episode"), list)
+        indices = row["episode"] if batch else [row.get("episode")]
+        if not indices:
+            raise ValueError("Empty episode batch")
+        if batch and "env_id" not in row:
+            if batch_width is not None and batch_width != len(indices):
+                raise ValueError("Implicit environment batch width changed")
+            batch_width = len(indices)
+        values = {}
+        for field in ("env_id", *fields):
+            value = row.get(field)
+            if field == "env_id" and batch and field not in row:
+                value = list(range(len(indices)))
+            if batch:
+                if value is None and field != "env_id":
+                    value = [None] * len(indices)
+                if not isinstance(value, list) or len(value) != len(indices):
+                    raise ValueError(f"Invalid batch shape for {field}")
+            else:
+                if isinstance(value, list):
+                    raise ValueError(f"Expected scalar {field}")
+                value = [value]
+            values[field] = value
+        env_ids = [_feedback_index(v, "env_id") for v in values["env_id"]]
+        if len(set(env_ids)) != len(env_ids):
+            raise ValueError("Duplicate environment IDs in a batch")
+        for index, episode in enumerate(indices):
+            key = (env_ids[index], _feedback_index(episode, "episode"))
+            yield key, {field: _feedback_number(values[field][index]) for field in fields}
+
+
+def reduce_recurrent_feedback(
+    rows: list[dict[str, Any]],
+    episode_results: list[dict[str, Any]] | None = None,
+    *,
+    hand_body_name: str,
+    lift_objective: str = "lift",
+) -> dict[str, Any]:
+    """Reduce fixed-body reach samples by environment and episode, without I/O.
+
+    Args:
+        rows: ReachTracer rows; batch positions are environment IDs unless env_id is supplied.
+            Scalar rows must supply env_id. Arrays must have the same shape as episode.
+        episode_results: Finished-episode recorder rows keyed by env_id and episode_in_env.
+            When supplied, only those episodes contribute; otherwise canonical scores are unknown.
+        hand_body_name: Required pinned link; residual components are in world coordinates.
+        lift_objective: Objective whose recorded is_complete represents the sustained-lift gate.
+            Caller must pin this to the task contract; neither height nor force defines completion.
+
+    Returns:
+        Episode-balanced residual means, counts and missingness, never zero-imputed evidence.
+    """
+    if not isinstance(hand_body_name, str) or not hand_body_name.strip():
+        raise ValueError("A pinned hand_body_name is required")
+    import statistics
+
+    episodes: dict[tuple[int, int], dict[str, Any]] = {}
+    fields = ("hand_dist_to_obj", "hand_x_minus_obj", "hand_y_minus_obj", "hand_z_minus_obj", "lift", "contact_force")
+    for key, numbers in _feedback_samples(rows, hand_body_name):
+        summary = episodes.setdefault(
+            key,
+            {
+                "env_id": key[0],
+                "episode": key[1],
+                "distance": None,
+                "dx": None,
+                "dy": None,
+                "dz": None,
+                "sample_count": 0,
+                "invalid_residual_samples": 0,
+                "peak_excursion": None,
+                "force_max": None,
+                "missing_lift_samples": 0,
+                "missing_force_samples": 0,
+            },
+        )
+        summary["sample_count"] += 1
+        distance = numbers["hand_dist_to_obj"]
+        if distance is not None and distance >= 0 and all(numbers[field] is not None for field in fields[1:4]):
+            if summary["distance"] is None or distance < summary["distance"]:
+                summary["distance"] = distance
+                for axis, field in zip(("dx", "dy", "dz"), fields[1:4]):
+                    summary[axis] = numbers[field]
+        else:
+            summary["invalid_residual_samples"] += 1
+        for field, output, missing in (
+            ("lift", "peak_excursion", "missing_lift_samples"),
+            ("contact_force", "force_max", "missing_force_samples"),
+        ):
+            number = numbers[field]
+            if number is None or (field == "contact_force" and number < 0):
+                summary[missing] += 1
+            elif summary[output] is None or number > summary[output]:
+                summary[output] = number
+    completed = {}
+    for record in episode_results or []:
+        if not isinstance(record, dict):
+            raise ValueError("Episode result rows must be objects")
+        key = (
+            _feedback_index(record.get("env_id"), "env_id"),
+            _feedback_index(record.get("episode_in_env"), "episode_in_env"),
+        )
+        if key in completed or record.get("completed", True) is not True:
+            raise ValueError("Duplicate or unfinished episode result")
+        success = record.get("success")
+        lift = record
+        for field in ("progress", "objectives", lift_objective, "is_complete"):
+            lift = lift.get(field) if isinstance(lift, dict) else None
+        # Sequential pick-and-place records the sustained lift as a completed event,
+        # not a standalone objective; whole-task completion is a different predicate.
+        if lift is None:
+            progress = record.get("progress")
+            events = progress.get("events") if isinstance(progress, dict) else None
+            if isinstance(events, list):
+                lift = any(
+                    isinstance(event, dict)
+                    and isinstance(event.get("predicate_name"), str)
+                    and event["predicate_name"].startswith("object_lifted_above_resting_min(")
+                    for event in events
+                )
+        if any(value is not None and type(value) is not bool for value in (success, lift)):
+            raise ValueError("Episode success and lift completion must be boolean or missing")
+        completed[key] = {"success": success, "sustained_lift": lift, "seed": record.get("seed")}
+    keys = sorted(completed if episode_results is not None else episodes)
+    summaries = []
+    for key in keys:
+        summary = dict(
+            episodes.get(
+                key,
+                {
+                    "env_id": key[0],
+                    "episode": key[1],
+                    "distance": None,
+                    "dx": None,
+                    "dy": None,
+                    "dz": None,
+                    "sample_count": 0,
+                    "invalid_residual_samples": 0,
+                    "peak_excursion": None,
+                    "force_max": None,
+                    "missing_lift_samples": 0,
+                    "missing_force_samples": 0,
+                },
+            )
+        )
+        summary.update(completed.get(key, {"success": None, "sustained_lift": None, "seed": None}))
+        summary["completed"] = key in completed
+        summaries.append(summary)
+    valid = [r for r in summaries if r["distance"] is not None]
+    forces = [r["force_max"] for r in summaries if r["force_max"] is not None]
+    peaks = [r["peak_excursion"] for r in summaries if r["peak_excursion"] is not None]
+    successes = [r["success"] for r in summaries if r["success"] is not None]
+    lifts = [r["sustained_lift"] for r in summaries if r["sustained_lift"] is not None]
+    count = len(completed)
+    dispersion = {}
+    for axis in ("dx", "dy", "dz"):
+        try:
+            dispersion[f"{axis}_std"] = (
+                _feedback_number(statistics.stdev(r[axis] for r in valid)) if len(valid) > 1 else None
+            )
+        except OverflowError:
+            dispersion[f"{axis}_std"] = None
+    return {
+        **dispersion,
+        "episodes": summaries,
+        "hand_body": hand_body_name,
+        "coordinate_frame": "world",
+        "contact_channel": "unspecified_sensor_force",
+        "trace_episode_count": len(episodes),
+        "completed_episode_count": count,
+        "uncompleted_trace_episode_count": len(episodes.keys() - completed.keys()),
+        "missing_trace_episode_count": len(completed.keys() - episodes.keys()),
+        "residual_episode_count": len(valid),
+        "success_observed_count": len(successes),
+        "lift_observed_count": len(lifts),
+        "success_rate": sum(successes) / count if count and len(successes) == count else None,
+        "lift_rate": sum(lifts) / count if count and len(lifts) == count else None,
+        "peak_excursion": max(peaks) if peaks else None,
+        "force_max": max(forces) if forces else None,
+        **{f"{axis}_mean": sum(r[axis] / len(valid) for r in valid) if valid else None for axis in ("dx", "dy", "dz")},
+    }
+
+
 def sync_recurrent_feedback_to_neo4j(
     eval_id: str,
     env_name: str,
     reach_traces_path: str,
     timestamp: str | None = None,
     driver: neo4j.Driver | None = None,
+    *,
+    env_version: str | None = None,
+    reifier_id: str | None = None,
+    hand_body_name: str | None = None,
+    episode_results_path: str | None = None,
+    lift_objective: str = "lift",
 ) -> dict[str, Any]:
-    """Ingests per-step reach traces and binds the recurrent [:FEEDBACK_MUTATION] loopback edge."""
+    """Attach verified evidence to one existing run/version/reifier in one transaction.
+
+    Args:
+        eval_id: Existing, complete EvaluationRun.id; never creates a run.
+        env_name: Exact EnvironmentGraph.name already linked by EVALUATED_GRAPH.
+        reach_traces_path: JSONL from a single run and target object, bound by the caller.
+        timestamp: Optional ISO timestamp for the feedback edge.
+        driver: Optional driver; caller-owned drivers are not closed.
+        env_version: Required exact EnvironmentGraph.version string. The legacy spec writer
+            does not populate this property: verified version registration is a prerequisite,
+            not a value this function guesses or backfills from a filename.
+        reifier_id: Required ReifiedRelation.reifier_id under this graph; no broadcast.
+        hand_body_name: Required pinned link used in every trace row.
+        episode_results_path: Finished-episode JSONL required for provenance-bound writes.
+            Trace-only analysis belongs to reduce_recurrent_feedback, not this writer.
+        lift_objective: Recorded objective implementing the task's sustained-lift predicate.
+
+    Returns:
+        Reduced evidence and exact identity after transactional edge/property read-back.
+        Residuals are observations in world axes, not validated displacement proposals.
+    """
+    import hashlib
     import json
-    import numpy as np
+    import math
     from pathlib import Path
 
-    p = Path(reach_traces_path)
-    if not p.exists():
-        return {}
+    identity = {"eval_id": eval_id, "env_name": env_name, "env_version": env_version, "reifier_id": reifier_id}
+    for field, value in {**identity, "hand_body_name": hand_body_name}.items():
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"Explicit {field} is required")
+    traces = Path(reach_traces_path)
+    trace_bytes = traces.read_bytes()
+    rows = [json.loads(line) for line in trace_bytes.splitlines() if line.strip()]
+    results_path = Path(episode_results_path) if episode_results_path is not None else None
+    result_bytes = results_path.read_bytes() if results_path is not None else None
+    results = (
+        [json.loads(line) for line in result_bytes.splitlines() if line.strip()] if result_bytes is not None else None
+    )
+    for row in [*rows, *(results or [])]:
+        if not isinstance(row, dict):
+            raise ValueError("Evidence rows must be objects")
+        if any(field in row and row[field] != value for field, value in identity.items()):
+            raise ValueError("Artifact identity conflicts with requested feedback target")
+    summary = reduce_recurrent_feedback(rows, results, hand_body_name=hand_body_name, lift_objective=lift_objective)
+    if not summary["residual_episode_count"]:
+        raise ValueError("No valid episode residuals for feedback")
+    properties = {
+        **identity,
+        "cartesian_dx": summary["dx_mean"],
+        "cartesian_dy": summary["dy_mean"],
+        "cartesian_dz": summary["dz_mean"],
+        "contact_force_max": summary["force_max"],
+        "lift_rate": summary["lift_rate"],
+        "success_rate": summary["success_rate"],
+        "hand_body": hand_body_name,
+        "coordinate_frame": "world",
+        "contact_channel": summary["contact_channel"],
+        "reach_traces_path": str(traces.resolve()),
+        "reach_traces_sha256": hashlib.sha256(trace_bytes).hexdigest(),
+        "episode_results_sha256": hashlib.sha256(result_bytes).hexdigest() if result_bytes is not None else None,
+        "episode_results_path": str(results_path.resolve()) if results_path is not None else None,
+        "lift_objective": lift_objective,
+        "evidence_payload": json.dumps(summary, sort_keys=True, allow_nan=False),
+    }
+    # Match the actual writer's keys and relationships. Requiring a registered version
+    # deliberately rejects legacy unversioned graphs, rather than inventing identity.
+    target = """
+        MATCH (ev:EvaluationRun {id: $eval_id})-[:EVALUATED_GRAPH]->
+              (env:EnvironmentGraph {name: $env_name, version: $env_version})
+        MATCH (env)-[:HAS_REIFIER]->
+              (rf:ReifiedRelation {reifier_id: $reifier_id, env_name: $env_name})
+        WHERE EXISTS { MATCH (ev)-[:USED_POLICY]->(:Policy) }
+          AND EXISTS { MATCH (rf)-[:REIFIES_SUBJECT]->({env_name: $env_name}) }
+          AND EXISTS { MATCH (rf)-[:REIFIES_OBJECT]->({env_name: $env_name}) }
+    """
 
-    lines = [json.loads(line) for line in p.read_text().splitlines() if line.strip()]
-    if not lines:
-        return {}
-
-    closest_steps = []
-    max_lifts = []
-    max_forces = []
-
-    # Parse episode closest approaches
-    episodes: dict[int, list[dict[str, Any]]] = {}
-    for r in lines:
-        ep_val = r.get("episode", [0])[0] if isinstance(r.get("episode"), list) else r.get("episode", 0)
-        episodes.setdefault(ep_val, []).append(r)
-
-    for ep, steps in episodes.items():
-        valid = [
-            s
-            for s in steps
-            if s.get("hand_dist_to_obj")
-            and (s["hand_dist_to_obj"][0] if isinstance(s["hand_dist_to_obj"], list) else s["hand_dist_to_obj"])
-            is not None
-        ]
-        if valid:
-            closest_steps.append(
-                min(
-                    valid,
-                    key=lambda s: (
-                        s["hand_dist_to_obj"][0] if isinstance(s["hand_dist_to_obj"], list) else s["hand_dist_to_obj"]
-                    ),
-                )
-            )
-        max_lifts.append(
-            max(
-                (s.get("lift", [0.0])[0] or 0.0) if isinstance(s.get("lift"), list) else (s.get("lift", 0.0) or 0.0)
-                for s in steps
+    def write_feedback(tx):
+        targets = list(
+            tx.run(
+                target + """RETURN ev.num_episodes AS num_episodes, ev.success_rate AS success_rate,
+                ev.artifact_paths AS artifact_paths, ev.artifact_sha256 AS artifact_sha256,
+                ev.episode_results_json AS episode_results_json""",
+                **identity,
             )
         )
-        max_forces.append(
-            max(
-                (
-                    (s.get("contact_force", [0.0])[0] or 0.0)
-                    if isinstance(s.get("contact_force"), list)
-                    else (s.get("contact_force", 0.0) or 0.0)
-                )
-                for s in steps
+        if len(targets) != 1:
+            raise ValueError("Feedback target must be one existing evaluation/environment/version/reifier chain")
+        count = targets[0]["num_episodes"]
+        rate = _feedback_number(targets[0]["success_rate"])
+        if type(count) is not int or count <= 0 or rate is None or not 0 <= rate <= 1:
+            raise ValueError("Existing evaluation must have complete canonical episode metrics")
+        if results is not None and (
+            count != summary["completed_episode_count"]
+            or (
+                summary["success_rate"] is not None
+                and not math.isclose(rate, summary["success_rate"], rel_tol=1e-6, abs_tol=1e-9)
+            )
+        ):
+            raise ValueError("Evidence conflicts with existing evaluation metrics")
+        paths = targets[0].get("artifact_paths")
+        hashes = targets[0].get("artifact_sha256")
+        payload = targets[0].get("episode_results_json")
+        if (
+            not isinstance(paths, list)
+            or not paths
+            or not all(isinstance(path, str) for path in paths)
+            or len(set(paths)) != len(paths)
+            or not isinstance(hashes, list)
+            or len(paths) != len(hashes)
+            or not isinstance(payload, str)
+        ):
+            raise ValueError("Existing evaluation lacks registered evidence provenance")
+        registered = dict(zip(paths, hashes))
+        for artifact in ("reach_traces", "episode_results"):
+            if (
+                registered.get(properties[f"{artifact}_path"]) != properties[f"{artifact}_sha256"]
+                or properties[f"{artifact}_path"] is None
+            ):
+                raise ValueError("Feedback evidence conflicts with registered artifact provenance")
+        try:
+            registered_results = json.loads(payload)
+        except (ValueError, TypeError) as exc:
+            raise ValueError("Invalid registered episode evidence provenance") from exc
+        if json.dumps(registered_results, sort_keys=True, allow_nan=False) != json.dumps(
+            results, sort_keys=True, allow_nan=False
+        ):
+            raise ValueError("Feedback episode evidence conflicts with registered raw records")
+        tx.run(
+            target + """
+            MERGE (ev)-[f:FEEDBACK_MUTATION]->(rf)
+            ON CREATE SET f += $properties,
+                f.timestamp = CASE WHEN $ts IS NULL THEN datetime() ELSE datetime($ts) END
+            """,
+            **identity,
+            properties=properties,
+            ts=timestamp,
+        ).consume()
+        verified = list(
+            tx.run(
+                target + """MATCH (ev)-[f:FEEDBACK_MUTATION]->(rf) RETURN properties(f) AS feedback,
+                ($ts IS NULL OR f.timestamp = datetime($ts)) AS timestamp_matches""",
+                **identity,
+                ts=timestamp,
             )
         )
+        if (
+            len(verified) != 1
+            or verified[0]["timestamp_matches"] is not True
+            or any(verified[0]["feedback"].get(key) != value for key, value in properties.items())
+        ):
+            raise RuntimeError("Feedback read-back verification failed")
+        return {**summary, **identity, "verified": True}
 
-    if not closest_steps:
-        return {}
-
-    dx_vals = [
-        (s["hand_x_minus_obj"][0] if isinstance(s["hand_x_minus_obj"], list) else s["hand_x_minus_obj"])
-        for s in closest_steps
-    ]
-    dy_vals = [
-        (s["hand_y_minus_obj"][0] if isinstance(s["hand_y_minus_obj"], list) else s["hand_y_minus_obj"])
-        for s in closest_steps
-    ]
-    dz_vals = [
-        (s["hand_z_minus_obj"][0] if isinstance(s["hand_z_minus_obj"], list) else s["hand_z_minus_obj"])
-        for s in closest_steps
-    ]
-
-    dx_mean = float(np.mean(dx_vals))
-    dy_mean = float(np.mean(dy_vals))
-    dz_mean = float(np.mean(dz_vals))
-    force_max = float(np.max(max_forces)) if max_forces else 0.0
-    lift_rate = float(np.mean([1.0 if ml > 0.015 else 0.0 for ml in max_lifts])) if max_lifts else 0.0
-
-    owns_driver = False
+    owns_driver = driver is None
     if driver is None:
         driver = get_neo4j_driver()
-        owns_driver = True
-
     try:
         with driver.session() as session:
-            # 1. Update EvaluationRun with granular reach posterior metrics
-            session.run(
-                """
-                MERGE (ev:EvaluationRun {id: $eval_id})
-                SET ev.cartesian_dx_mean = $dx_mean,
-                    ev.cartesian_dy_mean = $dy_mean,
-                    ev.cartesian_dz_mean = $dz_mean,
-                    ev.max_contact_force = $force_max,
-                    ev.lift_rate = $lift_rate
-                """,
-                eval_id=eval_id,
-                dx_mean=dx_mean,
-                dy_mean=dy_mean,
-                dz_mean=dz_mean,
-                force_max=force_max,
-                lift_rate=lift_rate,
-            )
-
-            # 2. Inject the Recurrent FEEDBACK_MUTATION Edge to ReifiedRelation
-            ts_clause = "datetime($ts)" if timestamp else "datetime()"
-            session.run(
-                f"""
-                MATCH (ev:EvaluationRun {{id: $eval_id}})
-                MATCH (env:EnvironmentGraph {{name: $env_name}})
-                MERGE (ev)-[:EVALUATED_GRAPH]->(env)
-                WITH ev, env
-                MATCH (env)-[:HAS_REIFIER]->(rf:ReifiedRelation)
-                MERGE (ev)-[f:FEEDBACK_MUTATION]->(rf)
-                SET f.cartesian_dx = $dx_mean,
-                    f.cartesian_dy = $dy_mean,
-                    f.cartesian_dz = $dz_mean,
-                    f.contact_force_max = $force_max,
-                    f.lift_rate = $lift_rate,
-                    f.timestamp = {ts_clause}
-                """,
-                eval_id=eval_id,
-                env_name=env_name,
-                dx_mean=dx_mean,
-                dy_mean=dy_mean,
-                dz_mean=dz_mean,
-                force_max=force_max,
-                lift_rate=lift_rate,
-                ts=timestamp or "",
-            )
-
-            return {
-                "eval_id": eval_id,
-                "env_name": env_name,
-                "dx_mean": dx_mean,
-                "dy_mean": dy_mean,
-                "dz_mean": dz_mean,
-                "lift_rate": lift_rate,
-                "force_max": force_max,
-            }
+            return session.execute_write(write_feedback)
     finally:
         if owns_driver:
             driver.close()
@@ -670,50 +906,58 @@ def fetch_recurrent_feedback_from_neo4j(
     env_name: str,
     eval_id: str | None = None,
     driver: neo4j.Driver | None = None,
+    *,
+    env_version: str | None = None,
+    reifier_id: str | None = None,
 ) -> dict[str, Any] | None:
-    """Query the most recent empirical feedback mutation for a given environment."""
-    owns_driver = False
+    """Read feedback only for an explicitly qualified graph version and relation.
+
+    Args:
+        env_name: Exact EnvironmentGraph.name.
+        eval_id: Exact existing evaluation ID, or latest evaluation for this target.
+        driver: Optional caller-owned driver.
+        env_version: Required registered EnvironmentGraph.version.
+        reifier_id: Required ReifiedRelation.reifier_id.
+
+    Returns:
+        One target's observations with frame and provenance, or None when absent.
+    """
+    for field, value in {"env_name": env_name, "env_version": env_version, "reifier_id": reifier_id}.items():
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"Explicit {field} is required")
+    if eval_id is not None and (not isinstance(eval_id, str) or not eval_id.strip()):
+        raise ValueError("eval_id must be nonempty when supplied")
+    owns_driver = driver is None
     if driver is None:
         driver = get_neo4j_driver()
-        owns_driver = True
-
     try:
         with driver.session() as session:
-            if eval_id:
-                record = session.run(
+            records = list(
+                session.run(
                     """
-                    MATCH (e:EnvironmentGraph {name: $env_name})<-[:EVALUATED_GRAPH]-(ev:EvaluationRun {id: $eval_id})-[f:FEEDBACK_MUTATION]->(rf:ReifiedRelation)
-                    RETURN f.cartesian_dx AS dx,
-                           f.cartesian_dy AS dy,
-                           f.cartesian_dz AS dz,
-                           f.lift_rate AS lift_rate,
-                           f.contact_force_max AS force_max,
-                           ev.id AS eval_id,
-                           rf.reifier_id AS reifier_id
-                    LIMIT 1
-                    """,
+                MATCH (e:EnvironmentGraph {name: $env_name, version: $env_version})
+                      <-[:EVALUATED_GRAPH]-(ev:EvaluationRun)-[f:FEEDBACK_MUTATION]->
+                      (rf:ReifiedRelation {reifier_id: $reifier_id, env_name: $env_name})
+                MATCH (e)-[:HAS_REIFIER]->(rf)
+                WHERE ($eval_id IS NULL OR ev.id = $eval_id)
+                  AND f.env_version = $env_version AND f.reifier_id = $reifier_id
+                  AND f.eval_id = ev.id AND f.env_name = $env_name
+                RETURN f.cartesian_dx AS dx, f.cartesian_dy AS dy, f.cartesian_dz AS dz,
+                       f.lift_rate AS lift_rate, f.success_rate AS success_rate,
+                       f.contact_force_max AS force_max, f.hand_body AS hand_body,
+                       f.coordinate_frame AS coordinate_frame, f.contact_channel AS contact_channel,
+                       f.evidence_payload AS evidence_payload, ev.id AS eval_id,
+                       rf.reifier_id AS reifier_id, e.version AS env_version
+                ORDER BY f.timestamp DESC, ev.id DESC
+                LIMIT 1
+                """,
                     env_name=env_name,
                     eval_id=eval_id,
-                ).single()
-            else:
-                record = session.run(
-                    """
-                    MATCH (e:EnvironmentGraph {name: $env_name})<-[:EVALUATED_GRAPH]-(ev:EvaluationRun)-[f:FEEDBACK_MUTATION]->(rf:ReifiedRelation)
-                    RETURN f.cartesian_dx AS dx,
-                           f.cartesian_dy AS dy,
-                           f.cartesian_dz AS dz,
-                           f.lift_rate AS lift_rate,
-                           f.contact_force_max AS force_max,
-                           ev.id AS eval_id,
-                           rf.reifier_id AS reifier_id
-                    ORDER BY coalesce(ev.ended_at, f.timestamp) DESC, f.timestamp DESC
-                    LIMIT 1
-                    """,
-                    env_name=env_name,
-                ).single()
-            if record:
-                return dict(record)
-            return None
+                    env_version=env_version,
+                    reifier_id=reifier_id,
+                )
+            )
+            return dict(records[0]) if records else None
     finally:
         if owns_driver:
             driver.close()

@@ -214,3 +214,32 @@ def test_finger_grasp_enclosure():
         robot_cfg=SceneEntityCfg("robot"),
     )
     assert rew[0] > 0.9, f"Expected high grasp score for curled fingers, got {rew[0]}"
+
+
+def test_arm_joint_vel_l2():
+    """Verify arm joint velocity penalty calculation."""
+    mock_env = MagicMock()
+    mock_env.num_envs = 1
+    mock_robot = MagicMock()
+
+    mock_robot.data.joint_names = [
+        "left_shoulder_pitch_joint",
+        "left_shoulder_roll_joint",
+        "left_elbow_joint",
+        "left_wrist_yaw_joint",
+        "right_hip_joint",
+    ]
+    mock_robot.find_joints.return_value = (
+        [0, 1, 2, 3],
+        ["left_shoulder_pitch_joint", "left_shoulder_roll_joint", "left_elbow_joint", "left_wrist_yaw_joint"],
+    )
+    mock_robot.data.joint_vel = wp.from_torch(torch.tensor([[1.0, 2.0, 3.0, 4.0, 10.0]]))
+
+    mock_env.scene = {"robot": mock_robot}
+
+    penalty = pick_and_place_rewards.arm_joint_vel_l2(
+        mock_env,
+        robot_cfg=SceneEntityCfg("robot"),
+    )
+    # Expected sum of squares of arm joints: 1^2 + 2^2 + 3^2 + 4^2 = 1 + 4 + 9 + 16 = 30.0
+    assert torch.allclose(penalty, torch.tensor([30.0])), f"Expected arm joint vel l2 sum 30.0, got {penalty}"

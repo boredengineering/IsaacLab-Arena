@@ -50,12 +50,14 @@ def _test_g1_apple_to_plate_rl_environment_build(simulation_app):
     assert hasattr(rew_cfg, "transporting_object")
     assert hasattr(rew_cfg, "placed_bonus")
     assert hasattr(rew_cfg, "action_rate")
+    assert hasattr(rew_cfg, "arm_joint_vel")
     assert hasattr(rew_cfg, "multi_keypoint_guidance")
     assert rew_cfg.reaching_object.weight == 2.0
     assert rew_cfg.lifting_object.weight == 10.0
     assert rew_cfg.transporting_object.weight == 15.0
     assert rew_cfg.placed_bonus.weight == 20.0
-    assert rew_cfg.action_rate.weight == -0.001
+    assert rew_cfg.action_rate.weight == -0.005
+    assert rew_cfg.arm_joint_vel.weight == -0.0005
     assert rew_cfg.multi_keypoint_guidance.weight == 3.0
 
     # Check RL termination terms

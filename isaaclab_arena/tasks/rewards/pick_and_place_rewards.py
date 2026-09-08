@@ -114,6 +114,20 @@ def action_rate_l2(env: ManagerBasedRLEnv) -> torch.Tensor:
     return torch.sum(torch.square(env.action_manager.action - env.action_manager.prev_action), dim=1)
 
 
+def arm_joint_vel_l2(
+    env: ManagerBasedRLEnv,
+    robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize large arm joint velocities for smooth trajectory execution."""
+    robot: Articulation = env.scene[robot_cfg.name]
+    joint_vel = wp.to_torch(robot.data.joint_vel)
+    arm_names = [name for name in robot.data.joint_names if any(k in name for k in ("shoulder", "elbow", "wrist"))]
+    if arm_names:
+        ids, _ = robot.find_joints(arm_names)
+        return torch.sum(torch.square(joint_vel[:, ids]), dim=1)
+    return torch.sum(torch.square(joint_vel), dim=1)
+
+
 def ee_approach_vector_alignment(
     env: ManagerBasedRLEnv,
     ee_link_name: str,

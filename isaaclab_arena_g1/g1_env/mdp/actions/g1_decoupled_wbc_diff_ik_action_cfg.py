@@ -32,8 +32,9 @@ class G1DecoupledWBCDiffIKActionCfg(G1DecoupledWBCJointActionCfg):
     )
     ee_link_name: str = "left_wrist_yaw_link"
 
-    scale_pos: float = 0.05
-    scale_rot: float = 0.1
+    scale_pos: float = 0.025
+    scale_rot: float = 0.08
+    ema_factor: float = 0.8
 
     controller: DifferentialIKControllerCfg = DifferentialIKControllerCfg(
         command_type="pose",

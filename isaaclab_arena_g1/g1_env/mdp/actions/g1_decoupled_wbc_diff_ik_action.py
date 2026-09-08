@@ -89,6 +89,7 @@ class G1DecoupledWBCDiffIKAction(G1DecoupledWBCJointAction):
 
         # Overwrite raw actions tensor with 7-D shape
         self._raw_actions = torch.zeros(self.num_envs, self.action_dim, device=self.device)
+        self._prev_delta_pose = torch.zeros(self.num_envs, 6, device=self.device)
 
         # Pre-allocate scale tensor
         self._scale_tensor = torch.tensor(
@@ -108,6 +109,11 @@ class G1DecoupledWBCDiffIKAction(G1DecoupledWBCJointAction):
         # Extract delta pose and finger grasp synergy
         delta_pose = self._raw_actions[:, :6] * self._scale_tensor
         finger_cmd = self._raw_actions[:, 6:7]
+
+        # Apply EMA smoothing on Cartesian delta pose to prevent sudden jerks
+        if hasattr(self.cfg, "ema_factor") and self.cfg.ema_factor < 1.0:
+            delta_pose = self.cfg.ema_factor * delta_pose + (1.0 - self.cfg.ema_factor) * self._prev_delta_pose
+            self._prev_delta_pose.copy_(delta_pose)
 
         # 1. Compute current EE pose in robot root (pelvis) frame
         root_pos_w = _to_torch(self._asset.data.root_pos_w)
@@ -169,8 +175,10 @@ class G1DecoupledWBCDiffIKAction(G1DecoupledWBCJointAction):
         """Reset action history."""
         if env_ids is None:
             self._raw_actions.zero_()
+            self._prev_delta_pose.zero_()
             self._ik_controller.reset()
         else:
             self._raw_actions[env_ids] = 0.0
+            self._prev_delta_pose[env_ids] = 0.0
             env_ids_tensor = torch.as_tensor(env_ids, dtype=torch.long, device=self.device)
             self._ik_controller.reset(env_ids_tensor)

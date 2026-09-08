@@ -248,6 +248,9 @@ class PickAndPlaceRewardCfg:
     action_rate: RewardTermCfg = MISSING
     """Regularization penalty on action rate change."""
 
+    arm_joint_vel: RewardTermCfg = MISSING
+    """Regularization penalty on arm joint velocities to suppress excessive speed."""
+
     def __init__(
         self,
         pick_up_object: Asset,
@@ -333,7 +336,12 @@ class PickAndPlaceRewardCfg:
         )
         self.action_rate = RewardTermCfg(
             func=pick_and_place_rewards.action_rate_l2,
-            weight=-0.001,
+            weight=-0.005,
+        )
+        self.arm_joint_vel = RewardTermCfg(
+            func=pick_and_place_rewards.arm_joint_vel_l2,
+            params={"robot_cfg": SceneEntityCfg(robot_name)},
+            weight=-0.0005,
         )
 
 

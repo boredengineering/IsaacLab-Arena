@@ -1,5 +1,12 @@
 # DA3 + Spatial Forcing pipeline for the G1 apple pick-and-place
 
+> [!WARNING]
+> **HISTORICAL / ARCHIVED SPECIFICATION (2026-09-07)**
+> This document details the legacy DA3 depth annotation and Spatial Forcing finetuning pipeline.
+> For active execution on G1 dexterous manipulation, grounded verification, and DCRG closed-loop evaluation, see:
+> - Master References Index: [`.agents/references/README.md`](../README.md)
+> - Active Plan: [`dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md`](dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md)
+
 **Status:** v1.2 (2026-09-07) -- **Harness Confounders Diagnosed; v1.1 Null Result Contextualized by Settle & Coordinate Defect.**
 The 2026-09-06 "null result" was measured under three severe harness confounders that masked spatial learning:
 1. **Startup Ground Depenetration Bounce**: `verify_and_settle_scene` exited early at step 15 while the G1 robot was in mid-bounce ($1.03\text{ m/s}$ upward velocity, $\pm 8\text{ cm}$ hand oscillation), injecting severe camera vibration into the VLM at inference start. This is now patched with robot root-velocity tracking and an enforced 40-step damping window.

@@ -459,6 +459,21 @@ def sync_eval_telemetry_to_neo4j(
     payload_val = list(g.objects(eval_runs[0], ARENA.metricsPayload)) if eval_runs else []
     metrics_payload = str(payload_val[0]) if payload_val else "{}"
 
+    all_complete_val = list(g.objects(eval_runs[0], ARENA.metric_all_complete_rate)) if eval_runs else []
+    all_complete_rate = float(all_complete_val[0]) if all_complete_val else None
+
+    progress_score_val = list(g.objects(eval_runs[0], ARENA.metric_mean_progress_score)) if eval_runs else []
+    mean_progress_score = float(progress_score_val[0]) if progress_score_val else None
+
+    integrity_val = list(g.objects(eval_runs[0], ARENA.semanticIntegrityVerified)) if eval_runs else []
+    semantic_integrity_verified = bool(integrity_val[0]) if integrity_val else True
+
+    violation_val = list(g.objects(eval_runs[0], ARENA.integrityViolation)) if eval_runs else []
+    integrity_violation = str(violation_val[0]) if violation_val else None
+
+    blocking_val = list(g.objects(eval_runs[0], ARENA.blockingPredicate)) if eval_runs else []
+    blocking_predicate = str(blocking_val[0]) if blocking_val else None
+
     activities = list(g.subjects(RDF.type, PROV.Activity))
     ended_at = ""
     policies = []
@@ -485,6 +500,11 @@ def sync_eval_telemetry_to_neo4j(
                 MERGE (ev:EvaluationRun {id: $eval_id})
                 SET ev.success_rate = $success_rate,
                     ev.num_episodes = $num_episodes,
+                    ev.all_complete_rate = $all_complete_rate,
+                    ev.mean_progress_score = $mean_progress_score,
+                    ev.semantic_integrity_verified = $semantic_integrity_verified,
+                    ev.integrity_violation = $integrity_violation,
+                    ev.blocking_predicate = $blocking_predicate,
                     ev.metrics_payload = $metrics_payload,
                     ev.ended_at = $ended_at
                 WITH ev
@@ -492,12 +512,26 @@ def sync_eval_telemetry_to_neo4j(
                 FOREACH (_ IN CASE WHEN e IS NOT NULL THEN [1] ELSE [] END |
                     MERGE (ev)-[:EVALUATED_GRAPH]->(e)
                 )
+                FOREACH (_ IN CASE WHEN $semantic_integrity_verified = false THEN [1] ELSE [] END |
+                    FOREACH (rf IN [(e)<-[:REIFIED_IN]-(r:ReifiedRelation) | r] |
+                        MERGE (ev)-[f:FEEDBACK_MUTATION]->(rf)
+                        SET f.defect_mode = "ProxyMetricDiscrepancy",
+                            f.root_cause = $integrity_violation,
+                            f.remediation = "Ground RL rewards and termination criteria to match physical predicates",
+                            f.timestamp = datetime()
+                    )
+                )
                 MERGE (p:Policy {name: $policy_name})
                 MERGE (ev)-[:USED_POLICY]->(p)
                 """,
                 eval_id=eval_id,
                 success_rate=success_rate,
                 num_episodes=num_episodes,
+                all_complete_rate=all_complete_rate,
+                mean_progress_score=mean_progress_score,
+                semantic_integrity_verified=semantic_integrity_verified,
+                integrity_violation=integrity_violation,
+                blocking_predicate=blocking_predicate,
                 metrics_payload=metrics_payload,
                 ended_at=ended_at,
                 env_name=env_name,
@@ -508,6 +542,8 @@ def sync_eval_telemetry_to_neo4j(
                 "env_name": env_name,
                 "policy_name": policy_name,
                 "success_rate": success_rate,
+                "all_complete_rate": all_complete_rate,
+                "semantic_integrity_verified": semantic_integrity_verified,
             }
     finally:
         if owns_driver:

@@ -1,5 +1,12 @@
 # Metric Range for the G1 Policy: Fix the Confounds, Then the Method
 
+> [!WARNING]
+> **HISTORICAL / ARCHIVED SPECIFICATION (2026-09-06)**
+> This document is retained purely as a measured empirical evidence appendix for camera calibrations and reach statistics.
+> For active execution on G1 dexterous manipulation, grounded verification, and DCRG closed-loop evaluation, see:
+> - Master References Index: [`.agents/references/README.md`](../README.md)
+> - Active Plan: [`dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md`](dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md)
+
 > [!NOTE]
 > **Role changed 2026-09-06.** This document is now the **measured evidence appendix**, not the
 > active plan. The build is directed by

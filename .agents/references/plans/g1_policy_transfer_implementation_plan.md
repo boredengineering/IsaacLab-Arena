@@ -1,10 +1,16 @@
 # Implementation Plan: G1 Policy Transfer Diagnosis (Code-Level)
 
+> [!NOTE]
+> **SUPERSEDED / HISTORICAL CONTEXT ONLY**
+> This document records earlier exploratory work on zero-shot VLA imitation policy transfer (NVIDIA GR00T / OpenPI) and coordinate calibration.
+> The active, canonical manipulation approach is **Direct RL (RSL-RL PPO)** with physically grounded rewards and DCRG active inference.
+> See [README.md](file:///workspaces/IsaacLab-Arena/.agents/references/README.md) and [dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md](file:///workspaces/IsaacLab-Arena/.agents/references/plans/dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md).
+
 > [!IMPORTANT]
-> **Status**: ACTIVE — the code-level companion to `g1_policy_transfer_and_height_invariance_plan.md`, which holds the strategy and the falsification criteria. This document holds the diffs, commands, and acceptance criteria.
+> **Status**: HISTORICAL RECORD — the code-level companion to `g1_policy_transfer_and_height_invariance_plan.md`, which held the strategy and the falsification criteria.
 > **Two findings from reviewing the repository changed the implementation**:
-> 1. The height sweep is **not** a YAML change. The corpus-aligned scene is a Python factory with a hardcoded shelf constant and an invisible collision patch (§2.1). The sweep becomes a ~20-line change to one file plus a shell loop — cheaper and far more controlled than authoring graph specs.
-> 2. The `−0.8015 m` corpus invariant **may be frame-confused**, not merely un-toleranced (§1). If so, the height axis is mis-parameterised at its root, and the sweep must start by measuring frames rather than success rates.
+> 1. The height sweep was **not** a YAML change. The corpus-aligned scene is a Python factory with a hardcoded shelf constant and an invisible collision patch (§2.1).
+> 2. The `−0.8015 m` corpus invariant was frame-confused, not merely un-toleranced (§1).
 
 > [!NOTE]
 > **Phase numbering in this document is superseded by [`g1_pick_success_phases.md`](g1_pick_success_phases.md)** (canonical `P0`-`P6` tracker, 2026-09-04). The sections here remain valid as detail; cite phases from the tracker.

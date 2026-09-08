@@ -1,5 +1,12 @@
 # **Strategic Evaluation of Spatial Reasoning and Depth Integration Architectures for Vision-Language-Action Models**
 
+> [!NOTE]
+> **LITERATURE REVIEW & ARCHITECTURAL REFERENCE**
+> This report evaluates monocular depth and spatial reasoning paradigms for VLA models (such as GR00T N1.7).
+> For concrete environment implementation, grounded simulation predicates, and DCRG telemetry in IsaacLab-Arena, see:
+> - Master References Index: [`.agents/references/README.md`](../README.md)
+> - Active Plan: [`dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md`](dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md)
+
 ## **Executive Summary**
 
 The transition of robotic control architectures from specialized, task-specific algorithms to generalized Vision-Language-Action (VLA) foundation models marks a critical inflection point in embodied artificial intelligence. Models such as NVIDIA Isaac GR00T N1.7 have demonstrated unprecedented semantic reasoning and cross-embodiment dexterous manipulation capabilities by leveraging internet-scale pretraining and expansive human-demonstration datasets. However, a persistent architectural vulnerability threatens the reliability of these systems: because their underlying Vision-Language Model (VLM) backbones are predominantly pretrained on 2D image-text corpora, they inherently lack explicit 3D geometric awareness. This spatial reasoning deficit manifests as elevated failure rates in precision-dependent tasks, such as fine-grained manipulation, height-adaptive object placement, and handling occluded environments.

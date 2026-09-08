@@ -90,6 +90,19 @@ arena:RobotAffordanceReachabilityShape a sh:NodeShape ;
             }
         """ ;
     ] .
-
-
-
+# 7. Evaluation Run Semantic Integrity Invariant
+arena:EvaluationRunIntegrityShape a sh:NodeShape ;
+    sh:targetClass arena:EvaluationRun ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "CRITICAL: EvaluationRun reports success_rate > 0 but failed semantic integrity audit (discrepancy between RL termination and physical task predicates)." ;
+        sh:select """
+            PREFIX arena: <https://isaac-sim.github.io/arena/schema#>
+            SELECT $this
+            WHERE {
+                $this arena:metric_success_rate ?sr .
+                FILTER (?sr > 0.0)
+                $this arena:semanticIntegrityVerified false .
+            }
+        """ ;
+    ] .

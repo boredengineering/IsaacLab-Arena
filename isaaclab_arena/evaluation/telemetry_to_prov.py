@@ -195,6 +195,60 @@ def record_eval_telemetry_to_prov(
             pred_name = f"metric_{k}"
             g.add((eval_uri, ARENA[pred_name], Literal(v, datatype=XSD.float if isinstance(v, float) else XSD.integer)))
 
+    # Audit episode_results_rank*.jsonl for physical predicate ground truth
+    all_complete_count = 0
+    total_episodes_found = 0
+    progress_score_sum = 0.0
+    blocking_predicates = []
+
+    for jsonl_file in Path(output_dir).glob("episode_results_rank*.jsonl"):
+        try:
+            with open(jsonl_file) as f:
+                for line in f:
+                    if not line.strip():
+                        continue
+                    rec = json.loads(line)
+                    total_episodes_found += 1
+                    prog = rec.get("progress", {})
+                    if prog.get("all_complete", False):
+                        all_complete_count += 1
+                    score = prog.get("overall_score", 0.0)
+                    progress_score_sum += score
+                    objs = prog.get("objectives", {})
+                    for obj_data in objs.values():
+                        if isinstance(obj_data, dict) and not obj_data.get("is_complete", True):
+                            for act_pred in obj_data.get("active_predicates", {}).values():
+                                blocking_predicates.append(str(act_pred))
+        except Exception as e:
+            logger.warning("Error parsing %s for PROV-O telemetry: %s", jsonl_file, e)
+
+    all_complete_rate = (all_complete_count / total_episodes_found) if total_episodes_found > 0 else None
+    mean_progress_score = (progress_score_sum / total_episodes_found) if total_episodes_found > 0 else None
+
+    # Check semantic integrity
+    success_rate = float(metrics.get("success_rate", 0.0))
+    semantic_integrity_verified = True
+    integrity_violation = None
+
+    if success_rate > 0.0 and all_complete_rate is not None and all_complete_rate == 0.0:
+        semantic_integrity_verified = False
+        blocking_str = f"; blocked by {blocking_predicates[0]}" if blocking_predicates else ""
+        integrity_violation = (
+            f"ProxyMetricDiscrepancy: termination success_rate is {success_rate:.2f} but "
+            f"physical predicate all_complete_rate is 0.0{blocking_str}"
+        )
+
+    if all_complete_rate is not None:
+        g.add((eval_uri, ARENA.metric_all_complete_rate, Literal(float(all_complete_rate), datatype=XSD.float)))
+    if mean_progress_score is not None:
+        g.add((eval_uri, ARENA.metric_mean_progress_score, Literal(float(mean_progress_score), datatype=XSD.float)))
+
+    g.add((eval_uri, ARENA.semanticIntegrityVerified, Literal(bool(semantic_integrity_verified), datatype=XSD.boolean)))
+    if integrity_violation:
+        g.add((eval_uri, ARENA.integrityViolation, Literal(integrity_violation, datatype=XSD.string)))
+    if blocking_predicates:
+        g.add((eval_uri, ARENA.blockingPredicate, Literal(blocking_predicates[0], datatype=XSD.string)))
+
     # Save metrics JSON payload
     g.add((eval_uri, ARENA.metricsPayload, Literal(json.dumps(metrics), datatype=XSD.string)))
 

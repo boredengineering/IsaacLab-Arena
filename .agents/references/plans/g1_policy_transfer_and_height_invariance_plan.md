@@ -1,17 +1,14 @@
 # Plan: G1 Policy Transfer Diagnosis & Height Invariance (Scenario C1 Follow-On)
 
+> [!NOTE]
+> **SUPERSEDED / HISTORICAL CONTEXT ONLY**
+> This document records earlier exploratory work on zero-shot VLA imitation policy transfer (NVIDIA GR00T / OpenPI).
+> The active, canonical manipulation approach is **Direct RL (RSL-RL PPO)** with physically grounded rewards and DCRG active inference.
+> See [README.md](file:///workspaces/IsaacLab-Arena/.agents/references/README.md) and [dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md](file:///workspaces/IsaacLab-Arena/.agents/references/plans/dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md).
+
 > [!IMPORTANT]
-> **Status**: ACTIVE, **re-scoped 2026-09-04**. Supersedes the "next steps" list drafted on
-> 2026-09-03.
->
-> **Goal (explicit)**: get `nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace` to *actually pick the
-> apple on the maple table*. Not to characterise why it cannot — to make it work.
->
-> **This plan's title is now partly misleading and is kept for continuity.** Height invariance was
-> measured on 2026-09-03 and found **in tolerance (6.5 cm)**. The height sweep is demoted from
-> Phase 1 to an optional robustness check. §1b records what replaced it.
-> **Decision context**: Pathways A (rebuild the benchmark on the shelf scene) and B (collect demos on `maple_table`) were rejected. The chosen direction is **fine-tune on the galileo scene and transfer to `maple_table`**, with the generation pipeline responsible for diagnosing and closing the transfer gap.
-> **What changed during review**: the original step 1 recommended fine-tuning with height variation. Investigation found (a) the tolerance driving that recommendation was never measured, and (b) the galileo scene already contains the shelf tiers needed to measure it. The plan below therefore leads with measurement, not training.
+> **Status**: HISTORICAL RECORD — re-scoped 2026-09-04, subsequently concluded.
+> **Decision context**: Zero-shot VLA transfer to `maple_table` failed due to domain shift. The project transitioned to direct Reinforcement Learning (`g1_apple_to_plate_rl`).
 
 > [!NOTE]
 > **Phase numbering in this document is superseded by [`g1_pick_success_phases.md`](g1_pick_success_phases.md)** (canonical `P0`-`P6` tracker, 2026-09-04). The sections here remain valid as detail; cite phases from the tracker.

@@ -1,5 +1,12 @@
 # Spatial Forcing with DA3METRIC-LARGE: Giving the G1 Policy Metric Range
 
+> [!WARNING]
+> **HISTORICAL / ARCHIVED SPECIFICATION (2026-09-06)**
+> This document is retained for algorithmic reference regarding DA3 and Spatial Forcing alignment losses.
+> For active execution on G1 dexterous manipulation, grounded verification, and DCRG closed-loop evaluation, see:
+> - Master References Index: [`.agents/references/README.md`](../README.md)
+> - Active Plan: [`dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md`](dcrg_rl_fidelity_and_epistemic_telemetry_repair_plan.md)
+
 > [!NOTE]
 > **Role, 2026-09-06.** The build is now directed by
 > [`da3_spatial_forcing_pipeline_plan.md`](da3_spatial_forcing_pipeline_plan.md). This document

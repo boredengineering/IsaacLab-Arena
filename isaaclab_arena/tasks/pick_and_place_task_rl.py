@@ -76,16 +76,18 @@ def object_is_lifted_obs(
     minimal_height: float,
     object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
 ) -> torch.Tensor:
-    """Indicator of whether the object is lifted above the minimal threshold."""
-    object: RigidObject = env.scene[object_cfg.name]
-    obj_z = wp.to_torch(object.data.root_pos_w)[:, 2:3]
-    return (obj_z > minimal_height).float()
+    """Indicator of whether the object is lifted above the minimal threshold from resting height."""
+    from isaaclab_arena.tasks.predicates.spatial import object_lifted_above_resting_min
+
+    lifted = object_lifted_above_resting_min(env, object_cfg.name, distance=minimal_height)
+    return lifted.float().unsqueeze(-1)
 
 
 def pick_and_place_rl_success(
     env: ManagerBasedRLEnv,
     minimal_height: float,
     max_xy_distance: float,
+    velocity_threshold: float = 0.2,
     object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
     destination_cfg: SceneEntityCfg = SceneEntityCfg("destination"),
     rl_training: bool = False,
@@ -94,18 +96,32 @@ def pick_and_place_rl_success(
 
     During RL training mode, returns all False to prevent premature episode termination while
     maintaining an active 'success' term in the termination manager required by SuccessRecorder.
-    During evaluation, checks placement on the destination within tolerance.
+    During evaluation, checks placement on the destination within tolerance with low velocity.
     """
     if rl_training:
         return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+    from isaaclab_arena.tasks.predicates.spatial import object_lifted_above_resting_min
 
     object_instance: RigidObject = env.scene[object_cfg.name]
     destination_instance: RigidObject = env.scene[destination_cfg.name]
     obj_pos_w = wp.to_torch(object_instance.data.root_pos_w)[:, :3]
     dest_pos_w = wp.to_torch(destination_instance.data.root_pos_w)[:, :3]
     distance_xy = torch.norm(obj_pos_w[:, :2] - dest_pos_w[:, :2], dim=1)
-    is_lifted = obj_pos_w[:, 2] > minimal_height
-    return (distance_xy < max_xy_distance) & is_lifted
+
+    # 1. Lift condition: must have been lifted above resting reference
+    has_been_lifted = object_lifted_above_resting_min(env, object_cfg.name, distance=minimal_height)
+
+    # 2. Velocity gate: must be at rest / low velocity (< 0.2 m/s), not flying
+    obj_vel = wp.to_torch(object_instance.data.root_lin_vel_w)
+    speed = torch.norm(obj_vel, dim=-1)
+    is_settled = speed < velocity_threshold
+
+    # 3. Vertical alignment with destination deck: within 5cm
+    dz = torch.abs(obj_pos_w[:, 2] - dest_pos_w[:, 2])
+    is_near_deck = dz < 0.05
+
+    return (distance_xy < max_xy_distance) & has_been_lifted & is_settled & is_near_deck
 
 
 @configclass
@@ -237,10 +253,19 @@ class PickAndPlaceRewardCfg:
             params={
                 "minimal_height": minimum_height_to_lift,
                 "max_xy_distance": max_destination_xy_distance,
+                "velocity_threshold": 0.2,
                 "object_cfg": SceneEntityCfg(pick_up_object.name),
                 "destination_cfg": SceneEntityCfg(destination_location.name),
             },
             weight=20.0,
+        )
+        self.excess_velocity = RewardTermCfg(
+            func=pick_and_place_rewards.object_excess_velocity_penalty,
+            params={
+                "max_allowed_speed": 1.0,
+                "object_cfg": SceneEntityCfg(pick_up_object.name),
+            },
+            weight=0.5,
         )
         self.action_rate = RewardTermCfg(
             func=pick_and_place_rewards.action_rate_l2,
@@ -360,6 +385,7 @@ class PickAndPlaceTaskRL(PickAndPlaceTask):
             params={
                 "minimal_height": self.min_lift_height,
                 "max_xy_distance": self.max_destination_xy_separation or 0.075,
+                "velocity_threshold": 0.2,
                 "object_cfg": SceneEntityCfg(self.pick_up_object.name),
                 "destination_cfg": SceneEntityCfg(self.destination_location.name),
                 "rl_training": self.rl_training_mode,

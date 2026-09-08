@@ -40,10 +40,11 @@ def object_is_lifted(
     minimal_height: float,
     object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
 ) -> torch.Tensor:
-    """Reward the agent for lifting the object above the minimal height."""
-    object: RigidObject = env.scene[object_cfg.name]
-    obj_z = wp.to_torch(object.data.root_pos_w)[:, 2]
-    return torch.where(obj_z > minimal_height, 1.0, 0.0)
+    """Reward the agent for lifting the object above the minimal height from its resting position."""
+    from isaaclab_arena.tasks.predicates.spatial import object_lifted_above_resting_min
+
+    lifted = object_lifted_above_resting_min(env, object_cfg.name, distance=minimal_height)
+    return lifted.float()
 
 
 def object_destination_distance(
@@ -54,12 +55,14 @@ def object_destination_distance(
     destination_cfg: SceneEntityCfg = SceneEntityCfg("destination"),
 ) -> torch.Tensor:
     """Reward the agent for tracking the destination location while lifted."""
+    from isaaclab_arena.tasks.predicates.spatial import object_lifted_above_resting_min
+
     object: RigidObject = env.scene[object_cfg.name]
     destination: RigidObject = env.scene[destination_cfg.name]
     obj_pos_w = wp.to_torch(object.data.root_pos_w)[:, :3]
     dest_pos_w = wp.to_torch(destination.data.root_pos_w)[:, :3]
     distance = torch.norm(dest_pos_w - obj_pos_w, dim=1)
-    is_lifted = (obj_pos_w[:, 2] > minimal_height).float()
+    is_lifted = object_lifted_above_resting_min(env, object_cfg.name, distance=minimal_height).float()
     return is_lifted * (1.0 - torch.tanh(distance / std))
 
 
@@ -67,18 +70,43 @@ def object_placed_bonus(
     env: ManagerBasedRLEnv,
     minimal_height: float,
     max_xy_distance: float,
+    velocity_threshold: float = 0.2,
     object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
     destination_cfg: SceneEntityCfg = SceneEntityCfg("destination"),
 ) -> torch.Tensor:
-    """Reward bonus when the object is lifted and placed within the destination radius."""
+    """Reward bonus when the object is lifted and placed within the destination radius at low speed."""
+    from isaaclab_arena.tasks.predicates.spatial import object_lifted_above_resting_min
+
     object: RigidObject = env.scene[object_cfg.name]
     destination: RigidObject = env.scene[destination_cfg.name]
     obj_pos_w = wp.to_torch(object.data.root_pos_w)[:, :3]
     dest_pos_w = wp.to_torch(destination.data.root_pos_w)[:, :3]
     distance_xy = torch.norm(obj_pos_w[:, :2] - dest_pos_w[:, :2], dim=1)
-    is_lifted = obj_pos_w[:, 2] > minimal_height
-    is_placed = (distance_xy < max_xy_distance) & is_lifted
+    is_lifted = object_lifted_above_resting_min(env, object_cfg.name, distance=minimal_height)
+
+    # Object velocity gate: must be settling or resting (< 0.2 m/s), not flying
+    obj_vel = wp.to_torch(object.data.root_lin_vel_w)
+    speed = torch.norm(obj_vel, dim=-1)
+    is_settled = speed < velocity_threshold
+
+    # Object vertical proximity: must be within 5cm of destination height
+    dz = torch.abs(obj_pos_w[:, 2] - dest_pos_w[:, 2])
+    is_near_deck = dz < 0.05
+
+    is_placed = (distance_xy < max_xy_distance) & is_lifted & is_settled & is_near_deck
     return is_placed.float()
+
+
+def object_excess_velocity_penalty(
+    env: ManagerBasedRLEnv,
+    max_allowed_speed: float = 1.0,
+    object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
+) -> torch.Tensor:
+    """Penalize excessive object linear speed to prevent batting or swatting."""
+    object: RigidObject = env.scene[object_cfg.name]
+    obj_vel = wp.to_torch(object.data.root_lin_vel_w)
+    speed = torch.norm(obj_vel, dim=-1)
+    return -torch.clamp(speed - max_allowed_speed, min=0.0)
 
 
 def action_rate_l2(env: ManagerBasedRLEnv) -> torch.Tensor:

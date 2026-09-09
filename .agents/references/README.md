@@ -1,6 +1,6 @@
 # IsaacLab-Arena Agent Reference Library Master Index
 
-- **Last Updated**: 2026-09-08
+- **Last Updated**: 2026-09-09
 - **Status**: CANONICAL REFERENCE
 - **Purpose**: Definitive navigation guide and architecture map for all documentation, design plans, and technical references under `.agents/references/`.
 

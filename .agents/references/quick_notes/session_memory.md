@@ -265,3 +265,17 @@
   * Controlled Cartesian descent with palm downward over apple; zero ballistic swatting, zero knuckle collisions.
   * Hand hovers in pre-grasp enclosure directly over the target apple.
   * Committed in `5a39b3104f` on `dev/0.3.0-prerelease`.
+
+## 26. Reverse Curriculum Architecture (Milestone M4) & Pre-Grasp / Lift Kinematics (2026-09-09)
+* **Empirical Pre-Grasp Kinematics Extraction**:
+  * Extracted from step 10 of rollout evaluation checkpoint `model_149.pt` where palm reached hover $1.7\,\text{cm}$ above apple:
+    * `left_shoulder_pitch_joint`: -0.1038, `left_shoulder_roll_joint`: -0.0865, `left_shoulder_yaw_joint`: 0.2141
+    * `left_elbow_joint`: 0.4491
+    * `left_wrist_roll_joint`: 0.1850, `left_wrist_pitch_joint`: -0.0044, `left_wrist_yaw_joint`: 0.1924
+* **Reverse Curriculum Event Terms (`pick_and_place_task_rl.py`)**:
+  * `reset_robot_arm_reverse_curriculum`: Selects fraction `curriculum_ratio` (default $0.35$ in training) of resetting envs and writes arm joint angles to pre-grasp posture with zero velocity.
+  * **Isaac Lab Joint Order Contract**: `robot.find_joints(joint_names)` defaults to sorting indices internally; must explicitly pass `preserve_order=True` when mapping dictionary values to index order.
+  * `reset_object_reverse_curriculum`: Selects fraction `lift_curriculum_ratio` (default $0.15$ in training) and elevates the manipuland by `lift_height_offset = 0.025m`, training the policy directly on in-flight transport and release without having to explore the full reach-and-grasp sequence from scratch every episode.
+* **Honest Evaluation Decoupling**:
+  * In `g1_apple_to_plate_rl_environment.py`, curriculum ratios are dynamically zeroed when `rl_training_mode=False`.
+  * Standalone evaluation runs (`policy_runner.py`) always test the policy from the canonical home posture without artificial reset assistance.

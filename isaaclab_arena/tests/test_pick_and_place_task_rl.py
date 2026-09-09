@@ -66,22 +66,36 @@ def _test_g1_apple_to_plate_rl_environment_build(simulation_app):
     assert hasattr(term_cfg, "object_dropped")
     assert term_cfg.success is not None, "RL termination must include dynamic success term for SuccessRecorder"
 
-    # Verify environment instantiation and 7-D Diff-IK action stepping
+    # Check that in evaluation mode (default), reverse curriculum terms are inactive
+    eval_events_cfg = arena_env.task.get_events_cfg()
+    assert eval_events_cfg.reset_robot_curriculum is None
+    assert eval_events_cfg.reset_object_curriculum is None
+
+    # Check that in training mode, reverse curriculum terms are properly attached
+    cfg_train = G1AppleToPlateRLEnvironmentCfg(rl_training_mode=True)
+    arena_env_train = factory.build(cfg_train)
+    train_events_cfg = arena_env_train.task.get_events_cfg()
+    assert train_events_cfg.reset_robot_curriculum is not None
+    assert train_events_cfg.reset_object_curriculum is not None
+    assert train_events_cfg.reset_robot_curriculum.params["curriculum_ratio"] == 0.35
+    assert train_events_cfg.reset_object_curriculum.params["lift_curriculum_ratio"] == 0.15
+
+    # Verify environment instantiation and 7-D Diff-IK action stepping with training curriculum active
     import torch
 
     from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
     from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
 
-    builder = ArenaEnvBuilder(arena_env, ArenaEnvBuilderCfg(num_envs=2))
+    builder = ArenaEnvBuilder(arena_env_train, ArenaEnvBuilderCfg(num_envs=4))
     env = builder.make_registered()
     obs, _ = env.reset()
     assert (
         env.unwrapped.action_manager.total_action_dim == 7
     ), f"Expected action dim 7 for Diff-IK, got {env.unwrapped.action_manager.total_action_dim}"
 
-    action = torch.zeros((2, 7), device=env.unwrapped.device)
+    action = torch.zeros((4, 7), device=env.unwrapped.device)
     obs, rew, term, trunc, info = env.step(action)
-    assert obs["policy"].shape[0] == 2
+    assert obs["policy"].shape[0] == 4
     assert not torch.isnan(rew).any(), "Rewards contain NaNs"
     env.close()
 

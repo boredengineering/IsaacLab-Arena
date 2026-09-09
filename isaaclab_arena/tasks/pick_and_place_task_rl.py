@@ -345,6 +345,80 @@ class PickAndPlaceRewardCfg:
         )
 
 
+def reset_robot_arm_reverse_curriculum(
+    env: ManagerBasedRLEnv,
+    env_ids: torch.Tensor,
+    curriculum_ratio: float,
+    pregrasp_arm_joint_pos: dict[str, float],
+    robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> None:
+    """Initialize a fraction of resetting environments with the robot arm in pre-grasp posture.
+
+    Args:
+        env: The simulation environment.
+        env_ids: Environment indices being reset.
+        curriculum_ratio: Fraction of resetting environments to place in pre-grasp posture.
+        pregrasp_arm_joint_pos: Dictionary mapping joint names to pre-grasp target angles.
+        robot_cfg: Scene entity configuration for the robot articulation.
+    """
+    if env_ids is None or len(env_ids) == 0 or curriculum_ratio <= 0.0 or not pregrasp_arm_joint_pos:
+        return
+
+    rand_vals = torch.rand(len(env_ids), device=env.device)
+    curr_mask = rand_vals < curriculum_ratio
+    curr_env_ids = env_ids[curr_mask]
+    if len(curr_env_ids) == 0:
+        return
+
+    robot: Articulation = env.scene[robot_cfg.name]
+    joint_names = list(pregrasp_arm_joint_pos.keys())
+    joint_ids, _ = robot.find_joints(joint_names, preserve_order=True)
+
+    joint_pos = wp.to_torch(robot.data.joint_pos)[curr_env_ids].clone()
+    joint_vel = wp.to_torch(robot.data.joint_vel)[curr_env_ids].clone()
+
+    for i, name in enumerate(joint_names):
+        joint_pos[:, joint_ids[i]] = pregrasp_arm_joint_pos[name]
+    joint_vel[:, joint_ids] = 0.0
+
+    robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=curr_env_ids)
+
+
+def reset_object_reverse_curriculum(
+    env: ManagerBasedRLEnv,
+    env_ids: torch.Tensor,
+    lift_curriculum_ratio: float,
+    lift_height_offset: float = 0.025,
+    object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
+) -> None:
+    """Initialize a fraction of resetting environments with the object slightly elevated.
+
+    Args:
+        env: The simulation environment.
+        env_ids: Environment indices being reset.
+        lift_curriculum_ratio: Fraction of environments to elevate.
+        lift_height_offset: Vertical offset in meters to add to default root position.
+        object_cfg: Scene entity configuration for the manipuland object.
+    """
+    if env_ids is None or len(env_ids) == 0 or lift_curriculum_ratio <= 0.0:
+        return
+
+    rand_vals = torch.rand(len(env_ids), device=env.device)
+    curr_mask = rand_vals < lift_curriculum_ratio
+    curr_env_ids = env_ids[curr_mask]
+    if len(curr_env_ids) == 0:
+        return
+
+    obj: RigidObject = env.scene[object_cfg.name]
+    root_pose = wp.to_torch(obj.data.default_root_state)[curr_env_ids, :7].clone()
+    root_pose[:, :3] += env.scene.env_origins[curr_env_ids]
+    root_pose[:, 2] += lift_height_offset
+    root_vel = torch.zeros(len(curr_env_ids), 6, device=env.device)
+
+    obj.write_root_pose_to_sim(root_pose, env_ids=curr_env_ids)
+    obj.write_root_velocity_to_sim(root_vel, env_ids=curr_env_ids)
+
+
 @configclass
 class PickAndPlaceEventsCfg:
     """Event terms for Pick and Place RL to ensure object reset across episodes."""
@@ -354,6 +428,12 @@ class PickAndPlaceEventsCfg:
 
     reset_destination: EventTermCfg = MISSING
     """Reset the destination object to its default root state upon episode reset."""
+
+    reset_robot_curriculum: EventTermCfg | None = None
+    """Optional reverse-curriculum reset term that initializes arm joints to pre-grasp posture."""
+
+    reset_object_curriculum: EventTermCfg | None = None
+    """Optional reverse-curriculum reset term that elevates object to pre-lifted state."""
 
 
 @configclass
@@ -393,6 +473,9 @@ class PickAndPlaceTaskRL(PickAndPlaceTask):
         ee_link_name: str = "left_hand_middle_1_link",
         rl_training_mode: bool = True,
         minimum_height_to_lift: float | None = None,
+        curriculum_ratio: float = 0.0,
+        pregrasp_arm_joint_pos: dict[str, float] | None = None,
+        lift_curriculum_ratio: float = 0.0,
     ):
         """Initialize the Pick-and-Place RL task.
 
@@ -414,6 +497,9 @@ class PickAndPlaceTaskRL(PickAndPlaceTask):
             ee_link_name: Body link name used for reaching calculations.
             rl_training_mode: Whether to run in RL training mode (no early success termination).
             minimum_height_to_lift: Optional alias for min_lift_height.
+            curriculum_ratio: Fraction of environments reset in pre-grasp arm posture.
+            pregrasp_arm_joint_pos: Dictionary mapping arm joint names to pre-grasp target angles.
+            lift_curriculum_ratio: Fraction of environments reset with object elevated.
         """
         if minimum_height_to_lift is not None:
             min_lift_height = minimum_height_to_lift
@@ -436,6 +522,9 @@ class PickAndPlaceTaskRL(PickAndPlaceTask):
         self.embodiment = embodiment
         self.ee_link_name = ee_link_name
         self.rl_training_mode = rl_training_mode
+        self.curriculum_ratio = curriculum_ratio
+        self.pregrasp_arm_joint_pos = pregrasp_arm_joint_pos
+        self.lift_curriculum_ratio = lift_curriculum_ratio
 
         self.observation_cfg = PickAndPlaceObservationsCfg(
             pick_up_object=self.pick_up_object,
@@ -475,9 +564,36 @@ class PickAndPlaceTaskRL(PickAndPlaceTask):
                 "asset_cfg": SceneEntityCfg(self.destination_location.name),
             },
         )
+
+        reset_robot_curriculum = None
+        if self.curriculum_ratio > 0.0 and self.pregrasp_arm_joint_pos:
+            reset_robot_curriculum = EventTermCfg(
+                func=reset_robot_arm_reverse_curriculum,
+                mode="reset",
+                params={
+                    "curriculum_ratio": self.curriculum_ratio,
+                    "pregrasp_arm_joint_pos": self.pregrasp_arm_joint_pos,
+                    "robot_cfg": SceneEntityCfg(self.embodiment.get_scene_key()),
+                },
+            )
+
+        reset_object_curriculum = None
+        if self.lift_curriculum_ratio > 0.0:
+            reset_object_curriculum = EventTermCfg(
+                func=reset_object_reverse_curriculum,
+                mode="reset",
+                params={
+                    "lift_curriculum_ratio": self.lift_curriculum_ratio,
+                    "lift_height_offset": 0.025,
+                    "object_cfg": SceneEntityCfg(self.pick_up_object.name),
+                },
+            )
+
         return PickAndPlaceEventsCfg(
             reset_object=reset_object,
             reset_destination=reset_destination,
+            reset_robot_curriculum=reset_robot_curriculum,
+            reset_object_curriculum=reset_object_curriculum,
         )
 
     def make_rl_termination_cfg(self) -> PickAndPlaceTerminationsCfg:

@@ -15,6 +15,17 @@ if TYPE_CHECKING:
     from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
 
 
+G1_PREGRASP_LEFT_ARM_JOINT_POS: dict[str, float] = {
+    "left_shoulder_pitch_joint": -0.1038,
+    "left_shoulder_roll_joint": -0.0865,
+    "left_shoulder_yaw_joint": 0.2141,
+    "left_elbow_joint": 0.4491,
+    "left_wrist_roll_joint": 0.1850,
+    "left_wrist_pitch_joint": -0.0044,
+    "left_wrist_yaw_joint": 0.1924,
+}
+
+
 @dataclass
 class G1AppleToPlateRLEnvironmentCfg(ArenaEnvironmentCfg):
     """Configure the G1 tabletop apple to plate RL training environment."""
@@ -39,6 +50,12 @@ class G1AppleToPlateRLEnvironmentCfg(ArenaEnvironmentCfg):
 
     rl_training_mode: bool = False
     """Whether to run in RL training mode (no early success termination)."""
+
+    curriculum_ratio: float = 0.35
+    """Fraction of parallel training environments initialized in pre-grasp arm posture."""
+
+    lift_curriculum_ratio: float = 0.15
+    """Fraction of parallel training environments initialized with object elevated."""
 
 
 @register_environment
@@ -116,6 +133,10 @@ class G1AppleToPlateRLEnvironment(ArenaEnvironmentFactory[G1AppleToPlateRLEnviro
         # Step 4: Compose scene and task
         scene = Scene(assets=[background, pick_up_object, destination, ground_plane, light])
 
+        # Reverse curriculum: active during training mode, zeroed for evaluation from home position
+        effective_curriculum_ratio = cfg.curriculum_ratio if cfg.rl_training_mode else 0.0
+        effective_lift_curriculum_ratio = cfg.lift_curriculum_ratio if cfg.rl_training_mode else 0.0
+
         task = PickAndPlaceTaskRL(
             pick_up_object=pick_up_object,
             destination_location=destination,
@@ -125,6 +146,9 @@ class G1AppleToPlateRLEnvironment(ArenaEnvironmentFactory[G1AppleToPlateRLEnviro
             minimum_height_to_lift=cfg.minimum_height_to_lift,
             episode_length_s=cfg.episode_length_s,
             rl_training_mode=cfg.rl_training_mode,
+            curriculum_ratio=effective_curriculum_ratio,
+            pregrasp_arm_joint_pos=G1_PREGRASP_LEFT_ARM_JOINT_POS,
+            lift_curriculum_ratio=effective_lift_curriculum_ratio,
         )
 
         return IsaacLabArenaEnvironment(

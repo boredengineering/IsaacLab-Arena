@@ -168,8 +168,8 @@ flowchart TD
 | **M2: Keypoint & Approach Reward** | Palm orientation alignment + fingertip-to-apple guidance (`multi_keypoint_grasp_guidance`) + finger polarity fix | Hand approaches vertically with fingers open; 0 knuckle collisions; unit tests pass | [`pick_and_place_rewards.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tasks/rewards/pick_and_place_rewards.py), [`pick_and_place_task_rl.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tasks/pick_and_place_task_rl.py) | **COMPLETED** (7/7 tests passed in [`test_pick_and_place_rewards.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tests/test_pick_and_place_rewards.py)) |
 | **M3: Staged Validation Training & Velocity Damping** | Train RSL-RL (150 iters) + Multi-tier arm velocity regularization & EMA smoothing | Mean reward surge > 3.0, standing stability 100%, arm jerk eliminated, zero ballistic swatting | [`logs/rsl_rl/g1_diff_ik_7d_validation/2026-09-08_21-20-25/`](file:///workspaces/IsaacLab-Arena/logs/rsl_rl/g1_diff_ik_7d_validation/2026-09-08_21-20-25/), [`PickAndPlaceRewardCfg`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tasks/pick_and_place_task_rl.py#L250) | **COMPLETED** (Committed in [`5a39b3104f`](file:///workspaces/IsaacLab-Arena)) |
 | **M4: Reverse Curriculum & Lifting** | Reverse curriculum initialization (pre-grasp/lift phases) | Lift rate > 50%, transport to plate | [`pick_and_place_task_rl.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tasks/pick_and_place_task_rl.py), [`g1_apple_to_plate_rl_environment.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena_environments/g1_apple_to_plate_rl_environment.py) | **COMPLETED** (Standing stance calibrated, 250-iter training reached reward 16.63, active lifting & transport discovered) |
-| **M5: RAPTOR Meta-Learning Config** | Teacher-student distillation spec with GRU hidden state | Loss convergence in distillation; in-context mass adaptation | `isaaclab_arena_examples/policy/raptor_distillation_cfg.py` | **IN PROGRESS** (Privileged teacher observation space & recurrent student architecture) |
-| **M6: DCRG Knowledge Graph Sync** | Evaluation telemetry ingested into Neo4j with updated predicates | `semantic_integrity_verified: true`, decision node marked VALIDATED | [`sync_dcrg_m4_curriculum.py`](file:///root/.gemini/antigravity-cli/brain/da0a2b64-a28e-40b6-9601-592f8500e0b1/scratch/sync_dcrg_m4_curriculum.py) | **COMPLETED** (Milestones M1–M4 synced to Neo4j LPG) |
+| **M5: RAPTOR Meta-Learning Config** | Teacher-student distillation spec with GRU hidden state | Loss convergence in distillation; in-context mass adaptation | [`raptor_distillation_cfg.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena_examples/policy/raptor_distillation_cfg.py), [`pick_and_place_task_rl.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tasks/pick_and_place_task_rl.py) | **COMPLETED** (Privileged teacher observation space, recurrent GRU student, distillation runner, smoke training verified) |
+| **M6: DCRG Knowledge Graph Sync** | Evaluation telemetry ingested into Neo4j with updated predicates | `semantic_integrity_verified: true`, decision node marked VALIDATED | [`sync_dcrg_m5_raptor.py`](file:///root/.gemini/antigravity-cli/brain/da0a2b64-a28e-40b6-9601-592f8500e0b1/scratch/sync_dcrg_m5_raptor.py) | **COMPLETED** (Milestones M1–M5 synced to Neo4j LPG) |
 
 ---
 
@@ -236,3 +236,20 @@ flowchart TD
   - Standing balance 100%, 0 falls, 0 drop terminations (all 3 episodes ran to full 300 steps).
   - Viewport video recorded: [`outputs/2026-09-09_01-38-31/rl-video-step-0.mp4`](file:///workspaces/IsaacLab-Arena/outputs/2026-09-09_01-38-31/rl-video-step-0.mp4).
   - Telemetry synced to Neo4j LPG and PROV-O graph.
+
+### 6.5 RAPTOR Meta-Learning Privileged Teacher-Student Distillation (Milestone M5) (2026-09-09)
+- **Commit**: [`b5a3cf2f`](file:///workspaces/IsaacLab-Arena) (`feat(rl): implement RAPTOR meta-learning privileged teacher-student distillation architecture`).
+- **Architecture Highlights**:
+  1. *Privileged Observation Space (`teacher_obs`)*: Integrated into [`PickAndPlaceObservationsCfg`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tasks/pick_and_place_task_rl.py#L187-L245) with 18 dimensions:
+     - `object_lin_vel` (3D): ground-truth linear velocity in world frame.
+     - `object_ang_vel` (3D): ground-truth angular velocity in world frame.
+     - `keypoints_to_object` (12D): relative 3D displacement vectors from 4 contact links (`left_wrist_yaw_link`, `left_hand_thumb_2_link`, `left_hand_index_1_link`, `left_hand_middle_1_link`) directly to object centroid.
+  2. *RAPTOR Policy Configurations ([`raptor_distillation_cfg.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena_examples/policy/raptor_distillation_cfg.py))*:
+     - `G1PrivilegedTeacherPolicyCfg`: Privileged PPO actor-critic (`[256, 128, 64]`) receiving `["policy", "task_obs", "teacher_obs"]`.
+     - `G1RaptorRecurrentPpoCfg`: Recurrent PPO with GRU memory (`rnn_hidden_dim=128`) operating strictly on observable histories (`["policy", "task_obs"]`).
+     - `G1RaptorDistillationRunnerCfg`: Distillation runner distilling privileged teacher into student GRU policy with sequence length 20.
+  3. *Environment Integration*: Bound dynamic `--policy_cfg` resolution in [`G1AppleToPlateRLEnvironment`](file:///workspaces/IsaacLab-Arena/isaaclab_arena_environments/g1_apple_to_plate_rl_environment.py).
+- **Validation**:
+  - Unit tests: [`test_raptor_distillation_cfg.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tests/test_raptor_distillation_cfg.py) (3/3 passed in 0.96s) and [`test_pick_and_place_task_rl.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tests/test_pick_and_place_task_rl.py) (verified 18-dim `teacher_obs` stepping in 29.35s).
+  - Smoke training: 10 iterations of `G1PrivilegedTeacherPolicyCfg` (`logs/rsl_rl/g1_privileged_teacher/2026-09-09_01-47-46/`) achieved mean reward 5.65 at 1010 steps/sec with zero NaNs.
+  - Neo4j LPG synchronized with `MetaLearningArchitecture` and decision `IMPLEMENT_RAPTOR_META_LEARNING_M5`.

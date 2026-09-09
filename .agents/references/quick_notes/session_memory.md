@@ -304,3 +304,24 @@
   * Viewport video recorded (`outputs/2026-09-09_01-38-31/rl-video-step-0.mp4`): G1 stands stably at the table, reaches arm directly toward target apple, closes fingers with vertical posture, avoiding drop terminations.
   * Telemetry recorded (`eval_telemetry.ttl`, `episode_results_rank0.jsonl`).
   * Milestone M4 marked **COMPLETED**.
+
+## 28. RAPTOR Meta-Learning Privileged Teacher-Student Distillation Architecture (Milestone M5) (2026-09-09)
+* **Privileged Observation Space (`teacher_obs`)**:
+  * In `PickAndPlaceObservationsCfg` (`pick_and_place_task_rl.py`), integrated an 18-dimensional privileged observation group:
+    * `object_lin_vel` (3D): ground-truth linear velocity in world frame (`wp.to_torch(object.data.root_lin_vel_w)[:, :3]`).
+    * `object_ang_vel` (3D): ground-truth angular velocity in world frame (`wp.to_torch(object.data.root_ang_vel_w)[:, :3]`).
+    * `keypoints_to_object` (12D): 3D relative displacement vectors from 4 contact links (`left_wrist_yaw_link`, `left_hand_thumb_2_link`, `left_hand_index_1_link`, `left_hand_middle_1_link`) directly to the target object centroid.
+  * Concatenated into a single 18-dim tensor per env when `concatenate_terms = True`.
+* **RAPTOR Configurations (`isaaclab_arena_examples/policy/raptor_distillation_cfg.py`)**:
+  * `G1PrivilegedTeacherPolicyCfg`: PPO on-policy runner observing `["policy", "task_obs", "teacher_obs"]` for both actor and critic, discovering robust manipulation trajectories under full physics observability.
+  * `G1RaptorRecurrentPpoCfg`: Recurrent PPO on-policy runner with GRU memory (`rnn_hidden_dim=128`, `hidden_dims=[256, 128]`) operating strictly on observable histories (`["policy", "task_obs"]`) for online in-context system identification.
+  * `G1RaptorDistillationRunnerCfg`: `RslRlDistillationRunnerCfg` distilling privileged MLP teacher into student GRU policy with sequence length 20, learning rate 1e-3, 4 epochs per batch.
+* **Environment Dynamic Configuration (`g1_apple_to_plate_rl_environment.py`)**:
+  * Added `policy_cfg` string and `enable_teacher_obs` boolean to `G1AppleToPlateRLEnvironmentCfg`.
+  * Allows CLI execution via `--policy_cfg G1PrivilegedTeacherPolicyCfg` or `--policy_cfg G1RaptorDistillationRunnerCfg`.
+* **Empirical Validation**:
+  * Unit tests: `test_raptor_distillation_cfg.py` passed 3/3 in 0.96s.
+  * Runtime test: `test_pick_and_place_task_rl.py` passed in 29.35s (verified `teacher_obs` shape `(4, 18)`).
+  * Smoke training: 10 iterations of privileged teacher (`logs/rsl_rl/g1_privileged_teacher/2026-09-09_01-47-46/`) completed in 16.66s (1010 steps/sec across 64 envs) reaching mean reward 5.65, finger enclosure 0.7315, and approach alignment 0.3979 with zero NaNs.
+  * Neo4j LPG synchronized with `MetaLearningArchitecture` and decision `IMPLEMENT_RAPTOR_META_LEARNING_M5`.
+  * Milestone M5 marked **COMPLETED**.

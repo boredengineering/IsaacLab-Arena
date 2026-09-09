@@ -42,6 +42,19 @@ def _test_g1_apple_to_plate_rl_environment_build(simulation_app):
     assert hasattr(obs_cfg.task_obs, "ee_to_object")
     assert hasattr(obs_cfg.task_obs, "object_to_destination")
     assert hasattr(obs_cfg.task_obs, "is_lifted")
+    assert hasattr(obs_cfg, "teacher_obs"), "Observation config must define teacher_obs group"
+    assert hasattr(obs_cfg.teacher_obs, "object_lin_vel")
+    assert hasattr(obs_cfg.teacher_obs, "object_ang_vel")
+    assert hasattr(obs_cfg.teacher_obs, "keypoints_to_object")
+
+    # Check RAPTOR policy configuration selection
+    cfg_teacher = G1AppleToPlateRLEnvironmentCfg(policy_cfg="G1PrivilegedTeacherPolicyCfg")
+    arena_env_teacher = factory.build(cfg_teacher)
+    assert "G1PrivilegedTeacherPolicyCfg" in arena_env_teacher.rl_policy_cfg
+
+    cfg_distill = G1AppleToPlateRLEnvironmentCfg(policy_cfg="G1RaptorDistillationRunnerCfg")
+    arena_env_distill = factory.build(cfg_distill)
+    assert "G1RaptorDistillationRunnerCfg" in arena_env_distill.rl_policy_cfg
 
     # Check RL reward terms
     rew_cfg = arena_env.task.get_rewards_cfg()
@@ -101,6 +114,9 @@ def _test_g1_apple_to_plate_rl_environment_build(simulation_app):
     action = torch.zeros((4, 7), device=env.unwrapped.device)
     obs, rew, term, trunc, info = env.step(action)
     assert obs["policy"].shape[0] == 4
+    assert obs["task_obs"].shape[0] == 4
+    assert obs["teacher_obs"].shape[0] == 4
+    assert obs["teacher_obs"].shape[1] == 18, f"Expected teacher_obs dim 18, got {obs['teacher_obs'].shape[1]}"
     assert not torch.isnan(rew).any(), "Rewards contain NaNs"
     env.close()
 

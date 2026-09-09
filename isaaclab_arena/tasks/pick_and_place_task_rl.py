@@ -142,12 +142,57 @@ def pick_and_place_rl_success(
     return (distance_xy < max_xy_distance) & has_been_lifted & is_settled & is_near_deck
 
 
+def object_lin_vel_obs(
+    env: ManagerBasedRLEnv,
+    object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
+) -> torch.Tensor:
+    """Privileged linear velocity of the target object."""
+    object_inst: RigidObject = env.scene[object_cfg.name]
+    return wp.to_torch(object_inst.data.root_lin_vel_w)[:, :3]
+
+
+def object_ang_vel_obs(
+    env: ManagerBasedRLEnv,
+    object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
+) -> torch.Tensor:
+    """Privileged angular velocity of the target object."""
+    object_inst: RigidObject = env.scene[object_cfg.name]
+    return wp.to_torch(object_inst.data.root_ang_vel_w)[:, :3]
+
+
+def keypoints_to_object_obs(
+    env: ManagerBasedRLEnv,
+    robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
+) -> torch.Tensor:
+    """Privileged relative 3D displacement vectors from hand keypoints to target object."""
+    robot: Articulation = env.scene[robot_cfg.name]
+    object_inst: RigidObject = env.scene[object_cfg.name]
+    obj_pos_w = wp.to_torch(object_inst.data.root_pos_w)[:, :3]
+
+    keypoint_links = [
+        "left_wrist_yaw_link",
+        "left_hand_thumb_2_link",
+        "left_hand_index_1_link",
+        "left_hand_middle_1_link",
+    ]
+    avail_indices = [robot.data.body_names.index(name) for name in keypoint_links if name in robot.data.body_names]
+    if len(avail_indices) == 4:
+        body_pos = wp.to_torch(robot.data.body_pos_w)[:, avail_indices, :]
+        diffs = obj_pos_w.unsqueeze(1) - body_pos
+        return diffs.reshape(env.num_envs, -1)
+    return torch.zeros((env.num_envs, 12), device=obj_pos_w.device)
+
+
 @configclass
 class PickAndPlaceObservationsCfg:
     """Observation specifications for Pick and Place RL."""
 
     task_obs: ObsGroup = MISSING
     """Task specific observation group."""
+
+    teacher_obs: ObsGroup | None = None
+    """Privileged observation group for teacher policy (RAPTOR meta-learning)."""
 
     def __init__(
         self,
@@ -156,6 +201,7 @@ class PickAndPlaceObservationsCfg:
         robot_name: str,
         ee_link_name: str,
         minimal_height: float,
+        enable_teacher_obs: bool = True,
     ):
         @configclass
         class TaskObsCfg(ObsGroup):
@@ -215,6 +261,32 @@ class PickAndPlaceObservationsCfg:
                 self.concatenate_terms = True
 
         self.task_obs = TaskObsCfg()
+
+        if enable_teacher_obs:
+
+            @configclass
+            class TeacherObsCfg(ObsGroup):
+                object_lin_vel = ObsTerm(
+                    func=object_lin_vel_obs,
+                    params={"object_cfg": SceneEntityCfg(pick_up_object.name)},
+                )
+                object_ang_vel = ObsTerm(
+                    func=object_ang_vel_obs,
+                    params={"object_cfg": SceneEntityCfg(pick_up_object.name)},
+                )
+                keypoints_to_object = ObsTerm(
+                    func=keypoints_to_object_obs,
+                    params={
+                        "robot_cfg": SceneEntityCfg(robot_name),
+                        "object_cfg": SceneEntityCfg(pick_up_object.name),
+                    },
+                )
+
+                def __post_init__(self):
+                    self.enable_corruption = False
+                    self.concatenate_terms = True
+
+            self.teacher_obs = TeacherObsCfg()
 
 
 @configclass
@@ -476,6 +548,7 @@ class PickAndPlaceTaskRL(PickAndPlaceTask):
         curriculum_ratio: float = 0.0,
         pregrasp_arm_joint_pos: dict[str, float] | None = None,
         lift_curriculum_ratio: float = 0.0,
+        enable_teacher_obs: bool = True,
     ):
         """Initialize the Pick-and-Place RL task.
 
@@ -500,6 +573,7 @@ class PickAndPlaceTaskRL(PickAndPlaceTask):
             curriculum_ratio: Fraction of environments reset in pre-grasp arm posture.
             pregrasp_arm_joint_pos: Dictionary mapping arm joint names to pre-grasp target angles.
             lift_curriculum_ratio: Fraction of environments reset with object elevated.
+            enable_teacher_obs: Whether to populate privileged teacher_obs group for RAPTOR distillation.
         """
         if minimum_height_to_lift is not None:
             min_lift_height = minimum_height_to_lift
@@ -525,6 +599,7 @@ class PickAndPlaceTaskRL(PickAndPlaceTask):
         self.curriculum_ratio = curriculum_ratio
         self.pregrasp_arm_joint_pos = pregrasp_arm_joint_pos
         self.lift_curriculum_ratio = lift_curriculum_ratio
+        self.enable_teacher_obs = enable_teacher_obs
 
         self.observation_cfg = PickAndPlaceObservationsCfg(
             pick_up_object=self.pick_up_object,
@@ -532,6 +607,7 @@ class PickAndPlaceTaskRL(PickAndPlaceTask):
             robot_name=self.embodiment.get_scene_key(),
             ee_link_name=self.ee_link_name,
             minimal_height=self.min_lift_height,
+            enable_teacher_obs=self.enable_teacher_obs,
         )
         self.rewards_cfg = PickAndPlaceRewardCfg(
             pick_up_object=self.pick_up_object,

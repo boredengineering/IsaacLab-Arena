@@ -72,6 +72,14 @@ class G1AppleToPlateRLEnvironmentCfg(ArenaEnvironmentCfg):
     lift_curriculum_ratio: float = 0.0
     """Fraction of parallel training environments initialized with object elevated."""
 
+    policy_cfg: str = "RLPolicyCfg"
+    """Entry point policy cfg within base_rsl_rl_policy or raptor_distillation_cfg.
+    Options: 'RLPolicyCfg', 'G1PrivilegedTeacherPolicyCfg', 'G1RaptorDistillationRunnerCfg', 'G1RaptorRecurrentPpoCfg'.
+    """
+
+    enable_teacher_obs: bool = True
+    """Whether to populate privileged teacher_obs group for RAPTOR distillation."""
+
 
 @register_environment
 class G1AppleToPlateRLEnvironment(ArenaEnvironmentFactory[G1AppleToPlateRLEnvironmentCfg]):
@@ -173,7 +181,18 @@ class G1AppleToPlateRLEnvironment(ArenaEnvironmentFactory[G1AppleToPlateRLEnviro
             curriculum_ratio=effective_curriculum_ratio,
             pregrasp_arm_joint_pos=G1_PREGRASP_LEFT_ARM_JOINT_POS,
             lift_curriculum_ratio=effective_lift_curriculum_ratio,
+            enable_teacher_obs=cfg.enable_teacher_obs,
         )
+
+        import isaaclab_arena_examples.policy.raptor_distillation_cfg as raptor_distillation_cfg
+
+        policy_map = {
+            "RLPolicyCfg": f"{base_rsl_rl_policy.__name__}:RLPolicyCfg",
+            "G1PrivilegedTeacherPolicyCfg": f"{raptor_distillation_cfg.__name__}:G1PrivilegedTeacherPolicyCfg",
+            "G1RaptorDistillationRunnerCfg": f"{raptor_distillation_cfg.__name__}:G1RaptorDistillationRunnerCfg",
+            "G1RaptorRecurrentPpoCfg": f"{raptor_distillation_cfg.__name__}:G1RaptorRecurrentPpoCfg",
+        }
+        resolved_policy_cfg = policy_map.get(cfg.policy_cfg, f"{base_rsl_rl_policy.__name__}:{cfg.policy_cfg}")
 
         return IsaacLabArenaEnvironment(
             name=self.name,
@@ -182,5 +201,5 @@ class G1AppleToPlateRLEnvironment(ArenaEnvironmentFactory[G1AppleToPlateRLEnviro
             task=task,
             teleop_device=None,
             rl_framework_entry_point="rsl_rl_cfg_entry_point",
-            rl_policy_cfg=f"{base_rsl_rl_policy.__name__}:RLPolicyCfg",
+            rl_policy_cfg=resolved_policy_cfg,
         )

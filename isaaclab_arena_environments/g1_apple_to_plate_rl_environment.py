@@ -25,6 +25,21 @@ G1_PREGRASP_LEFT_ARM_JOINT_POS: dict[str, float] = {
     "left_wrist_yaw_joint": 0.1924,
 }
 
+G1_SETTLED_LOWER_BODY_JOINT_POS: dict[str, float] = {
+    "left_hip_pitch_joint": -0.3204,
+    "right_hip_pitch_joint": -0.2594,
+    "left_knee_joint": 0.6523,
+    "right_knee_joint": 0.6132,
+    "left_ankle_pitch_joint": -0.2907,
+    "right_ankle_pitch_joint": -0.3087,
+    "left_hip_roll_joint": 0.0406,
+    "left_hip_yaw_joint": 0.0890,
+    "right_hip_roll_joint": -0.0012,
+    "right_hip_yaw_joint": -0.0571,
+    "left_ankle_roll_joint": -0.0317,
+    "right_ankle_roll_joint": -0.0106,
+}
+
 
 @dataclass
 class G1AppleToPlateRLEnvironmentCfg(ArenaEnvironmentCfg):
@@ -51,22 +66,29 @@ class G1AppleToPlateRLEnvironmentCfg(ArenaEnvironmentCfg):
     rl_training_mode: bool = False
     """Whether to run in RL training mode (no early success termination)."""
 
-    curriculum_ratio: float = 0.35
+    curriculum_ratio: float = 0.50
     """Fraction of parallel training environments initialized in pre-grasp arm posture."""
 
-    lift_curriculum_ratio: float = 0.15
+    lift_curriculum_ratio: float = 0.0
     """Fraction of parallel training environments initialized with object elevated."""
 
 
 @register_environment
 class G1AppleToPlateRLEnvironment(ArenaEnvironmentFactory[G1AppleToPlateRLEnvironmentCfg]):
-    """Registered provider for G1 tabletop apple to plate RL environment."""
+    """G1 humanoid tabletop apple to plate reinforcement learning environment."""
 
     name: str = "g1_apple_to_plate_rl"
     _legacy_argparse_cfg_type = G1AppleToPlateRLEnvironmentCfg
 
     def build(self, cfg: G1AppleToPlateRLEnvironmentCfg) -> IsaacLabArenaEnvironment:
-        """Build the environment from its typed configuration."""
+        """Compose the G1 humanoid tabletop apple to plate RL environment.
+
+        Args:
+            cfg: Configuration for the environment.
+
+        Returns:
+            The configured IsaacLabArenaEnvironment instance.
+        """
         import isaaclab_arena_examples.policy.base_rsl_rl_policy as base_rsl_rl_policy
         from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
         from isaaclab_arena.scene.scene import Scene
@@ -92,16 +114,18 @@ class G1AppleToPlateRLEnvironment(ArenaEnvironmentFactory[G1AppleToPlateRLEnviro
         embodiment.observation_config.wbc = None
         embodiment.set_initial_pose(
             Pose(
-                position_xyz=(-0.46, 0.0, 0.0007),
+                position_xyz=(-0.4896, 0.0, 0.1414),
                 rotation_xyzw=(0.0, 0.0, 0.0, 1.0),
             )
         )
-        embodiment.set_joint_initial_pos({
+        initial_joint_targets = G1_SETTLED_LOWER_BODY_JOINT_POS.copy()
+        initial_joint_targets.update({
             "left_shoulder_roll_joint": 0.25,
             "right_shoulder_roll_joint": -0.25,
             "left_shoulder_yaw_joint": 0.5,
             "right_shoulder_yaw_joint": -0.5,
         })
+        embodiment.set_joint_initial_pos(initial_joint_targets)
         embodiment.set_finger_contact_friction(
             material_path="/World/Materials/g1_static_pick_place_high_friction_fingers",
             static_friction=6.0,

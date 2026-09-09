@@ -76,9 +76,14 @@ def _test_g1_apple_to_plate_rl_environment_build(simulation_app):
     arena_env_train = factory.build(cfg_train)
     train_events_cfg = arena_env_train.task.get_events_cfg()
     assert train_events_cfg.reset_robot_curriculum is not None
-    assert train_events_cfg.reset_object_curriculum is not None
-    assert train_events_cfg.reset_robot_curriculum.params["curriculum_ratio"] == 0.35
-    assert train_events_cfg.reset_object_curriculum.params["lift_curriculum_ratio"] == 0.15
+    assert train_events_cfg.reset_robot_curriculum.params["curriculum_ratio"] == 0.50
+    assert train_events_cfg.reset_object_curriculum is None
+
+    # Check explicit lift curriculum configuration
+    cfg_lift = G1AppleToPlateRLEnvironmentCfg(rl_training_mode=True, lift_curriculum_ratio=0.15)
+    train_lift_events = factory.build(cfg_lift).task.get_events_cfg()
+    assert train_lift_events.reset_object_curriculum is not None
+    assert train_lift_events.reset_object_curriculum.params["lift_curriculum_ratio"] == 0.15
 
     # Verify environment instantiation and 7-D Diff-IK action stepping with training curriculum active
     import torch

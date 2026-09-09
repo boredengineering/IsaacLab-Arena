@@ -42,6 +42,30 @@
       "url": "file:///workspaces/IsaacLab-Arena/.agents/references/presentations/category_a_b_run_inventory.json",
       "title": "",
       "accessed": "2026-09-09"
+    },
+    {
+      "id": 8,
+      "url": "file:///workspaces/IsaacLab-Arena/.agents/references/presentations/category_a_b_graph_queries.verified.json",
+      "title": "",
+      "accessed": "2026-09-09"
+    },
+    {
+      "id": 9,
+      "url": "file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/lpg_neo4j_sync.py",
+      "title": "",
+      "accessed": "2026-09-09"
+    },
+    {
+      "id": 10,
+      "url": "file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/rdf_lowering.py",
+      "title": "",
+      "accessed": "2026-09-09"
+    },
+    {
+      "id": 11,
+      "url": "file:///workspaces/IsaacLab-Arena/.agents/scratch/category_b_graph_schema_snapshot.json",
+      "title": "",
+      "accessed": "2026-09-09"
     }
   ]
 }

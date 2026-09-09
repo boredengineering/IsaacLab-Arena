@@ -458,20 +458,24 @@ DISPLAY=:1 bash .agents/scratch/run_droid_viz.sh
 This is the actual verified 2,000-step command wrapper. It discovers the simulator, uses `ubuntu:1234`, sets dedicated writable `TMPDIR` and Kit portable root, and preserves the requested scene/policy YAML and `viz_run` output base. `DISPLAY=:1` was tested with non-root `XOpenDisplay`; no blanket `xhost +` permission was needed. The output-base directory must be writable before a future non-root run.
 
 #### 3. Neo4j Graph Queries
+
+**Correct graph identity:** the folder/run family is `droid_apple_to_wooden_bowl`, but the stored `EnvironmentGraph.name` is **`franka_droid_apple_to_bowl_maple_table`**. The old substring matched no graph. The old `clearance_radius` expression generated an unknown-property warning; it was not a database write failure. Asset identifiers are `id` / `registry_name`, not `name`.[8][9]
+
+Use the first two queries below in Neo4j Browser's **Graph** view. They return paths containing real nodes and relationships, unlike a scalar-only `RETURN` that produces a table. The [query collection](category_a_b_graph_queries.cypher) contains **17 tested queries**: A1 discovery/scene/reification/provenance (1–7), B1 tomato (8–12), and B4 Spam (13–17). Every query returned records without database notifications or writes; B4's gap-check record explicitly reports zero reifiers.[8]
+
+##### Previous Code
+
 ```cypher
-// 1. Inspect Environment Graph Topology & Asset Prim Bindings
 MATCH (g:EnvironmentGraph)
 WHERE g.name CONTAINS 'apple_to_wooden_bowl'
 OPTIONAL MATCH (g)-[r]-(n)
 RETURN g, r, n;
 
-// 2. Inspect Reified Sector Clearance & Relative Spatial Factors
 MATCH (g:EnvironmentGraph)-[:HAS_REIFIER]->(rf:ReifiedRelation)
 WHERE g.name CONTAINS 'apple'
 MATCH (rf)-[:REIFIES_SUBJECT]->(s), (rf)-[:REIFIES_OBJECT]->(t)
 RETURN g.name, rf.relation_type, s.name, t.name, rf.clearance_radius, rf.nominal_height;
 
-// 3. Include the verified current run even though its environment edge is missing.
 MATCH (ev:EvaluationRun)
 OPTIONAL MATCH (ev)-[:EVALUATED_GRAPH]->(g:EnvironmentGraph)
 WITH ev, collect(g.name) AS environments
@@ -480,6 +484,84 @@ WHERE ev.id = 'eval_run_1788928970'
 RETURN ev.id, environments, ev.num_episodes, ev.success_rate,
        ev.mean_progress_score, ev.blocking_predicate, ev.metrics_payload;
 ```
+
+
+##### A. Scene overview — 11 nodes / 24 relationships
+
+```cypher
+MATCH p=(g:EnvironmentGraph {name: 'franka_droid_apple_to_bowl_maple_table'})-[*1..2]-(n)
+WHERE all(member IN nodes(p) WHERE member = g OR member.env_name = g.name)
+RETURN p
+LIMIT 100;
+```
+
+This view includes the robot, apple, bowl, table, surface anchor, camera, and four reifiers. It is an asset-registry/scene-metadata view, **not verified simulation USD prim binding**: the inspected apple/bowl nodes carry registry IDs and parameter strings, not resolved `prim_path` properties.[8]
+
+##### B. Recommended presentation view — statements as annotated entities
+
+```cypher
+MATCH membership=(g:EnvironmentGraph {name: 'franka_droid_apple_to_bowl_maple_table'})
+                 -[:HAS_REIFIER]->(rf:ReifiedRelation)
+MATCH statement=(subject)<-[:REIFIES_SUBJECT]-(rf)-[:REIFIES_OBJECT]->(object)
+OPTIONAL MATCH direct_fact=(subject)-[fact]->(object)
+WHERE type(fact) = rf.relation_type
+RETURN membership, statement, direct_fact;
+```
+
+**Verified result: 4 statement rows, 9 nodes, 14 relationships.** The graph contains two `PLACED_ON` reifiers and two `REACHABLE_BY` reifiers. The optional direct edge exists for the placement statements; no direct `REACHABLE_BY` edge was found. Keeping it optional preserves both reachability statements rather than dropping them from the visual.[8]
+
+For a less crowded slide, use query `4_apple_placement_closeup` in the companion file: one statement, four nodes, four relationships. Its live structure is illustrated below; all arrows represent stored relationships, not invented evaluation feedback.[8]
+
+```mermaid
+flowchart LR
+    G["EnvironmentGraph<br/>franka_droid_apple_to_bowl_maple_table"] -->|HAS_REIFIER| R["ReifiedRelation<br/>reifier_apple_table<br/>relation_type: PLACED_ON<br/>required_headroom: 0.30<br/>required_friction: 0.65"]
+    R -->|REIFIES_SUBJECT| A["RigidObject<br/>red_apple"]
+    R -->|REIFIES_OBJECT| T["Fixture / Terrain<br/>maple_table_bg"]
+    A -->|PLACED_ON| T
+    classDef statement fill:#fff0c2,stroke:#b57900,stroke-width:3px,color:#202020;
+    classDef asset fill:#dceeff,stroke:#2b6cb0,color:#202020;
+    classDef graph fill:#e9ddff,stroke:#7040a0,color:#202020;
+    class R statement;
+    class A,T asset;
+    class G graph;
+```
+
+**Suggested Browser captions:** `EnvironmentGraph → name`, `ReifiedRelation → reifier_id`, assets/robot/surface/camera → `id`, `Policy → name`, `EvaluationRun → id`. Give the reifiers a contrasting color and inspect a reifier node to reveal its constraint/evidence properties. Keep scene membership edges visible for context; use the close-up when explaining a single statement.
+
+**RDF-star terminology:** this deployment visualizes **explicit reification in a labeled property graph**. A reifier represents a subject–predicate–object assertion and carries annotations. The current RDF exporter uses `arena:hasSubject`, `arena:hasPredicate`, and `arena:hasObject`; the predicate is a literal and the annotations are ordinary triples. Present this as the project's **RDF-star-inspired / reified-statement projection**, not native RDF-star triple-term storage, an executed SPARQL-star query, or a lossless roundtrip guarantee.[9][10]
+
+##### C. Actual reifier annotations — four rows, no missing-property warning
+
+```cypher
+MATCH (g:EnvironmentGraph {name: 'franka_droid_apple_to_bowl_maple_table'})
+      -[:HAS_REIFIER]->(rf:ReifiedRelation)
+MATCH (rf)-[:REIFIES_SUBJECT]->(subject), (rf)-[:REIFIES_OBJECT]->(object)
+RETURN rf.reifier_id AS statement_id, rf.relation_type AS predicate,
+       subject.id AS subject, object.id AS object,
+       rf.surface_anchor AS surface_anchor,
+       rf.required_headroom AS required_headroom,
+       rf.required_friction AS required_friction,
+       rf.delta_x_min AS delta_x_min, rf.delta_x_max AS delta_x_max,
+       rf.delta_y_min AS delta_y_min, rf.delta_y_max AS delta_y_max,
+       rf.delta_z_nominal AS delta_z_nominal,
+       rf.prior_entropy AS prior_entropy, rf.posterior_entropy AS posterior_entropy,
+       rf.evidence_sources AS evidence_sources
+ORDER BY statement_id;
+```
+
+`required_headroom` is **not** a renamed clearance radius. `delta_z_nominal` is an offset, **not** the table's world height. Direct placement edges separately store `clearance`, `nominal_height`, and `raw_params` (companion query 6). Here their clearance 0.05 and nominal height 0.0 are sync defaults when those source parameters are absent; do not present them as measured geometry. Required friction/headroom, evidence labels, and entropy values are declared scene metadata—not proof of measured friction, Bayesian calibration, or successful placement.[8][9]
+
+**Sector gap to disclose:** `surface_sector` exists in the YAML but is not persisted on these Neo4j reifiers by the current sync function. The direct apple edge's `raw_params` contains `front_center`, while the reifier's `evidence_sources` includes `front_right_sector_constraint`. These are conflicting source annotations; neither the query nor this presentation edit silently reconciles them.[8][9]
+
+##### D. Current evaluation provenance — show only the edge that exists
+
+```cypher
+MATCH p=(ev:EvaluationRun {id: 'eval_run_1788928970'})-[:USED_POLICY]->(policy:Policy)
+OPTIONAL MATCH environment_link=(ev)-[:EVALUATED_GRAPH]->(g:EnvironmentGraph)
+RETURN p, environment_link;
+```
+
+**Verified result: two nodes and one `USED_POLICY` relationship; `environment_link` is null.** Do not draw a stored link from this evaluation to the scene or reifier: it is still missing. The scene has no immutable spec digest/version binding on this graph node, and the policy node identifies a class rather than the served checkpoint. This read-only showcase does not repair provenance or convert constraints into measured feedback.[8]
 
 ---
 
@@ -773,20 +855,83 @@ docker exec -it \
 ```
 
 #### 3. Neo4j Graph Queries
-```cypher
-// 1. Trace the Version Lineage (v1 -> v2 -> v3 -> v4) and Derivation Patches
-MATCH (child:EnvironmentGraph)-[r:WAS_DERIVED_FROM]->(parent:EnvironmentGraph)
-WHERE child.name CONTAINS 'tomato_soup'
-RETURN child.name, r.defect, r.patch_applied, parent.name;
 
-// 2. Compare Multi-Version Quantitative Benchmark Results
-MATCH (ev:EvaluationRun)-[:EVALUATED_GRAPH]->(g:EnvironmentGraph)
-WHERE g.name CONTAINS 'tomato_soup'
-RETURN g.name AS environment, ev.id AS evaluation_id,
-       ev.num_episodes AS num_episodes, ev.success_rate AS success_rate,
-       ev.metrics_payload AS recorded_metrics
-ORDER BY environment;
+**Stored scene name:** `franka_droid_tomato_soup_to_bin`. Use this exact name, not the folder name `droid_tomato_soup_to_blue_bin`. In Neo4j Browser select **Graph** for path-returning queries; use **Table** for annotation/metric inspection. Queries 8–12 in the [companion file](category_a_b_graph_queries.cypher) are the tested B1 sequence.[8]
+
+##### B1-A. Establish the scene — 11 nodes / 24 relationships
+
+```cypher
+MATCH p=(g:EnvironmentGraph {name: 'franka_droid_tomato_soup_to_bin'})-[*1..2]-(n)
+WHERE all(member IN nodes(p) WHERE member = g OR member.env_name = g.name)
+RETURN p
+LIMIT 100;
 ```
+
+Start the presentation here: identify `tomato_soup_can`, `blue_bin`, `maple_table`, `droid_robot`, the shared surface anchor, and the camera. Then switch to the statement view to remove most scene-layout clutter. This is a registry/scene-metadata graph, not proof that every displayed field was measured in simulation.[8]
+
+##### B1-B. Show the RDF-star-inspired statement layer — 9 nodes / 14 relationships
+
+```cypher
+MATCH membership=(g:EnvironmentGraph {name: 'franka_droid_tomato_soup_to_bin'})
+                 -[:HAS_REIFIER]->(rf:ReifiedRelation)
+MATCH statement=(subject)<-[:REIFIES_SUBJECT]-(rf)-[:REIFIES_OBJECT]->(object)
+OPTIONAL MATCH direct_fact=(subject)-[fact]->(object)
+WHERE type(fact) = rf.relation_type
+RETURN membership, statement, direct_fact;
+```
+
+**Four stored statements:** the can and bin are each `PLACED_ON` the table and each `REACHABLE_BY` the robot. Direct placement edges exist alongside their reifiers; reachability is represented by the reifier paths without a matching direct `REACHABLE_BY` edge. The optional match keeps those reachability statements visible.[8]
+
+| Statement subject → predicate → object | Reifier ID | Required headroom | Required friction |
+| :--- | :--- | :--- | :--- |
+| `tomato_soup_can → PLACED_ON → maple_table` | `reifier_tomato_soup_can_maple_table` | 0.25 | 0.65 |
+| `blue_bin → PLACED_ON → maple_table` | `reifier_blue_bin_maple_table` | 0.30 | 0.60 |
+| `tomato_soup_can → REACHABLE_BY → droid_robot` | `reifier_tomato_soup_can_reachability` | 0.35 | 0.60 |
+| `blue_bin → REACHABLE_BY → droid_robot` | `reifier_blue_bin_reachability` | 0.35 | 0.60 |
+
+These are **declared requirements**, not measured clearance, contact friction, or successful reachability. Inspect the exact node properties with companion query `11_b1_statement_annotations`.[8][9]
+
+##### B1-C. Explain one statement, then its annotations
+
+Companion query `10_b1_can_statement_closeup` returns the following four-node/four-edge structure. Orange identifies the statement entity; blue identifies the can; grey identifies its support.[8]
+
+```mermaid
+flowchart LR
+    G["B1 EnvironmentGraph"] -->|HAS_REIFIER| R["reifier_tomato_soup_can_maple_table<br/>predicate: PLACED_ON<br/>headroom requirement: 0.25<br/>friction requirement: 0.65"]
+    R -->|REIFIES_SUBJECT| C["tomato_soup_can"]
+    R -->|REIFIES_OBJECT| T["maple_table"]
+    C -->|PLACED_ON| T
+    classDef statement fill:#fff0c2,stroke:#b57900,stroke-width:3px,color:#202020;
+    classDef item fill:#dceeff,stroke:#2b6cb0,color:#202020;
+    classDef support fill:#edf2f7,stroke:#64748b,color:#202020;
+    classDef scene fill:#e9ddff,stroke:#7040a0,color:#202020;
+    class R statement;
+    class C item;
+    class T support;
+    class G scene;
+```
+
+**Speaker explanation:** “The ordinary edge says the can is on the table. The orange node gives that assertion an identity, so its requirements and evidence labels can be attached to the assertion rather than to the can in every possible context.” The same can participates in a different `REACHABLE_BY` statement, with a different manifold and requirement set. This is the useful RDF-star idea—**describe an assertion**—shown through the project's explicit reification schema.[8][9][10]
+
+* The placement reifier records `surface_anchor=table_top`, `kinematic_manifold=tabletop_stationary_reach`, and evidence labels `tabletop_spatial_planner` / `front_right_sector_constraint`. Those labels are strings, not separately linked provenance documents.[8]
+* Its `prior_entropy=2.8` and `posterior_entropy=0.08` are stored metadata; no evaluation-to-reifier feedback link establishes that the 25/52 trial produced that change. Do not present these numbers as calibrated posterior evidence from the measured rollout.[8]
+* **Can-on-table is the support/layout assertion, not the sorting goal.** The task description asks for can-into-bin; this graph does not contain an observed successful-insertion statement or per-episode containment proof.[8]
+* In the actual RDF exporter, the identity is an `arena:ReifiedRelation` with `arena:hasSubject`, a literal `arena:hasPredicate`, and `arena:hasObject`. It is **not native RDF-star triple-term storage**. Cypher visualizes the LPG projection; it does not execute SPARQL-star.[10]
+
+##### B1-D. Separate empirical evidence from the scene diagram
+
+The following IDs were matched to the seven original tomato run artifacts, including pilots. This returns **eight nodes and seven `USED_POLICY` edges**. All optional environment links are currently null; a graph-name-only evaluation query would omit these records.[6][8]
+
+```cypher
+MATCH policy_use=(ev:EvaluationRun)-[:USED_POLICY]->(policy:Policy)
+WHERE ev.id IN ['eval_run_1788238238', 'eval_run_1788238722', 'eval_run_1788279490',
+               'eval_run_1788281565', 'eval_run_1788284877', 'eval_run_1788287246',
+               'eval_run_1788289371']
+OPTIONAL MATCH environment_link=(ev)-[:EVALUATED_GRAPH]->(g:EnvironmentGraph)
+RETURN policy_use, environment_link;
+```
+
+Click an evaluation node to show `num_episodes`, `success_rate`, and `metrics_payload`. For `eval_run_1788284877`, pair **25/52 success flags** with the separately audited **11/52 progress-complete records**—the latter was recovered from JSONL, not invented as a Neo4j property. Do not draw an existing scene/reifier feedback edge or a v1→v4 derivation chain: neither was found on this stored scene. Current scene metadata is not an immutable historical version snapshot.[6][8][11]
 
 ---
 
@@ -958,18 +1103,96 @@ docker exec -it \
 ```
 
 #### 3. Neo4j Graph Queries
-```cypher
-// 1. Inspect Spam Can Scene Nodes & Receptacle Properties
-MATCH (g:EnvironmentGraph)
-WHERE g.name CONTAINS 'spam_can'
-OPTIONAL MATCH (g)-[r]-(n)
-RETURN g, r, n;
 
-// 2. Query Empirical Results for Spam Can vs Tomato Soup (Affordance Comparison)
-MATCH (ev:EvaluationRun)-[:EVALUATED_GRAPH]->(g:EnvironmentGraph)
-WHERE g.name CONTAINS 'spam_can' OR g.name CONTAINS 'tomato_soup'
-RETURN g.name, ev.id, ev.num_episodes, ev.success_rate, ev.metrics_payload;
+**Stored scene name:** `franka_droid_spam_can_to_grey_bin`. Unlike B1, this scene has **zero `ReifiedRelation` nodes with this `env_name`**, not just missing membership edges. It currently represents placement facts as **annotated direct relationships**. Queries 13–17 in the [companion file](category_a_b_graph_queries.cypher) show what is actually present and explicitly check the gap.[8]
+
+##### B4-A. Scene overview — 7 nodes / 12 relationships
+
+```cypher
+MATCH p=(g:EnvironmentGraph {name: 'franka_droid_spam_can_to_grey_bin'})-[*1..2]-(n)
+WHERE all(member IN nodes(p) WHERE member = g OR member.env_name = g.name)
+RETURN p
+LIMIT 100;
 ```
+
+This shows `spam_can`, `grey_bin`, `maple_table`, `droid_robot`, the common surface anchor, camera, and scene root. The bin has both `RigidObject` and `Receptacle` labels. Fewer nodes than B1 means a different stored representation—not a simpler task or better policy performance.[8]
+
+##### B4-B. Presentation close-up — two support statements, four nodes / four edges
+
+```cypher
+MATCH membership=(g:EnvironmentGraph {name: 'franka_droid_spam_can_to_grey_bin'})
+                 -[:CONTAINS_OBJECT]->(item)
+WHERE item.id IN ['spam_can', 'grey_bin']
+MATCH support_statement=(item)-[:PLACED_ON]->(table)
+WHERE table.env_name = g.name
+RETURN membership, support_statement;
+```
+
+```mermaid
+flowchart LR
+    G["B4 EnvironmentGraph"] -->|CONTAINS_OBJECT| C["spam_can"]
+    G -->|CONTAINS_OBJECT| B["grey_bin<br/>Receptacle"]
+    C -->|PLACED_ON| T["maple_table"]
+    B -->|PLACED_ON| T
+    classDef item fill:#dceeff,stroke:#2b6cb0,color:#202020;
+    classDef destination fill:#d8f3e8,stroke:#237a57,color:#202020;
+    classDef support fill:#edf2f7,stroke:#64748b,color:#202020;
+    classDef scene fill:#e9ddff,stroke:#7040a0,color:#202020;
+    class C item;
+    class B destination;
+    class T support;
+    class G scene;
+```
+
+All four arrows above exist in Neo4j. There is deliberately **no orange statement node** and **no `spam_can → PLACED_INSIDE → grey_bin` edge**. The two support statements describe can and bin on the table; they do not certify can-in-bin completion.[8]
+
+##### B4-C. Explain the RDF-star/reification gap without manufacturing it
+
+```cypher
+MATCH (g:EnvironmentGraph {name: 'franka_droid_spam_can_to_grey_bin'})
+OPTIONAL MATCH (rf:ReifiedRelation {env_name: g.name})
+RETURN g.name AS graph_name, count(rf) AS reifier_count,
+       collect(rf.reifier_id) AS statement_ids;
+```
+
+**Verified result:** one diagnostic row with `reifier_count=0` and `statement_ids=[]`. A mandatory `HAS_REIFIER` query would return no records; the optional match keeps the absence visible. This is an expected inspection result, not a failed query.[8]
+
+**Speaker explanation:** “B1 has named statement entities. B4 currently stores the annotations directly on `PLACED_ON` edges. Both attach information to a relation, but the database has not materialized B4's explicit statement identities. We cannot show reifier-level evidence or feedback for nodes that do not exist.” Native RDF-star would represent an annotatable triple term in an RDF data model; these Cypher paths are the current LPG representation, not a claim that such triple terms are stored.[8][10]
+
+Use companion query `16_b4_edge_annotations` to inspect the two actual placement edges:
+
+| Direct statement | Stored source parameters | Interpretation |
+| :--- | :--- | :--- |
+| `spam_can → PLACED_ON → maple_table` | `surface_anchor=table_top`; `raw_params` contains `surface_sector: front_right` | Declared initial support/sector, not a grasp result. |
+| `grey_bin → PLACED_ON → maple_table` | `surface_anchor=table_top`; `raw_params` contains `surface_sector: front_left` | Declared bin support/sector, not a completed insertion. |
+
+Both edges contain `clearance=0.05` and `nominal_height=0.0`; these are the sync defaults when the corresponding source parameters are absent. `raw_params` is a string, not a set of independently typed sector properties. Do not substitute these edge defaults for B1's `required_headroom`/`required_friction`, invent B4 entropy values, or claim a measured clearance envelope.[8][9]
+
+If explicit B4 reification is added later, it should have source-backed statement IDs, typed annotations, and version/run provenance. That is a separate graph-ingestion change, **not performed by these read-only presentation queries**. Do not create virtual or persisted nodes merely to make B4 look like B1.
+
+##### B4-D. Show the three historical evaluations as a separate evidence view
+
+```cypher
+MATCH policy_use=(ev:EvaluationRun)-[:USED_POLICY]->(policy:Policy)
+WHERE ev.id IN ['eval_run_1788290861', 'eval_run_1788292259', 'eval_run_1788292607']
+OPTIONAL MATCH environment_link=(ev)-[:EVALUATED_GRAPH]->(g:EnvironmentGraph)
+RETURN policy_use, environment_link;
+```
+
+**Verified result: four nodes / three `USED_POLICY` relationships**, with no environment links. The runs correspond to **18/70**, **13/67**, and **0/2** archived success flags. Their **2/70**, **3/67**, and **0/2** progress-complete counts come from the original episode files. A `Policy` class-name node is not a checkpoint identity, and there is no measured feedback edge to a B4 reifier.[6][8]
+
+##### B1/B4 visual comparison and narration guide
+
+| Layer | B1 tomato → blue bin | B4 Spam → grey bin |
+| :--- | :--- | :--- |
+| Scene overview | 11 nodes / 24 relationships | 7 nodes / 12 relationships |
+| Statement representation | 4 explicit reifiers; placement and reachability | 2 annotated direct placement edges; 0 reifiers |
+| Recommended close-up | Can–reifier–table plus direct fact and scene membership | Can and bin each on table, plus scene membership |
+| Annotation location | Reifier properties, plus direct-edge properties | Direct-edge properties only in the inspected support statements |
+| Historical evidence view | 7 run nodes → shared policy node | 3 run nodes → shared policy node |
+| Missing provenance | No run→environment links; no evaluated statement feedback found | Same, plus no explicit reifier layer |
+
+**Visual convention:** purple scene root, blue manipulated object, green receptacle, grey support, orange **existing** reifier. In Browser use `name` captions for scene/policy, `id` for assets/runs, and `reifier_id` for statements. Present **layout → assertion → annotation → evaluation evidence** in separate views. The separation is intentional: physical task success must not be inferred from a constraint graph or a visually connected diagram.[8]
 
 ---
 
@@ -1251,3 +1474,7 @@ RETURN child.name AS repaired_env,
 [5] file:///workspaces/IsaacLab-Arena/.agents/scratch/category_ab_a_audit.md
 [6] file:///workspaces/IsaacLab-Arena/.agents/scratch/category_ab_b_audit.md
 [7] file:///workspaces/IsaacLab-Arena/.agents/references/presentations/category_a_b_run_inventory.json
+[8] file:///workspaces/IsaacLab-Arena/.agents/references/presentations/category_a_b_graph_queries.verified.json
+[9] file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/lpg_neo4j_sync.py
+[10] file:///workspaces/IsaacLab-Arena/isaaclab_arena/agentic_environment_generation/rdf_lowering.py
+[11] file:///workspaces/IsaacLab-Arena/.agents/scratch/category_b_graph_schema_snapshot.json

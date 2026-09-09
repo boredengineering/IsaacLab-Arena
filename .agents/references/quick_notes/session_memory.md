@@ -251,3 +251,17 @@
   * `finger_grasp_enclosure` reached **0.4287**, `approach_alignment` reached **0.1729**.
   * Checkpoint: `logs/rsl_rl/g1_diff_ik_7d_validation/2026-09-08_21-20-25/model_149.pt`.
   * Rollout evaluation (`policy_runner.py`): 100% standing stability (0 falls), 100% object moved rate, active finger enclosure.
+
+## 25. Multi-Tier Arm Velocity Mitigation, EMA Smoothing, and Visual Rollout Validation (2026-09-08 / 2026-09-09)
+* **Excessive Speed Mitigation & Kinematic Smoothing**:
+  * Clamped maximum single-step Cartesian displacement: `scale_pos = 0.025m` ($2.5\,\text{cm}$) and `scale_rot = 0.08rad`, strictly capping maximum end-effector linear velocity to $\le 1.25\,\text{m/s}$ at $50\,\text{Hz}$.
+  * Added EMA command low-pass filtering ($\alpha = 0.8$) in `G1DecoupledWBCDiffIKAction` to eliminate high-frequency action chatter.
+  * Added `arm_joint_vel_l2` penalty (weight `-0.0005`) in `PickAndPlaceRewardCfg`.
+  * Increased action rate penalty by 5x (`action_rate_l2 = -0.005`).
+  * Fixed camera/replicator auto-initialization in `policy_runner.py` for `--record_viewport_video`.
+* **Visual Evaluation Rollout**:
+  * Recorded 300-step (6.0s) rollout (`outputs/2026-09-08_22-46-43/rl-video-step-0.mp4`).
+  * 100% bipedal standing balance maintained by Unitree AGILE WBC throughout rollout.
+  * Controlled Cartesian descent with palm downward over apple; zero ballistic swatting, zero knuckle collisions.
+  * Hand hovers in pre-grasp enclosure directly over the target apple.
+  * Committed in `5a39b3104f` on `dev/0.3.0-prerelease`.

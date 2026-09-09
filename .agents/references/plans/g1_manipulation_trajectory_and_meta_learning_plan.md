@@ -147,8 +147,8 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- |
 | **M1: Task-Space Action Setup** | 7-D Diff-IK action adapter for G1 tabletop task (`G1DecoupledWBCDiffIKAction`) + AGILE WBC standing balance | Action dimension verified at 7; IK convergence on GPU (< 1 ms); AGILE WBC stable at 0.75m pelvis height | [`g1_decoupled_wbc_diff_ik_action.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena_g1/g1_env/mdp/actions/g1_decoupled_wbc_diff_ik_action.py), [`g1.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/embodiments/g1/g1.py) | **COMPLETED** (Verified via [`test_pick_and_place_task_rl.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tests/test_pick_and_place_task_rl.py)) |
 | **M2: Keypoint & Approach Reward** | Palm orientation alignment + fingertip-to-apple guidance (`multi_keypoint_grasp_guidance`) + finger polarity fix | Hand approaches vertically with fingers open; 0 knuckle collisions; unit tests pass | [`pick_and_place_rewards.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tasks/rewards/pick_and_place_rewards.py), [`pick_and_place_task_rl.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tasks/pick_and_place_task_rl.py) | **COMPLETED** (7/7 tests passed in [`test_pick_and_place_rewards.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tests/test_pick_and_place_rewards.py)) |
-| **M3: Staged Validation Training** | Train RSL-RL for 150 iterations with 64 envs (230,400 steps) | Mean reward surge > 3.0, standing stability 100%, finger enclosure > 0.40 | [`logs/rsl_rl/g1_diff_ik_7d_validation/2026-09-08_21-20-25/`](file:///workspaces/IsaacLab-Arena/logs/rsl_rl/g1_diff_ik_7d_validation/2026-09-08_21-20-25/) | **COMPLETED** (Mean reward 0.67 -> 3.87, enclosure 0.4287, 0 falls) |
-| **M4: Reverse Curriculum & Lifting** | Reverse curriculum initialization (pre-grasp/lift phases) | Lift rate > 50%, transport to plate | [`pick_and_place_task_rl.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tasks/pick_and_place_task_rl.py) | UPCOMING |
+| **M3: Staged Validation Training & Velocity Damping** | Train RSL-RL (150 iters) + Multi-tier arm velocity regularization & EMA smoothing | Mean reward surge > 3.0, standing stability 100%, arm jerk eliminated, zero ballistic swatting | [`logs/rsl_rl/g1_diff_ik_7d_validation/2026-09-08_21-20-25/`](file:///workspaces/IsaacLab-Arena/logs/rsl_rl/g1_diff_ik_7d_validation/2026-09-08_21-20-25/), [`PickAndPlaceRewardCfg`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tasks/pick_and_place_task_rl.py#L250) | **COMPLETED** (Committed in [`5a39b3104f`](file:///workspaces/IsaacLab-Arena)) |
+| **M4: Reverse Curriculum & Lifting** | Reverse curriculum initialization (pre-grasp/lift phases) | Lift rate > 50%, transport to plate | [`pick_and_place_task_rl.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tasks/pick_and_place_task_rl.py) | ACTIVE / IN PROGRESS |
 | **M5: RAPTOR Meta-Learning Config** | Teacher-student distillation spec with GRU hidden state | Loss convergence in distillation; in-context mass adaptation | `isaaclab_arena_examples/policy/raptor_distillation_cfg.py` | ROADMAP |
 | **M6: DCRG Knowledge Graph Sync** | Evaluation telemetry ingested into Neo4j with updated predicates | `semantic_integrity_verified: true`, decision node marked VALIDATED | [`sync_dcrg_diff_ik_m1_m2.py`](file:///root/.gemini/antigravity-cli/brain/0b2d82ed-1cdf-4737-ab8e-0b0a0f2cc728/scratch/sync_dcrg_diff_ik_m1_m2.py) | **COMPLETED** (Synced to Neo4j) |
 
@@ -181,3 +181,15 @@ flowchart TD
   - Report saved to `outputs/2026-09-08_21-25-01/index.html`.
   - Zero falls, zero NaN actions, smooth Cartesian end-effector tracking via GPU DLS inverse kinematics.
   - Hand approaches apple directly and curls fingers around it, replacing the earlier knuckle-swatting failure mode.
+
+### 6.3 Multi-Tier Arm Velocity Mitigation & Viewport Video Recording (2026-09-08 / 2026-09-09)
+- **Commit**: [`5a39b3104f`](file:///workspaces/IsaacLab-Arena) (`feat(rl): add arm velocity penalty, EMA command smoothing, and viewport video recording`).
+- **Control Enhancements**:
+  1. Clamped maximum single-step Cartesian displacement: `scale_pos = 0.025m` ($2.5\,\text{cm}$) and `scale_rot = 0.08rad`, strictly bounding maximum end-effector linear velocity to $\le 1.25\,\text{m/s}$ at $50\,\text{Hz}$.
+  2. Implemented EMA command smoothing ($\alpha = 0.8$) in [`G1DecoupledWBCDiffIKAction`](file:///workspaces/IsaacLab-Arena/isaaclab_arena_g1/g1_env/mdp/actions/g1_decoupled_wbc_diff_ik_action.py) to suppress high-frequency action chatter.
+  3. Added physical `arm_joint_vel_l2` penalty (weight `-0.0005`) to [`PickAndPlaceRewardCfg`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/tasks/pick_and_place_task_rl.py#L250).
+  4. Increased `action_rate_l2` penalty weight by 5x (weight `-0.005`).
+  5. Fixed Replicator camera auto-initialization in [`policy_runner.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena/evaluation/policy_runner.py#L624-L628) for `--record_viewport_video`.
+- **Visual Validation**:
+  - Recorded 300-step (6.0s) rollout (`outputs/2026-09-08_22-46-43/rl-video-step-0.mp4`).
+  - Hand approaches target apple smoothly with downward palm orientation, achieving stable pre-grasp enclosure hovering with zero swatting and zero torso wobble.

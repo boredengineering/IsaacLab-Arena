@@ -279,3 +279,28 @@
 * **Honest Evaluation Decoupling**:
   * In `g1_apple_to_plate_rl_environment.py`, curriculum ratios are dynamically zeroed when `rl_training_mode=False`.
   * Standalone evaluation runs (`policy_runner.py`) always test the policy from the canonical home posture without artificial reset assistance.
+
+## 27. Reverse Curriculum Calibration, Stance Loading Dynamics, and Extended Training Convergence (Milestone M4) (2026-09-09)
+* **Stance Transition vs Forward-Reaching Arm Coupling (Root Cause Diagnosis)**:
+  * In initial curriculum testing, the G1 humanoid spawned in a 14 cm deep crouch ($Z = 0.0007\,\text{m}$), causing its forward outstretched arm during pre-grasp reset to dip down to $Z = -0.028\,\text{m}$ (10 cm into table surface) during the stance loading transient.
+  * PhysX penetration forces pushed the hand down, causing table collisions and object scattering.
+  * Extracted settled standing posture from physics rollout: Pelvis $Z = 0.1414\,\text{m}$, root pos `[-0.4896, 0.0, 0.1414]`, and lower-body leg angles `G1_SETTLED_LOWER_BODY_JOINT_POS`.
+  * In [`g1_apple_to_plate_rl_environment.py`](file:///workspaces/IsaacLab-Arena/isaaclab_arena_environments/g1_apple_to_plate_rl_environment.py), bound `G1_SETTLED_LOWER_BODY_JOINT_POS` and initialized robot at settled standing root pose.
+* **Mid-Air Spawning Depenetration Explosion (Root Cause Diagnosis)**:
+  * Attempting to spawn rigid manipuland in mid-air (`lift_curriculum_ratio = 0.15`) without physical attachment or active grasping caused severe PhysX depenetration impulses against the robot fingers, catapulting the apple 7.25m into the air and triggering `object_dropped` at 98%.
+  * Setting `lift_curriculum_ratio = 0.0` while retaining arm pre-grasp curriculum (`curriculum_ratio = 0.50`) eliminated object explosions completely, providing smooth, stable descent and grasp exploration.
+* **Extended RL Training (250 Iterations / 384,000 Steps on RTX PRO 6000 Blackwell)**:
+  * Run directory: `logs/rsl_rl/g1_diff_ik_curriculum_m4_standing/2026-09-09_01-31-26/`
+  * Checkpoint: `model_249.pt`
+  * Wall time: 391.63s (~6.5 minutes at ~960 steps/sec across 64 parallel PhysX environments).
+  * **Mean Total Reward**: Surged to **16.63** (M1 $\to 0.82$, M3 $\to 3.87$, M4 $\to \mathbf{16.63}$ - a **+330%** jump over M3 and **+2380%** over M1).
+  * **Mean Episode Length**: Reached **230.87 steps** (76% of episodes run to full 300-step horizon timeout; drop rate dropped from 98% to 24%).
+  * **Finger Grasp Enclosure**: Reached **0.8096** (near complete finger flexion around apple).
+  * **Approach Alignment**: Reached **0.3238**, Multi-Keypoint Guidance reached **0.5686**.
+  * **Active Lifting Discovered**: `Episode_Reward/lifting_object: 0.0750`.
+  * **Active Transport Discovered**: `Episode_Reward/transporting_object: 0.0212`.
+* **Evaluation Rollout (`policy_runner.py`)**:
+  * Zero falls, zero NaN actions, 100% standing balance across all 3 episodes (300 steps each).
+  * Viewport video recorded (`outputs/2026-09-09_01-38-31/rl-video-step-0.mp4`): G1 stands stably at the table, reaches arm directly toward target apple, closes fingers with vertical posture, avoiding drop terminations.
+  * Telemetry recorded (`eval_telemetry.ttl`, `episode_results_rank0.jsonl`).
+  * Milestone M4 marked **COMPLETED**.

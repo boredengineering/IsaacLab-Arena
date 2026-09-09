@@ -1,3 +1,8 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Copyright (c) 2026, The Isaac Lab Arena Project Developers.
 # All rights reserved.
 #
@@ -7,9 +12,9 @@
 
 import argparse
 from pathlib import Path
-from PIL import Image
 
 from isaaclab.app import AppLauncher
+from PIL import Image
 
 parser = argparse.ArgumentParser(description="Render registered asset thumbnails to PNG.")
 parser.add_argument(
@@ -46,17 +51,17 @@ args_cli.enable_cameras = True
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
-from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
+from isaaclab_arena.assets.registries import AssetRegistry, ensure_assets_registered
+from isaaclab_arena.environment_spec.arena_env_graph_conversion_utils import build_arena_env_from_graph_spec
 from isaaclab_arena.environment_spec.arena_env_graph_spec import (
     ArenaEnvGraphSpec,
     AssetSpec,
-    SpatialRelationSpec,
     CompositeTaskSpec,
+    SpatialRelationSpec,
     TaskSpec,
 )
-from isaaclab_arena.environment_spec.arena_env_graph_conversion_utils import build_arena_env_from_graph_spec
-from isaaclab_arena.assets.registries import AssetRegistry, ensure_assets_registered
+from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
+from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
 
 
 def render_single_asset(asset_name: str, out_dir: Path):

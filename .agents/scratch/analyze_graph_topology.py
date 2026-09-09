@@ -1,6 +1,12 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Proof of Graph Topology & RDF-star Reified Relations in IsaacLab-Arena Neo4j LPG
-import os
 import json
+import os
+
 from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import get_neo4j_driver
 
 driver = get_neo4j_driver()
@@ -8,7 +14,7 @@ with driver.session() as session:
     print("=================================================================")
     print("=== 1. GRAPH TOPOLOGY & CYCLE PROOF (DCRG ANALYSIS) ===")
     print("=================================================================")
-    
+
     # Check self-loops (length 1)
     self_loops = session.run("MATCH (n)-[r]->(n) RETURN count(r) as c").single()["c"]
     print(f"Self-loops (length 1): {self_loops}")
@@ -44,7 +50,7 @@ with driver.session() as session:
     OPTIONAL MATCH (n)-[out]->()
     OPTIONAL MATCH (n)<-[in]-()
     WITH n, count(DISTINCT out) as out_deg, count(DISTINCT in) as in_deg, count(DISTINCT out) + count(DISTINCT in) as deg
-    RETURN min(deg) as min_deg, max(deg) as max_deg, avg(deg) as avg_deg, 
+    RETURN min(deg) as min_deg, max(deg) as max_deg, avg(deg) as avg_deg,
            stDev(deg) as stdev_deg, count(n) as total_nodes
     """).single()
     print("Degree stats:", dict(degree_stats))
@@ -89,7 +95,7 @@ with driver.session() as session:
     MATCH (rf:ReifiedRelation)
     OPTIONAL MATCH (rf)-[:REIFIES_SUBJECT]->(s)
     OPTIONAL MATCH (rf)-[:REIFIES_OBJECT]->(t)
-    RETURN rf.reifier_id as id, rf.relation_type as rel_type, s.id as subject, t.id as object, 
+    RETURN rf.reifier_id as id, rf.relation_type as rel_type, s.id as subject, t.id as object,
            rf.surface_anchor as anchor, rf.kinematic_manifold as manifold,
            rf.delta_x_min as dx_min, rf.delta_x_max as dx_max,
            rf.required_friction as friction, rf.required_headroom as headroom
@@ -97,7 +103,10 @@ with driver.session() as session:
     """).data()
     for r in reifiers:
         print(f"  Reifier [{r['id']}]: << ({r['subject']}) -[:{r['rel_type']}]-> ({r['object']}) >>")
-        print(f"     Manifold: {r['manifold']} | Anchor: {r['anchor']} | Friction: {r['friction']} | dx: [{r['dx_min']}, {r['dx_max']}]")
+        print(
+            f"     Manifold: {r['manifold']} | Anchor: {r['anchor']} | Friction: {r['friction']} | dx: [{r['dx_min']},"
+            f" {r['dx_max']}]"
+        )
 
     print("\n=================================================================")
     print("=== 4. G1 TABLETOP ENVIRONMENT SUBGRAPH IN NEO4J ===")
@@ -117,7 +126,7 @@ with driver.session() as session:
     print("  Children of g1_tabletop_apple_to_plate:")
     for d in g1_details:
         print(f"    -[{d['rel']}]-> ({d['child_type']}: id={d['child_id']}, reg={d['reg_name']})")
-    
+
     # Check relationships between the objects inside g1_tabletop_apple_to_plate
     obj_rels = session.run("""
     MATCH (s {env_name: "g1_tabletop_apple_to_plate"})-[r]->(t {env_name: "g1_tabletop_apple_to_plate"})

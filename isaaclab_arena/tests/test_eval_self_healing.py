@@ -5,9 +5,10 @@
 
 """Unit tests for EvaluationDiagnosticOracle and EvaluationRemediationEngine."""
 
-from pathlib import Path
 import tempfile
 import yaml
+from pathlib import Path
+
 import pytest
 
 from isaaclab_arena.agentic_environment_generation.eval_self_healing import (
@@ -40,22 +41,30 @@ def _sample_spec() -> ArenaEnvGraphSpec:
         ],
         "relations": [
             {"kind": "is_anchor", "subject": "table"},
-            {"kind": "on", "subject": "cube", "reference": "table", "params": {"surface_anchor": "table_top", "surface_sector": "front_left"}},
-            {"kind": "on", "subject": "bin", "reference": "table", "params": {"surface_anchor": "table_top", "surface_sector": "front_right"}},
+            {
+                "kind": "on",
+                "subject": "cube",
+                "reference": "table",
+                "params": {"surface_anchor": "table_top", "surface_sector": "front_left"},
+            },
+            {
+                "kind": "on",
+                "subject": "bin",
+                "reference": "table",
+                "params": {"surface_anchor": "table_top", "surface_sector": "front_right"},
+            },
         ],
         "task": {
             "composition": "atomic",
             "description": "Pick up the Rubik's cube and place it into the bin.",
-            "subtasks": [
-                {
-                    "kind": "PickAndPlaceTask",
-                    "params": {
-                        "pick_up_object": "cube",
-                        "destination_location": "bin",
-                        "background_scene": "table",
-                    },
-                }
-            ],
+            "subtasks": [{
+                "kind": "PickAndPlaceTask",
+                "params": {
+                    "pick_up_object": "cube",
+                    "destination_location": "bin",
+                    "background_scene": "table",
+                },
+            }],
         },
     })
 

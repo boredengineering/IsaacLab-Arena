@@ -19,4 +19,3 @@
 
 :policy_isaaclab_arena_policy_zero_action_policy_ZeroActionPolicy a prov:Entity ;
     arena:modelWeightsPath "isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy"^^xsd:string .
-

@@ -111,7 +111,10 @@ def add_agentic_env_gen_runner_cli_args(parser: argparse.ArgumentParser) -> None
         "--api_key",
         type=str,
         default=None,
-        help="Explicit API key for inference backend (default: NV_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY).",
+        help=(
+            "Explicit API key for inference backend (default: OPENAI_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, or"
+            " NV_API_KEY)."
+        ),
     )
     group.add_argument(
         "--env_name",

@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": 1,
+      "url": "file:///workspaces/IsaacLab-Arena/.agents/scratch/droid_n16_verified_result.json",
+      "title": "",
+      "accessed": "2026-09-09"
+    },
+    {
+      "id": 2,
+      "url": "file:///workspaces/IsaacLab-Arena/.agents/scratch/droid_n16_session_handoff.txt",
+      "title": "",
+      "accessed": "2026-09-09"
+    },
+    {
+      "id": 3,
+      "url": "file:///workspaces/IsaacLab-Arena/eval_output/droid_apple_to_wooden_bowl/viz_run/2026-09-09_04-37-42/episode_results_rank0.jsonl",
+      "title": "",
+      "accessed": "2026-09-09"
+    },
+    {
+      "id": 4,
+      "url": "file:///workspaces/IsaacLab-Arena/.agents/scratch/category_ab_graph_audit.json",
+      "title": "",
+      "accessed": "2026-09-09"
+    },
+    {
+      "id": 5,
+      "url": "file:///workspaces/IsaacLab-Arena/.agents/scratch/category_ab_a_audit.md",
+      "title": "",
+      "accessed": "2026-09-09"
+    },
+    {
+      "id": 6,
+      "url": "file:///workspaces/IsaacLab-Arena/.agents/scratch/category_ab_b_audit.md",
+      "title": "",
+      "accessed": "2026-09-09"
+    },
+    {
+      "id": 7,
+      "url": "file:///workspaces/IsaacLab-Arena/.agents/references/presentations/category_a_b_run_inventory.json",
+      "title": "",
+      "accessed": "2026-09-09"
+    }
+  ]
+}

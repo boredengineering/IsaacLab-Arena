@@ -8,14 +8,14 @@
 from __future__ import annotations
 
 import json
+import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
-import yaml
 
-from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
-from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import relax_spec_spatial_factor_graph
 from isaaclab_arena.agentic_environment_generation.inference_backend import InferenceBackend, StructuredOutputRequest
+from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import relax_spec_spatial_factor_graph
+from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
 
 @dataclass
@@ -27,7 +27,6 @@ class FailureSignature:
     evidence: str
     recommended_policy_patches: dict[str, Any] = field(default_factory=dict)
     recommended_spatial_patches: dict[str, Any] = field(default_factory=dict)
-
 
 
 class EvaluationDiagnosticOracle:
@@ -137,10 +136,10 @@ class EvaluationDiagnosticOracle:
                         evidence=(
                             f"{false_success_count}/{total_episodes_counted} episodes reported success with a "
                             f"zero progress score (shortest such episode: {shortest} steps). The success "
-                            f"predicate fired without the task having been performed - typically a contact "
-                            f"sensor triggered by an object resting against or grazing its destination. "
-                            f"Gate placement behind a verified lift before trusting any other metric from "
-                            f"this run."
+                            "predicate fired without the task having been performed - typically a contact "
+                            "sensor triggered by an object resting against or grazing its destination. "
+                            "Gate placement behind a verified lift before trusting any other metric from "
+                            "this run."
                         ),
                         recommended_policy_patches={},
                         recommended_spatial_patches={},
@@ -150,7 +149,10 @@ class EvaluationDiagnosticOracle:
             manipuland_id = None
             container_id = None
             for obj in spec.objects:
-                is_recep = any(k in obj.id.lower() or k in obj.registry_name.lower() for k in ("bin", "basket", "box", "tray", "bowl", "plate"))
+                is_recep = any(
+                    k in obj.id.lower() or k in obj.registry_name.lower()
+                    for k in ("bin", "basket", "box", "tray", "bowl", "plate")
+                )
                 if is_recep:
                     container_id = obj.id
                 else:
@@ -169,15 +171,24 @@ class EvaluationDiagnosticOracle:
                         defect_type="camera_occlusion",
                         severity=0.99,
                         evidence=(
-                            f"Robot failed to contact or move target object (object_moved_rate={object_moved_rate:.2f}). "
-                            f"For VLA policies (e.g. GR00T-DROID, OpenVLA), objects placed without strict near-field "
-                            f"constraints (d in [0.25m, 0.45m], X in [-0.30m, -0.10m]) fall outside the downward camera crop "
-                            f"and teleoperation training distribution. The table must be shifted closer to the robot base."
+                            "Robot failed to contact or move target object"
+                            f" (object_moved_rate={object_moved_rate:.2f}). For VLA policies (e.g. GR00T-DROID,"
+                            " OpenVLA), objects placed without strict near-field constraints (d in [0.25m, 0.45m], X"
+                            " in [-0.30m, -0.10m]) fall outside the downward camera crop and teleoperation training"
+                            " distribution. The table must be shifted closer to the robot base."
                         ),
                         recommended_spatial_patches={
                             "maple_table": {"position_xyz": [-0.15, 0.0, 0.0]},
-                            manipuland_id or "pick_up_object": {"surface_sector": "front_center", "sector_bounds": [-0.30, -0.10, -0.15, 0.15]},
-                            container_id or "destination_location": {"surface_sector": "front_left", "sector_bounds": [-0.30, -0.10, 0.15, 0.35]},
+                            manipuland_id
+                            or "pick_up_object": {
+                                "surface_sector": "front_center",
+                                "sector_bounds": [-0.30, -0.10, -0.15, 0.15],
+                            },
+                            container_id
+                            or "destination_location": {
+                                "surface_sector": "front_left",
+                                "sector_bounds": [-0.30, -0.10, 0.15, 0.35],
+                            },
                         },
                     )
                 )
@@ -192,12 +203,12 @@ class EvaluationDiagnosticOracle:
                         defect_type="in_flight_slip_inertia",
                         severity=0.92,
                         evidence=(
-                            f"Statistical Funnel Bottleneck (N={total_episodes_counted}): "
-                            f"Robot achieved initial reach and lift in {lift_rate * 100:.1f}% of episodes, "
-                            f"but conversion to successful placement was only {conversion_rate * 100:.1f}%. "
-                            f"High-lift with incomplete placement indicates in-flight rotational slippage, open-loop drift, "
-                            f"or acceleration jerk during transport. Compress execution chunk (from {curr_chunk} to {target_chunk}) "
-                            f"to enable high-frequency receding horizon feedback."
+                            f"Statistical Funnel Bottleneck (N={total_episodes_counted}): Robot achieved initial reach"
+                            f" and lift in {lift_rate * 100:.1f}% of episodes, but conversion to successful placement"
+                            f" was only {conversion_rate * 100:.1f}%. High-lift with incomplete placement indicates"
+                            " in-flight rotational slippage, open-loop drift, or acceleration jerk during transport."
+                            f" Compress execution chunk (from {curr_chunk} to {target_chunk}) to enable high-frequency"
+                            " receding horizon feedback."
                         ),
                         recommended_policy_patches={
                             "action_chunk_length": target_chunk,
@@ -213,7 +224,10 @@ class EvaluationDiagnosticOracle:
                     FailureSignature(
                         defect_type="unconditioned_vla",
                         severity=0.95,
-                        evidence="Policy config lacks 'language_instruction'; VLA multimodal backbone received empty text conditioning.",
+                        evidence=(
+                            "Policy config lacks 'language_instruction'; VLA multimodal backbone received empty text"
+                            " conditioning."
+                        ),
                         recommended_policy_patches={"language_instruction": task_desc},
                     )
                 )
@@ -224,7 +238,10 @@ class EvaluationDiagnosticOracle:
                     FailureSignature(
                         defect_type="horizon_truncation",
                         severity=0.80,
-                        evidence=f"Rollout was limited to {num_steps_executed} steps ({num_steps_executed * 0.02:.1f}s), terminating before multi-stage pick-and-place completed.",
+                        evidence=(
+                            f"Rollout was limited to {num_steps_executed} steps ({num_steps_executed * 0.02:.1f}s),"
+                            " terminating before multi-stage pick-and-place completed."
+                        ),
                         recommended_policy_patches={"num_steps": 2000},
                     )
                 )
@@ -234,12 +251,15 @@ class EvaluationDiagnosticOracle:
             # monocular depth estimation to quantify spatial misalignment.
             trajectory_frames = sorted(eval_path.glob("**/trajectory*/step_*.png"))
             if not trajectory_frames:
-                trajectory_frames = sorted(eval_path.glob("**/*robot_head_cam*.png")) + sorted(eval_path.glob("**/frames/*.png"))
+                trajectory_frames = sorted(eval_path.glob("**/*robot_head_cam*.png")) + sorted(
+                    eval_path.glob("**/frames/*.png")
+                )
             if not trajectory_frames:
                 mp4_files = sorted(eval_path.glob("**/*robot*cam*.mp4"))
                 if mp4_files:
                     try:
                         import cv2
+
                         cap = cv2.VideoCapture(str(mp4_files[0]))
                         ret, f_bgr = cap.read()
                         cap.release()
@@ -251,16 +271,15 @@ class EvaluationDiagnosticOracle:
                         pass
 
             dataset_video = self._find_reference_dataset_video(spec)
-            if (
-                trajectory_frames
-                and dataset_video
-                and success_rate < 0.3
-                and object_moved_rate < 0.2
-            ):
+            if trajectory_frames and dataset_video and success_rate < 0.3 and object_moved_rate < 0.2:
                 try:
                     # Calculate expected target UV in simulation frame using pinhole projection
                     sim_target_uv = None
-                    emb_pose = spec.embodiment.params.get("initial_pose", {}) if spec.embodiment and spec.embodiment.params else {}
+                    emb_pose = (
+                        spec.embodiment.params.get("initial_pose", {})
+                        if spec.embodiment and spec.embodiment.params
+                        else {}
+                    )
                     emb_pos = emb_pose.get("position_xyz")
                     if manipuland_id and emb_pos:
                         target_obj = next((o for o in spec.objects if o.id == manipuland_id), None)
@@ -271,6 +290,7 @@ class EvaluationDiagnosticOracle:
                                     _G1_HEAD_CAM,
                                     _project_to_image_plane,
                                 )
+
                                 cam = _G1_HEAD_CAM
                                 fx = cam["focal_length_mm"] * cam["width"] / cam["sensor_width_mm"]
                                 cx = cam["width"] / 2.0
@@ -281,7 +301,9 @@ class EvaluationDiagnosticOracle:
                                     emb_pos[1] + cam["offset_xyz"][1],
                                     base_z + cam["head_link_height_above_base"] + cam["offset_xyz"][2],
                                 )
-                                proj = _project_to_image_plane(tuple(t_pos), cam_world, cam["offset_quat_xyzw"], fx, cx, cy)
+                                proj = _project_to_image_plane(
+                                    tuple(t_pos), cam_world, cam["offset_quat_xyzw"], fx, cx, cy
+                                )
                                 if proj:
                                     sim_target_uv = (proj[0], proj[1])
 
@@ -289,18 +311,10 @@ class EvaluationDiagnosticOracle:
                         dataset_video, trajectory_frames[0], sim_target_uv=sim_target_uv
                     )
                     if depth_report:
-                        slope_ratio = depth_report.get("discrepancies", {}).get(
-                            "surface_pitch_slope_ratio", 1.0
-                        )
-                        y_delta_px = depth_report.get("discrepancies", {}).get(
-                            "object_vertical_pixel_delta", 0.0
-                        )
-                        depth_delta = depth_report.get("discrepancies", {}).get(
-                            "object_relative_depth_delta", 0.0
-                        )
-                        sign_flip = depth_report.get("discrepancies", {}).get(
-                            "surface_slope_sign_flip", False
-                        )
+                        slope_ratio = depth_report.get("discrepancies", {}).get("surface_pitch_slope_ratio", 1.0)
+                        y_delta_px = depth_report.get("discrepancies", {}).get("object_vertical_pixel_delta", 0.0)
+                        depth_delta = depth_report.get("discrepancies", {}).get("object_relative_depth_delta", 0.0)
+                        sign_flip = depth_report.get("discrepancies", {}).get("surface_slope_sign_flip", False)
                         diagnostics_msgs = depth_report.get("diagnostics", [])
 
                         # Trigger on significant spatial misalignment
@@ -316,27 +330,28 @@ class EvaluationDiagnosticOracle:
                                     defect_type="depth_alignment_mismatch",
                                     severity=0.98,
                                     evidence=(
-                                        f"Depth Anything V2 spatial audit: slope_ratio={slope_ratio:.3f}, "
-                                        f"sign_flip={sign_flip}, apple_y_delta={y_delta_px:+.3f}, depth_delta={depth_delta:+.3f}. "
+                                        f"Depth Anything V2 spatial audit: slope_ratio={slope_ratio:.3f},"
+                                        f" sign_flip={sign_flip}, apple_y_delta={y_delta_px:+.3f},"
+                                        f" depth_delta={depth_delta:+.3f}. "
                                         + " ".join(diagnostics_msgs)
                                     ),
                                     recommended_spatial_patches={
                                         table_id: {
                                             "position_xyz": [recommended_table_x, 0.0, 0.0],
                                         },
-                                        manipuland_id or "pick_up_object": {
+                                        manipuland_id
+                                        or "pick_up_object": {
                                             "surface_sector": "front_center",
                                         },
-                                        container_id or "destination_location": {
+                                        container_id
+                                        or "destination_location": {
                                             "surface_sector": "front_left",
                                         },
                                     },
                                 )
                             )
                 except Exception as exc:
-                    print(
-                        f"[EvaluationDiagnosticOracle] Depth audit skipped: {exc}"
-                    )
+                    print(f"[EvaluationDiagnosticOracle] Depth audit skipped: {exc}")
 
         # --- OPTION B: Generative LLM Healing (When configured or when deterministic signatures don't trigger) ---
         if healing_mode == "llm" or (healing_mode == "hybrid" and len(signatures) == 0 and success_rate < 0.8):
@@ -391,7 +406,13 @@ class EvaluationDiagnosticOracle:
                             "recommended_policy_patches": {"type": "object", "additionalProperties": True},
                             "recommended_spatial_patches": {"type": "object", "additionalProperties": True},
                         },
-                        "required": ["defect_type", "severity", "evidence", "recommended_policy_patches", "recommended_spatial_patches"],
+                        "required": [
+                            "defect_type",
+                            "severity",
+                            "evidence",
+                            "recommended_policy_patches",
+                            "recommended_spatial_patches",
+                        ],
                         "additionalProperties": False,
                     },
                 }
@@ -401,8 +422,9 @@ class EvaluationDiagnosticOracle:
         }
 
         system_prompt = (
-            "You are an expert robotics simulation diagnostic engineer specializing in Foundation VLA policies (GR00T, OpenVLA, DROID) "
-            "and Isaac Sim physics. Analyze the evaluation failure telemetry and recommend precise, grounded policy/spatial patches."
+            "You are an expert robotics simulation diagnostic engineer specializing in Foundation VLA policies (GR00T,"
+            " OpenVLA, DROID) and Isaac Sim physics. Analyze the evaluation failure telemetry and recommend precise,"
+            " grounded policy/spatial patches."
         )
 
         user_prompt = f"""Environment: {spec.env_name}
@@ -462,8 +484,12 @@ Identify any physical, kinematic, perceptual, or controller defects and provide 
 
         # 2. Search well-known dataset paths
         candidates = [
-            Path("/datasets/isaaclab_arena/static_apple_tutorial/arena_g1_static_apple_dataset_recorded/lerobot/videos/chunk-000/observation.images.ego_view/episode_000000.mp4"),
-            Path("/home/tarfy/datasets/isaaclab_arena/static_apple_tutorial/arena_g1_static_apple_dataset_recorded/lerobot/videos/chunk-000/observation.images.ego_view/episode_000000.mp4"),
+            Path(
+                "/datasets/isaaclab_arena/static_apple_tutorial/arena_g1_static_apple_dataset_recorded/lerobot/videos/chunk-000/observation.images.ego_view/episode_000000.mp4"
+            ),
+            Path(
+                "/home/tarfy/datasets/isaaclab_arena/static_apple_tutorial/arena_g1_static_apple_dataset_recorded/lerobot/videos/chunk-000/observation.images.ego_view/episode_000000.mp4"
+            ),
         ]
         for c in candidates:
             if c.exists():
@@ -497,8 +523,9 @@ Identify any physical, kinematic, perceptual, or controller defects and provide 
             Depth audit report dict, or None if the auditor is unavailable.
         """
         try:
-            import cv2
             import numpy as np
+
+            import cv2
             from PIL import Image as PILImage
 
             from isaaclab_arena.agentic_environment_generation.depth_spatial_auditor import DepthSpatialAuditor
@@ -531,7 +558,6 @@ Identify any physical, kinematic, perceptual, or controller defects and provide 
             dataset_target_uv=dataset_target_uv,
         )
         return report
-
 
 
 DEFECT_TYPE_TO_FAILURE_MODES: dict[str, tuple[str, ...]] = {

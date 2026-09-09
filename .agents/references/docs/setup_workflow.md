@@ -13,7 +13,7 @@ flowchart TB
     subgraph Host ["Host Workstation (NVIDIA Driver >= 570 / Blackwell SM120)"]
         HostDocker["Docker Engine (/var/run/docker.sock)"]
         HostStorage["Shared Mounts: Repo, ~/datasets, ~/models, ~/eval"]
-        
+
         subgraph DevContainer ["1. DevContainer (Agent & Development Stack)"]
             Agent["Antigravity / AI Coding Assistants"]
             MCP["MCP Servers (Playwright, Terraform, GCloud, Ansible, Filesystem)"]
@@ -400,4 +400,3 @@ python -m torch.distributed.run --nnode=1 --nproc_per_node=2 \
    - `g1_wbc_pink` uses single-threaded Pinocchio QP (used during human teleoperation and demo collection with `--num_envs 1`).
    - `g1_wbc_joint` directly tracks upper-body joint targets predicted by GR00T while delegating lower-body locomotion to the WBC policy, supporting parallel multi-env rollouts ($N > 1$).
 3. **Port Safety**: Always use port `5556` for GR00T ZeroMQ communication to avoid collision with VS Code's internal debug services on `5555`.
-

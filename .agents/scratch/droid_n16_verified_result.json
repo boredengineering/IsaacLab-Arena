@@ -1,0 +1,26 @@
+{
+  "model": "nvidia/GR00T-N1.6-DROID",
+  "checkpoint_revision": "ae3ebe8d288971ac53aa30c756ea5cba0f52611b",
+  "embodiment": "OXE_DROID",
+  "endpoint": "127.0.0.1:5559",
+  "visualizer": "kit",
+  "policy_steps_completed": 2000,
+  "process_exit_code": 0,
+  "completed_episodes": 2,
+  "successful_episodes": 0,
+  "episode_lengths": [
+    1000,
+    1000
+  ],
+  "seed_values": [
+    42
+  ],
+  "reported_object_moved_rate": 1.0,
+  "report_path": "/workspaces/IsaacLab-Arena/eval_output/droid_apple_to_wooden_bowl/viz_run/2026-09-09_04-37-42/index.html",
+  "log_path": "/workspaces/IsaacLab-Arena/.agents/scratch/droid_viz_20260909_final.log",
+  "tests_passed": 15,
+  "production_precommit": "passed",
+  "sphinx_build": "passed",
+  "lineage_update": "failed: root-owned lineage.json permission denied; not modified",
+  "videos_recorded": false
+}

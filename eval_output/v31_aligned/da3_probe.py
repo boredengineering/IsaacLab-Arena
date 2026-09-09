@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """DA3 Metric Depth Probe: Measure perceived metric depth and pitch between demo and sim."""
 
 import json
-from pathlib import Path
 import numpy as np
-from PIL import Image
 import torch
 import torch.nn.functional as F
+from pathlib import Path
+
 from depth_anything_3.cfg import create_object
 from omegaconf import OmegaConf
+from PIL import Image
 from safetensors.torch import load_file
 
 ROOT = "/models/isaaclab_arena/DA3METRIC-LARGE"
 FOCAL_PX_NATIVE = 15.0 / 20.955 * 640.0  # focal_length / horizontal_aperture * width (~458.12 px)
-IN_H, IN_W = 518, 686                    # multiples of 14 near 480x640
+IN_H, IN_W = 518, 686  # multiples of 14 near 480x640
 MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
 STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
@@ -44,7 +50,8 @@ def find_apple_mask(rgb):
     g = rgb[:, :, 1].astype(float)
     b = rgb[:, :, 2].astype(float)
     # Red dominance
-    redness = r - np.maximum(g, b); red_mask = redness > 50
+    redness = r - np.maximum(g, b)
+    red_mask = redness > 50
     # Constrain to plausible tabletop region: rows 150 to 450
     mask = np.zeros_like(red_mask)
     mask[150:450, 50:590] = red_mask[150:450, 50:590]

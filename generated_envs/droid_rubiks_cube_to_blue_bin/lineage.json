@@ -198,16 +198,16 @@
       "spec_file": "droid_rubiks_cube_to_blue_bin/v9/droid_rubiks_cube_to_blue_bin.yaml",
       "policy_file": null,
       "evaluation": {
-        "timestamp": "2026-08-31T22:56:50.968284+00:00",
-        "eval_dir": "/workspaces/isaaclab_arena/eval_output/droid_rubiks_cube_to_blue_bin/2026-08-31_22-51-09",
-        "success_rate": 0.6666666666666666,
-        "object_moved_rate": 1.0,
-        "num_episodes": 3,
+        "timestamp": "2026-09-09T03:49:24.601204+00:00",
+        "eval_dir": "outputs/2026-09-09_03-48-53",
+        "success_rate": 0.0,
+        "object_moved_rate": NaN,
+        "num_episodes": 0,
         "progress_score": 0.0,
         "raw_metrics": {
-          "num_episodes": 3,
-          "success_rate": 0.6666666666666666,
-          "object_moved_rate": 1.0
+          "num_episodes": 0,
+          "success_rate": 0.0,
+          "object_moved_rate": NaN
         }
       }
     }

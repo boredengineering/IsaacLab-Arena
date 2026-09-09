@@ -1,18 +1,25 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Scale-free near-field fidelity: is a planar table planar, and does the apple's relief show?
 
 Needs no ground truth, so it runs on the exact dataset frames training feeds. The apple's true
 relief above the table is 3.4 cm at ~0.5 m, i.e. ~6.8% of the table distance -- a ratio, so it is
 invariant to the global scale error that makes these teachers' absolute metres wrong.
 """
+
 import json
 import numpy as np
-from PIL import Image
 import torch
 import torch.nn.functional as F
+from transformers import AutoModelForDepthEstimation
+
 from depth_anything_3.cfg import create_object
 from omegaconf import OmegaConf
+from PIL import Image
 from safetensors.torch import load_file
-from transformers import AutoModelForDepthEstimation
 
 P = "/workspaces/isaaclab_arena/eval_output/g1_teacher_probe"
 F_PX, CX, CY = 458.12, 320.0, 240.0
@@ -41,19 +48,19 @@ def depth_da3(name, rgb):
 
 
 def depth_dav2(rgb):
-    m = AutoModelForDepthEstimation.from_pretrained(
-        "depth-anything/Depth-Anything-V2-Small-hf").cuda().eval()
+    m = AutoModelForDepthEstimation.from_pretrained("depth-anything/Depth-Anything-V2-Small-hf").cuda().eval()
     with torch.no_grad():
         out = m(pixel_values=prep(rgb)).predicted_depth
     if out.dim() == 3:
         out = out[:, None]
     d = F.interpolate(out.float(), (480, 640), mode="bilinear", align_corners=False)[0, 0].cpu().numpy()
-    return 1.0 / np.clip(d, 1e-6, None)          # DA-V2 emits inverse relative depth
+    return 1.0 / np.clip(d, 1e-6, None)  # DA-V2 emits inverse relative depth
 
 
 def analyse(label, depth, table, apple):
     """Fit a plane to the table in 3D, then measure planarity and the apple's relief."""
     yy, xx = np.mgrid[0:480, 0:640]
+
     def points(mask):
         z = depth[mask]
         return np.stack([(xx[mask] - CX) / F_PX * z, (yy[mask] - CY) / F_PX * z, z], 1)
@@ -64,16 +71,18 @@ def analyse(label, depth, table, apple):
     coef, *_ = np.linalg.lstsq(A, Pt[:, 2], rcond=None)
     resid = A @ coef - Pt[:, 2]
     table_z = np.median(Pt[:, 2])
-    planarity = float(np.sqrt((resid ** 2).mean()) / table_z)      # scale-free RMS
+    planarity = float(np.sqrt((resid**2).mean()) / table_z)  # scale-free RMS
 
     Pa = points(apple)
     Aa = np.stack([Pa[:, 0], Pa[:, 1], np.ones(len(Pa))], 1)
     plane_at_apple = Aa @ coef
-    relief = plane_at_apple - Pa[:, 2]                             # positive = nearer than plane
+    relief = plane_at_apple - Pa[:, 2]  # positive = nearer than plane
     rel_ratio = float(np.median(relief) / table_z)
-    print(f"  {label:22s} table_z={table_z:6.3f}  planarity RMS={planarity*100:5.2f}% of range"
-          f"   apple relief={np.median(relief)*100:+6.2f} cm = {rel_ratio*100:+5.2f}% of range"
-          f"   (truth +6.8%)")
+    print(
+        f"  {label:22s} table_z={table_z:6.3f}  planarity RMS={planarity*100:5.2f}% of range"
+        f"   apple relief={np.median(relief)*100:+6.2f} cm = {rel_ratio*100:+5.2f}% of range"
+        "   (truth +6.8%)"
+    )
     return rel_ratio, planarity
 
 

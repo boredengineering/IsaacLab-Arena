@@ -14,6 +14,7 @@ from __future__ import annotations
 import gymnasium as gym
 import numpy as np
 import torch
+from collections import deque
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -28,10 +29,12 @@ from isaaclab_arena_gr00t.policy.gr00t_core import (
     build_gr00t_action_tensor,
     build_gr00t_policy_observations,
     compute_action_dim,
+    compute_droid_eef_9d,
     extract_obs_numpy_from_torch,
     load_gr00t_joint_configs,
+    resize_rgb_for_policy,
 )
-from isaaclab_arena_gr00t.utils.io_utils import create_config_from_yaml, load_gr00t_modality_config_from_file
+from isaaclab_arena_gr00t.utils.io_utils import create_config_from_yaml, load_gr00t_modality_config_from_file, to_numpy
 
 
 # TODO(xinjieyao, 2026-04-27): Consider adding RemotePolicyCfg and deriving this config from it.
@@ -95,25 +98,7 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
             self.robot_state_joints_config,
         ) = load_gr00t_joint_configs(self.policy_config)
 
-        self.modality_configs = load_gr00t_modality_config_from_file(
-            self.policy_config.modality_config_path,
-            self.policy_config.embodiment_tag,
-        )
-
-        # Action / chunk shapes
-        self.action_dim = compute_action_dim(self.task_mode, self.robot_action_joints_config)
-        self.action_chunk_length = self.policy_config.action_chunk_length
-
-        self._chunking_state: ActionScheduler | None = action_scheduler_cls(
-            num_envs=self.num_envs,
-            action_chunk_length=self.action_chunk_length,
-            action_horizon=self.policy_config.action_horizon,
-            action_dim=self.action_dim,
-            device=self.device,
-            dtype=torch.float,
-        )
-
-        # Connect to GR00T's native PolicyClient
+        # Connect before choosing default modalities: the server may run a different GR00T version.
         client = Gr00tPolicyClient(
             host=config.remote_host,
             port=config.remote_port,
@@ -123,6 +108,40 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
         self._client: Gr00tPolicyClient | None = client
         if not client.ping():
             raise ConnectionError(f"Cannot reach GR00T policy server at {config.remote_host}:{config.remote_port}")
+
+        if self.policy_config.modality_config_path:
+            self.modality_configs = load_gr00t_modality_config_from_file(
+                self.policy_config.modality_config_path,
+                self.policy_config.embodiment_tag,
+            )
+        else:
+            self.modality_configs = client.get_modality_config()
+
+        # Action / chunk shapes
+        self.action_dim = compute_action_dim(self.task_mode, self.robot_action_joints_config)
+        action_delta = getattr(self.modality_configs.get("action"), "delta_indices", None)
+        if action_delta is not None and hasattr(action_delta, "__len__"):
+            self.action_horizon = len(action_delta)
+        else:
+            self.action_horizon = self.policy_config.action_horizon
+        self.action_chunk_length = min(self.policy_config.action_chunk_length, self.action_horizon)
+
+        self._chunking_state: ActionScheduler | None = action_scheduler_cls(
+            num_envs=self.num_envs,
+            action_chunk_length=self.action_chunk_length,
+            action_horizon=self.action_horizon,
+            action_dim=self.action_dim,
+            device=self.device,
+            dtype=torch.float,
+        )
+
+        # Temporal observation buffer for models requiring video horizon > 1 (e.g. GR00T-N1.7 delta_indices: [-15, 0])
+        video_delta = getattr(self.modality_configs["video"], "delta_indices", [0])
+        self._video_delta_indices: list[int] = list(video_delta) if hasattr(video_delta, "__len__") else [0]
+        self._video_horizon: int = len(self._video_delta_indices)
+        min_delta = min(self._video_delta_indices) if self._video_delta_indices else 0
+        self._video_buffer_maxlen: int = abs(min_delta) + 1 if min_delta < 0 else 1
+        self._video_history: list[deque[np.ndarray]] = []
 
         self.task_description: str | None = None
 
@@ -139,8 +158,32 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
         self.task_description = task_description
         return self.task_description
 
+    def _update_video_history(self, observation: dict[str, Any]) -> None:
+        """Update the temporal video observation buffer with the current frame."""
+        camera_names = self.policy_config.pov_cam_name_sim
+        if isinstance(camera_names, str):
+            camera_names = [camera_names]
+        rgb_list_np, _ = extract_obs_numpy_from_torch(nested_obs=observation, camera_names=camera_names)
+        if getattr(self.policy_config, "bilateral_mirror", False):
+            rgb_list_np = [np.ascontiguousarray(img[:, :, ::-1, :]) for img in rgb_list_np]
+        target_image_size = getattr(self.policy_config, "target_image_size", None)
+        if target_image_size is not None:
+            rgb_list_np = resize_rgb_for_policy(rgb_list_np=rgb_list_np, target_image_size=target_image_size)
+
+        if not self._video_history:
+            self._video_history = [
+                deque([cam_frames] * self._video_buffer_maxlen, maxlen=self._video_buffer_maxlen)
+                for cam_frames in rgb_list_np
+            ]
+        else:
+            for cam_idx, cam_frames in enumerate(rgb_list_np):
+                self._video_history[cam_idx].append(cam_frames)
+
     def get_action(self, env: gym.Env, observation: dict[str, Any]) -> torch.Tensor:
         assert self._chunking_state is not None, "GR00T remote policy has been closed"
+
+        if self._video_horizon > 1:
+            self._update_video_history(observation)
 
         def fetch_chunk() -> torch.Tensor:
             return self._get_action_chunk(observation, self.policy_config.pov_cam_name_sim)
@@ -176,9 +219,29 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
         assert self._client is not None, "GR00T remote policy has been closed"
         rgb_list_np, joint_pos_sim_np = extract_obs_numpy_from_torch(nested_obs=observation, camera_names=camera_names)
 
+        extra_state_np: dict[str, np.ndarray] = {}
+        if "policy" in observation:
+            policy_obs = observation["policy"]
+            if "eef_9d" in policy_obs:
+                extra_state_np["eef_9d"] = to_numpy(policy_obs["eef_9d"])
+            elif "eef_pos" in policy_obs and "eef_quat" in policy_obs:
+                pos = to_numpy(policy_obs["eef_pos"])
+                quat = to_numpy(policy_obs["eef_quat"])
+                extra_state_np["eef_9d"] = compute_droid_eef_9d(pos, quat)
+
         if getattr(self.policy_config, "bilateral_mirror", False):
             # Horizontally flip RGB observations: shape (N, H, W, C) -> width is axis 2
             rgb_list_np = [np.ascontiguousarray(img[:, :, ::-1, :]) for img in rgb_list_np]
+
+        if self._video_horizon > 1:
+            if not self._video_history:
+                self._update_video_history(observation)
+            temporal_rgb_list = []
+            for cam_idx in range(len(rgb_list_np)):
+                history_deque = self._video_history[cam_idx]
+                sampled = [history_deque[d - 1] for d in self._video_delta_indices]
+                temporal_rgb_list.append(np.stack(sampled, axis=1))
+            rgb_list_np = temporal_rgb_list
 
         policy_observations = build_gr00t_policy_observations(
             rgb_list_np=rgb_list_np,
@@ -188,6 +251,7 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
             robot_state_joints_config=self.robot_state_joints_config,
             policy_joints_config=self.policy_joints_config,
             modality_configs=self.modality_configs,
+            extra_state_np=extra_state_np,
         )
 
         if getattr(self.policy_config, "bilateral_mirror", False):
@@ -242,6 +306,7 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
         assert self._chunking_state is not None, "GR00T remote policy has been closed"
         self._client.reset()
         self._chunking_state.reset(env_ids)
+        self._video_history = []
 
     def close(self) -> None:
         """Release Arena-side resources for the remote GR00T policy client."""

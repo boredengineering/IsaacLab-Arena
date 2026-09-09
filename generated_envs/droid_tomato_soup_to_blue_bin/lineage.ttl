@@ -48,4 +48,3 @@
     arena:successRate "0.0"^^xsd:float ;
     arena:trigger "active_inference_auto_heal"^^xsd:string ;
     arena:versionNumber 3 .
-

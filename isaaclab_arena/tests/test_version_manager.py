@@ -5,6 +5,7 @@
 
 import json
 from pathlib import Path
+
 from isaaclab_arena.agentic_environment_generation.version_manager import EnvironmentVersionManager
 
 
@@ -43,7 +44,7 @@ def test_version_manager_lifecycle(tmp_path):
         metrics={"success_rate": 0.0, "progress_score": 0.33, "num_episodes": 2},
     )
 
-    with open(mgr.lineage_file, "r") as f:
+    with open(mgr.lineage_file) as f:
         lineage = json.load(f)
         assert lineage["current_version"] == 1
         assert lineage["versions"][0]["evaluation"]["success_rate"] == 0.0
@@ -73,4 +74,3 @@ def test_version_manager_lifecycle(tmp_path):
     assert "Shift table closer" in readme_content
     assert "| `v1` |" in readme_content
     assert "| `v2` |" in readme_content
-

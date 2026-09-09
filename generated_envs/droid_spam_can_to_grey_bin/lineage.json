@@ -15,8 +15,8 @@
       "spec_file": "droid_spam_can_to_grey_bin/v1/droid_spam_can_to_grey_bin.yaml",
       "policy_file": "droid_spam_can_to_grey_bin/v1/policy_config.yaml",
       "evaluation": {
-        "timestamp": "2026-09-01T19:56:48.210089+00:00",
-        "eval_dir": "/workspaces/isaaclab_arena/eval_output/droid_spam_can_to_grey_bin/2026-09-01_19-53-15",
+        "timestamp": "2026-09-09T05:15:11.139398+00:00",
+        "eval_dir": "outputs/2026-09-09_05-10-01",
         "success_rate": 0.0,
         "object_moved_rate": 0.5,
         "num_episodes": 2,

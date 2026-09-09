@@ -14,16 +14,14 @@ from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import get_neo
 
 def list_environment_graphs(driver) -> list[dict]:
     with driver.session() as session:
-        result = session.run(
-            """
+        result = session.run("""
             MATCH (e:EnvironmentGraph)
             RETURN e.name AS name,
                    e.task_description AS task_description,
                    e.task_composition AS composition,
                    e.updated_at AS updated_at
             ORDER BY e.updated_at DESC
-            """
-        )
+            """)
         return [record.data() for record in result]
 
 
@@ -86,13 +84,20 @@ def inspect_environment(driver, env_name: str) -> None:
 
         # 4. RDF 1.2 Reified Factor Graph Nodes
         from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import query_reified_relations
+
         reifiers = query_reified_relations(env_name, driver=driver)
         if reifiers:
             print(f"\n[RDF 1.2 Reified Factor Nodes ({len(reifiers)})]")
             for rf in reifiers:
                 print(f"  • << :{rf['reifier_id']} | :{rf['source_id']} :{rf['relation_type']} :{rf['target_id']} >>")
-                print(f"      anchor: {rf['surface_anchor']} | headroom: {rf['required_headroom']}m | friction: {rf['required_friction']}")
-                print(f"      manifold: {rf['kinematic_manifold']} | prior_H: {rf['prior_entropy']} nats | post_H: {rf['posterior_entropy']} nats")
+                print(
+                    f"      anchor: {rf['surface_anchor']} | headroom: {rf['required_headroom']}m | friction:"
+                    f" {rf['required_friction']}"
+                )
+                print(
+                    f"      manifold: {rf['kinematic_manifold']} | prior_H: {rf['prior_entropy']} nats | post_H:"
+                    f" {rf['posterior_entropy']} nats"
+                )
 
 
 def main():

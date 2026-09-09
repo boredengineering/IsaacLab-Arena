@@ -138,4 +138,4 @@ docker exec -it \
 | `v6` | 2026-08-31 | `active_inference_auto_heal` | Spatial: {'maple_table': {'position_xyz': [-0.15, 0.0, 0.0]}, 'rubiks_cube': {'surface_sector': 'front_center', 'sector_bounds': [-0.3, -0.1, -0.15, 0.15]}, 'blue_bin': {'surface_sector': 'front_left', 'sector_bounds': [-0.3, -0.1, 0.15, 0.35]}}, Policy: {'num_steps': 2000} | *Pending evaluation* |
 | `v7` | 2026-08-31 | `active_inference_refinement` | Initial synthesis | 0.0% (2 eps) |
 | `v8` | 2026-08-31 | `active_inference_refinement` | Initial synthesis | 0.0% (2 eps) |
-| `v9` | 2026-08-31 | `active_inference_refinement` | Initial synthesis | 66.7% (3 eps) |
+| `v9` | 2026-08-31 | `active_inference_refinement` | Initial synthesis | 0.0% (0 eps) |

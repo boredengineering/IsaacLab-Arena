@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
+
 from isaaclab_arena.agentic_environment_generation.version_manager import EnvironmentVersionManager
 
 
@@ -29,13 +30,18 @@ def consolidate_droid_rubiks():
     if not v1_source_spec.exists():
         v1_source_spec = gen_root / "droid_rubiks_blue_bin" / "droid_pick_rubiks_cube_to_blue_bin.yaml"
 
-    default_policy = Path("/workspaces/isaaclab_arena/isaaclab_arena_gr00t/policy/config/droid_manip_gr00t_closedloop_config.yaml")
+    default_policy = Path(
+        "/workspaces/isaaclab_arena/isaaclab_arena_gr00t/policy/config/droid_manip_gr00t_closedloop_config.yaml"
+    )
 
     v1, v1_dir = mgr.create_version(
         spec_source=v1_source_spec,
         policy_config_source=default_policy,
         trigger="initial_active_inference_generation",
-        prompt="Droid stands in front of the table, picks up the Rubik's cube from the maple table and places it in the blue bin.",
+        prompt=(
+            "Droid stands in front of the table, picks up the Rubik's cube from the maple table and places it in the"
+            " blue bin."
+        ),
         remediations=[],
         diagnostics=[],
     )

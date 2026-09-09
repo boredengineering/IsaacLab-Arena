@@ -140,27 +140,23 @@ class SpecInference:
         affordance_sec = ""
         if available_affordances:
             affordance_sec = (
-                f"\nAVAILABLE INTROSPECTED AFFORDANCE PATCHES (USD Ground Truth):\n"
+                "\nAVAILABLE INTROSPECTED AFFORDANCE PATCHES (USD Ground Truth):\n"
                 f"{json.dumps(available_affordances, indent=2)}\n"
             )
         catalog_sec = ""
         if asset_catalog is not None:
-            cat_str = asset_catalog.to_catalog_string() if hasattr(asset_catalog, "to_catalog_string") else str(asset_catalog)
+            cat_str = (
+                asset_catalog.to_catalog_string() if hasattr(asset_catalog, "to_catalog_string") else str(asset_catalog)
+            )
             catalog_sec = f"\nREGISTERED ASSET VOCABULARY:\n{cat_str}\n\n"
         prompt_sec = f"TARGET GOAL / REFINEMENT REQUEST:\n{original_prompt}\n\n" if original_prompt else ""
         return (
-            f"{catalog_sec}"
-            f"{prompt_sec}"
-            f"PREVIOUS CANDIDATE SPEC:\n"
-            f"{json.dumps(previous_spec, indent=2)}\n\n"
-            f"DIAGNOSTIC FEEDBACK & INSTRUCTIONS:\n"
-            f"{feedback_report}\n"
-            f"{affordance_sec}\n"
-            f"INSTRUCTION:\n"
-            f"Perform a targeted modification on the candidate spec to satisfy all instructions and constraint feedback above.\n"
-            f"1. Update objects, relations, surface anchors, or containment hierarchies so they conform to registered catalogue names.\n"
-            f"2. Keep all valid unchanged objects, background, and embodiment configurations.\n"
-            f"3. Emit the complete valid ArenaEnvGraphSpec JSON matching the schema."
+            f"{catalog_sec}{prompt_sec}PREVIOUS CANDIDATE SPEC:\n{json.dumps(previous_spec, indent=2)}\n\nDIAGNOSTIC"
+            f" FEEDBACK & INSTRUCTIONS:\n{feedback_report}\n{affordance_sec}\nINSTRUCTION:\nPerform a targeted"
+            " modification on the candidate spec to satisfy all instructions and constraint feedback above.\n1. Update"
+            " objects, relations, surface anchors, or containment hierarchies so they conform to registered catalogue"
+            " names.\n2. Keep all valid unchanged objects, background, and embodiment configurations.\n3. Emit the"
+            " complete valid ArenaEnvGraphSpec JSON matching the schema."
         )
 
     @staticmethod
@@ -252,4 +248,3 @@ TELESCOPIC DOLLHOUSE SPATIAL PLACEMENT:
 - Reachability Envelope: All task-relevant objects must be placed within reachable distance of the robot base (r in [0.30, 0.80]m for Franka/Droid, r in [0.45, 0.95]m for G1).
 - Non-Overlap & Headroom: Maintain at least 0.20m separation between objects on the same support surface.
 """
-

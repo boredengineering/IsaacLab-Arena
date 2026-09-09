@@ -160,5 +160,3 @@ Containing evaluation statistics and remediation actions on the graph turns the 
 2. **Causal Derivation Edges**:
    `(v3:EnvironmentGraph)-[:WAS_DERIVED_FROM {defect: 'IN_FLIGHT_SLIP_INERTIA', patch: 'action_chunk_length=16'}]->(v2:EnvironmentGraph)`.
 3. **Persistent Empirical Affordance Memory**: The system remembers which controller parameters stabilize grasps for curved/spherical geometries, eliminating repeated trial-and-error across future environments.
-
-

@@ -69,7 +69,7 @@ class ActionChunkScheduler(ActionScheduler):
         if self.env_requires_new_chunk.any():
             new_chunk = fetch_action_tensor_fn()
             mask = self.env_requires_new_chunk
-            self.current_action_chunk[mask] = new_chunk[mask]
+            self.current_action_chunk[mask] = new_chunk[mask, : self.action_horizon]
             self.current_action_index[mask] = 0
             self.env_requires_new_chunk[mask] = False
 

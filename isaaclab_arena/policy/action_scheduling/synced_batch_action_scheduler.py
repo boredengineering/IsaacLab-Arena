@@ -46,7 +46,7 @@ class SyncedBatchActionScheduler(ActionChunkScheduler):
             self._per_env_fetch_count += 1
 
             new_chunk = fetch_action_tensor_fn()
-            self.current_action_chunk[:] = new_chunk
+            self.current_action_chunk[:] = new_chunk[:, : self.action_horizon]
             self.current_action_index[:] = 0
             self.env_requires_new_chunk[:] = False
 

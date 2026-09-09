@@ -237,8 +237,13 @@ class EnvironmentGenerationAgent:
             try:
                 from isaaclab_arena.agentic_environment_generation.rdf_lowering import spec_to_rdf_graph
                 from isaaclab_arena.agentic_environment_generation.rdf_validation import validate_rdf_environment_graph
-                from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import validate_spatial_geometry
-                from isaaclab_arena.agentic_environment_generation.visual_critic import PhysXPreflightCritic, VisualSceneCritic
+                from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
+                    validate_spatial_geometry,
+                )
+                from isaaclab_arena.agentic_environment_generation.visual_critic import (
+                    PhysXPreflightCritic,
+                    VisualSceneCritic,
+                )
 
                 rdf_graph = spec_to_rdf_graph(spec)
                 shacl_conforms, shacl_report = validate_rdf_environment_graph(rdf_graph)
@@ -255,25 +260,41 @@ class EnvironmentGenerationAgent:
                     converged = True
                     self._traces.append(f"SHACL semantic validation passed on iteration {iteration + 1}.")
                     self._traces.append(f"Spatial Geometric validation passed on iteration {iteration + 1}.")
-                    self._traces.append(f"Visual line-of-sight and dynamic physics validation passed on iteration {iteration + 1}.")
+                    self._traces.append(
+                        f"Visual line-of-sight and dynamic physics validation passed on iteration {iteration + 1}."
+                    )
                     break
                 else:
                     repair_iterations += 1
                     combined_report_parts = []
                     if not shacl_conforms:
-                        combined_report_parts.append(f"SHACL constraint violation on iteration {iteration + 1}:\n{shacl_report}")
+                        combined_report_parts.append(
+                            f"SHACL constraint violation on iteration {iteration + 1}:\n{shacl_report}"
+                        )
                         self._traces.append(f"SHACL constraint violation on iteration {iteration + 1}:\n{shacl_report}")
                     if not geom_conforms:
                         geom_text = "\n".join(geom_diagnostics)
-                        combined_report_parts.append(f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}")
-                        self._traces.append(f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}")
+                        combined_report_parts.append(
+                            f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}"
+                        )
+                        self._traces.append(
+                            f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}"
+                        )
                     if not visual_result.conforms:
-                        combined_report_parts.append(f"Visual Scene Occlusion on iteration {iteration + 1}:\n{visual_result.actionable_feedback}")
-                        self._traces.append(f"Visual Scene Occlusion on iteration {iteration + 1}:\n{visual_result.actionable_feedback}")
+                        combined_report_parts.append(
+                            f"Visual Scene Occlusion on iteration {iteration + 1}:\n{visual_result.actionable_feedback}"
+                        )
+                        self._traces.append(
+                            f"Visual Scene Occlusion on iteration {iteration + 1}:\n{visual_result.actionable_feedback}"
+                        )
                     if phys_issues:
                         phys_text = "\n".join(phys_issues)
-                        combined_report_parts.append(f"PhysX Dynamic Stability Issues on iteration {iteration + 1}:\n{phys_text}")
-                        self._traces.append(f"PhysX Dynamic Stability Issues on iteration {iteration + 1}:\n{phys_text}")
+                        combined_report_parts.append(
+                            f"PhysX Dynamic Stability Issues on iteration {iteration + 1}:\n{phys_text}"
+                        )
+                        self._traces.append(
+                            f"PhysX Dynamic Stability Issues on iteration {iteration + 1}:\n{phys_text}"
+                        )
 
                     combined_report = "\n\n".join(combined_report_parts)
                     affordances = _discover_candidate_affordances(spec)
@@ -287,7 +308,8 @@ class EnvironmentGenerationAgent:
                         )
                     except Exception as repair_exc:
                         self._traces.append(
-                            f"[ActiveInference] Repair failed on iteration {iteration + 1}: {repair_exc}. Applying deterministic fallback."
+                            f"[ActiveInference] Repair failed on iteration {iteration + 1}: {repair_exc}. Applying"
+                            " deterministic fallback."
                         )
                         spec = _deterministic_affordance_fallback(spec)
                         break
@@ -296,7 +318,8 @@ class EnvironmentGenerationAgent:
                         spec = _ensure_reified_relations_and_grounding(repaired_spec)
                     else:
                         self._traces.append(
-                            f"[ActiveInference] Repair returned None on iteration {iteration + 1}. Applying deterministic fallback."
+                            f"[ActiveInference] Repair returned None on iteration {iteration + 1}. Applying"
+                            " deterministic fallback."
                         )
                         spec = _deterministic_affordance_fallback(spec)
                         break
@@ -328,6 +351,7 @@ class EnvironmentGenerationAgent:
         # Sync validated factor graph to Neo4j LPG
         try:
             from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
+
             sync_spec_to_neo4j(spec, telemetry=self._telemetry)
         except Exception as exc:  # pragma: no cover
             self._traces.append(f"Neo4j LPG sync skipped: {exc}")
@@ -423,7 +447,9 @@ class EnvironmentGenerationAgent:
             try:
                 from isaaclab_arena.agentic_environment_generation.rdf_lowering import spec_to_rdf_graph
                 from isaaclab_arena.agentic_environment_generation.rdf_validation import validate_rdf_environment_graph
-                from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import validate_spatial_geometry
+                from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
+                    validate_spatial_geometry,
+                )
 
                 rdf_graph = spec_to_rdf_graph(spec)
                 shacl_conforms, shacl_report = validate_rdf_environment_graph(rdf_graph)
@@ -440,12 +466,18 @@ class EnvironmentGenerationAgent:
                     repair_iterations += 1
                     combined_report_parts = []
                     if not shacl_conforms:
-                        combined_report_parts.append(f"SHACL constraint violation on iteration {iteration + 1}:\n{shacl_report}")
+                        combined_report_parts.append(
+                            f"SHACL constraint violation on iteration {iteration + 1}:\n{shacl_report}"
+                        )
                         self._traces.append(f"SHACL constraint violation on iteration {iteration + 1}:\n{shacl_report}")
                     if not geom_conforms:
                         geom_text = "\n".join(geom_diagnostics)
-                        combined_report_parts.append(f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}")
-                        self._traces.append(f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}")
+                        combined_report_parts.append(
+                            f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}"
+                        )
+                        self._traces.append(
+                            f"Spatial & Geometric Violations on iteration {iteration + 1}:\n{geom_text}"
+                        )
 
                     combined_report = "\n\n".join(combined_report_parts)
                     affordances = _discover_candidate_affordances(spec)
@@ -459,7 +491,8 @@ class EnvironmentGenerationAgent:
                         )
                     except Exception as repair_exc:
                         self._traces.append(
-                            f"[ActiveInference] Refinement repair failed: {repair_exc}. Applying deterministic fallback."
+                            f"[ActiveInference] Refinement repair failed: {repair_exc}. Applying deterministic"
+                            " fallback."
                         )
                         spec = _deterministic_affordance_fallback(spec)
                         break
@@ -499,6 +532,7 @@ class EnvironmentGenerationAgent:
         # Sync validated factor graph to Neo4j LPG
         try:
             from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
+
             sync_spec_to_neo4j(spec, telemetry=self._telemetry)
         except Exception as exc:  # pragma: no cover
             self._traces.append(f"Neo4j LPG sync skipped: {exc}")
@@ -540,8 +574,12 @@ def _discover_candidate_affordances(spec: ArenaEnvGraphSpec) -> list[str]:
 def _deterministic_affordance_fallback(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphSpec:
     """Deterministically repair hierarchical placement and ungrounded reifiers without LLM calls."""
     furniture_objs = [
-        obj for obj in spec.objects
-        if any(k in f"{obj.id} {obj.registry_name}".lower() for k in ("shelf", "shelving", "table", "counter", "desk", "rack"))
+        obj
+        for obj in spec.objects
+        if any(
+            k in f"{obj.id} {obj.registry_name}".lower()
+            for k in ("shelf", "shelving", "table", "counter", "desk", "rack")
+        )
     ]
     if furniture_objs and spec.background:
         primary_fixture = furniture_objs[0]
@@ -557,8 +595,8 @@ def _deterministic_affordance_fallback(spec: ArenaEnvGraphSpec) -> ArenaEnvGraph
 
 def _ensure_reified_relations_and_grounding(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphSpec:
     """Ensure spatial grounding, surface anchors, formal RDF 1.2 contracts, and dynamic factor graph relaxation."""
-    from isaaclab_arena.environment_spec.arena_env_graph_types import ContinuousIntervalSpec, ReifiedRelationSpec
     from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import relax_spec_spatial_factor_graph
+    from isaaclab_arena.environment_spec.arena_env_graph_types import ContinuousIntervalSpec, ReifiedRelationSpec
 
     spec = _ground_telescopic_dollhouse_spec(spec)
 
@@ -567,7 +605,11 @@ def _ensure_reified_relations_and_grounding(spec: ArenaEnvGraphSpec) -> ArenaEnv
         reified_list: list[ReifiedRelationSpec] = []
         for idx, rel in enumerate(spec.relations):
             if rel.kind.lower() in ("on", "placed_on", "inside", "placed_inside", "stands_near"):
-                rel_type = "PLACED_ON" if "on" in rel.kind.lower() else ("PLACED_INSIDE" if "inside" in rel.kind.lower() else "STANDS_NEAR")
+                rel_type = (
+                    "PLACED_ON"
+                    if "on" in rel.kind.lower()
+                    else ("PLACED_INSIDE" if "inside" in rel.kind.lower() else "STANDS_NEAR")
+                )
                 target_id = rel.reference or spec.background.id
                 reified_list.append(
                     ReifiedRelationSpec(

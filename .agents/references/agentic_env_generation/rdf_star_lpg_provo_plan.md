@@ -10,7 +10,7 @@ Implementation blueprint, codebase gap analysis, scaffolded **RDF-star / JSON-LD
 
 ## 1. Executive Summary & Dual-Plane Vision
 
-The current environment generation pipeline in `isaaclab_arena/agentic_environment_generation/` compiles unstructured natural-language prompts into declarative environment specifications (`ArenaEnvGraphSpec`). 
+The current environment generation pipeline in `isaaclab_arena/agentic_environment_generation/` compiles unstructured natural-language prompts into declarative environment specifications (`ArenaEnvGraphSpec`).
 
 This architecture addresses three foundational requirements:
 1. **Reified Spatial Relations**: Topological relations (`on`, `inside`, `nav_corridor`) natively carry continuous metric constraints (bounding intervals, contact normals, surface anchors, locomotion clearance radii) via RDF-star and LPG properties.
@@ -25,7 +25,7 @@ flowchart TD
         LPG_STORE["Native Property Graph (Neo4j / Cypher):<br/>(:RigidObject)-[:PLACED_ON {height: 0.75}]->(:Fixture)"]
         RDF_STAR["RDF-star Knowledge Graph:<br/>&lt;&lt; :box :placedOn :shelf &gt;&gt;<br/>  :contactAnchor :middle_tier ;<br/>  :metricBounds [x, y, z] ;<br/>  :clearance 0.08 ."]
         SHACL["SHACL-star Validation Engine:<br/>• Mandatory Ground Plane Invariant<br/>• Kinematic Workspace Manifold Gate<br/>• Pink WBC Single-Thread Invariant<br/>• Locomotion Corridor Clearance Gate"]
-        
+
         PROV --> JSON_LD
         JSON_LD --> LPG_STORE
         LPG_STORE <-->|"Isomorphic Mapping"| RDF_STAR
@@ -84,7 +84,7 @@ flowchart TD
         YAML_SPEC["Validated Executable Spec YAML<br/>(g1_pick_and_place_brown_box.yaml)"]
         BUILDER_PIPE["ArenaEnvBuilder & Task Factory<br/>(Scene Assembly & PhysX Spawners)"]
         PHYSX_RUN["Isaac Sim / PhysX 6.0 Runtime<br/>• G1 Bipedal Locomotion (Pink WBC)<br/>• Stable Collision Settling<br/>• Viewport Video / GUI (--viz kit)"]
-        
+
         SHACL_GATE ==> LOWER_COMP
         LOWER_COMP --> YAML_SPEC
         YAML_SPEC --> BUILDER_PIPE
@@ -94,7 +94,7 @@ flowchart TD
     subgraph STAGE_5 ["5. Telemetry & Provenance Backpropagation"]
         EVAL_PIPE["policy_runner.py Rollout<br/>(ZeroActionPolicy / GR00T Policy)"]
         PROV_GRAPH["telemetry_to_prov.py<br/>(W3C PROV-O Graph: eval_telemetry.ttl)<br/>:eval_run prov:wasGeneratedBy :eval_act ;<br/>  prov:used :scene_graph, :model_checkpoint ;<br/>  arena:metric_success_rate 1.0 ."]
-        
+
         PHYSX_RUN --> EVAL_PIPE
         EVAL_PIPE --> PROV_GRAPH
         PROV_GRAPH -.->|"Causal Feedback Loop"| NL_PROMPT
@@ -154,45 +154,45 @@ flowchart TD
 ```cypher
 // 1. Create Nodes with Labels and Properties
 CREATE (g1:Embodiment {
-    id: "g1_robot", 
-    registry_name: "g1_wbc_joint", 
-    controller: "g1_decoupled_wbc_pink_action", 
+    id: "g1_robot",
+    registry_name: "g1_wbc_joint",
+    controller: "g1_decoupled_wbc_pink_action",
     spawn_xyz: [0.0, 0.18, 0.0]
 })
 CREATE (room:Fixture {
-    id: "galileo_room", 
-    registry_name: "galileo_locomanip", 
+    id: "galileo_room",
+    registry_name: "galileo_locomanip",
     usd_path: "isaaclab_arena/assets/galileo_locomanip.usd"
 })
 CREATE (box:RigidObject {
-    id: "brown_box", 
-    registry_name: "brown_box", 
+    id: "brown_box",
+    registry_name: "brown_box",
     is_target: true
 })
 CREATE (bin:RigidObject {
-    id: "blue_sorting_bin", 
-    registry_name: "blue_sorting_bin", 
+    id: "blue_sorting_bin",
+    registry_name: "blue_sorting_bin",
     is_receptacle: true
 })
 
 // 2. Create Directed Relationships WITH First-Class Properties (LPG)
 CREATE (box)-[:PLACED_ON {
-    surface_anchor: "shelf_tier_1", 
-    nominal_height: 0.0707, 
-    bound_x: [0.5535, 0.6035], 
-    bound_y: [0.1550, 0.2050], 
+    surface_anchor: "shelf_tier_1",
+    nominal_height: 0.0707,
+    bound_x: [0.5535, 0.6035],
+    bound_y: [0.1550, 0.2050],
     clearance: 0.05
 }]->(room)
 
 CREATE (bin)-[:PLACED_ON {
-    surface_anchor: "floor_deposit_zone", 
-    nominal_height: -0.2641, 
-    bound_x: [-0.2600, -0.2300], 
+    surface_anchor: "floor_deposit_zone",
+    nominal_height: -0.2641,
+    bound_x: [-0.2600, -0.2300],
     bound_y: [-1.6400, -1.6100]
 }]->(room)
 
 CREATE (box)-[:NAV_CORRIDOR_TO {
-    distance_m: 1.85, 
+    distance_m: 1.85,
     min_clearance_radius: 0.60
 }]->(bin);
 ```
@@ -422,7 +422,7 @@ flowchart LR
     AGENT["prov:Agent<br/>:agent_gemini_3_6"] -->|prov:wasAssociatedWith| ACT1["prov:Activity<br/>:activity_prompt_synthesis"]
     SPEC["prov:Entity<br/>:grounded_task_spec_v1"] -->|prov:used| ACT1
     ACT1 -->|prov:wasGeneratedBy| SCENE["prov:Entity<br/>:scene_g1_locomanip_001"]
-    
+
     SCENE -->|prov:used| ACT2["prov:Activity<br/>:activity_gr00t_eval_5558"]
     POLICY["prov:Entity<br/>:checkpoint_20000"] -->|prov:used| ACT2
     ACT2 -->|prov:wasGeneratedBy| EVAL["prov:Entity<br/>:eval_run_20260827_01<br/>• taskSuccess=1.0<br/>• meanLatencyMs=18.2<br/>• settleDivergence=0.0"]
@@ -993,7 +993,7 @@ flowchart TD
     GALILEO -->|"arena:hasSubPrim"| STORAGE_BAY
     WIRESHELVING -->|"arena:attachedToPrim"| STORAGE_BAY
     WIRESHELVING -->|"arena:hasSubSurface"| TIER_2
-    
+
     %% RDF-star Reified Relations
     BROWN_BOX -->|"arena:placedOnSubSurface<br/><b>clearance:</b> 0.02m"| TIER_2
     G1_ROBOT -->|"arena:standsAtAffordance<br/><b>standoff:</b> 0.85m"| WIRESHELVING
@@ -1053,8 +1053,8 @@ MATCH path = (bg:BackgroundScene)-[:CONTAINS_PRIM]->(zone:USDPrim)
              <-[:PLACED_ON_SUB_SURFACE]-(obj:RigidObject)
 MATCH (furn)<-[:STANDS_AT_AFFORDANCE]-(bot:Embodiment)
 MATCH (obj)<-[:OBSERVES_INTERACTION_ZONE]-(cam:Camera)
-RETURN bg.id AS room, zone.prim_path AS room_zone, furn.id AS fixture, 
-       tier.anchorName AS shelf_tier, obj.id AS object, 
+RETURN bg.id AS room, zone.prim_path AS room_zone, furn.id AS fixture,
+       tier.anchorName AS shelf_tier, obj.id AS object,
        bot.id AS robot, cam.id AS camera;
 ```
 
@@ -1336,7 +1336,7 @@ MATCH (anchor)-[:ORTHOGONALLY_OBSERVED_BY]->(cam_top:TopCamera)
 // 5. Expand outwards to Room & Floor (Rank 4)
 MATCH (furn)-[:ATTACHED_TO_PRIM]->(room_zone:USDPrim)<-[:CONTAINS_PRIM]-(room:BackgroundScene)
 
-RETURN task.description, o1.id, o2.id, anchor.anchorName, robot.id, 
+RETURN task.description, o1.id, o2.id, anchor.anchorName, robot.id,
        cam_persp.id, cam_top.id, room.id;
 ```
 
@@ -1412,7 +1412,7 @@ def lpg_edge_to_rdf_star(subject_id: str, rel_type: str, object_id: str, propert
     subj = f":{subject_id}"
     pred = f"arena:{rel_type.lower()}"
     obj = f":{object_id}"
-    
+
     reified_header = f"<< {subj} {pred} {obj} >>"
     property_lines = []
     for k, v in properties.items():
@@ -1422,7 +1422,7 @@ def lpg_edge_to_rdf_star(subject_id: str, rel_type: str, object_id: str, propert
             property_lines.append(f'    arena:{k} "{v}"')
         elif isinstance(v, (list, tuple)):
             property_lines.append(f'    arena:{k} {list(v)}')
-            
+
     return reified_header + "\n" + " ;\n".join(property_lines) + " .\n"
 ```
 
@@ -1786,17 +1786,7 @@ MATCH (shelf)-[:ATTACHED_TO_PRIM]->(zone:USDPrim)
 MATCH (shelf)<-[:STANDS_AT_AFFORDANCE]-(robot:Embodiment)
 MATCH (robot)-[:FRAMES_PERSPECTIVE_VIEW]->(cam:PerspectiveCamera)
 MATCH (robot)-[:GROUNDED_ON]->(floor:USDPrim)
-WHERE robot.standoff_distance <= 0.85 
+WHERE robot.standoff_distance <= 0.85
   AND cam.has_clear_line_of_sight = true
 RETURN seed.id, box.id, shelf.id, robot.id, cam.id, floor.id;
 ```
-
-
-
-
-
-
-
-
-
-

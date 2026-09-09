@@ -114,7 +114,10 @@ class Gr00tClosedloopPolicyCfg:
             "GR1",
             "NEW_EMBODIMENT",
             "OXE_DROID",
-        ], "embodiment_tag must be one of the following: " + ", ".join(["GR1", "NEW_EMBODIMENT", "OXE_DROID"])
+            "OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT",
+        ], "embodiment_tag must be one of the following: " + ", ".join(
+            ["GR1", "NEW_EMBODIMENT", "OXE_DROID", "OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT"]
+        )
         if self.task_mode_name == TaskMode.G1_LOCOMANIPULATION.value:
             assert (
                 self.embodiment_tag == "NEW_EMBODIMENT"
@@ -122,6 +125,9 @@ class Gr00tClosedloopPolicyCfg:
         elif self.task_mode_name == TaskMode.GR1_TABLETOP_MANIPULATION.value:
             assert self.embodiment_tag == "GR1", "embodiment_tag must be GR1 for GR1 tabletop manipulation"
         elif self.task_mode_name == TaskMode.DROID_MANIPULATION.value:
-            assert self.embodiment_tag == "OXE_DROID", "embodiment_tag must be OXE_DROID for DROID manipulation"
+            assert self.embodiment_tag in [
+                "OXE_DROID",
+                "OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT",
+            ], "embodiment_tag must be OXE_DROID or OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT for DROID manipulation"
         else:
             raise ValueError(f"Invalid inference mode: {self.task_mode}")

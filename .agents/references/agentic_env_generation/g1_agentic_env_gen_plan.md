@@ -49,7 +49,7 @@ flowchart TD
 
 ### Gap 4: Dynamics, Balance & Pinocchio WBC Invariants
 * **Issue**: Declarative scene graphs only specify static positions at $t=0$. G1 is a 29-DOF humanoid requiring active Whole-Body Control (WBC) to maintain dynamic balance under gravity ($200\text{Hz}-500\text{Hz}$).
-* **Impact on G1**: 
+* **Impact on G1**:
   1. Spawning G1 in a default zero pose without the calibrated squatting joint state causes immediate tipping/collapse.
   2. Running parallel rollouts (`--num_envs > 1`) with `g1_wbc_pink` causes Pinocchio QP multithreading race conditions (segfault).
 
@@ -144,7 +144,7 @@ To allow declarative scene graph compilation to instantiate humanoid loco-manipu
 
 Update the Spatial Constraint Satisfaction Problem (CSP) rules:
 * **Tabletop Mode** (Franka/Droid): Enforce $\text{dist}(\mathbf{p}_{\text{robot}}, \mathbf{p}_{\text{target}}) \le \mathcal{W}_{\text{reach}}$.
-* **Loco-Manipulation Mode** (G1/Humanoid): 
+* **Loco-Manipulation Mode** (G1/Humanoid):
   * Relax arm reach constraint between robot base and destination receptacle.
   * Verify **Free-Space Corridor**:
     $$\text{SDF}(\text{corridor}(\mathbf{p}_{\text{start}}, \mathbf{p}_{\text{goal}}), \mathcal{V}_{\text{fixtures}}) \ge r_{\text{clearance}} = 0.6\text{ m}$$

@@ -8,8 +8,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-import rdflib
+
 import pyshacl
+import rdflib
 
 DEFAULT_SHACL_PATH = Path(__file__).parent / "ontology" / "arena_constraints.shacl.ttl"
 

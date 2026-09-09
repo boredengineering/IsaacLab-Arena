@@ -22,11 +22,12 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from typing import Any, Optional
+
 from pydantic import BaseModel, Field
 
-from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
-from isaaclab_arena.agentic_environment_generation.usd_stage_introspection import resolve_surface_anchor_bounding_box
 from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import get_fixture_sector_bounds
+from isaaclab_arena.agentic_environment_generation.usd_stage_introspection import resolve_surface_anchor_bounding_box
+from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
 
 class VisualCriticResult(BaseModel):
@@ -34,7 +35,9 @@ class VisualCriticResult(BaseModel):
 
     conforms: bool = Field(
         default=True,
-        description="True if the scene is visually sound, all task objects are visible, and approach headroom is clear.",
+        description=(
+            "True if the scene is visually sound, all task objects are visible, and approach headroom is clear."
+        ),
     )
     visibility_score: float = Field(
         default=10.0,
@@ -62,21 +65,24 @@ class VisualCriticResult(BaseModel):
     )
     tier_used: str = Field(
         default="tier_3_geometric_oracle",
-        description="Which verification tier produced this result (tier_1_cloud_vlm, tier_2_local_vlm, tier_3_geometric_oracle, tier_4_advisory_fallback).",
+        description=(
+            "Which verification tier produced this result (tier_1_cloud_vlm, tier_2_local_vlm, tier_3_geometric_oracle,"
+            " tier_4_advisory_fallback)."
+        ),
     )
 
 
 class VisualSceneCritic:
     """Evaluates visual line-of-sight, occlusion, and physical grounding across a 4-tier hierarchy."""
 
-    def __init__(self, backend: Optional[Any] = None, local_vlm_url: Optional[str] = None):
+    def __init__(self, backend: Any | None = None, local_vlm_url: str | None = None):
         self.backend = backend
         self.local_vlm_url = local_vlm_url or os.environ.get("LOCAL_VLM_BASE_URL", "http://localhost:8000/v1")
 
     def evaluate_scene_spec(
         self,
         spec: ArenaEnvGraphSpec,
-        rendered_images: Optional[dict[str, Any]] = None,
+        rendered_images: dict[str, Any] | None = None,
     ) -> VisualCriticResult:
         """Evaluate visual occlusion, camera frustum coverage, and support grounding across cascading tiers.
 
@@ -103,7 +109,9 @@ class VisualSceneCritic:
                     local_res.tier_used = "tier_2_local_vlm"
                     return local_res
             except Exception as exc:
-                print(f"[VisualCritic] Tier 2 Local VLM unavailable ({exc}), falling back to Tier 3 Geometric Oracle...")
+                print(
+                    f"[VisualCritic] Tier 2 Local VLM unavailable ({exc}), falling back to Tier 3 Geometric Oracle..."
+                )
 
         # --- Tier 3: Deterministic Geometric & Frustum Oracle ---
         try:
@@ -119,40 +127,34 @@ class VisualSceneCritic:
     def _call_cloud_vlm_critic(self, spec: ArenaEnvGraphSpec, images: dict[str, Any]) -> VisualCriticResult:
         """Call cloud multimodal LLM with scene preview images."""
         prompt = (
-            f"You are a robotic scene perception critic inspecting an IsaacLab simulation environment for task: {spec.task.description if spec.task else 'manipulation'}.\n"
-            "Inspect the provided camera perspective(s), which include the robot's first-person egocentric head camera looking down at the tabletop and its own hands.\n"
-            "Evaluate:\n"
-            "1. Are all target objects clearly visible, unoccluded, and inside the robot's forward field of view?\n"
-            "2. Are all objects physically resting on the countertop/table deck, or are any suspended in air / ceiling or penetrating the floor?\n"
-            "3. Are the objects positioned in the correct relative quadrants (e.g. front-right vs. front-left) corresponding to the robot's hands?\n"
-            "4. Is the robot standing at a feasible reach elevation and distance relative to the work surface?\n\n"
-            "Return JSON matching:\n"
-            "{\n"
-            "  \"conforms\": bool,\n"
-            "  \"visibility_score\": float,\n"
-            "  \"occluded_objects\": [str],\n"
-            "  \"floating_objects\": [str],\n"
-            "  \"anomalies\": [str],\n"
-            "  \"actionable_feedback\": str,\n"
-            "  \"actionable_corrections\": dict\n"
-            "}"
+            "You are a robotic scene perception critic inspecting an IsaacLab simulation environment for task:"
+            f" {spec.task.description if spec.task else 'manipulation'}.\nInspect the provided camera perspective(s),"
+            " which include the robot's first-person egocentric head camera looking down at the tabletop and its own"
+            " hands.\nEvaluate:\n1. Are all target objects clearly visible, unoccluded, and inside the robot's forward"
+            " field of view?\n2. Are all objects physically resting on the countertop/table deck, or are any suspended"
+            " in air / ceiling or penetrating the floor?\n3. Are the objects positioned in the correct relative"
+            " quadrants (e.g. front-right vs. front-left) corresponding to the robot's hands?\n4. Is the robot"
+            " standing at a feasible reach elevation and distance relative to the work surface?\n\nReturn JSON"
+            ' matching:\n{\n  "conforms": bool,\n  "visibility_score": float,\n  "occluded_objects": [str],\n '
+            ' "floating_objects": [str],\n  "anomalies": [str],\n  "actionable_feedback": str,\n '
+            ' "actionable_corrections": dict\n}'
         )
         resp = self.backend.multimodal_chat(prompt, images)
         data = json.loads(resp) if isinstance(resp, str) else resp
         return VisualCriticResult(**data)
 
-    def _call_local_vlm_critic(self, spec: ArenaEnvGraphSpec, images: dict[str, Any]) -> Optional[VisualCriticResult]:
+    def _call_local_vlm_critic(self, spec: ArenaEnvGraphSpec, images: dict[str, Any]) -> VisualCriticResult | None:
         """Query local OpenAI-compatible VLM endpoint (e.g. vLLM / Ollama serving Qwen2.5-VL)."""
-        content_payload: list[dict[str, Any]] = [
-            {
-                "type": "text",
-                "text": (
-                    f"Robotic scene perception check for task: {spec.task.description if spec.task else 'manipulation'}. "
-                    "Evaluate visibility, occlusion, and whether objects are grounded on the table vs. floating at ceiling. "
-                    "Respond with strict JSON matching: {\"conforms\": bool, \"visibility_score\": float, \"occluded_objects\": [], \"floating_objects\": [], \"anomalies\": [], \"actionable_feedback\": \"\", \"actionable_corrections\": {}}"
-                ),
-            }
-        ]
+        content_payload: list[dict[str, Any]] = [{
+            "type": "text",
+            "text": (
+                f"Robotic scene perception check for task: {spec.task.description if spec.task else 'manipulation'}."
+                " Evaluate visibility, occlusion, and whether objects are grounded on the table vs. floating at"
+                ' ceiling. Respond with strict JSON matching: {"conforms": bool, "visibility_score": float,'
+                ' "occluded_objects": [], "floating_objects": [], "anomalies": [], "actionable_feedback":'
+                ' "", "actionable_corrections": {}}'
+            ),
+        }]
 
         for cam_name, img_data in images.items():
             if isinstance(img_data, bytes):
@@ -190,16 +192,29 @@ class VisualSceneCritic:
         floating: list[str] = []
         corrections: dict[str, Any] = {}
 
-        emb_pose = spec.embodiment.params.get("initial_pose", {}).get("position_xyz", [-0.55, 0.0, 0.0]) if spec.embodiment and spec.embodiment.params else [-0.55, 0.0, 0.0]
+        emb_pose = (
+            spec.embodiment.params.get("initial_pose", {}).get("position_xyz", [-0.55, 0.0, 0.0])
+            if spec.embodiment and spec.embodiment.params
+            else [-0.55, 0.0, 0.0]
+        )
         bg_reg = spec.background.registry_name if spec.background else "maple_table_robolab"
 
-        receptacles = [obj for obj in spec.objects if any(k in f"{obj.id} {obj.registry_name}".lower() for k in ("bin", "crate", "box", "rack", "shelf", "tall"))]
+        receptacles = [
+            obj
+            for obj in spec.objects
+            if any(
+                k in f"{obj.id} {obj.registry_name}".lower() for k in ("bin", "crate", "box", "rack", "shelf", "tall")
+            )
+        ]
         manipulands = [obj for obj in spec.objects if obj not in receptacles]
 
         # 1. Check object grounding against fixture sub-prim deck elevation
         for obj in spec.objects:
             obj_lower = f"{obj.id} {obj.registry_name}".lower()
-            if any(k in obj_lower for k in ("shelf", "shelving", "shelv", "table", "counter", "desk", "rack", "cabinet", "stand")):
+            if any(
+                k in obj_lower
+                for k in ("shelf", "shelving", "shelv", "table", "counter", "desk", "rack", "cabinet", "stand")
+            ):
                 continue
 
             if not obj.params or "initial_pose" not in obj.params:
@@ -222,8 +237,8 @@ class VisualSceneCritic:
             if pos[2] > nominal_z + 0.35:
                 floating.append(obj.id)
                 anomalies.append(
-                    f"Object '{obj.id}' Z={pos[2]:.2f}m is floating high above support deck (nominal Z={nominal_z:.2f}m). "
-                    f"Grounded placement required."
+                    f"Object '{obj.id}' Z={pos[2]:.2f}m is floating high above support deck (nominal"
+                    f" Z={nominal_z:.2f}m). Grounded placement required."
                 )
                 corrections[f"{obj.id}_z"] = float(nominal_z + 0.01)
             elif pos[2] < nominal_z - 0.20:
@@ -235,14 +250,16 @@ class VisualSceneCritic:
 
             # 2. Check camera frustum & reach distance from robot base
             dist_xy = math.hypot(pos[0] - emb_pose[0], pos[1] - emb_pose[1])
-            is_humanoid = spec.embodiment and ("g1" in spec.embodiment.registry_name.lower() or "gr1" in spec.embodiment.registry_name.lower())
+            is_humanoid = spec.embodiment and (
+                "g1" in spec.embodiment.registry_name.lower() or "gr1" in spec.embodiment.registry_name.lower()
+            )
             max_reach = 0.95 if is_humanoid else 0.75
 
             if dist_xy > max_reach:
                 occluded.append(obj.id)
                 anomalies.append(
                     f"Object '{obj.id}' is at distance {dist_xy:.2f}m from robot base (max reach {max_reach:.2f}m). "
-                    f"Outside primary camera frustum and dexterous reach."
+                    "Outside primary camera frustum and dexterous reach."
                 )
             elif dist_xy < 0.20:
                 occluded.append(obj.id)
@@ -262,7 +279,10 @@ class VisualSceneCritic:
                 # If receptacle is directly between robot and manipuland along X/Y ray
                 if emb_pose[0] < r_pos[0] < m_pos[0] and abs(r_pos[1] - m_pos[1]) < 0.10:
                     occluded.append(manip.id)
-                    anomalies.append(f"Object '{manip.id}' is visually occluded behind tall container '{recep.id}' from robot perspective")
+                    anomalies.append(
+                        f"Object '{manip.id}' is visually occluded behind tall container '{recep.id}' from robot"
+                        " perspective"
+                    )
 
         conforms = len(anomalies) == 0
         visibility_score = 10.0 if conforms else max(2.0, 10.0 - 2.5 * len(anomalies))
@@ -282,9 +302,9 @@ class VisualSceneCritic:
     def _emit_tier4_advisory_result(self, spec: ArenaEnvGraphSpec) -> VisualCriticResult:
         """Graceful non-blocking fallback with structured user advisory."""
         advisory_msg = (
-            "[ADVISORY][VisualPreflight]: Automated multimodal verification was bypassed. "
-            "The environment proceeded using spatial factor graph relaxation. "
-            "To enable live visual inspection, configure OPENROUTER_API_KEY, GEMINI_API_KEY, or launch a local vLLM server."
+            "[ADVISORY][VisualPreflight]: Automated multimodal verification was bypassed. The environment proceeded"
+            " using spatial factor graph relaxation. To enable live visual inspection, configure OPENROUTER_API_KEY,"
+            " GEMINI_API_KEY, or launch a local vLLM server."
         )
         print(advisory_msg)
         return VisualCriticResult(
@@ -321,12 +341,14 @@ class PhysXPreflightCritic:
                 _, _, _, nominal_z = resolve_surface_anchor_bounding_box(bg_reg)
                 if pos[2] > nominal_z + 0.30:
                     issues.append(
-                        f"[PhysXCritic] Object '{obj.id}' initial Z={pos[2]:.2f}m is floating high above table surface (nominal Z={nominal_z:.2f}m). "
-                        f"Drop impact may cause bouncing or toppling. Ground object near Z={nominal_z + 0.01:.2f}m."
+                        f"[PhysXCritic] Object '{obj.id}' initial Z={pos[2]:.2f}m is floating high above table surface"
+                        f" (nominal Z={nominal_z:.2f}m). Drop impact may cause bouncing or toppling. Ground object near"
+                        f" Z={nominal_z + 0.01:.2f}m."
                     )
                 elif pos[2] < nominal_z - 0.15:
                     issues.append(
-                        f"[PhysXCritic] Object '{obj.id}' initial Z={pos[2]:.2f}m is below table surface, penetrating floor or fixture."
+                        f"[PhysXCritic] Object '{obj.id}' initial Z={pos[2]:.2f}m is below table surface, penetrating"
+                        " floor or fixture."
                     )
 
         return issues

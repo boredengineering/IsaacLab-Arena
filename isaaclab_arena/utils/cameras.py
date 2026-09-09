@@ -259,4 +259,3 @@ def compute_robot_relative_viewer_cfg(
         return get_viewer_cfg_look_at_object(lookat_target, np.array(fallback_offset))
 
     return ViewerCfg()
-

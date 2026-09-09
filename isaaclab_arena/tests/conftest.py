@@ -13,11 +13,13 @@
 from __future__ import annotations
 
 import enum
+
 try:
     from enum import StrEnum  # noqa: F401
 except ImportError:
     try:
         import strenum
+
         enum.StrEnum = strenum.StrEnum
     except ImportError:
         pass

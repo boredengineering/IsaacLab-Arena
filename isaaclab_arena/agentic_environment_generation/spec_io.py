@@ -302,4 +302,3 @@ def write_env_graph_dict(data: dict[str, Any], out_dir: Path) -> Path:
     path = env_graph_spec_path(env_name, out_dir)
     path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     return path
-

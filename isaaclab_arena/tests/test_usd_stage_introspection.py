@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import numpy as np
+
 import pytest
 import shapely.geometry
 from pxr import Gf, Usd, UsdGeom, Vt
@@ -128,9 +129,18 @@ def test_multipolygon_dumbbell_erosion():
     # Right pad: [0.5, -0.5] to [2, 0.5]
     # Thin bridge: [-0.5, -0.01] to [0.5, 0.01] (width 0.02m < 0.08m safety margin)
     points = [
-        Gf.Vec3f(-2.0, -0.5, 0.6), Gf.Vec3f(-0.5, -0.5, 0.6), Gf.Vec3f(-0.5, 0.5, 0.6), Gf.Vec3f(-2.0, 0.5, 0.6), # Left
-        Gf.Vec3f(0.5, -0.5, 0.6), Gf.Vec3f(2.0, -0.5, 0.6), Gf.Vec3f(2.0, 0.5, 0.6), Gf.Vec3f(0.5, 0.5, 0.6),      # Right
-        Gf.Vec3f(-0.5, -0.01, 0.6), Gf.Vec3f(0.5, -0.01, 0.6), Gf.Vec3f(0.5, 0.01, 0.6), Gf.Vec3f(-0.5, 0.01, 0.6), # Bridge
+        Gf.Vec3f(-2.0, -0.5, 0.6),
+        Gf.Vec3f(-0.5, -0.5, 0.6),
+        Gf.Vec3f(-0.5, 0.5, 0.6),
+        Gf.Vec3f(-2.0, 0.5, 0.6),  # Left
+        Gf.Vec3f(0.5, -0.5, 0.6),
+        Gf.Vec3f(2.0, -0.5, 0.6),
+        Gf.Vec3f(2.0, 0.5, 0.6),
+        Gf.Vec3f(0.5, 0.5, 0.6),  # Right
+        Gf.Vec3f(-0.5, -0.01, 0.6),
+        Gf.Vec3f(0.5, -0.01, 0.6),
+        Gf.Vec3f(0.5, 0.01, 0.6),
+        Gf.Vec3f(-0.5, 0.01, 0.6),  # Bridge
     ]
     face_vertex_counts = [4, 4, 4]
     face_vertex_indices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
@@ -166,10 +176,7 @@ def test_long_edge_principal_orientation():
         [2.0, 0.5, 0.5],
         [-2.0, 0.5, 0.5],
     ]
-    rot_pts = [
-        Gf.Vec3f(float(p[0]*c - p[1]*s), float(p[0]*s + p[1]*c), p[2])
-        for p in local_pts
-    ]
+    rot_pts = [Gf.Vec3f(float(p[0] * c - p[1] * s), float(p[0] * s + p[1] * c), p[2]) for p in local_pts]
 
     mesh_prim.GetPointsAttr().Set(Vt.Vec3fArray(rot_pts))
     mesh_prim.GetFaceVertexCountsAttr().Set(Vt.IntArray([4]))
@@ -184,7 +191,9 @@ def test_long_edge_principal_orientation():
 
     assert len(patches) == 1
     patch = patches[0]
-    assert np.isclose(patch.principal_orientation_deg, 30.0, atol=2.0) or np.isclose(patch.principal_orientation_deg, 210.0 % 180, atol=2.0)
+    assert np.isclose(patch.principal_orientation_deg, 30.0, atol=2.0) or np.isclose(
+        patch.principal_orientation_deg, 210.0 % 180, atol=2.0
+    )
 
 
 def test_format_dollhouse_catalog():

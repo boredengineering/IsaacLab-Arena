@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from rdflib import Graph, Literal, Namespace, RDF, URIRef
+from rdflib import RDF, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import PROV, XSD
 
 ARENA = Namespace("https://isaac-sim.github.io/arena/schema#")
@@ -79,7 +79,7 @@ class EnvironmentVersionManager:
             return max(existing_v) if existing_v else 0
 
         try:
-            with open(self.lineage_file, "r", encoding="utf-8") as f:
+            with open(self.lineage_file, encoding="utf-8") as f:
                 data = json.load(f)
                 return int(data.get("current_version", 0))
         except Exception:
@@ -189,6 +189,7 @@ class EnvironmentVersionManager:
                 emb_name = spec_source.get("embodiment", {}).get("registry_name", "")
 
             import yaml
+
             target_policy_file = new_v_dir / "policy_config.yaml"
             if "g1" in emb_name.lower():
                 default_cfg = {
@@ -258,7 +259,7 @@ class EnvironmentVersionManager:
         if not self.lineage_file.exists():
             return
 
-        with open(self.lineage_file, "r", encoding="utf-8") as f:
+        with open(self.lineage_file, encoding="utf-8") as f:
             data = json.load(f)
 
         for entry in data.get("versions", []):
@@ -296,7 +297,7 @@ class EnvironmentVersionManager:
         now = datetime.now(timezone.utc).isoformat()
         if self.lineage_file.exists():
             try:
-                with open(self.lineage_file, "r", encoding="utf-8") as f:
+                with open(self.lineage_file, encoding="utf-8") as f:
                     data = json.load(f)
             except Exception:
                 data = {"env_name": self.env_name, "created_at": now, "versions": []}
@@ -382,13 +383,15 @@ class EnvironmentVersionManager:
         lineage_data: dict[str, Any] = {}
         if self.lineage_file.exists():
             try:
-                with open(self.lineage_file, "r", encoding="utf-8") as f:
+                with open(self.lineage_file, encoding="utf-8") as f:
                     lineage_data = json.load(f)
             except Exception:
                 pass
 
         versions = lineage_data.get("versions", [])
-        latest_entry = next((v for v in reversed(versions) if v.get("version") == current_v), versions[-1] if versions else {})
+        latest_entry = next(
+            (v for v in reversed(versions) if v.get("version") == current_v), versions[-1] if versions else {}
+        )
         prompt = (
             latest_entry.get("prompt")
             or (versions[0].get("prompt") if versions else None)
@@ -416,7 +419,9 @@ class EnvironmentVersionManager:
                 table_rows.append(f"| {v_num} | {created} | {trigger} | {remediations} | {sr} |")
         else:
             now_date = datetime.now(timezone.utc).isoformat()[:10]
-            table_rows.append(f"| `v{current_v}` | {now_date} | `generation` | Initial synthesis | *Pending evaluation* |")
+            table_rows.append(
+                f"| `v{current_v}` | {now_date} | `generation` | Initial synthesis | *Pending evaluation* |"
+            )
 
         lineage_table_str = "\n".join(table_rows)
 
@@ -560,4 +565,3 @@ docker exec -it \\
             f.write(readme_content)
 
         return readme_file
-

@@ -144,8 +144,18 @@ class TestGenerateSpec:
         repaired_spec_dict["relations"] = [
             {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
             {"kind": "on", "subject": "wireshelving", "reference": "maple_table_robolab", "params": {}},
-            {"kind": "on", "subject": "bowl_ycb_robolab", "reference": "wireshelving", "params": {"surface_anchor": "shelf_tier_2"}},
-            {"kind": "on", "subject": "rubiks_cube_hot3d_robolab", "reference": "wireshelving", "params": {"surface_anchor": "shelf_tier_1"}},
+            {
+                "kind": "on",
+                "subject": "bowl_ycb_robolab",
+                "reference": "wireshelving",
+                "params": {"surface_anchor": "shelf_tier_2"},
+            },
+            {
+                "kind": "on",
+                "subject": "rubiks_cube_hot3d_robolab",
+                "reference": "wireshelving",
+                "params": {"surface_anchor": "shelf_tier_1"},
+            },
         ]
 
         client.chat.completions.create.side_effect = [
@@ -254,7 +264,12 @@ class TestGenerateSpec:
         repaired_spec["relations"] = [
             {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
             {"kind": "on", "subject": "rubiks_cube_hot3d_robolab", "reference": "maple_table_robolab", "params": {}},
-            {"kind": "on", "subject": "bowl_ycb_robolab", "reference": "maple_table_robolab", "params": {"surface_anchor": "table_top"}},
+            {
+                "kind": "on",
+                "subject": "bowl_ycb_robolab",
+                "reference": "maple_table_robolab",
+                "params": {"surface_anchor": "table_top"},
+            },
         ]
 
         client.chat.completions.create.side_effect = [
@@ -289,9 +304,12 @@ class TestGenerateSpec:
         # Refined spec swaps bowl with wooden bowl and adds a banana
         refined_dict = minimal_spec_dict()
         refined_dict["objects"].append({"id": "banana", "registry_name": "banana_ycb_robolab", "role": "object"})
-        refined_dict["relations"].append(
-            {"kind": "on", "subject": "banana", "reference": "maple_table_robolab", "params": {"surface_anchor": "table_top"}}
-        )
+        refined_dict["relations"].append({
+            "kind": "on",
+            "subject": "banana",
+            "reference": "maple_table_robolab",
+            "params": {"surface_anchor": "table_top"},
+        })
 
         client.chat.completions.create.return_value = chat_response(content=json.dumps(refined_dict))
 
@@ -306,7 +324,6 @@ class TestGenerateSpec:
         assert data is None
         assert any(obj.id == "banana" for obj in spec.objects)
         assert client.chat.completions.create.call_count == 1
-
 
 
 # ---------------------------------------------------------------------------

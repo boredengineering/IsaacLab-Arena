@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-import yaml
 import sys
+import yaml
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -67,7 +67,11 @@ class ArenaEnvGraphSpec(BaseModel):
             normalized = dict(data)
             if not normalized.get("env_name"):
                 emb = normalized.get("embodiment")
-                emb_name = emb if isinstance(emb, str) else (emb.get("registry_name", "env") if isinstance(emb, dict) else "env")
+                emb_name = (
+                    emb
+                    if isinstance(emb, str)
+                    else (emb.get("registry_name", "env") if isinstance(emb, dict) else "env")
+                )
                 normalized["env_name"] = f"{emb_name}_generated_task"
             return normalized
         return data

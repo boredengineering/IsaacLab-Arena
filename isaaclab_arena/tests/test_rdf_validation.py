@@ -7,8 +7,8 @@
 
 from __future__ import annotations
 
-import rdflib
 import pytest
+import rdflib
 
 from isaaclab_arena.agentic_environment_generation.rdf_validation import validate_rdf_environment_graph
 
@@ -162,4 +162,3 @@ def test_hierarchical_placement_fails_shacl_when_fixture_bypassed():
     conforms, report = validate_rdf_environment_graph(graph)
     assert not conforms
     assert "HierarchicalPlacementShape" in report or "furniture" in report.lower()
-

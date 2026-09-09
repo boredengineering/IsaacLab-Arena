@@ -1,3 +1,8 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Copyright (c) 2026, The Isaac Lab Arena Project Developers.
 # All rights reserved.
 #
@@ -6,11 +11,11 @@
 """Tool to render camera viewpoints from any IsaacLab-Arena environment specification."""
 
 import argparse
-from pathlib import Path
-from PIL import Image
 import torch
+from pathlib import Path
 
 from isaaclab.app import AppLauncher
+from PIL import Image
 
 parser = argparse.ArgumentParser(description="Render camera viewpoints from an environment spec YAML.")
 parser.add_argument(
@@ -47,10 +52,10 @@ args_cli.enable_cameras = True
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+from isaaclab_arena.environment_spec.arena_env_graph_conversion_utils import build_arena_env_from_graph_spec
+from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
 from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
-from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
-from isaaclab_arena.environment_spec.arena_env_graph_conversion_utils import build_arena_env_from_graph_spec
 
 
 def render_environment_cameras(
@@ -167,6 +172,7 @@ def main():
         )
     except Exception as e:
         import traceback
+
         print(f"[RenderEnvCamera] Error during rendering: {e}")
         traceback.print_exc()
     finally:

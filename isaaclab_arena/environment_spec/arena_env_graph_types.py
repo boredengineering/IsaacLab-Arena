@@ -390,7 +390,9 @@ class ReifiedRelationSpec(BaseModel):
             if "source_id" not in normalized:
                 normalized["source_id"] = normalized.get("subject") or normalized.get("source") or ""
             if "target_id" not in normalized:
-                normalized["target_id"] = normalized.get("reference") or normalized.get("target") or normalized.get("object") or ""
+                normalized["target_id"] = (
+                    normalized.get("reference") or normalized.get("target") or normalized.get("object") or ""
+                )
             if "reifier_id" not in normalized or not normalized["reifier_id"]:
                 src = normalized.get("source_id", "src")
                 rel = str(normalized.get("relation_type", "rel")).lower()
@@ -418,4 +420,3 @@ class ReifiedRelationSpec(BaseModel):
                 normalized["required_headroom"] = 0.35
             return normalized
         return data
-

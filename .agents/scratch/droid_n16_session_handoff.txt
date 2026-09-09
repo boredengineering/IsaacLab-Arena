@@ -1,0 +1,69 @@
+DROID N1.6 transport repair and Kit run handoff
+
+Request: fix exterior_image_1_left arriving as dict, serve exactly nvidia/GR00T-N1.6-DROID / OXE_DROID on 127.0.0.1:5559, run 2000 steps with --viz kit using generated_envs/droid_apple_to_wooden_bowl/latest and output under eval_output/droid_apple_to_wooden_bowl/viz_run.
+
+Session: 2026-09-09. Branch dev/0.3.0-prerelease. Working tree was already extensively modified; do not revert user edits. No Docker or submodule source was changed. A minimal remote-policy modality-source fix plus tests/docs was added after the first real Kit launch exposed a second mismatch.
+
+Verified root cause:
+- Arena imports submodules/Isaac-GR00T/gr00t/policy/server_client.py with msgpack-numpy wire encoding.
+- gr00t-dev:latest contains older /workspace/gr00t/gr00t/policy/server_client.py accepting only __ndarray_class__/as_npy envelopes.
+- A synthetic observation sent through the real client/server reproduced the exact reported RuntimeError.
+- Same captured bytes decode to dict with image transport and ndarray with Arena transport.
+- New transport roundtrip, legacy envelope decode, object-array and forged pickle-envelope rejection passed in N1.6 Python.
+
+Applied operational fix:
+- Old server stopped and preserved as gr00t-server-before-transport-fix-20260909.
+- New server name gr00t-server, container ID 2cc529d1b098e94b664203df6feb49b5df841800df46f15c92febb7bc080c999.
+- Read-only overlay ONLY Arena server_client.py onto image server_client.py. N1.6 model/processor/inference implementation remains image-native.
+- Exact checkpoint nvidia/GR00T-N1.6-DROID, cached revision ae3ebe8d288971ac53aa30c756ea5cba0f52611b; OXE_DROID; CUDA; SDPA math; port 5559; cache read-only/offline.
+- N1.6 image Python 3.10.21 lives under root-only /root. Startup copies only its interpreter into /opt/arena-python, then drops to UID/GID 1000. Dependencies remain image .venv. Do not substitute /usr/bin/python3: that is Python 3.12 and cannot load the installed CPython 3.10 torch extension.
+- Live probe PASSED: finite float32 actions joint_position (1,32,7), gripper_position (1,32,1). Synthetic transport test is NOT task-success evidence.
+
+Paths/mounts:
+- Editor repository: /workspaces/IsaacLab-Arena
+- Docker-host repository: /home/tarfy/Documents/GitHub/BoredEngineer/IsaacLab-Arena
+- Simulator repository: /workspaces/isaaclab_arena
+- Actual simulator discovered by mount/image: isaaclab_arena-latest, host networking. The unhealthy healthcheck is not a reliable launch test.
+- Server model cache host source /root/.cache/huggingface (the existing server cache), now mounted /cache/huggingface read-only. Do not confuse with editor /root/.cache/huggingface, which maps to host /home/tarfy/.cache/huggingface.
+- Simulator user ubuntu UID1000 with primary GID1234 (read group of /isaac-sim).
+- DISPLAY=:1. X11 abstract socket and non-root XOpenDisplay both passed despite no /tmp/.X11-unix mount inside simulator.
+- latest resolves to v3. No spec/policy edits.
+- Changed ONLY viz_run directory itself from root:root to 1000:1234 so non-root can create new timestamped runs; existing artifacts were not recursively changed.
+
+Artifacts/scripts (local scratch, not committed):
+- .agents/scratch/run_droid_n16_compatible.sh : verified server launch command. Refuses to overwrite an existing server. Local image interpreter path is explicit.
+- .agents/scratch/run_droid_viz.sh : requested exact rollout plus non-root/cache/portable-root settings. Discovers ARENA_CONTAINER by host repo mount and image; requires DISPLAY. Optional HOST_REPO/ARENA_CONTAINER overrides.
+- .agents/scratch/gr00t_droid_transport_probe.py : live synthetic transport/inference regression.
+- .agents/scratch/check_gr00t_transport.py : cross-version decoder and safety regression; requires old image module plus /tmp/arena_server_client.py and /tmp/droid_transport.msgpack.
+
+Current status:
+- First Kit run proc_29c232ef8fe4 / .agents/scratch/droid_viz_20260909.log opened the scene, then failed with video horizon 2 instead of 1. Output timestamp 2026-09-09_04-32-36; preserve failed artifacts.
+- The generated config omits modality_config_path, so the old remote policy used the installed N1.7 defaults (2 frames / 40 actions) rather than served N1.6 (1 frame / 32 actions).
+- Fixed isaaclab_arena_gr00t/policy/gr00t_remote_closedloop_policy.py: connect before allocating scheduler/history; when no explicit modality file is given, use client.get_modality_config(). Explicit files retain existing precedence. All pre-existing temporal/bilateral/EEF user changes preserved.
+- Added parametrized 1/2-frame DROID regression in isaaclab_arena_gr00t/tests/test_gr00t_remote_closedloop_policy.py. Verified RED (2 vs 1; 40 vs 32) then GREEN. Combined remote-policy/scheduler suite: 15 passed. Pre-commit passed for policy, tests, and docs/pages/example_workflows/agentic_env_gen/eval_with_gr00t.rst.
+- Scratch transport safety script has a codespell false positive on literal wire key "nd"; other scratch lint hooks passed. Do not change the wire key to appease spelling checks.
+- Attempt proc_655dd1839a36 failed before simulation because background shell did not inherit foreground ARENA_CONTAINER. Launcher now discovers it itself.
+- COMPLETED: proc_ff50d3af436b exited 0. Log .agents/scratch/droid_viz_20260909_final.log confirms 2000/2000 policy steps. Output directory eval_output/droid_apple_to_wooden_bowl/viz_run/2026-09-09_04-37-42.
+- Final records programmatically verified: two distinct completed episodes, each episode_length=1000, both seed=42, zero successes; reported object_moved_rate=1.0. Both record a lift predicate but remain blocked at object_on_destination(force_threshold=0.1, velocity_threshold=0.1). This is not successful placement or independent-seed robustness.
+- Report index.html, episode_results_rank0.jsonl, eval_telemetry.ttl, and dataset_20260909_043750_rank0.hdf5 exist in that output directory. No video was requested/recorded. Kit closed normally at completion.
+- Final result manifest: .agents/scratch/droid_n16_verified_result.json.
+- Full Sphinx HTML build passed with no warnings/errors in /tmp/arena-droid-docs-20260909.log; output /tmp/arena-droid-docs-20260909. Simulator lacked Sphinx, so used isolated host uv docs requirements.
+- Production/test/docs and launch-script pre-commit checks all passed. Scratch transport codespell also passes with explicit -L nd (valid protocol key).
+- Nonfatal metadata warning: auto-update of generated_envs/droid_apple_to_wooden_bowl/lineage.json failed with permission denied (root-owned user file). Left it unchanged rather than broadening permissions or overwriting pre-existing changes.
+- Neo4j readback verified EvaluationRun id eval_run_1788928970 with num_episodes=2, success_rate=0.0 and correct blocking predicate. EVALUATED_GRAPH targets are empty: run is saved but not linked to an EnvironmentGraph. Do not claim fully linked lineage or reusable refinement history.
+- Query of GraphRAG refinement history for droid_apple_to_wooden_bowl and exact model URI returned []. Capability planner queried. Neo4j host Bolt port verified 7688.
+- Post-run server ping passed; gr00t-server remains running with the requested model. No commits or pushes made.
+
+Rerun from /workspaces/IsaacLab-Arena while the fixed server remains running:
+    DISPLAY=:1 bash .agents/scratch/run_droid_viz.sh
+The launcher discovers the matching simulator. To recreate the server later, first explicitly stop/rename the current gr00t-server, then run bash .agents/scratch/run_droid_n16_compatible.sh. Do not reuse the original unmodified docker run line: it omits the transport overlay and uses editor paths as host bind sources.
+
+Resume: runtime repair and requested run are complete. Separate remaining work, if requested, is manipulation performance and metadata lineage permissions/graph linking. Read this handoff and verified result manifest before repeating evaluations. Do not promise retention of another application's Antigravity context/token budget.
+
+Follow-up presentation/history audit completed:
+- Updated .agents/references/presentations/category_a_b_manipulation_experiments.md with runtime fixes, actual run, corrected launch references, sourced historical tables, catalog-versus-executed status and graph gaps.
+- Created category_a_b_run_inventory.json and category_a_b_run_inventory.csv alongside that presentation. Independent recount: 25 candidate runs, 18 nonempty, 7 empty, 406 episode records including the current 2; no pooled success-rate claim.
+- Historical completed scenarios: Category A apple->wooden bowl (7 runs, 97 records); Category B tomato->blue bin (7 runs) and Spam->grey bin (3 runs), together 307 records. Mustard has five zero-action N=0 reports across two distinct task families. Other catalog A/B tasks have no recovered completed-run evidence; banana/avocado sibling specs target wooden bowls, not their catalog destinations.
+- Key corrections: apple N65 has 8 success flags but only 4 complete records and 4/56 success-given-lift; tomato N52 has 25 success flags, 11 complete records, 23/44 success-given-lift; Spam 175/284 figures were lift timing, not placement duration. Historical checkpoints/chunks/timing are unpinned and all nonempty records use seed42.
+- Detailed evidence and raw line citations: .agents/scratch/category_ab_a_audit.{json,md}, category_ab_b_audit.{json,md}; graph snapshot category_ab_graph_audit.json.
+- Verified all 17 historical nonempty table rows against recounted raw JSONL/TTL/graph, local links, Markdown fences and citation IDs. Presentation/inventory pre-commit checks passed. No new evaluation, source-record edits, database mutation or commit in this follow-up.

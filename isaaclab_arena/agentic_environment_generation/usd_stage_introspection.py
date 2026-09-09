@@ -7,10 +7,10 @@
 
 from __future__ import annotations
 
+import numpy as np
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
 import shapely.geometry
 import shapely.ops
 
@@ -144,9 +144,7 @@ def extract_geometric_affordance_patches(
     time = Usd.TimeCode.Default()
     xform_cache = UsdGeom.XformCache(time)
 
-    target_meshes: list[UsdGeom.Mesh] = [
-        UsdGeom.Mesh(p) for p in Usd.PrimRange(prim) if p.IsA(UsdGeom.Mesh)
-    ]
+    target_meshes: list[UsdGeom.Mesh] = [UsdGeom.Mesh(p) for p in Usd.PrimRange(prim) if p.IsA(UsdGeom.Mesh)]
 
     if not target_meshes:
         return []
@@ -258,9 +256,7 @@ def extract_geometric_affordance_patches(
 
     for bin_i in active_bins:
         tier_z_center = 0.5 * (bin_edges[bin_i] + bin_edges[bin_i + 1])
-        tier_polys = [
-            t[0] for t in upward_triangles_2d if bin_edges[bin_i] <= t[1] < bin_edges[bin_i + 1]
-        ]
+        tier_polys = [t[0] for t in upward_triangles_2d if bin_edges[bin_i] <= t[1] < bin_edges[bin_i + 1]]
         if not tier_polys:
             continue
 
@@ -297,9 +293,7 @@ def extract_geometric_affordance_patches(
             orientation_deg = float(np.degrees(np.arctan2(major_vec[1], major_vec[0])) % 180)
 
             headroom = raycast_vertical_headroom(stage, prim, tier_z_center, (rep_pt.x, rep_pt.y))
-            approach_yaw = compute_unobstructed_approach_sector(
-                stage, prim, tier_z_center, (rep_pt.x, rep_pt.y)
-            )
+            approach_yaw = compute_unobstructed_approach_sector(stage, prim, tier_z_center, (rep_pt.x, rep_pt.y))
 
             patches.append(
                 AffordancePatch(
@@ -393,8 +387,7 @@ def introspect_usd_stage(usd_path: str) -> list[DollhouseSubPrim]:
                 dim_y = abs(bounds_max[1] - bounds_min[1])
                 is_horizontal_planar = dim_x >= 0.2 and dim_y >= 0.2
                 is_surface_name = any(
-                    kw in name_lower
-                    for kw in ("shelf", "tier", "table", "counter", "desk", "surface", "tray", "top")
+                    kw in name_lower for kw in ("shelf", "tier", "table", "counter", "desk", "surface", "tray", "top")
                 )
                 is_surface = is_surface_name or (is_horizontal_planar and obj_type == "fixture")
 
@@ -504,13 +497,23 @@ def resolve_surface_anchor_bounding_box(
         elif "tier_3" in anchor_lower:
             return [0.45, -0.20, 0.85], [0.70, 0.40, 0.95], None, 0.90
         # Default tier 1 (nominal static apple shelf workspace)
-        return [0.45, -0.15, -0.05], [0.70, 0.40, 0.0], [[0.45, -0.15], [0.70, -0.15], [0.70, 0.40], [0.45, 0.40]], -0.030
+        return (
+            [0.45, -0.15, -0.05],
+            [0.70, 0.40, 0.0],
+            [[0.45, -0.15], [0.70, -0.15], [0.70, 0.40], [0.45, 0.40]],
+            -0.030,
+        )
 
     elif "kitchen" in bg_lower:
         # Kitchen island countertop sub-prim in kitchen_background.usd
         # Counter top elevation in env-local frame is Z = 0.75m
         if "island" in anchor_lower or "counter" in anchor_lower or "sink" in anchor_lower or not surface_anchor:
-            return [-0.40, -0.30, 0.70], [0.40, 0.30, 0.76], [[-0.40, -0.30], [0.40, -0.30], [0.40, 0.30], [-0.40, 0.30]], 0.75
+            return (
+                [-0.40, -0.30, 0.70],
+                [0.40, 0.30, 0.76],
+                [[-0.40, -0.30], [0.40, -0.30], [0.40, 0.30], [-0.40, 0.30]],
+                0.75,
+            )
         elif "drawer" in anchor_lower:
             return [-0.25, -0.20, 0.40], [0.25, 0.20, 0.50], None, 0.45
         return [-0.40, -0.30, 0.70], [0.40, 0.30, 0.76], None, 0.75
@@ -523,8 +526,12 @@ def resolve_surface_anchor_bounding_box(
         return [-0.40, -0.20, 0.72], [0.40, 0.20, 0.78], None, 0.76
 
     elif "packing_table" in bg_lower or "office_table" in bg_lower or "table" in bg_lower or "desk" in bg_lower:
-        return [-0.45, -0.30, 0.72], [0.45, 0.30, 0.78], [[-0.45, -0.30], [0.45, -0.30], [0.45, 0.30], [-0.45, 0.30]], 0.75
+        return (
+            [-0.45, -0.30, 0.72],
+            [0.45, 0.30, 0.78],
+            [[-0.45, -0.30], [0.45, -0.30], [0.45, 0.30], [-0.45, 0.30]],
+            0.75,
+        )
 
     # Default fallback
     return [-0.45, -0.30, 0.72], [0.45, 0.30, 0.78], None, 0.75
-

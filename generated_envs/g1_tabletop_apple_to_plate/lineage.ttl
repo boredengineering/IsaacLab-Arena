@@ -58,4 +58,3 @@
     arena:successRate "0.0"^^xsd:float ;
     arena:trigger "embodiment_joint_space_alignment"^^xsd:string ;
     arena:versionNumber 2 .
-

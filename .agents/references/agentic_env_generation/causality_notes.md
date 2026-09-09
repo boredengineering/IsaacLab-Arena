@@ -1,7 +1,7 @@
 # Comprehensive Master Blueprint: Causal & Bayesian Scene Generation for IsaacLab-Arena
 
-> **Status**: Architectural Specification & Implementation Roadmap  
-> **Target Subsystem**: `isaaclab_arena/agentic_environment_generation/`, `isaaclab_arena/environment_spec/`, `isaaclab_arena/relations/`, `isaaclab_arena/evaluation/`  
+> **Status**: Architectural Specification & Implementation Roadmap
+> **Target Subsystem**: `isaaclab_arena/agentic_environment_generation/`, `isaaclab_arena/environment_spec/`, `isaaclab_arena/relations/`, `isaaclab_arena/evaluation/`
 > **Theoretical Foundations**:
 > 1. *Directed Cyclic Random Graphs (DCRG) & Active Bayesian Inference*
 > 2. *Semantic Reification for Program Generation* (ACM 2024, DL: 3808268)
@@ -16,7 +16,7 @@
 
 In robotics simulation, an environment is not a passive collection of visual meshes; it is a **tightly coupled dynamical system of physical contact forces, kinematic reachability manifolds, gravitational grounding, and optical line-of-sight**.
 
-Previous environment-generation approaches failed because they treated scene synthesis as a naive translation from natural language into ungrounded global 3D coordinates $\mathbf{X} \in \mathbb{R}^{N \times 3}$. 
+Previous environment-generation approaches failed because they treated scene synthesis as a naive translation from natural language into ungrounded global 3D coordinates $\mathbf{X} \in \mathbb{R}^{N \times 3}$.
 
 This blueprint establishes the **Causality Light Cone & Bayesian Semantic Reification Architecture**:
 1. **Separation of Concerns**: Decouples the **USD Geometric Asset Store** from the **Physical Causal Factor Graph (LPG / RDF 1.2)**.
@@ -183,19 +183,19 @@ class ReifiedRelationSpec:
     source_id: str
     relation_type: str  # "PLACED_ON", "STANDS_NEAR", "RECEPTACLE_FOR", "OBSERVES"
     target_id: str
-    
+
     # Affordance & Metric Anchors
     surface_anchor: str | None = None
     contact_normal: list[float] = field(default_factory=lambda: [0.0, 0.0, 1.0])
     delta_x: ContinuousIntervalSpec = field(default_factory=lambda: ContinuousIntervalSpec(-0.1, 0.1, 0.0))
     delta_y: ContinuousIntervalSpec = field(default_factory=lambda: ContinuousIntervalSpec(-0.1, 0.1, 0.0))
     delta_z: ContinuousIntervalSpec = field(default_factory=lambda: ContinuousIntervalSpec(0.0, 0.05, 0.02))
-    
+
     # Physical & Kinematic Invariants
     required_headroom: float = 0.35
     required_friction: float = 0.60
     kinematic_manifold: str = "unitree_g1_bimanual_chest_height"
-    
+
     # Bayesian Belief State
     prior_entropy: float = 2.5
     posterior_entropy: float = 0.05
@@ -240,14 +240,14 @@ def extract_geometric_affordance_patches(
     """Production-grade vectorized extraction of physical support patches from USD meshes."""
     time = Usd.TimeCode.Default()
     xform_cache = UsdGeom.XformCache(time)
-    
+
     target_meshes: list[UsdGeom.Mesh] = []
     if prim.IsA(UsdGeom.Mesh):
         target_meshes.append(UsdGeom.Mesh(prim))
     for child in prim.GetDescendants():
         if child.IsA(UsdGeom.Mesh):
             target_meshes.append(UsdGeom.Mesh(child))
-            
+
     if not target_meshes:
         return []
 
@@ -256,14 +256,14 @@ def extract_geometric_affordance_patches(
     for mesh in target_meshes:
         mesh_prim = mesh.GetPrim()
         world_transform = xform_cache.GetLocalToWorldTransform(mesh_prim)
-        
+
         local_points = mesh.GetPointsAttr().Get(time) or []
         if len(local_points) < 3:
             continue
-            
+
         world_points = [world_transform.Transform(p) for p in local_points]
         pts = np.array([[p[0], p[1], p[2]] for p in world_points], dtype=np.float64)
-        
+
         face_counts = np.array(mesh.GetFaceVertexCountsAttr().Get(time) or [])
         face_indices = np.array(mesh.GetFaceVertexIndicesAttr().Get(time) or [])
         if len(face_counts) == 0 or len(face_indices) == 0:
@@ -274,17 +274,17 @@ def extract_geometric_affordance_patches(
             v0 = pts[tri_indices[:, 0]]
             v1 = pts[tri_indices[:, 1]]
             v2 = pts[tri_indices[:, 2]]
-            
+
             normals_unnorm = np.cross(v1 - v0, v2 - v0)
             norms = np.linalg.norm(normals_unnorm, axis=1, keepdims=True)
             norms[norms < 1e-8] = 1e-8
             normals = normals_unnorm / norms
-            
+
             upward_mask = normals[:, 2] >= 0.95
             upward_v0 = v0[upward_mask]
             upward_v1 = v1[upward_mask]
             upward_v2 = v2[upward_mask]
-            
+
             avg_zs = (upward_v0[:, 2] + upward_v1[:, 2] + upward_v2[:, 2]) / 3.0
             for i in range(len(upward_v0)):
                 p2d = shapely.geometry.Polygon([
@@ -294,24 +294,24 @@ def extract_geometric_affordance_patches(
                 ])
                 if p2d.is_valid and p2d.area > 1e-6:
                     upward_triangles_2d.append((p2d, float(avg_zs[i])))
-                    
+
         elif np.all(face_counts == 4):
             quad_indices = face_indices.reshape(-1, 4)
             for (idx0, idx1, idx2) in [(0, 1, 2), (0, 2, 3)]:
                 v0 = pts[quad_indices[:, idx0]]
                 v1 = pts[quad_indices[:, idx1]]
                 v2 = pts[quad_indices[:, idx2]]
-                
+
                 normals_unnorm = np.cross(v1 - v0, v2 - v0)
                 norms = np.linalg.norm(normals_unnorm, axis=1, keepdims=True)
                 norms[norms < 1e-8] = 1e-8
                 normals = normals_unnorm / norms
-                
+
                 upward_mask = normals[:, 2] >= 0.95
                 upward_v0 = v0[upward_mask]
                 upward_v1 = v1[upward_mask]
                 upward_v2 = v2[upward_mask]
-                
+
                 avg_zs = (upward_v0[:, 2] + upward_v1[:, 2] + upward_v2[:, 2]) / 3.0
                 for i in range(len(upward_v0)):
                     p2d = shapely.geometry.Polygon([
@@ -350,27 +350,27 @@ def extract_geometric_affordance_patches(
     num_bins = max(1, int(np.ceil((z_max - z_min) / z_bin_size)))
     hist, bin_edges = np.histogram(all_z, bins=num_bins, range=(z_min, z_max + z_bin_size))
     active_bins = np.where(hist >= 3)[0]
-    
+
     patches: list[AffordancePatch] = []
     patch_idx = 1
-    
+
     for bin_i in active_bins:
         tier_z_center = 0.5 * (bin_edges[bin_i] + bin_edges[bin_i + 1])
         tier_polys = [
-            t[0] for t in upward_triangles_2d 
+            t[0] for t in upward_triangles_2d
             if bin_edges[bin_i] <= t[1] < bin_edges[bin_i + 1]
         ]
         if not tier_polys:
             continue
-            
+
         raw_footprint = shapely.ops.unary_union(tier_polys)
         if raw_footprint.is_empty:
             continue
-            
+
         eroded_geom = raw_footprint.buffer(-safety_margin)
         if eroded_geom.is_empty:
             continue
-            
+
         sub_polygons: list[shapely.geometry.Polygon] = []
         if eroded_geom.geom_type == 'Polygon':
             sub_polygons.append(eroded_geom)
@@ -384,20 +384,20 @@ def extract_geometric_affordance_patches(
         for poly in sub_polygons:
             if poly.area < min_area:
                 continue
-                
+
             rep_pt = poly.representative_point()
             anchor_pos = [float(rep_pt.x), float(rep_pt.y), float(tier_z_center)]
-            
+
             min_rect = poly.minimum_rotated_rectangle
             rect_coords = np.array(min_rect.exterior.coords)
             edge1 = rect_coords[1] - rect_coords[0]
             edge2 = rect_coords[2] - rect_coords[1]
             major_vec = edge1 if np.linalg.norm(edge1) >= np.linalg.norm(edge2) else edge2
             orientation_deg = float(np.degrees(np.arctan2(major_vec[1], major_vec[0])) % 180)
-            
+
             headroom = raycast_vertical_headroom(stage, prim, tier_z_center, (rep_pt.x, rep_pt.y))
             approach_yaw = compute_unobstructed_approach_sector(stage, prim, tier_z_center, (rep_pt.x, rep_pt.y))
-            
+
             patches.append(AffordancePatch(
                 patch_id=f"{prim.GetName()}_patch_{patch_idx}",
                 parent_prim=str(prim.GetPath()),
@@ -433,14 +433,14 @@ class BipedalCapabilityProfile:
     min_dexterous_height: float        # e.g., 0.30m (crouch limit)
     max_dexterous_height: float        # e.g., 1.35m (overhead reach limit)
     bimanual_lateral_span: tuple[float, float] = (-0.25, 0.25)
-    
+
     def evaluate_optimal_standoff(self, delta_z: float) -> tuple[float, float, float]:
         """Calculates optimal standoff distance, pitch adjustment, and dexterity score."""
         assert self.min_dexterous_height <= delta_z <= self.max_dexterous_height, (
             f"Target elevation {delta_z:.3f}m is outside embodiment '{self.embodiment_name}' "
             f"dexterous workspace [{self.min_dexterous_height}m, {self.max_dexterous_height}m]."
         )
-        
+
         # High Shelf Tier (Shoulder Extension Range: 1.05m - 1.35m)
         if delta_z > 1.05:
             standoff = 0.50 + 0.15 * (1.35 - delta_z)
@@ -456,7 +456,7 @@ class BipedalCapabilityProfile:
             standoff = 0.75 + 0.20 * (0.65 - delta_z)
             tolerance = 0.08
             dexterity = 0.70
-            
+
         return standoff, tolerance, dexterity
 
 
@@ -475,47 +475,47 @@ def sample_bipedal_reach_manifold(
         min_dexterous_height=0.30,
         max_dexterous_height=1.35,
     )
-    
+
     delta_z = target_world_xyz[2] - z_floor_estimate
     standoff, tolerance, dexterity = profile.evaluate_optimal_standoff(delta_z)
-    
+
     if approach_yaw_range:
         min_yaw, max_yaw = np.radians(approach_yaw_range[0]), np.radians(approach_yaw_range[1])
         yaw_approach = 0.5 * (min_yaw + max_yaw)
     else:
         yaw_approach = 0.0
-        
+
     dx = -standoff * np.cos(yaw_approach)
     dy = -standoff * np.sin(yaw_approach)
-    
+
     p_robot_x = target_world_xyz[0] + dx
     p_robot_y = target_world_xyz[1] + dy
-    
+
     yaw_robot = float(np.degrees(np.arctan2(
-        target_world_xyz[1] - p_robot_y, 
+        target_world_xyz[1] - p_robot_y,
         target_world_xyz[0] - p_robot_x
     )))
-    
+
     if upper_tier_clearance < 0.30 and delta_z > 0.85:
         p_robot_x -= 0.08 * np.cos(yaw_approach)
         p_robot_y -= 0.08 * np.sin(yaw_approach)
         dexterity *= 0.85
-        
+
     return [float(p_robot_x), float(p_robot_y)], yaw_robot, dexterity
 
 
 def compile_reified_scene_transforms(
-    spec: ArenaEnvGraphSpec, 
+    spec: ArenaEnvGraphSpec,
     stage
 ) -> dict[str, list[float]]:
     """Compiles reified semantic relations into exact, grounded 3D transforms."""
     resolved_transforms = {}
-    
+
     # 1. Hop 0 & 1: Ground Fixture and Resolve Manipuland on Support Patch
     shelf_patch = get_affordance_patch(stage, spec.background.registry_name, "shelf_tier_2")
     p_box = sample_patch_anchor(shelf_patch, delta_offset=[0.0, 0.0, 0.025])
     resolved_transforms[spec.objects[0].name] = p_box
-    
+
     # 2. Hop 2: Embodiment Pose via 3D Bipedal Capability Manifold & Floor Raycast
     z_floor_preliminary = raycast_floor_height(stage, [p_box[0], p_box[1] - 0.70])
     p_robot_xy, yaw_robot, dexterity = sample_bipedal_reach_manifold(
@@ -526,24 +526,24 @@ def compile_reified_scene_transforms(
     )
     z_floor = raycast_floor_height(stage, p_robot_xy)
     resolved_transforms[spec.embodiment.name] = [p_robot_xy[0], p_robot_xy[1], z_floor, yaw_robot]
-    
+
     # 3. Hop 3: Secondary Fixture (Goal Bin) in Contralateral Sweep Arc
     p_bin = sample_contralateral_arc(
-        origin_xy=p_robot_xy, 
-        yaw=yaw_robot, 
-        side="right", 
+        origin_xy=p_robot_xy,
+        yaw=yaw_robot,
+        side="right",
         distance=0.55
     )
     z_bin_floor = raycast_floor_height(stage, p_bin[:2])
     resolved_transforms["sorting_bin"] = [p_bin[0], p_bin[1], z_bin_floor, 0.0]
-    
+
     # 4. Hop 4: Gaze-Aligned Multi-Camera Framing
     cam_pos, cam_quat = compute_robot_relative_camera_pose(
         robot_pos=resolved_transforms[spec.embodiment.name][:3],
         target_pos=p_box[:3]
     )
     resolved_transforms["perspective_camera"] = {"pos": cam_pos, "quat": cam_quat}
-    
+
     return resolved_transforms
 ```
 
@@ -566,7 +566,7 @@ class VectorizedTelemetryBuffer:
         self.buffer_size = buffer_size
         self.device = device
         self.head = 0
-        
+
         # Pre-allocate pinned GPU memory for zero-copy parallel stepping
         self.drift_tensor = torch.zeros((buffer_size, num_envs), dtype=torch.float32, device=device)
         self.joint_jitter_tensor = torch.zeros((buffer_size, num_envs), dtype=torch.float32, device=device)
@@ -582,7 +582,7 @@ class VectorizedTelemetryBuffer:
         idx = self.head % self.buffer_size
         self.drift_tensor[idx] = drift_mags
         self.terminal_mask[idx] = is_terminal
-        
+
         # Measure high-frequency torque derivative jitter
         if self.head > 0:
             prev_idx = (self.head - 1) % self.buffer_size
@@ -590,7 +590,7 @@ class VectorizedTelemetryBuffer:
             self.joint_jitter_tensor[idx] = torch.norm(torque_diff, dim=-1)
         else:
             self.joint_jitter_tensor[idx] = 0.0
-            
+
         self.head += 1
 
     def extract_recent_window_numpy(self, window_size: int = 100) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -598,7 +598,7 @@ class VectorizedTelemetryBuffer:
         curr_head = self.head
         start_idx = max(0, curr_head - window_size)
         indices = torch.arange(start_idx, curr_head, device=self.device) % self.buffer_size
-        
+
         drift_np = self.drift_tensor[indices].cpu().numpy()
         jitter_np = self.joint_jitter_tensor[indices].cpu().numpy()
         term_np = self.terminal_mask[indices].cpu().numpy()
@@ -620,10 +620,10 @@ class StatisticalStationarityEvaluator:
         var_diff = float(np.var(np.diff(jitter_trajectory, axis=0)))
         baseline_var = float(np.var(jitter_trajectory)) + 1e-8
         jitter_ratio = var_diff / baseline_var
-        
+
         max_drift = float(np.max(drift_trajectory))
         has_terminal_failure = bool(np.any(terminal_events))
-        
+
         # Trigger fault attribution if non-stationary jitter or spatial drift exceeds limits
         if jitter_ratio > 3.5 or max_drift > 0.03 or has_terminal_failure:
             return {

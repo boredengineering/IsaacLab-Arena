@@ -127,4 +127,3 @@ arena:placedInside a owl:ObjectProperty ;
 arena:navCorridorTo a owl:ObjectProperty ;
     rdfs:domain arena:SceneEntity ;
     rdfs:range arena:SceneEntity .
-

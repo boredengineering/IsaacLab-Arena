@@ -19,7 +19,7 @@ DIRECTORIES=(
     "${HOST_HOME}/datasets"
     "${HOST_HOME}/models"
     "${HOST_HOME}/eval"
-    
+
     # Standard IsaacLab-Arena Workflow Subpaths
     "${HOST_HOME}/datasets/isaaclab_arena/locomanipulation_tutorial"
     "${HOST_HOME}/datasets/isaaclab_arena/sequential_static_manipulation_tutorial"
@@ -31,10 +31,10 @@ DIRECTORIES=(
     "${HOST_HOME}/models/isaaclab_arena/static_apple_tutorial"
     "${HOST_HOME}/eval/isaaclab_arena/locomanipulation_tutorial"
     "${HOST_HOME}/eval/isaaclab_arena/camera_sensitivity"
-    
+
     # Caches & Hugging Face
     "${HOST_HOME}/.cache/huggingface"
-    
+
     # Cloud Credentials & Tooling Configs
     "${HOST_HOME}/.aws"
     "${HOST_HOME}/.config/gcloud"

@@ -213,11 +213,14 @@ def load_gr00t_modality_config_from_file(modality_config_path: str | Path, embod
         embodiment_tag_enum = EmbodimentTag[embodiment_tag.upper()]
     except KeyError:
         embodiment_tag_str = embodiment_tag.upper()
-        matching_tags = [tag for tag in EmbodimentTag if tag.name == embodiment_tag_str]
-        if not matching_tags:
-            available_tags = [tag.name for tag in EmbodimentTag]
-            raise ValueError(f"Invalid embodiment tag '{embodiment_tag}'. Available tags: {available_tags}")
-        embodiment_tag_enum = matching_tags[0]
+        if embodiment_tag_str == "OXE_DROID" and hasattr(EmbodimentTag, "OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT"):
+            embodiment_tag_enum = EmbodimentTag.OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT
+        else:
+            matching_tags = [tag for tag in EmbodimentTag if tag.name == embodiment_tag_str]
+            if not matching_tags:
+                available_tags = [tag.name for tag in EmbodimentTag]
+                raise ValueError(f"Invalid embodiment tag '{embodiment_tag}'. Available tags: {available_tags}")
+            embodiment_tag_enum = matching_tags[0]
 
     # Use the enum's value (lowercase string) to look up in MODALITY_CONFIGS
     embodiment_tag_key = embodiment_tag_enum.value

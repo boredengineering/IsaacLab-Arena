@@ -6,17 +6,18 @@
 """Unit tests for Neo4j Labeled Property Graph (LPG) synchronization and spatial queries."""
 
 import pytest
+
+from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import (
+    get_neo4j_driver,
+    query_spatial_hierarchy,
+    sync_spec_to_neo4j,
+)
 from isaaclab_arena.environment_spec.arena_env_graph_spec import (
     ArenaEnvGraphSpec,
     AssetSpec,
     CompositeTaskSpec,
     SpatialRelationSpec,
     TaskSpec,
-)
-from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import (
-    get_neo4j_driver,
-    query_spatial_hierarchy,
-    sync_spec_to_neo4j,
 )
 
 
@@ -92,14 +93,18 @@ def test_sync_spec_to_neo4j_and_query():
     assert box_rel["nominal_height"] == 0.75
 
     # Verify telescopic PLACED_ON_SUB_SURFACE relation exists
-    sub_surface_rel = next((h for h in hierarchy if h["subject"] == "brown_box" and h["relation"] == "PLACED_ON_SUB_SURFACE"), None)
+    sub_surface_rel = next(
+        (h for h in hierarchy if h["subject"] == "brown_box" and h["relation"] == "PLACED_ON_SUB_SURFACE"), None
+    )
     assert sub_surface_rel is not None
     assert sub_surface_rel["parent_id"] == "wireshelving_shelf_tier_1"
 
     # Verify that Camera and SurfaceAnchor nodes exist in Neo4j
     driver = get_neo4j_driver()
     with driver.session() as session:
-        sa_res = session.run("MATCH (sa:SurfaceAnchor {env_name: 'test_g1_shelf_pnp_lpg'}) RETURN count(sa) AS count").single()
+        sa_res = session.run(
+            "MATCH (sa:SurfaceAnchor {env_name: 'test_g1_shelf_pnp_lpg'}) RETURN count(sa) AS count"
+        ).single()
         assert sa_res["count"] >= 1
 
         cam_res = session.run("MATCH (c:Camera {env_name: 'test_g1_shelf_pnp_lpg'}) RETURN count(c) AS count").single()
@@ -109,8 +114,8 @@ def test_sync_spec_to_neo4j_and_query():
 
 @pytest.mark.skipif(not _is_neo4j_reachable(), reason="Neo4j instance not reachable at bolt://172.17.0.2:7687")
 def test_sync_reified_relation_factor_nodes_to_neo4j():
-    from isaaclab_arena.environment_spec.arena_env_graph_types import ContinuousIntervalSpec, ReifiedRelationSpec
     from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import query_reified_relations
+    from isaaclab_arena.environment_spec.arena_env_graph_types import ContinuousIntervalSpec, ReifiedRelationSpec
 
     spec = ArenaEnvGraphSpec(
         env_name="test_g1_reified_factor_graph",
@@ -121,7 +126,9 @@ def test_sync_reified_relation_factor_nodes_to_neo4j():
             AssetSpec(id="brown_box", registry_name="brown_box"),
         ],
         relations=[
-            SpatialRelationSpec(kind="on", subject="brown_box", reference="wireshelving", params={"surface_anchor": "shelf_tier_2"}),
+            SpatialRelationSpec(
+                kind="on", subject="brown_box", reference="wireshelving", params={"surface_anchor": "shelf_tier_2"}
+            ),
         ],
         reified_relations=[
             ReifiedRelationSpec(
@@ -173,5 +180,3 @@ def test_sync_reified_relation_factor_nodes_to_neo4j():
     assert r["kinematic_manifold"] == "unitree_g1_bimanual_chest_height"
     assert r["prior_entropy"] == 2.8
     assert r["posterior_entropy"] == 0.04
-
-

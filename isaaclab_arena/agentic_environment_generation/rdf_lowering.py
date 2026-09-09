@@ -7,11 +7,12 @@
 
 from __future__ import annotations
 
+import numpy as np
 from dataclasses import dataclass
 from typing import Any
-import numpy as np
+
 import rdflib
-from rdflib import Literal, Namespace, RDF, XSD
+from rdflib import RDF, XSD, Literal, Namespace
 
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 from isaaclab_arena.environment_spec.arena_env_graph_types import (
@@ -176,9 +177,7 @@ def sample_bipedal_reach_manifold(
     p_robot_x = target_world_xyz[0] + dx
     p_robot_y = target_world_xyz[1] + dy
 
-    yaw_robot = float(
-        np.degrees(np.arctan2(target_world_xyz[1] - p_robot_y, target_world_xyz[0] - p_robot_x))
-    )
+    yaw_robot = float(np.degrees(np.arctan2(target_world_xyz[1] - p_robot_y, target_world_xyz[0] - p_robot_x)))
 
     if upper_tier_clearance < 0.30 and delta_z > 0.85:
         p_robot_x -= 0.08 * np.cos(yaw_approach)
@@ -412,7 +411,13 @@ def spec_to_rdf_graph(spec: ArenaEnvGraphSpec) -> rdflib.Graph:
     for obj in spec.objects:
         obj_uri = INSTANCES[obj.id]
         name_lower = obj.registry_name.lower()
-        if "shelf" in name_lower or "shelv" in name_lower or "table" in name_lower or "counter" in name_lower or "rack" in name_lower:
+        if (
+            "shelf" in name_lower
+            or "shelv" in name_lower
+            or "table" in name_lower
+            or "counter" in name_lower
+            or "rack" in name_lower
+        ):
             g.add((obj_uri, RDF.type, ARENA.Fixture))
             g.add((obj_uri, RDF.type, ARENA.Furniture))
         elif "bin" in name_lower or "box" in name_lower or "tray" in name_lower:

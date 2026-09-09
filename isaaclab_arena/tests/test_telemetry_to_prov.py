@@ -7,11 +7,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import numpy as np
+import torch
+from pathlib import Path
+
 import pytest
 import rdflib
-import torch
 
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 from isaaclab_arena.environment_spec.arena_env_graph_types import (
@@ -134,7 +135,11 @@ def test_attribute_simulation_telemetry_to_reifiers():
         task=CompositeTaskSpec(
             composition=TaskCompositionType.ATOMIC,
             description="Pick brown box",
-            subtasks=[TaskSpec(kind="PickAndPlaceTask", params={"pick_up_object": "brown_box", "destination_location": "galileo"})],
+            subtasks=[
+                TaskSpec(
+                    kind="PickAndPlaceTask", params={"pick_up_object": "brown_box", "destination_location": "galileo"}
+                )
+            ],
         ),
     )
 

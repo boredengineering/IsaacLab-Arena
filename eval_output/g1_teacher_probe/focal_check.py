@@ -1,19 +1,26 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Is DA3METRIC's overestimate a focal-units bug? Test every plausible convention."""
+
 import json
 import numpy as np
-from PIL import Image
 import torch
 import torch.nn.functional as F
+
 from depth_anything_3.cfg import create_object
 from omegaconf import OmegaConf
+from PIL import Image
 from safetensors.torch import load_file
 
 P = "/workspaces/isaaclab_arena/eval_output/g1_teacher_probe"
 GT = "/workspaces/isaaclab_arena/eval_output/rerender/probe_set/depth/episode_000000.npz"
 IN_H, IN_W = 518, 686
-F_NATIVE = 15.0 / 20.955 * 640.0          # 458.12 px at 480x640
-F_PROC_X = F_NATIVE * IN_W / 640.0        # 491.03 px on the fed grid
-F_PROC_Y = F_NATIVE * IN_H / 480.0        # 494.38 px
+F_NATIVE = 15.0 / 20.955 * 640.0  # 458.12 px at 480x640
+F_PROC_X = F_NATIVE * IN_W / 640.0  # 491.03 px on the fed grid
+F_PROC_Y = F_NATIVE * IN_H / 480.0  # 494.38 px
 MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
 STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
@@ -34,16 +41,16 @@ with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
 raw = F.interpolate(raw, (480, 640), mode="bilinear", align_corners=False)[0, 0].cpu().numpy()
 
 gt = np.load(GT)["depth"][0].astype(np.float32)
-m = np.isfinite(gt) & (gt > 0.40) & (gt < 0.60)      # the table, unambiguous surface
+m = np.isfinite(gt) & (gt > 0.40) & (gt < 0.60)  # the table, unambiguous surface
 
 print(f"raw net output over the table: median={np.median(raw[m]):.4f}  GT median={np.median(gt[m]):.4f}\n")
 for label, factor in [
-    ("raw, no rescale",                 1.0),
-    ("x f_native/300  (458.12/300)",    F_NATIVE / 300.0),
-    ("x f_proc_x/300  (491.03/300)",    F_PROC_X / 300.0),
-    ("x f_proc_y/300  (494.38/300)",    F_PROC_Y / 300.0),
-    ("x (f_proc_x+f_proc_y)/2 /300",    (F_PROC_X + F_PROC_Y) / 2 / 300.0),
-    ("/ f_native/300  (inverse)",       300.0 / F_NATIVE),
+    ("raw, no rescale", 1.0),
+    ("x f_native/300  (458.12/300)", F_NATIVE / 300.0),
+    ("x f_proc_x/300  (491.03/300)", F_PROC_X / 300.0),
+    ("x f_proc_y/300  (494.38/300)", F_PROC_Y / 300.0),
+    ("x (f_proc_x+f_proc_y)/2 /300", (F_PROC_X + F_PROC_Y) / 2 / 300.0),
+    ("/ f_native/300  (inverse)", 300.0 / F_NATIVE),
 ]:
     p = raw * factor
     ratio = np.median(p[m] / gt[m])

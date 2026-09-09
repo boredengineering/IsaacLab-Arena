@@ -76,7 +76,7 @@ The symbolic knowledge graph defines initial scene state distributions at $t=0$ 
 ```mermaid
 flowchart LR
     GRAPH["Symbolic Graph G\n(Static Configuration at t=0)"]
-    
+
     subgraph WBC_Layer ["Dynamical Optimal Control Layer (Continuous TQ)"]
         DYN["Equations of Motion:\nM(q) q'' + C(q, q')q' + g(q) = S^T tau + J_c^T lambda"]
         HQP["Hierarchical Quadratic Program (QP):\nmin || J_task q'' - a_des ||^2 \ns.t. Friction Cones, Contact Holonomy, Torque Limits"]
@@ -105,7 +105,7 @@ Naive zero-shot language prompts produce simulation failures due to 5 fundamenta
 ```mermaid
 flowchart TD
     NL["Zero-Shot Natural Language Prompt"] --> SYM["Symbolic Predicates: ON(box, shelf)"]
-    
+
     subgraph Gaps ["The 5 Symbolic-Geometric Gaps"]
         G1["1. Blind Asset Problem: Outer AABB != Interior Tiers"]
         G2["2. Missing Reachability: Outside W_reach Manifold"]

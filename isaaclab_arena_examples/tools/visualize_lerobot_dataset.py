@@ -1,3 +1,8 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Copyright (c) 2026, Isaac Lab Arena Project Developers.
 # All rights reserved.
 #
@@ -13,13 +18,13 @@ from __future__ import annotations
 
 import argparse
 import logging
+import numpy as np
 import os
-from pathlib import Path
 import socket
 import time
+from pathlib import Path
 
 import cv2
-import numpy as np
 import pandas as pd
 import rerun as rr
 
@@ -74,10 +79,7 @@ def visualize_episode(
                 break
 
     if not resolved_dir or not resolved_dir.exists():
-        raise FileNotFoundError(
-            "Could not locate the LeRobot dataset directory. "
-            "Please specify --dataset-dir <PATH>."
-        )
+        raise FileNotFoundError("Could not locate the LeRobot dataset directory. Please specify --dataset-dir <PATH>.")
 
     chunk_idx = episode_index // 1000
     parquet_path = resolved_dir / "data" / f"chunk-{chunk_idx:03d}" / f"episode_{episode_index:06d}.parquet"

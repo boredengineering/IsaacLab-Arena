@@ -172,7 +172,9 @@ class OnRelationValidator(PlacementValidator):
                 # 2) Checking that the child lies within the parent's xy
                 sec_name = getattr(rel, "surface_sector", None) or getattr(rel, "surface_anchor", None)
                 if sec_name is not None:
-                    from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import get_fixture_sector_bounds
+                    from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
+                        get_fixture_sector_bounds,
+                    )
 
                     parent_reg_name = getattr(parent, "registry_name", getattr(parent, "name", ""))
                     sec_bounds = get_fixture_sector_bounds(parent_reg_name, sec_name)
@@ -207,7 +209,9 @@ class OnRelationValidator(PlacementValidator):
                 if getattr(rel, "nominal_height", None) is not None:
                     parent_top_z = float(rel.nominal_height)
                 elif sec_name is not None:
-                    from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import get_fixture_sector_bounds
+                    from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
+                        get_fixture_sector_bounds,
+                    )
 
                     parent_reg_name = getattr(parent, "registry_name", getattr(parent, "name", ""))
                     sec_bounds = get_fixture_sector_bounds(parent_reg_name, sec_name)

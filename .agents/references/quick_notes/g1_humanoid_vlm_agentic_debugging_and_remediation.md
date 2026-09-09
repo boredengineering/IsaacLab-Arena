@@ -163,10 +163,10 @@ Step 150: Left Wrist=[-0.351, 0.383, 0.888] (dist to apple: 0.350m)
 
 ```
                       G1 Robot & Target Geometry
-                      
+
    Reference Training Scene                  Our Tabletop Scene (v6)
    (Low Warehouse Shelf)                     (High Dining/Work Table)
-   
+
      [ Head / EyeCam ]                         [ Head / EyeCam ]
              |                                         |
          (Pelvis) Z = +0.79m                       (Pelvis) Z = +0.79m

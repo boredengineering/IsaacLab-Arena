@@ -1,11 +1,18 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Distinguish 'divide by f/300' from 'resize so the fed focal IS 300'."""
+
 import json
 import numpy as np
-from PIL import Image
 import torch
 import torch.nn.functional as F
+
 from depth_anything_3.cfg import create_object
 from omegaconf import OmegaConf
+from PIL import Image
 from safetensors.torch import load_file
 
 P = "/workspaces/isaaclab_arena/eval_output/g1_teacher_probe"
@@ -43,5 +50,7 @@ for in_h, in_w in [(518, 686), (308, 420), (322, 434), (294, 392), (476, 630)]:
     # DA3's formula with the focal of the FED image
     r_doc = np.median((raw * f_eff / 300.0)[m] / gt[m])
     e_raw = np.median(np.abs(raw - gt)[m])
-    print(f"  fed {in_h}x{in_w:4d}  f_eff={f_eff:6.2f}  raw pred/gt={r_raw:6.3f}x "
-          f"(|err|={e_raw*100:6.2f} cm)   with xf_eff/300: {r_doc:6.3f}x")
+    print(
+        f"  fed {in_h}x{in_w:4d}  f_eff={f_eff:6.2f}  raw pred/gt={r_raw:6.3f}x "
+        f"(|err|={e_raw*100:6.2f} cm)   with xf_eff/300: {r_doc:6.3f}x"
+    )

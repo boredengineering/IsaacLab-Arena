@@ -205,23 +205,71 @@ def resize_rgb_for_policy(
     """Resize each RGB frame to the policy target size with padding if needed.
 
     Args:
-        rgb_list_np: List of (N, H, W, C) RGB arrays.
+        rgb_list_np: List of (N, H, W, C) or (N, T, H, W, C) RGB arrays.
         target_image_size: (H, W, C) target dimensions.
 
     Returns:
-        List of (N, H', W', C) arrays, each resized/padded to target H, W.
+        List of (N, H', W', C) or (N, T, H', W', C) arrays, each resized/padded to target H, W.
     """
     processed: list[np.ndarray] = []
     for rgb_np in rgb_list_np:
-        if rgb_np.shape[1:3] != tuple(target_image_size[:2]):
-            rgb_np = resize_frames_with_padding(
-                rgb_np,
-                target_image_size=target_image_size,
-                bgr_conversion=False,
-                pad_img=True,
-            )
-        processed.append(rgb_np)
+        if rgb_np.ndim == 5:
+            n, t, h, w, c = rgb_np.shape
+            if (h, w) != tuple(target_image_size[:2]):
+                flat = rgb_np.reshape(n * t, h, w, c)
+                resized = resize_frames_with_padding(
+                    flat,
+                    target_image_size=target_image_size,
+                    bgr_conversion=False,
+                    pad_img=True,
+                )
+                processed.append(resized.reshape(n, t, target_image_size[0], target_image_size[1], c))
+            else:
+                processed.append(rgb_np)
+        else:
+            if rgb_np.shape[1:3] != tuple(target_image_size[:2]):
+                rgb_np = resize_frames_with_padding(
+                    rgb_np,
+                    target_image_size=target_image_size,
+                    bgr_conversion=False,
+                    pad_img=True,
+                )
+            processed.append(rgb_np)
     return processed
+
+
+# DROID egocentric frame correction matrix: R_euler is post-multiplied by this matrix
+# to match the OXE DROID training pipeline (TFG convention).
+DROID_EEF_ROTATION_CORRECT = np.array(
+    [[0, 0, -1], [-1, 0, 0], [0, 1, 0]],
+    dtype=np.float64,
+)
+
+
+def compute_droid_eef_9d(pos: np.ndarray, quat_wxyz: np.ndarray) -> np.ndarray:
+    """Compute 9D end-effector pose [x, y, z, rot6d_0..5] in DROID convention.
+
+    Args:
+        pos: (N, 3) or (3,) XYZ position array.
+        quat_wxyz: (N, 4) or (4,) quaternion array in (w, x, y, z) format.
+
+    Returns:
+        (N, 9) array of [pos(3), rot6d(6)].
+    """
+    from scipy.spatial.transform import Rotation
+
+    pos = np.asarray(pos, dtype=np.float32)
+    quat_wxyz = np.asarray(quat_wxyz, dtype=np.float32)
+    if pos.ndim == 1:
+        pos = pos[np.newaxis, :]
+    if quat_wxyz.ndim == 1:
+        quat_wxyz = quat_wxyz[np.newaxis, :]
+
+    quat_xyzw = quat_wxyz[:, [1, 2, 3, 0]]
+    rot_matrices = Rotation.from_quat(quat_xyzw).as_matrix()
+    rot_matrices = rot_matrices @ DROID_EEF_ROTATION_CORRECT
+    rot6d = rot_matrices[:, :2, :].reshape(pos.shape[0], 6)
+    return np.concatenate([pos, rot6d], axis=-1).astype(np.float32)
 
 
 def build_gr00t_policy_observations(
@@ -232,6 +280,7 @@ def build_gr00t_policy_observations(
     robot_state_joints_config: dict[str, Any],
     policy_joints_config: dict[str, Any],
     modality_configs: dict[str, Any],
+    extra_state_np: dict[str, np.ndarray] | None = None,
 ) -> dict[str, Any]:
     """Build GR00T policy observation dict from numpy env observations.
 
@@ -240,17 +289,18 @@ def build_gr00t_policy_observations(
     :func:`extract_obs_numpy_from_torch`.
 
     Args:
-        rgb_list_np: List of RGB arrays, one per camera; each shape (N, H, W, C).
+        rgb_list_np: List of RGB arrays, one per camera; each shape (N, H, W, C) or (N, T, H, W, C).
         joint_pos_sim_np: Joint positions in sim order, shape (N, num_joints).
         task_description: Language instruction for the policy.
         policy_config: Closed-loop config (target_image_size, etc.).
         robot_state_joints_config: State joint name->index for sim order.
         policy_joints_config: Policy group name->list of joint names.
         modality_configs: Dict with "language", "video", "state" modality configs.
+        extra_state_np: Optional dict of non-joint state arrays (e.g. eef_9d).
 
     Returns:
         Nested dict "language" / "video" / "state" with keys from modality
-        config and arrays shaped for GR00T (e.g. video: N, 1, H, W, C).
+        config and arrays shaped for GR00T (e.g. video: N, T, H, W, C).
     """
     target_image_size = getattr(policy_config, "target_image_size", None)
     if target_image_size is not None:
@@ -267,6 +317,11 @@ def build_gr00t_policy_observations(
         rgb_list_np
     ), f"number of video keys ({len(video_keys)}) and rgb inputs ({len(rgb_list_np)}) must match"
 
+    video_delta_indices = getattr(modality_configs["video"], "delta_indices", [0])
+    video_horizon = len(video_delta_indices) if hasattr(video_delta_indices, "__len__") else 1
+    state_delta_indices = getattr(modality_configs["state"], "delta_indices", [0])
+    state_horizon = len(state_delta_indices) if hasattr(state_delta_indices, "__len__") else 1
+
     # TODO(xinejiayao, 2025-12-10): when multi-task with parallel envs feature is enabled,
     # we need to pass in a list of task descriptions.
     policy_observations: dict[str, Any] = {
@@ -275,17 +330,54 @@ def build_gr00t_policy_observations(
         "state": {},
     }
     for i, video_key in enumerate(video_keys):
+        img = rgb_list_np[i]
+        if img.ndim == 4:
+            reshaped_single = img.reshape(num_envs, 1, target_image_size[0], target_image_size[1], target_image_size[2])
+            if video_horizon > 1:
+                policy_observations["video"][video_key] = np.repeat(reshaped_single, video_horizon, axis=1)
+            else:
+                policy_observations["video"][video_key] = reshaped_single
+        elif img.ndim == 5:
+            assert (
+                img.shape[1] == video_horizon
+            ), f"Video input shape {img.shape} horizon {img.shape[1]} does not match expected {video_horizon}"
+            policy_observations["video"][video_key] = img
+        else:
+            raise ValueError(f"Unexpected image shape {img.shape} for video key '{video_key}'")
 
-        policy_observations["video"][video_key] = rgb_list_np[i].reshape(
-            num_envs, 1, target_image_size[0], target_image_size[1], target_image_size[2]
-        )
     for state_key in state_keys:
         if state_key in joint_pos_state_policy:
             arr = joint_pos_state_policy[state_key]
             assert (
                 arr.shape[0] == num_envs
             ), f"joint_pos_state_policy[{state_key}] has shape {arr.shape} but expected ({num_envs}, -1)"
-            policy_observations["state"][state_key] = arr.reshape(num_envs, 1, -1)
+            reshaped_state = arr.reshape(num_envs, 1, -1)
+            if state_horizon > 1:
+                policy_observations["state"][state_key] = np.repeat(reshaped_state, state_horizon, axis=1)
+            else:
+                policy_observations["state"][state_key] = reshaped_state
+        elif extra_state_np is not None and state_key in extra_state_np:
+            arr = extra_state_np[state_key]
+            assert (
+                arr.shape[0] == num_envs
+            ), f"extra_state_np[{state_key}] has shape {arr.shape} but expected ({num_envs}, -1)"
+            reshaped_state = arr.reshape(num_envs, 1, -1)
+            if state_horizon > 1:
+                policy_observations["state"][state_key] = np.repeat(reshaped_state, state_horizon, axis=1)
+            else:
+                policy_observations["state"][state_key] = reshaped_state
+        elif state_key == "eef_9d":
+            # Fallback nominal EEF pose [x, y, z, rot6d]: 9D
+            eef_arr = np.tile(np.array([0.0, 0.0, 0.5, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0], dtype=np.float32), (num_envs, 1))
+            reshaped_state = eef_arr.reshape(num_envs, 1, -1)
+            if state_horizon > 1:
+                policy_observations["state"][state_key] = np.repeat(reshaped_state, state_horizon, axis=1)
+            else:
+                policy_observations["state"][state_key] = reshaped_state
+        else:
+            raise KeyError(
+                f"State key '{state_key}' requested by policy modality configs not found in state observations"
+            )
 
     return policy_observations
 

@@ -15,14 +15,14 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import numpy as np
+import torch
 from pathlib import Path
+from transformers import pipeline
 from typing import Any
 
 import cv2
-import numpy as np
 from PIL import Image
-import torch
-from transformers import pipeline
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -177,7 +177,9 @@ class DepthSpatialAuditor:
                 by = max(0, abs_y - 20)
                 bw = min(w - bx, 40)
                 bh = min(h - by, 40)
-                obj_d = float(np.median(depth_map[max(0, abs_y - 4) : min(h, abs_y + 4), max(0, abs_x - 4) : min(w, abs_x + 4)]))
+                obj_d = float(
+                    np.median(depth_map[max(0, abs_y - 4) : min(h, abs_y + 4), max(0, abs_x - 4) : min(w, abs_x + 4)])
+                )
                 return {
                     "detected": True,
                     "method": "depth_elevation_saliency",
@@ -260,12 +262,8 @@ class DepthSpatialAuditor:
         sim_target_uv: tuple[float, float] | None = None,
     ) -> dict[str, Any]:
         """Compare spatial geometries between dataset frame and simulation frame."""
-        res_dataset = self.analyze_frame(
-            dataset_img, label="Dataset Demonstration", target_uv=dataset_target_uv
-        )
-        res_sim = self.analyze_frame(
-            sim_img, label="Simulation View", target_uv=sim_target_uv
-        )
+        res_dataset = self.analyze_frame(dataset_img, label="Dataset Demonstration", target_uv=dataset_target_uv)
+        res_sim = self.analyze_frame(sim_img, label="Simulation View", target_uv=sim_target_uv)
 
         discrepancies: dict[str, Any] = {}
         if res_dataset["object"]["detected"] and res_sim["object"]["detected"]:
@@ -287,9 +285,13 @@ class DepthSpatialAuditor:
         if "object_relative_depth_delta" in discrepancies:
             d_depth = discrepancies["object_relative_depth_delta"]
             if d_depth < -0.20:
-                diagnostics.append(f"Target object is significantly FURTHER away in simulation (depth delta: {d_depth:+.3f}).")
+                diagnostics.append(
+                    f"Target object is significantly FURTHER away in simulation (depth delta: {d_depth:+.3f})."
+                )
             elif d_depth > 0.20:
-                diagnostics.append(f"Target object is significantly CLOSER in simulation (depth delta: {d_depth:+.3f}).")
+                diagnostics.append(
+                    f"Target object is significantly CLOSER in simulation (depth delta: {d_depth:+.3f})."
+                )
             else:
                 diagnostics.append("Target object distance is within acceptable training distribution range.")
 
@@ -301,8 +303,8 @@ class DepthSpatialAuditor:
 
         if discrepancies.get("surface_slope_sign_flip"):
             diagnostics.append(
-                "CRITICAL: Camera pitch slope sign is inverted! Simulation camera is looking level/upward across table, "
-                "whereas demonstration was looking steeply down onto support surface."
+                "CRITICAL: Camera pitch slope sign is inverted! Simulation camera is looking level/upward across table,"
+                " whereas demonstration was looking steeply down onto support surface."
             )
         elif abs(slope_ratio) < 0.4:
             diagnostics.append(
@@ -346,14 +348,10 @@ class DepthSpatialAuditor:
         s_rgb = cv2.resize(sim_img, target_size)
 
         # Colorize depth maps with INFERNO colormap
-        d_depth_color = cv2.applyColorMap(
-            (res_dataset["depth_map"] * 255).astype(np.uint8), cv2.COLORMAP_INFERNO
-        )
+        d_depth_color = cv2.applyColorMap((res_dataset["depth_map"] * 255).astype(np.uint8), cv2.COLORMAP_INFERNO)
         d_depth_color = cv2.resize(d_depth_color, target_size)
 
-        s_depth_color = cv2.applyColorMap(
-            (res_sim["depth_map"] * 255).astype(np.uint8), cv2.COLORMAP_INFERNO
-        )
+        s_depth_color = cv2.applyColorMap((res_sim["depth_map"] * 255).astype(np.uint8), cv2.COLORMAP_INFERNO)
         s_depth_color = cv2.resize(s_depth_color, target_size)
 
         # Draw overlays on Dataset RGB
@@ -392,9 +390,25 @@ class DepthSpatialAuditor:
         d_slope = res_dataset["surface_gradient_slope"]
         s_slope = res_sim["surface_gradient_slope"]
         cv2.putText(d_rgb, "DATASET DEMO (RGB)", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(d_depth_color, f"DATASET DEPTH (Slope: {d_slope:+.4f})", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
+        cv2.putText(
+            d_depth_color,
+            f"DATASET DEPTH (Slope: {d_slope:+.4f})",
+            (15, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (255, 255, 255),
+            2,
+        )
         cv2.putText(s_rgb, "SIMULATION SCENE (RGB)", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(s_depth_color, f"SIM DEPTH (Slope: {s_slope:+.4f})", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
+        cv2.putText(
+            s_depth_color,
+            f"SIM DEPTH (Slope: {s_slope:+.4f})",
+            (15, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (255, 255, 255),
+            2,
+        )
 
         # Stitch 2x2 grid
         top_row = np.hstack([d_rgb, d_depth_color])
@@ -412,10 +426,20 @@ def main() -> None:
     parser.add_argument("--dataset-video", type=str, default=None, help="Path to episode MP4 video")
     parser.add_argument("--dataset-frame", type=str, default=None, help="Path to reference dataset frame image")
     parser.add_argument("--sim-frame", type=str, required=True, help="Path to simulation camera snapshot")
-    parser.add_argument("--output-viz", type=str, default="depth_spatial_comparison.png", help="Path to output visualization")
+    parser.add_argument(
+        "--output-viz", type=str, default="depth_spatial_comparison.png", help="Path to output visualization"
+    )
     parser.add_argument("--output-json", type=str, default=None, help="Optional path to save JSON metrics report")
-    parser.add_argument("--sim-target-uv", type=float, nargs=2, default=None, help="Optional (u_norm, v_norm) target hint for sim frame")
-    parser.add_argument("--dataset-target-uv", type=float, nargs=2, default=None, help="Optional (u_norm, v_norm) target hint for dataset")
+    parser.add_argument(
+        "--sim-target-uv", type=float, nargs=2, default=None, help="Optional (u_norm, v_norm) target hint for sim frame"
+    )
+    parser.add_argument(
+        "--dataset-target-uv",
+        type=float,
+        nargs=2,
+        default=None,
+        help="Optional (u_norm, v_norm) target hint for dataset",
+    )
     args = parser.parse_args()
 
     # Resolve dataset image
@@ -430,9 +454,13 @@ def main() -> None:
         d_img = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     else:
         # Default auto-discovery of static apple episode 0
-        cand = Path("/datasets/isaaclab_arena/static_apple_tutorial/arena_g1_static_apple_dataset_recorded/lerobot/videos/chunk-000/observation.images.ego_view/episode_000000.mp4")
+        cand = Path(
+            "/datasets/isaaclab_arena/static_apple_tutorial/arena_g1_static_apple_dataset_recorded/lerobot/videos/chunk-000/observation.images.ego_view/episode_000000.mp4"
+        )
         if not cand.exists():
-            cand = Path("/home/tarfy/datasets/isaaclab_arena/static_apple_tutorial/arena_g1_static_apple_dataset_recorded/lerobot/videos/chunk-000/observation.images.ego_view/episode_000000.mp4")
+            cand = Path(
+                "/home/tarfy/datasets/isaaclab_arena/static_apple_tutorial/arena_g1_static_apple_dataset_recorded/lerobot/videos/chunk-000/observation.images.ego_view/episode_000000.mp4"
+            )
         if not cand.exists():
             raise FileNotFoundError("Please specify --dataset-video or --dataset-frame.")
         cap = cv2.VideoCapture(str(cand))

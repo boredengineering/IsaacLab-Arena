@@ -5,6 +5,7 @@
 
 import math
 import numpy as np
+
 import pytest
 
 from isaaclab_arena.relations.placement_asset import PlaceableAsset

@@ -3,7 +3,7 @@
 **Status:** Completed
 
 ## 1. Overview & Objective
-This plan outlines the modifications required to integrate the **OpenAI Codex CLI and agentic harness** into the IsaacLab-Arena development container. 
+This plan outlines the modifications required to integrate the **OpenAI Codex CLI and agentic harness** into the IsaacLab-Arena development container.
 
 The repository's [`AGENTS.md`](file:///workspaces/IsaacLab-Arena/AGENTS.md) already anticipates multi-agent workflows (*"Claude Code reads the library via the committed `.claude/skills` symlink; Codex scans `.agents/skills/` directly"*). This integration completes the setup by installing the Codex binary, persisting authentication sessions, pre-configuring MCP servers, and ensuring consistent host/container permissions.
 
@@ -74,18 +74,18 @@ flowchart TD
 @@ -442,8 +442,8 @@ EOF_DOC
    echo "  ✓ Generated .agents/references/docs/debugging_arena_gr00t.md"
  fi
- 
+
 -# 15. Agent MCP Servers Configuration (Antigravity, VS Code, Cursor, Claude Code)
 -mkdir -p /root/.gemini/config "${TARGET_DIR}/.vscode" "${TARGET_DIR}/.cursor"
 +# 15. Agent MCP Servers Configuration (Antigravity, VS Code, Cursor, Claude Code, OpenAI Codex)
 +mkdir -p /root/.gemini/config "${TARGET_DIR}/.vscode" "${TARGET_DIR}/.cursor" /root/.codex
- 
+
  # Master MCP configuration (ansible, gcp-cloud, playwright, terraform, filesystem)
  cat <<'EOF_MCP' > /root/.gemini/config/mcp_config.json
 @@ -486,7 +486,32 @@ cp /root/.gemini/config/mcp_config.json "${TARGET_DIR}/.cursor/mcp.json"
  cp /root/.gemini/config/mcp_config.json /root/.claude.json
  chmod 644 /root/.claude.json
- 
+
 -echo "  ✓ Configured MCP servers for Antigravity, VS Code, Cursor, and Claude Code"
 +# OpenAI Codex global MCP configuration (~/.codex/config.toml)
 +cat <<'EOF_CODEX' > /root/.codex/config.toml

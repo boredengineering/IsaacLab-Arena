@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import numpy as np
+
 import pytest
 import rdflib
 
@@ -159,7 +160,11 @@ def test_compile_reified_scene_transforms():
         task=CompositeTaskSpec(
             composition=TaskCompositionType.ATOMIC,
             description="Pick brown box",
-            subtasks=[TaskSpec(kind="PickAndPlaceTask", params={"pick_up_object": "brown_box", "destination_location": "galileo"})],
+            subtasks=[
+                TaskSpec(
+                    kind="PickAndPlaceTask", params={"pick_up_object": "brown_box", "destination_location": "galileo"}
+                )
+            ],
         ),
     )
 

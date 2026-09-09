@@ -189,7 +189,7 @@ RETURN emb, r, target;
 
 #### 6. Global Database Overview (Explore Everything)
 ```cypher
-MATCH (n)-[r]->(m) 
+MATCH (n)-[r]->(m)
 RETURN n, r, m LIMIT 150;
 ```
 

@@ -211,11 +211,11 @@ RETURN e, r1, n, r2, m
 ### 2. View Generation Telemetry Properties
 ```cypher
 MATCH (e:EnvironmentGraph)
-RETURN e.name AS Environment, 
-       e.model_used AS Model, 
-       e.llm_call_count AS LLMCalls, 
-       e.repair_iterations AS RepairIterations, 
-       e.total_tokens AS TotalTokens, 
+RETURN e.name AS Environment,
+       e.model_used AS Model,
+       e.llm_call_count AS LLMCalls,
+       e.repair_iterations AS RepairIterations,
+       e.total_tokens AS TotalTokens,
        e.generation_time_s AS GenerationTimeSec,
        e.converged AS Converged
 ORDER BY e.updated_at DESC
@@ -226,8 +226,8 @@ ORDER BY e.updated_at DESC
 MATCH (e:EnvironmentGraph {name: "droid_pick_apple_to_bowl"})-[:HAS_REIFIER]->(rf:ReifiedRelation)
 MATCH (rf)-[:REIFIES_SUBJECT]->(s)
 MATCH (rf)-[:REIFIES_OBJECT]->(t)
-RETURN s.id AS Subject, rf.relation_type AS Relation, t.id AS Target, 
-       rf.surface_anchor AS Anchor, rf.required_headroom AS Headroom, 
+RETURN s.id AS Subject, rf.relation_type AS Relation, t.id AS Target,
+       rf.surface_anchor AS Anchor, rf.required_headroom AS Headroom,
        rf.prior_entropy AS PriorEntropy, rf.kinematic_manifold AS Manifold
 ```
 

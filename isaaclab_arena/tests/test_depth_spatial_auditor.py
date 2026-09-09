@@ -6,12 +6,13 @@
 """Unit tests for Depth-Anything Spatial Auditor and Oracle depth alignment verification."""
 
 import numpy as np
+
 import pytest
 
 from isaaclab_arena.agentic_environment_generation.depth_spatial_auditor import DepthSpatialAuditor
 from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
-    DATASET_DEPTH_FINGERPRINTS,
     _G1_HEAD_CAM,
+    DATASET_DEPTH_FINGERPRINTS,
     _project_to_image_plane,
     _quat_to_rotation_matrix,
 )

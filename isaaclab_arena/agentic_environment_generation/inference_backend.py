@@ -8,12 +8,13 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import copy
 import json
 import os
-from pathlib import Path
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from openai import OpenAI
@@ -31,8 +32,8 @@ def _load_dotenv_if_present() -> None:
     ]
     for p in search_paths:
         if p.exists():
-            try:
-                with open(p, "r", encoding="utf-8") as f:
+            with contextlib.suppress(Exception):
+                with open(p, encoding="utf-8") as f:
                     for line in f:
                         line = line.strip()
                         if line and not line.startswith("#") and "=" in line:
@@ -41,8 +42,6 @@ def _load_dotenv_if_present() -> None:
                             val = val.strip().strip("\"'")
                             if key not in os.environ:
                                 os.environ[key] = val
-            except Exception:
-                pass
 
 
 MAX_RETRIES_LIMIT = 10
@@ -170,35 +169,76 @@ class InferenceBackend:
             0 <= max_retries < MAX_RETRIES_LIMIT
         ), f"max_retries must be in [0, {MAX_RETRIES_LIMIT}), got {max_retries}"
         _load_dotenv_if_present()
-        resolved_api_key = (
-            api_key
-            or os.getenv("OPENROUTER_API_KEY")
-            or os.getenv("NV_API_KEY")
-            or os.getenv("OPENAI_API_KEY")
-            or os.getenv("GEMINI_API_KEY")
+        candidate_model = (
+            model or os.getenv("OPENAI_MODEL") or os.getenv("GEMINI_MODEL") or os.getenv("OPENROUTER_MODEL") or ""
         )
-        assert resolved_api_key, "API key required: set OPENROUTER_API_KEY, NV_API_KEY, OPENAI_API_KEY, or pass api_key."
 
-        is_openrouter = (
-            resolved_api_key.startswith("sk-or-")
-            or bool(os.getenv("OPENROUTER_API_KEY"))
-            or (base_url is not None and "openrouter.ai" in base_url)
-            or bool(os.getenv("OPENROUTER_BASE_URL"))
-        )
-        default_endpoint = "https://openrouter.ai/api/v1" if is_openrouter else DEFAULT_BASE_URL
-        default_model_id = (os.getenv("OPENROUTER_MODEL") or DEFAULT_OPENROUTER_MODEL) if is_openrouter else DEFAULT_MODEL
+        if api_key:
+            resolved_api_key = api_key
+        elif ("gpt" in candidate_model or "astra" in candidate_model) and os.getenv("OPENAI_API_KEY"):
+            resolved_api_key = os.getenv("OPENAI_API_KEY")
+        elif "gemini" in candidate_model and os.getenv("GEMINI_API_KEY"):
+            resolved_api_key = os.getenv("GEMINI_API_KEY")
+        elif ("claude" in candidate_model or "anthropic" in candidate_model) and os.getenv("OPENROUTER_API_KEY"):
+            resolved_api_key = os.getenv("OPENROUTER_API_KEY")
+        else:
+            resolved_api_key = (
+                os.getenv("OPENAI_API_KEY")
+                or os.getenv("GEMINI_API_KEY")
+                or os.getenv("OPENROUTER_API_KEY")
+                or os.getenv("NV_API_KEY")
+            )
+        assert (
+            resolved_api_key
+        ), "API key required: set OPENAI_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, NV_API_KEY, or pass api_key."
 
-        resolved_base_url = (
-            base_url
-            or os.getenv("OPENROUTER_BASE_URL")
-            or os.getenv("OPENAI_BASE_URL")
-            or os.getenv("NV_BASE_URL")
-            or os.getenv("BASE_URL")
-            or default_endpoint
-        )
+        if base_url is not None:
+            is_openrouter = "openrouter.ai" in base_url
+            is_gemini = "generativelanguage.googleapis.com" in base_url
+            is_openai = "api.openai.com" in base_url
+        elif resolved_api_key.startswith("sk-or-") or (
+            os.getenv("OPENROUTER_API_KEY") and resolved_api_key == os.getenv("OPENROUTER_API_KEY")
+        ):
+            is_openrouter, is_gemini, is_openai = True, False, False
+        elif resolved_api_key.startswith("AIza") or (
+            os.getenv("GEMINI_API_KEY") and resolved_api_key == os.getenv("GEMINI_API_KEY")
+        ):
+            is_openrouter, is_gemini, is_openai = False, True, False
+        elif resolved_api_key.startswith("sk-") or (
+            os.getenv("OPENAI_API_KEY") and resolved_api_key == os.getenv("OPENAI_API_KEY")
+        ):
+            is_openrouter, is_gemini, is_openai = False, False, True
+        else:
+            is_openrouter = bool(os.getenv("OPENROUTER_BASE_URL"))
+            is_gemini = bool(os.getenv("GEMINI_BASE_URL"))
+            is_openai = bool(os.getenv("OPENAI_BASE_URL"))
+
+        if is_openrouter:
+            resolved_base_url = (
+                base_url or os.getenv("OPENROUTER_BASE_URL") or os.getenv("BASE_URL") or "https://openrouter.ai/api/v1"
+            )
+            default_model_id = os.getenv("OPENROUTER_MODEL") or DEFAULT_OPENROUTER_MODEL
+        elif is_gemini:
+            resolved_base_url = (
+                base_url
+                or os.getenv("GEMINI_BASE_URL")
+                or os.getenv("BASE_URL")
+                or "https://generativelanguage.googleapis.com/v1beta/openai/"
+            )
+            default_model_id = os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
+        elif is_openai:
+            resolved_base_url = (
+                base_url or os.getenv("OPENAI_BASE_URL") or os.getenv("BASE_URL") or "https://api.openai.com/v1"
+            )
+            default_model_id = os.getenv("OPENAI_MODEL") or "gpt-6-astra"
+        else:
+            resolved_base_url = base_url or os.getenv("NV_BASE_URL") or os.getenv("BASE_URL") or DEFAULT_BASE_URL
+            default_model_id = DEFAULT_MODEL
+
         raw_model = (
             model
             or (os.getenv("OPENROUTER_MODEL") if is_openrouter else None)
+            or (os.getenv("GEMINI_MODEL") if is_gemini else None)
             or os.getenv("OPENAI_MODEL")
             or os.getenv("NV_MODEL")
             or default_model_id
@@ -249,7 +289,11 @@ class InferenceBackend:
         last_exc: Exception | None = None
         for attempt in range(1 + self._max_retries):
             if attempt > 0:
-                print(f"[{request.retry_label}] retry {attempt}/{self._max_retries} after: {type(last_exc).__name__}: {last_exc}", flush=True)
+                print(
+                    f"[{request.retry_label}] retry {attempt}/{self._max_retries} after: {type(last_exc).__name__}:"
+                    f" {last_exc}",
+                    flush=True,
+                )
             start_time = time.perf_counter()
             try:
                 resp = self._client.chat.completions.create(
@@ -320,9 +364,7 @@ class InferenceBackend:
             f"{1 + self._max_retries} attempts. Last error: {last_exc}"
         ) from last_exc
 
-    def multimodal_chat(
-        self, prompt: str, images: dict[str, Any]
-    ) -> str:
+    def multimodal_chat(self, prompt: str, images: dict[str, Any]) -> str:
         """Call multimodal LLM with text prompt and images.
 
         Args:

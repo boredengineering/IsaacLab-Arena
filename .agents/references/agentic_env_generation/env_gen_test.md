@@ -352,11 +352,3 @@ The comparative benchmarking across `v2`, `v3`, and `v4` uncovered a critical dy
 1. **Planar Grasp Affordance**: The rectangular prismatic geometry of `spam_can_ycb_robolab` achieved a **97.1% Lift Rate** in `v1`, substantially outperforming spherical assets ($86.2\%$) due to parallel face alignment with the Franka 2-finger jaws.
 2. **Receptacle Height Dynamics**: The `grey_bin_robolab` has higher sidewalls than `bin_b03_vomp_robolab`, meaning transport trajectories that dip slightly during transfer collide with the bin lip, explaining the lower conversion rate compared to Scenario B1.
 3. **Cross-Validation of the Chunking Invariant**: In both Scenario B1 (Tomato Soup Can) and Scenario B4 (Spam Can), reducing `action_chunk_length` from $16$ to $8$ caused diffusion trajectory jitter, decreasing grasp acquisition speed and success rate. `action_chunk_length = 16` stands confirmed across multiple asset geometries as the universal sweet spot.
-
-
-
-
-
-
-
-

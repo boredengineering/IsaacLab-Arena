@@ -1,3 +1,8 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Copyright (c) 2026, The Isaac Lab Arena Project Developers.
 # All rights reserved.
 #
@@ -6,12 +11,12 @@
 """Tool to render 3D perspective and side-profile views of a scene graph specification for workflow verification."""
 
 import argparse
-from pathlib import Path
-from PIL import Image
-import torch
 import numpy as np
+import torch
+from pathlib import Path
 
 from isaaclab.app import AppLauncher
+from PIL import Image
 
 parser = argparse.ArgumentParser(description="Render external 3D perspective & side views of environment.")
 parser.add_argument(
@@ -36,14 +41,15 @@ args_cli.enable_cameras = True
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+import isaaclab.sim as sim_utils
 from isaaclab.sensors.camera.camera_cfg import CameraCfg
 from isaaclab.utils import configclass
-import isaaclab.sim as sim_utils
+
 from isaaclab_arena.embodiments.g1.g1 import G1CameraCfg
+from isaaclab_arena.environment_spec.arena_env_graph_conversion_utils import build_arena_env_from_graph_spec
+from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
 from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
-from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
-from isaaclab_arena.environment_spec.arena_env_graph_conversion_utils import build_arena_env_from_graph_spec
 
 
 @configclass

@@ -1,3 +1,8 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Copyright (c) 2026, The Isaac Lab Arena Project Developers.
 # All rights reserved.
 #
@@ -8,11 +13,11 @@
 import argparse
 import json
 import os
-from pathlib import Path
-from PIL import Image
 import torch
+from pathlib import Path
 
 from isaaclab.app import AppLauncher
+from PIL import Image
 
 parser = argparse.ArgumentParser(description="Render policy trajectory and run VLM failure diagnostic.")
 parser.add_argument(
@@ -73,14 +78,14 @@ args_cli.enable_cameras = True
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
-from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
-from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
-from isaaclab_arena.environment_spec.arena_env_graph_conversion_utils import build_arena_env_from_graph_spec
-from isaaclab_arena.evaluation.policy_runner import get_policy_cls
-from isaaclab_arena.evaluation.policy_runner_cli import build_policy_from_cli
 from isaaclab_arena.agentic_environment_generation.inference_backend import InferenceBackend
 from isaaclab_arena.agentic_environment_generation.visual_critic import VisualSceneCritic
+from isaaclab_arena.environment_spec.arena_env_graph_conversion_utils import build_arena_env_from_graph_spec
+from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
+from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
+from isaaclab_arena.evaluation.policy_runner import get_policy_cls
+from isaaclab_arena.evaluation.policy_runner_cli import build_policy_from_cli
 
 
 def main():
@@ -129,25 +134,16 @@ def main():
     critic = VisualSceneCritic(backend=backend)
 
     autopsy_prompt = (
-        f"You are a robotic failure autopsy expert inspecting an IsaacLab rollout for task: '{spec.task.description}'.\n"
-        f"The robot failed to pick and place the red apple onto the plate.\n"
-        f"Review the sequential egocentric frames from the robot's head camera showing the progression from step 0 to step {args_cli.num_steps - 1}.\n"
-        f"Notice the robot's hands entering from the bottom facing the table.\n"
-        f"Evaluate:\n"
-        f"1. Did the robot's arm reach toward the apple, or did it move elsewhere/freeze?\n"
-        f"2. Did the hand reach the apple's location, or was the apple placed too far / out of reach?\n"
-        f"3. Did the fingers contact or grasp the apple, or did slip / collision occur?\n"
-        f"4. What exact physical or spatial correction is required to succeed?\n\n"
-        f"Respond in strict JSON matching:\n"
-        f"{{\n"
-        f'  "conforms": false,\n'
-        f'  "visibility_score": float,\n'
-        f'  "occluded_objects": [str],\n'
-        f'  "floating_objects": [str],\n'
-        f'  "anomalies": [str],\n'
-        f'  "actionable_feedback": str,\n'
-        f'  "actionable_corrections": dict\n'
-        f"}}"
+        "You are a robotic failure autopsy expert inspecting an IsaacLab rollout for task:"
+        f" '{spec.task.description}'.\nThe robot failed to pick and place the red apple onto the plate.\nReview the"
+        " sequential egocentric frames from the robot's head camera showing the progression from step 0 to step"
+        f" {args_cli.num_steps - 1}.\nNotice the robot's hands entering from the bottom facing the"
+        " table.\nEvaluate:\n1. Did the robot's arm reach toward the apple, or did it move elsewhere/freeze?\n2. Did"
+        " the hand reach the apple's location, or was the apple placed too far / out of reach?\n3. Did the fingers"
+        " contact or grasp the apple, or did slip / collision occur?\n4. What exact physical or spatial correction is"
+        ' required to succeed?\n\nRespond in strict JSON matching:\n{\n  "conforms": false,\n  "visibility_score":'
+        ' float,\n  "occluded_objects": [str],\n  "floating_objects": [str],\n  "anomalies": [str],\n '
+        ' "actionable_feedback": str,\n  "actionable_corrections": dict\n}'
     )
 
     resp_str = backend.multimodal_chat(autopsy_prompt, captured_frames)

@@ -44,7 +44,7 @@ def _joint_name_to_policy_group(
             return "waist"
         return None
 
-    if tag == "OXE_DROID":
+    if tag in ("OXE_DROID", "OXE_DROID_RELATIVE_EEF_RELATIVE_JOINT"):
         # DROID: policy groups are joint_position, gripper_position
         for group, names in policy_joints_config.items():
             if joint_name in names:

@@ -23,6 +23,7 @@ import torch
 from typing import Any
 
 import pytest
+from gr00t.data.types import ModalityConfig
 
 from isaaclab_arena.assets.registries import PolicyRegistry
 from isaaclab_arena.policy import action_scheduling
@@ -139,6 +140,56 @@ def _build_policy(policy_config_yaml: str, scheduler: str = "chunk"):
 
 
 # ------------------------------- tests ------------------------------- #
+
+
+@pytest.mark.parametrize("video_delta_indices", [[0], [-15, 0]])
+def test_default_droid_modalities_come_from_server(monkeypatch, video_delta_indices):
+    """Use the served model's horizons and state keys, not the client's GR00T version."""
+    modalities = {
+        "video": ModalityConfig(
+            delta_indices=video_delta_indices, modality_keys=["exterior_image_1_left", "wrist_image_left"]
+        ),
+        "state": ModalityConfig(delta_indices=[0], modality_keys=["joint_position", "gripper_position"]),
+        "action": ModalityConfig(delta_indices=list(range(32)), modality_keys=["joint_position", "gripper_position"]),
+        "language": ModalityConfig(delta_indices=[0], modality_keys=["annotation.language.language_instruction"]),
+    }
+
+    class DroidClient(_FakePolicyClient):
+        def get_modality_config(self):
+            return modalities
+
+        def get_action(self, observation):
+            self.last_observation = observation
+            for image in observation["video"].values():
+                assert image.shape[1] == len(video_delta_indices), "Video horizon must match the served model"
+            return {
+                "joint_position": np.zeros((NUM_ENVS, 32, 7), dtype=np.float32),
+                "gripper_position": np.zeros((NUM_ENVS, 32, 1), dtype=np.float32),
+            }, {}
+
+    client = DroidClient()
+    monkeypatch.setattr(gr00t_policy, "Gr00tPolicyClient", lambda **kwargs: client)
+    policy = _build_policy("isaaclab_arena_gr00t/policy/config/droid_manip_gr00t_closedloop_config.yaml")
+    try:
+        policy.set_task_description("place the apple into the bowl")
+        observation = {
+            "camera_obs": {
+                key: torch.zeros((NUM_ENVS, 180, 320, 3), dtype=torch.uint8)
+                for key in ("external_camera_rgb", "wrist_camera_rgb")
+            },
+            "policy": {"robot_joint_pos": torch.zeros((NUM_ENVS, 13))},
+        }
+        action = policy.get_action(env=None, observation=observation)
+        sent = client.last_observation
+        assert sent is not None
+        for image in sent["video"].values():
+            assert image.shape == (NUM_ENVS, len(video_delta_indices), 180, 320, 3)
+            assert image.dtype == np.uint8
+        assert set(sent["state"]) == {"joint_position", "gripper_position"}
+        assert policy.action_horizon == 32
+        assert action.shape == (NUM_ENVS, 8)
+    finally:
+        policy.close()
 
 
 def test_observation_sent_to_server_has_expected_structure(

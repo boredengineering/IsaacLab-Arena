@@ -34,6 +34,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+web = [
+    "fastapi>=0.120.4,<1",
+    "uvicorn>=0.52.4,<0.53",
+    # HTTP/UDS contract tests for the optional workbench API.
+    "httpx>=0.28.1,<0.29",
+]
 dev = [
     "jupyter",
     "debugpy",
@@ -329,7 +335,7 @@ reportPrivateUsage = "warning"
 
 
 [tool.codespell]
-skip = '*.usd,*.svg,*.png,_isaac_sim*,*.bib,*.css,*/_build'
+skip = '*.usd,*.svg,*.png,_isaac_sim*,*.bib,*.css,*/_build,web/arena-workbench/package-lock.json'
 quiet-level = 0
 # the world list should always have words in lower case
 ignore-words-list = "haa,slq,collapsable,buss,crate,reacher"

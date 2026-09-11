@@ -75,6 +75,11 @@ generate, edit, and visualize the prompt-specified environment in a web browser:
 
 See :doc:`gui_runner` for the full UI walkthrough.
 
+The containerized TanStack workbench is being introduced through separate
+integration and parity gates. See :doc:`workbench` for its current capabilities
+and :doc:`../../concepts/agentic_workbench` for its Python/frontend boundary.
+It does not replace Streamlit until authoring and real preview parity pass.
+
 Available Generated Specs
 -------------------------
 
@@ -164,6 +169,7 @@ Follow the steps below to complete the workflow:
    :hidden:
 
    gui_runner
+   workbench
    eval_with_gr00t
    eval_with_openpi
    dcrg

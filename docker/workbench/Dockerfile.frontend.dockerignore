@@ -1,0 +1,28 @@
+# Copyright (c) 2026, The Isaac Lab-Arena Project Developers.
+# SPDX-License-Identifier: Apache-2.0
+# Deny by default, then enumerate the only build inputs.
+**
+!web/
+!web/arena-workbench/
+!web/arena-workbench/package.json
+!web/arena-workbench/package-lock.json
+!web/arena-workbench/index.html
+!web/arena-workbench/tsconfig*.json
+!web/arena-workbench/vite.config.ts
+!web/arena-workbench/src/
+!web/arena-workbench/src/**
+!web/arena-workbench/public/
+!web/arena-workbench/public/**
+!docker/
+!docker/workbench/
+!docker/workbench/Dockerfile.frontend
+!docker/workbench/nginx.prod.conf
+!docker/workbench/nginx.dev.conf
+!docker/workbench/dev-supervisor.mjs
+**/.env*
+**/*credentials*
+**/*.pem
+**/*.key
+**/node_modules/**
+**/dist/**
+**/.git/**

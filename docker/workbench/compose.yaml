@@ -1,0 +1,43 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+# Use run_workbench.sh to discover required paths and numeric identities.
+services:
+  frontend:
+    build:
+      context: ${WORKBENCH_BUILD_CONTEXT:-../..}
+      dockerfile: docker/workbench/Dockerfile.frontend
+      target: production
+      args:
+        FRONTEND_UID: ${FRONTEND_UID:?set a non-root numeric UID}
+        FRONTEND_GID: ${FRONTEND_GID:?set a non-root numeric GID}
+    user: "${FRONTEND_UID}:${FRONTEND_GID}"
+    group_add:
+      - "${API_GID:?set the numeric API socket group}"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "127.0.0.1:${WORKBENCH_HTTP_PORT:-3000}:3000"
+    volumes:
+      - type: bind
+        source: ${WORKBENCH_IPC_HOST:?discover the host IPC directory}
+        target: /run/arena-api
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,mode=1777
+    networks: [workbench]
+    restart: "no"
+    stop_grace_period: 15s
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:3000/]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+networks:
+  workbench:
+    driver: bridge

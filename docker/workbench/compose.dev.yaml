@@ -1,0 +1,23 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+services:
+  frontend:
+    build:
+      target: development
+    environment:
+      HOME: /tmp
+      NPM_CONFIG_CACHE: /tmp/npm-cache
+    volumes:
+      - type: bind
+        source: ${WORKBENCH_SOURCE_HOST:?discover the host frontend source}
+        target: /app
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: volume
+        source: frontend_deps
+        target: /app/node_modules
+volumes:
+  frontend_deps:

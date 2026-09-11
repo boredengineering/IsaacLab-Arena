@@ -1,0 +1,237 @@
+/* Appearance is independent of routing, editor state and snapshot pixels. */
+:root {
+  color-scheme: light;
+  --page: #fafbf9;
+  --text: #24332e;
+  --inset: #f2f5ef;
+  --hover: #eff4ef;
+  --selected: #e8f0e1;
+  --editor-gutter: #f7f8f7;
+  --editor-selection: #d7e8df;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --page: #111815;
+  --text: #e0e9e3;
+  --surface: #19221d;
+  --inset: #141d18;
+  --border: #35453b;
+  --muted: #a6b7aa;
+  --accent: #8dd5b3;
+  --warning: #edc785;
+  --error: #f6aba3;
+  --hover: #25372c;
+  --selected: #2a4434;
+  --editor-gutter: #141d18;
+  --editor-selection: #355441;
+  color: var(--text);
+  background: var(--page);
+}
+.sidebar-brand-tools {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.sidebar {
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.sidebar nav {
+  margin-left: auto;
+}
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 38px;
+  font-size: 12px;
+}
+.theme-track {
+  display: inline-flex;
+  align-items: center;
+  width: 28px;
+  height: 16px;
+  padding: 2px;
+  border-radius: 12px;
+  background: #c9d3cb;
+}
+.theme-track > span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+}
+.theme-toggle[aria-checked='true'] .theme-track {
+  background: var(--accent);
+}
+.theme-toggle[aria-checked='true'] .theme-track > span {
+  transform: translateX(12px);
+  background: #163425;
+}
+:root[data-theme='dark'] body,
+:root[data-theme='dark'] .topbar {
+  background: var(--page);
+}
+:root[data-theme='dark'] :is(button, select, input, textarea, .sidebar, .code-editor,
+  .asset-card, .graph-view, .scene-gallery figure, .zoom-dialog) {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+:root[data-theme='dark'] :is(pre, th, .prompt-section textarea, .asset-placeholder,
+  .node-inspector, .empty-state, .editor-job, .generated-review, .saved-revision,
+  .scope-note, .footer, .snapshot-image img, .tag) {
+  background: var(--inset);
+  border-color: var(--border);
+  color: var(--muted);
+}
+:root[data-theme='dark'] :is(pre, td, .brand, .asset-caption strong,
+  .scope-note strong, .empty h2, .empty h3, .inspector dd, .future-panel h2) {
+  color: var(--text);
+}
+:root[data-theme='dark'] :is(td, .graph-toolbar, .graph-caption, .future-panel) {
+  border-color: var(--border);
+}
+:root[data-theme='dark'] :is(.brand small, .breadcrumb, .breadcrumb strong, .connection,
+  .source-path, .eyebrow, .nav-item, .prompt-section label, .asset-caption,
+  .graph-toolbar, .graph-caption, .relation-details, .limitations, .inspector dt,
+  .timestamp, .panel-foot, .panel-foot span, .filter-label, .diagnostic-form label,
+  .empty, .future-panel, td a code) {
+  color: var(--muted);
+}
+:root[data-theme='dark'] :is(a, .brand-mark, .validation-status.valid) {
+  color: var(--accent);
+}
+:root[data-theme='dark'] .brand {
+  color: var(--text);
+}
+:root[data-theme='dark'] .brand-mark {
+  border-color: var(--accent);
+}
+:root[data-theme='dark'] button:hover:not(:disabled),
+:root[data-theme='dark'] .nav-item:hover {
+  background: var(--hover);
+  border-color: var(--muted);
+}
+:root[data-theme='dark'] button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #102f20;
+}
+:root[data-theme='dark'] button.primary:hover:not(:disabled) {
+  background: #b0e6c9;
+}
+:root[data-theme='dark'] button.quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+:root[data-theme='dark'] :is(.nav-item.selected, .nav-item[data-status='active'],
+  .result-tabs [aria-selected='true'], .count, .selected-row) {
+  background: var(--selected);
+  border-color: var(--border);
+  color: var(--accent);
+}
+:root[data-theme='dark'] :is(.notice.warning, .transport-note,
+  .job-status.indeterminate, .job-status.cancel_requested) {
+  background: #30291c;
+  border-color: #695a3c;
+  color: var(--warning);
+}
+:root[data-theme='dark'] :is(.validation-status, .stale-label, .warning-text) {
+  color: var(--warning);
+}
+:root[data-theme='dark'] :is(.notice.error, button.danger, .job-status.failed) {
+  background: #35241f;
+  border-color: #785247;
+  color: var(--error);
+}
+:root[data-theme='dark'] .notice.error small {
+  color: var(--error);
+}
+:root[data-theme='dark'] .job-status {
+  background: var(--inset);
+  border-color: var(--border);
+  color: var(--muted);
+}
+:root[data-theme='dark'] :is(.job-status.running, .job-status.succeeded) {
+  background: var(--selected);
+  border-color: #52715c;
+  color: var(--accent);
+}
+:root[data-theme='dark'] .raw-section pre {
+  background: none;
+}
+:root[data-theme='dark'] .spatial-graph {
+  background-image: radial-gradient(#35453b 0.75px, transparent 0.75px);
+}
+:root[data-theme='dark'] .graph-node rect {
+  fill: #293d30;
+  stroke: #789880;
+}
+:root[data-theme='dark'] .graph-node .reifier {
+  fill: #40351f;
+  stroke: #bfa56c;
+}
+:root[data-theme='dark'] .graph-node text {
+  fill: var(--text);
+}
+:root[data-theme='dark'] .graph-node .node-role {
+  fill: var(--muted);
+}
+:root[data-theme='dark'] .edge-label {
+  fill: var(--muted);
+  stroke: var(--surface);
+}
+:root[data-theme='dark'] .graph-node:is(:hover, :focus, .is-selected) :is(rect, path) {
+  stroke: var(--accent);
+}
+:root[data-theme='dark'] :is(a, button, input, select, textarea, summary):focus-visible {
+  outline-color: var(--accent);
+}
+:root[data-theme='dark'] ::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+/* Reconfigure CodeMirror appearance without recreating the editor. */
+.code-editor .cm-editor {
+  color: var(--text);
+  background: var(--surface);
+}
+.code-editor .cm-editor .cm-gutters {
+  color: var(--muted);
+  background: var(--editor-gutter);
+}
+.code-editor .cm-editor .cm-activeLine,
+.code-editor .cm-editor .cm-activeLineGutter {
+  background: var(--inset);
+}
+.code-editor .cm-editor .cm-selectionBackground,
+.code-editor .cm-editor.cm-focused .cm-selectionBackground {
+  background: var(--editor-selection);
+}
+.code-editor .cm-editor .cm-cursor {
+  border-left-color: var(--text);
+}
+.code-editor .cm-editor.cm-focused {
+  outline-color: var(--accent);
+}
+@media (max-width: 760px) {
+  .sidebar {
+    flex-direction: row;
+    align-items: center;
+  }
+  .sidebar-brand-tools {
+    flex: 1;
+    gap: 12px;
+  }
+  .sidebar nav {
+    order: 3;
+    margin-left: 0;
+  }
+  .theme-toggle {
+    min-height: 44px;
+  }
+}

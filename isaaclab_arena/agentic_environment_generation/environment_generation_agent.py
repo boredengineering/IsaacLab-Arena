@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -86,6 +87,7 @@ class EnvironmentGenerationAgent:
         temperature: float = 0.2,
         max_tokens: int = 4096,
         max_retries: int = 3,
+        load_dotenv: bool = True,
     ):
         """Configure the OpenAI-compatible client and validate the model.
 
@@ -103,6 +105,7 @@ class EnvironmentGenerationAgent:
             max_retries: Number of additional attempts after a recoverable failure
                 (network errors, timeouts, empty responses, malformed JSON). Each
                 retry is a fresh API call.
+            load_dotenv: Preserve CLI credential discovery; servers should pass False.
         """
         inference_backend = InferenceBackend(
             api_key=api_key,
@@ -111,6 +114,7 @@ class EnvironmentGenerationAgent:
             temperature=temperature,
             max_tokens=max_tokens,
             max_retries=max_retries,
+            load_dotenv=load_dotenv,
         )
         self.inference_backend = inference_backend
         self.spec_inference = SpecInference(inference_backend)
@@ -135,6 +139,9 @@ class EnvironmentGenerationAgent:
         asset_catalog: AssetCatalogue | None = None,
         relation_catalog: RelationCatalogue | None = None,
         task_catalog: TaskCatalogue | None = None,
+        *,
+        publish_to_graph: bool = True,
+        progress: Callable[[str], None] | None = None,
     ) -> tuple[ArenaEnvGraphSpec | None, dict[str, Any] | None]:
         """Call the model with user prompt and return the parsed ArenaEnvGraphSpec.
 
@@ -153,6 +160,8 @@ class EnvironmentGenerationAgent:
                 from the live ``ObjectRelationLibraryRegistry``.
             task_catalog: Pre-built task vocabulary. When ``None``, built from
                 ``TaskRegistry`` tasks marked ``@agent_ready``.
+            publish_to_graph: Publish the completed spec to Neo4j; False returns an unpublished draft.
+            progress: Observer of real execution stages, without estimated percentages.
 
         Returns:
             A ``(spec, data)`` tuple. On success, ``spec`` is validated and
@@ -160,6 +169,8 @@ class EnvironmentGenerationAgent:
             When validation fails, ``agent.traces`` holds the diagnostic trace.
         """
         self._traces = []
+        emit = progress or (lambda stage: None)
+        emit("catalogues_loading")
         start_t = time.perf_counter()
         repair_iterations = 0
         shacl_passed = False
@@ -171,6 +182,7 @@ class EnvironmentGenerationAgent:
         relation_catalog = relation_catalog or build_relation_catalogue()
         task_catalog = task_catalog or build_task_catalogue()
 
+        emit("graph_priors_loading")
         # Retrieve Graph-RAG priors from Neo4j LPG memory
         try:
             from isaaclab_arena.agentic_environment_generation.graph_rag import GraphRAGRetriever
@@ -184,6 +196,7 @@ class EnvironmentGenerationAgent:
         except Exception as exc:  # pragma: no cover
             self._traces.append(f"[GraphRAG] Prior retrieval skipped: {exc}")
 
+        emit("spec_inference")
         spec, data = self.spec_inference.infer(
             prompt,
             self._traces,
@@ -210,11 +223,13 @@ class EnvironmentGenerationAgent:
             )
             return None, data
         if spec.object_references:
+            emit("prim_paths_resolving")
             resolved = self.prim_path_inference.infer(spec, self._traces)
             if resolved is None:
                 return None, spec.to_dict()
             spec = resolved
 
+        emit("spatial_grounding")
         # Ground spatial anchors and ensure reified relation contracts
         spec = _ensure_reified_relations_and_grounding(spec)
 
@@ -223,6 +238,7 @@ class EnvironmentGenerationAgent:
         max_loop_steps = min(self.max_retries, 2)  # Cap repair attempts to prevent token runaway
 
         for iteration in range(max_loop_steps):
+            emit(f"validation_iteration_{iteration + 1}")
             current_hash = _compute_spec_hash(spec)
             if current_hash in seen_spec_hashes:
                 stagnation_detected = True
@@ -348,14 +364,15 @@ class EnvironmentGenerationAgent:
             traces=list(self._traces),
         )
 
-        # Sync validated factor graph to Neo4j LPG
-        try:
-            from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
+        if publish_to_graph:
+            emit("graph_publishing")
+            try:
+                from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
 
-            sync_spec_to_neo4j(spec, telemetry=self._telemetry)
-        except Exception as exc:  # pragma: no cover
-            self._traces.append(f"Neo4j LPG sync skipped: {exc}")
-
+                sync_spec_to_neo4j(spec, telemetry=self._telemetry)
+            except Exception as exc:  # pragma: no cover
+                self._traces.append(f"Neo4j LPG sync skipped: {exc}")
+        emit("generation_completed")
         return spec, None
 
     def refine_spec(
@@ -365,6 +382,9 @@ class EnvironmentGenerationAgent:
         asset_catalog: Any = None,
         relation_catalog: Any = None,
         task_catalog: Any = None,
+        *,
+        publish_to_graph: bool = True,
+        progress: Callable[[str], None] | None = None,
     ) -> tuple[ArenaEnvGraphSpec | None, dict[str, Any] | None]:
         """Refine or modify an existing ArenaEnvGraphSpec using natural-language instructions.
 
@@ -374,11 +394,15 @@ class EnvironmentGenerationAgent:
             asset_catalog: Pre-built asset vocabulary.
             relation_catalog: Pre-built relation vocabulary.
             task_catalog: Pre-built task vocabulary.
+            publish_to_graph: Publish the completed spec to Neo4j; False returns an unpublished draft.
+            progress: Observer of real execution stages, without estimated percentages.
 
         Returns:
             A ``(spec, data)`` tuple with the refined, validated specification.
         """
         self._traces = []
+        emit = progress or (lambda stage: None)
+        emit("catalogues_loading")
         start_t = time.perf_counter()
         repair_iterations = 0
         shacl_passed = False
@@ -391,6 +415,7 @@ class EnvironmentGenerationAgent:
         task_catalog = task_catalog or build_task_catalogue()
         affordances = _discover_candidate_affordances(base_spec)
 
+        emit("spec_inference")
         spec, data = self.spec_inference.repair_with_feedback(
             base_spec,
             feedback_report=f"USER REFINEMENT INSTRUCTIONS:\n{feedback}",
@@ -421,10 +446,12 @@ class EnvironmentGenerationAgent:
             return None, data
 
         if spec.object_references:
+            emit("prim_paths_resolving")
             resolved = self.prim_path_inference.infer(spec, self._traces)
             if resolved is not None:
                 spec = resolved
 
+        emit("spatial_grounding")
         # Ground spatial anchors and ensure reified relation contracts
         spec = _ensure_reified_relations_and_grounding(spec)
 
@@ -433,6 +460,7 @@ class EnvironmentGenerationAgent:
         max_loop_steps = min(self.max_retries, 2)
 
         for iteration in range(max_loop_steps):
+            emit(f"validation_iteration_{iteration + 1}")
             current_hash = _compute_spec_hash(spec)
             if current_hash in seen_spec_hashes:
                 stagnation_detected = True
@@ -529,14 +557,15 @@ class EnvironmentGenerationAgent:
             traces=list(self._traces),
         )
 
-        # Sync validated factor graph to Neo4j LPG
-        try:
-            from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
+        if publish_to_graph:
+            emit("graph_publishing")
+            try:
+                from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_spec_to_neo4j
 
-            sync_spec_to_neo4j(spec, telemetry=self._telemetry)
-        except Exception as exc:  # pragma: no cover
-            self._traces.append(f"Neo4j LPG sync skipped: {exc}")
-
+                sync_spec_to_neo4j(spec, telemetry=self._telemetry)
+            except Exception as exc:  # pragma: no cover
+                self._traces.append(f"Neo4j LPG sync skipped: {exc}")
+        emit("generation_completed")
         return spec, None
 
 

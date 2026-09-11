@@ -1,6 +1,6 @@
 # TanStack agentic environment workbench: implementation plan for review
 
-Status: revised implementation plan for review, not an implemented migration. The previous proposal was rejected; this revision incorporates the requested separate frontend container, transport, networking, and session/ownership decisions. Updating this document is not approval to launch workloads or modify shared Docker configuration. Source baseline: `dev/0.3.0-prerelease`, commit `f6c018c03`. No new generation, simulation, evaluation, or live Neo4j queries were performed for this revision. Existing runtime health is not certified by this report.
+Status: implementation approved and in progress. The user approved the revised plan and requested implementation, including the planned `docker/workbench/` additions. Existing simulator launchers, shared workflows, submodules and policy services remain outside that change scope. Source audit baseline: `dev/0.3.0-prerelease`, commit `f6c018c03`; implementation began from clean commit `396ad6835`. The earlier proposal was rejected, then revised and approved. Completion must be recorded per acceptance gate, not inferred from this approval. Paid generation and dedicated GPU evaluation require the bounded run budgets described below.
 
 ## 1. Decision and scope
 
@@ -20,6 +20,8 @@ Two independently useful deliverables:
 Keep Streamlit available until the replacement passes runtime parity tests. Do not rewrite the policy runner, Graph-RAG retriever, spatial solvers, or DCRG controller in TypeScript.
 
 ## 2. What the current system actually does
+
+Implementation checkpoint: the main TanStack route is now an environment editor, not the Slice 0 diagnostic console. Document/schema/graph/save/export, actual scene/object snapshot display, and a separate read-only Neo4j query/table/graph surface have been exercised through the real API and browser. B1/B4 authored reifier differences are preserved. Generation is wired but live verification is blocked on server credentials and an approved model-call budget. Independent backend, query and frontend recovery reviews passed after fixes. This does not mark all roadmap gates complete: numbered-version-manager integration, full evaluation/DCRG controls, distributed scheduling, and automatic graph publication are not delivered. The canonical runbook records exact verified scope and limitations.
 
 Paths in this section are repository-relative. `A/` denotes `isaaclab_arena/agentic_environment_generation/`; `E/` denotes `isaaclab_arena_examples/agentic_environment_generation/`; `S/` denotes `isaaclab_arena/environment_spec/`.
 

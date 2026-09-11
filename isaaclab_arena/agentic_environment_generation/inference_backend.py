@@ -152,6 +152,7 @@ class InferenceBackend:
         temperature: float = 0.2,
         max_tokens: int = 4096,
         max_retries: int = 3,
+        load_dotenv: bool = True,
     ):
         """Configure an OpenAI-compatible structured-output client.
 
@@ -164,11 +165,13 @@ class InferenceBackend:
             max_tokens: Maximum tokens in each completion response.
             max_retries: Additional attempts after a recoverable failure; must be in
                 ``[0, MAX_RETRIES_LIMIT)``.
+            load_dotenv: Load local credential files for legacy CLI callers; disable in servers.
         """
         assert (
             0 <= max_retries < MAX_RETRIES_LIMIT
         ), f"max_retries must be in [0, {MAX_RETRIES_LIMIT}), got {max_retries}"
-        _load_dotenv_if_present()
+        if load_dotenv:
+            _load_dotenv_if_present()
         candidate_model = (
             model or os.getenv("OPENAI_MODEL") or os.getenv("GEMINI_MODEL") or os.getenv("OPENROUTER_MODEL") or ""
         )

@@ -20,6 +20,7 @@ def get_neo4j_driver(
     uri: str | None = None,
     user: str | None = None,
     password: str | None = None,
+    **driver_options: Any,
 ) -> neo4j.Driver:
     """Creates a Neo4j driver using environment variables or provided credentials.
 
@@ -32,6 +33,7 @@ def get_neo4j_driver(
         uri: Bolt URI; falls back to ``NEO4J_URI``, then to the local default.
         user: Username; falls back to ``NEO4J_USER``.
         password: Password; falls back to ``NEO4J_PASSWORD``.
+        **driver_options: Explicit Neo4j driver settings, such as bounded connection timeouts.
     """
     # Imported here rather than at module scope so that every caller of this module stays
     # importable without the driver installed. Environments that only run simulation do not
@@ -41,7 +43,7 @@ def get_neo4j_driver(
     uri = uri or os.environ.get("NEO4J_URI", "bolt://localhost:7688")
     user = user or os.environ.get("NEO4J_USER", "neo4j")
     password = password or os.environ.get("NEO4J_PASSWORD", "isaaclab_arena_password")
-    return neo4j.GraphDatabase.driver(uri, auth=(user, password))
+    return neo4j.GraphDatabase.driver(uri, auth=(user, password), **driver_options)
 
 
 def sync_spec_to_neo4j(

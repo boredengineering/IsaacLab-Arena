@@ -1,0 +1,24 @@
+SESSION HANDOFF — TanStack UI discussion
+
+Current continuation: the user requested a revision of tanstack_agentic_workbench_plan.md covering a separate frontend container, proxy/networking, live progress and session/job/simulator ownership. The plan has been revised for review; the earlier rejection applies to its previous contents. No implementation or Docker configuration changes have been authorized by this documentation update.
+
+Selected in the revised plan: frontend application source in web/arena-workbench/, deployment assets in docker/workbench/, React/Vite with TanStack Router/Query, an unprivileged Nginx frontend on a Docker bridge, and HTTP/SSE to the existing host-network Arena API over a narrowly shared Unix socket. Only the frontend port is published on loopback. Jobs are durable and independent of browser sessions; GPU ownership is supervised. These are plan decisions, not verified runtime implementation.
+
+Current plan for review:
+/workspaces/IsaacLab-Arena/.agents/references/plans/tanstack_agentic_workbench_plan.md
+The requested plan revision is complete; wait for implementation direction rather than treating it as approval to build or launch containers. Preserve the factual audit and use the revised plan rather than the rejected earlier version.
+
+Work completed: read-only source/documentation audit of Streamlit review_gui, generation agent/runner, Graph-RAG, YAML loading/runtime conversion, version manager, SimApp preview, evaluation identity, and DCRG boundaries; two parallel read-only audits. Consulted TanStack documentation. Created the proposal Markdown; pre-commit checks passed. No application implementation, simulation, generation, evaluation, or database mutation was performed. No commits made by the assistant.
+
+Last observed checkout: /workspaces/IsaacLab-Arena, branch dev/0.3.0-prerelease, HEAD f6c018c03. The plan and this handoff are untracked. Rediscover status before changing anything.
+
+Useful source context, to verify rather than treat as an approved design:
+- Existing UI: isaaclab_arena_examples/agentic_environment_generation/gui_runner.py and review_gui/streamlit_ui.py.
+- Streamlit calls generate_spec and flat save; CLI also supports refine_spec and numbered versions.
+- Generation already retrieves priors and attempts Neo4j writes; validation/fallback and publication are not cleanly separated.
+- Runtime relation solving can replace authored initial poses for non-anchored objects.
+- Preview is zero-action first/last frames, not trained-policy evaluation.
+- Legacy family/name/version/evaluation identities differ from DCRG immutable identities.
+- DCRG is separate bounded CLI orchestration, not automatically selected by the generation agent.
+
+Resume posture: continue from the revised plan and the user's next feedback. No application files, Docker files, simulations or database records were changed during the revision. Do not repeat the historical rejection as though the requested revision never happened.

@@ -1,55 +1,56 @@
-import { useEffect, useRef, useState } from 'react';
-import type { Asset, SnapshotResult } from './editor-contracts';
-import { EditorJobProgress, useEditorJob } from './editor-jobs';
-export interface SnapshotReceipt {
-  jobId: string;
-  text: string;
-  documentId?: string;
-  result: SnapshotResult;
-}
-export function useSnapshots() {
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { skipToken, useQuery } from '@tanstack/react-query';
+import type { Asset } from './editor-contracts';
+import type { Workspace } from './contracts';
+import { workspaceKey } from './cache';
+import { snapshotHistory, snapshotMatches, type SnapshotReceipt } from './snapshot-model';
+import { useEditorJob } from './editor-jobs';
+export function useSnapshots(canonicalHash: string | null, documentId: string) {
   const controller = useEditorJob('snapshots');
-  const [history, setHistory] = useState<SnapshotReceipt[]>([]);
-  useEffect(() => {
-    const job = controller.job;
-    if (job?.status !== 'succeeded' || !job.result || !Array.isArray(job.result.assets)) return;
-    const receipt = {
-      jobId: job.id,
-      text: String(controller.retained?.payload.yaml_text ?? ''),
-      documentId: controller.retained?.payload.document_id as string | undefined,
-      result: job.result as unknown as SnapshotResult,
-    };
-    setHistory((previous) =>
-      previous.some((r) => r.jobId === job.id) ? previous : [receipt, ...previous].slice(0, 8),
-    );
-  }, [controller.job, controller.retained]);
+  const { data: workspace } = useQuery<Workspace>({
+    queryKey: workspaceKey, queryFn: skipToken, gcTime: Infinity,
+  });
+  const history = useMemo(() => snapshotHistory(
+    [...(workspace?.jobs ?? []), ...(controller.job ? [controller.job] : [])],
+    canonicalHash, documentId,
+  ), [workspace, controller.job, canonicalHash, documentId]);
   return { controller, history };
 }
 export function SnapshotImage({ url, label }: { url: string; label: string }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [url]);
+  const [zoomed, setZoomed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+    setZoomed(false);
+    dialog.current?.close();
+  }, [url]);
   if (!/^\/api\/editor\/artifacts\/[a-zA-Z0-9_.-]+$/.test(url))
     return <p className="error-text">Unsupported artifact URL.</p>;
   return (
     <>
       {failed ? (
-        <div className="asset-placeholder">Image unavailable. Check artifact access.</div>
+        <div className="asset-placeholder image-error" role="alert">
+          <span>Image unavailable. Retry after reconnecting, or render snapshots again.</span>
+          <button aria-label={`Retry ${label}`} onClick={() => setFailed(false)}>Retry image</button>
+        </div>
       ) : (
         <button
           className="snapshot-image"
           aria-label={`Zoom ${label}`}
-          onClick={() => dialog.current?.showModal()}
+          onClick={() => { setZoomed(true); dialog.current?.showModal(); }}
         >
           <img src={url} alt={label} loading="lazy" onError={() => setFailed(true)} />
         </button>
       )}
-      <dialog className="zoom-dialog" aria-label={`Zoomed ${label}`} ref={dialog}>
+      <dialog className="zoom-dialog" aria-label={`Zoomed ${label}`} ref={dialog} onClose={() => setZoomed(false)}>
         <div className="section-heading">
           <h3>{label}</h3>
-          <button onClick={() => dialog.current?.close()}>Close image</button>
+          <button onClick={() => { dialog.current?.close(); setZoomed(false); }}>Close image</button>
         </div>
-        <img src={url} alt={`Zoomed ${label}`} />
+        {zoomed && <img src={url} alt={`Zoomed ${label}`} onError={() => {
+          setFailed(true); setZoomed(false); dialog.current?.close();
+        }} />}
       </dialog>
     </>
   );
@@ -72,12 +73,17 @@ export function AssetGrid({
             {image ? (
               <SnapshotImage url={image.url} label={`${asset.id} snapshot`} />
             ) : (
-              <div className="asset-placeholder">Not rendered</div>
+              <div className="asset-placeholder">
+                {asset.role === 'embodiment' ? 'Scene preview only' : 'No saved preview'}
+              </div>
             )}
             <div className="asset-caption">
               <span className="asset-role">{asset.role}</span>
               <strong>{asset.id}</strong>
               <p>{asset.registry_name}</p>
+              {!image && asset.role === 'embodiment' && (
+                <p>Robot preview is included in the scene snapshot.</p>
+              )}
               {image && stale && <p className="stale-label">Stale · draft changed</p>}
               {asset.parent_id && <small>Parent: {asset.parent_id}</small>}
               {asset.prim_path && <code>{asset.prim_path}</code>}
@@ -91,7 +97,7 @@ export function AssetGrid({
     </div>
   );
 }
-export function SnapshotGallery({
+export function SnapshotControls({
   snapshots,
   draft,
   documentId,
@@ -103,9 +109,6 @@ export function SnapshotGallery({
   enabled: boolean;
 }) {
   return (
-    <section className="snapshot-section">
-      <div className="section-heading">
-        <h2>Scene snapshots</h2>
         <button
           disabled={!enabled || snapshots.controller.busy}
           onClick={() =>
@@ -121,12 +124,18 @@ export function SnapshotGallery({
               ? 'Retry snapshot request'
               : 'Render snapshots'}
         </button>
-      </div>
+  );
+}
+export function SnapshotGallery({ snapshots, canonicalHash }: {
+  snapshots: ReturnType<typeof useSnapshots>;
+  canonicalHash: string | null;
+}) {
+  return (
+    <section className="snapshot-section">
+      <h2>Scene snapshots</h2>
       <p className="hint">
-        Explicit Isaac Sim render · scene overview and per-asset thumbnails. No simulation starts
-        while typing.
+        Saved scene overviews. Use Render snapshots beside Assets to update the scene and thumbnails.
       </p>
-      <EditorJobProgress controller={snapshots.controller} />
       {!snapshots.history.length ? (
         <div className="empty-state">
           No snapshots rendered. Rendering is an explicit GPU job, never a side effect of editing.
@@ -147,12 +156,12 @@ export function SnapshotGallery({
                 <strong>Scene overview</strong>
                 <p
                   className={
-                    receipt.text !== draft || receipt.documentId !== documentId
+                    !snapshotMatches(receipt, canonicalHash)
                       ? 'stale-label'
                       : 'muted'
                   }
                 >
-                  {receipt.text !== draft || receipt.documentId !== documentId
+                  {!snapshotMatches(receipt, canonicalHash)
                     ? 'Stale · draft changed since this render'
                     : 'Matches current draft'}
                 </p>

@@ -6,6 +6,10 @@ The UI does not invent document content, graph query results, progress percentag
 
 ## Appearance
 
+Saved asset and scene previews are recovered from successful workspace jobs, including in fresh tabs. `snapshot-model.ts` selects the latest exact canonical scene match, deduplicates repeated renders, and bounds history to eight scenes. Older same-document previews are explicitly stale; matching asset names alone never establishes freshness. The workspace snapshot remains cached across route navigation. Recovery is currently limited to jobs present in the workspace snapshot or the explicitly retained job; a dedicated preview catalogue is planned.
+
+Use **Render snapshots** beside Assets for an explicit GPU job. Missing robot thumbnails are labelled scene-only; failed image loads offer **Retry image**, which only fetches the existing artifact again. Zoom images are loaded on opening. Browser checks against an already rendered fixture use `WORKBENCH_E2E_CACHED_SNAPSHOTS=1` and `tests/e2e/asset-previews.spec.ts`; they never create a render automatically.
+
 The Light/Dark switch at the far right of the top sidebar controls the whole workbench, including CodeMirror and authored/query graphs. Light is the default. The choice is saved under `arena.workbench.theme` in local storage; if browser storage is blocked, switching still works for the current page. Theme changes do not recreate the editor or submit jobs. `src/theme.tsx` owns preference state, `src/theme.css` owns the palette, and CodeMirror updates its appearance through a compartment.
 
 For local launches, both `localhost` and `127.0.0.1` work on the configured port. Every mutation still requires an Origin matching that request's Host and the configured scheme, plus CSRF for established-session operations. Other hosts, ports and schemes are not implicitly trusted. These hostnames have separate browser cookies, storage and SharedWorkers; stay on one hostname while editing a draft.

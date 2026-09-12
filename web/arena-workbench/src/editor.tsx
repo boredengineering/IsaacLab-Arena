@@ -11,7 +11,8 @@ import type {
   Validation,
 } from './editor-contracts';
 import { EditorJobProgress, useEditorJob } from './editor-jobs';
-import { AssetGrid, SnapshotGallery, useSnapshots } from './snapshots';
+import { AssetGrid, SnapshotControls, SnapshotGallery, useSnapshots } from './snapshots';
+import { snapshotMatches } from './snapshot-model';
 import { downloadRecoveredYaml, readDraft, storeDraft } from './draft-storage';
 import type { RecoverableDraft } from './draft-storage';
 
@@ -99,7 +100,10 @@ export function EditorView() {
   const latest = useRef(draft);
   latest.current = draft;
   const generation = useEditorJob('generate');
-  const snapshots = useSnapshots();
+  const current = validation?.text === draft ? validation.result : null;
+  const valid = current?.valid === true;
+  const canonicalHash = valid ? current.canonical_hash : null;
+  const snapshots = useSnapshots(canonicalHash, document?.document_id ?? '');
   const generated =
     generation.job?.status === 'succeeded' && typeof generation.job.result?.yaml_text === 'string'
       ? (generation.job.result as unknown as GeneratedResult)
@@ -185,8 +189,6 @@ export function EditorView() {
       request.current++;
     };
   }, [draft, documentId, session?.session_id, loading, index.data]);
-  const current = validation?.text === draft ? validation.result : null;
-  const valid = current?.valid === true;
   function chooseDocument(id: string) {
     if (
       document &&
@@ -442,14 +444,28 @@ export function EditorView() {
               </div>
               <span className="tag">Authored · not Neo4j</span>
             </div>
-            <h3 className="subheading">Assets</h3>
+            <div className="section-heading asset-heading">
+              <h3>Assets</h3>
+              <SnapshotControls
+                snapshots={snapshots}
+                draft={draft}
+                documentId={document?.document_id ?? ''}
+                enabled={!!session && valid && !loading && !recovery && index.data?.capabilities.snapshots === true}
+              />
+            </div>
+            <p className="hint preview-status">
+              {snapshotMatches(snapshots.history[0], canonicalHash)
+                ? 'Saved previews match the validated scene.'
+                : snapshots.history.length
+                  ? 'Older previews shown. Render snapshots to update this scene.'
+                  : 'No saved previews for this scene. Render snapshots to create asset and scene images.'}
+              {' '}Rendering is an explicit GPU job; editing does not start it.
+            </p>
+            <EditorJobProgress controller={snapshots.controller} />
             <AssetGrid
               assets={valid ? current.assets : []}
               receipt={snapshots.history[0]}
-              stale={
-                snapshots.history[0]?.text !== draft ||
-                snapshots.history[0]?.documentId !== (document?.document_id ?? '')
-              }
+              stale={!snapshotMatches(snapshots.history[0], canonicalHash)}
             />
             <div className="section-heading graph-heading">
               <h3>Authored spatial graph</h3>
@@ -481,9 +497,7 @@ export function EditorView() {
           </section>
           <SnapshotGallery
             snapshots={snapshots}
-            draft={draft}
-            documentId={document?.document_id ?? ''}
-            enabled={!!session && valid && !loading && !recovery && index.data?.capabilities.snapshots === true}
+            canonicalHash={canonicalHash}
           />
         </div>
       </div>

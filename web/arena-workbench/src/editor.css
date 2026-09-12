@@ -314,6 +314,20 @@ pre {
   grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
   gap: 10px;
 }
+.asset-heading {
+  margin-top: 22px;
+  margin-bottom: 8px;
+}
+.preview-status {
+  margin-bottom: 14px;
+}
+.asset-placeholder.image-error {
+  height: auto;
+  min-height: 100px;
+  gap: 8px;
+  padding: 12px;
+  text-align: center;
+}
 .asset-card {
   border: 1px solid #dce3d9;
   background: white;

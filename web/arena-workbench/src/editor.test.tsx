@@ -73,6 +73,37 @@ export function mountEditor(fetcher = editorServer(), path = '/') {
     />,
   );
 }
+it('restores matching saved asset previews in a fresh tab without submitting a render', async () => {
+  const base = editorServer();
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/workspaces/default')) return response({
+      id: 'default', name: 'Arena', event_cursor: 1,
+      jobs: [{
+        id: 'saved-render', workspace_id: 'default', kind: 'snapshots',
+        status: 'succeeded', stage: 'completed', updated_at: 10,
+        inputs: { document_id: 'frozen-fixture', canonical_hash: 'canonical', yaml_text: 'env_name: real_document' },
+        result: {
+          input_hash: 'hash', warnings: [],
+          assets: [{ id: 'table', artifact_id: 'table-image', url: '/api/editor/artifacts/table-image' }],
+          scene: { artifact_id: 'scene-image', url: '/api/editor/artifacts/scene-image' },
+        },
+      }],
+    });
+    return base(url, init);
+  });
+  const view = mountEditor(fetcher);
+  expect(await screen.findByRole('img', { name: 'table snapshot' })).toHaveAttribute('src', '/api/editor/artifacts/table-image');
+  expect(screen.getByText('Matches current draft')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('link', { name: 'Neo4j query' }));
+  await screen.findByRole('heading', { name: 'Neo4j query' });
+  fireEvent.click(screen.getByRole('link', { name: 'Environment editor' }));
+  await screen.findByRole('img', { name: 'table snapshot' });
+  view.unmount();
+  mountEditor(fetcher);
+  await screen.findByRole('img', { name: 'table snapshot' });
+  expect(fetcher.mock.calls.filter(([url]) => /generate|snapshots|\/save$/.test(url))).toHaveLength(0);
+});
+
 it('recovers unsaved YAML after reload without silently changing the source context', async () => {
   const fetcher = editorServer();
   const view = mountEditor(fetcher);
@@ -342,7 +373,7 @@ it('renders only on request, shows authenticated asset and scene images, and ope
         kind: 'snapshots',
         status: 'succeeded',
         stage: 'complete',
-        inputs: {},
+        inputs: { document_id: 'frozen-fixture', canonical_hash: 'canonical', yaml_text: 'env_name: real_document' },
         result: {
           input_hash: 'hash',
           assets: [{ id: 'table', artifact_id: 'asset', url: '/api/editor/artifacts/asset' }],
@@ -357,6 +388,9 @@ it('renders only on request, shows authenticated asset and scene images, and ope
     expect(screen.getByRole('button', { name: 'Render snapshots' })).toBeEnabled(),
   );
   expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Render snapshots' }).compareDocumentPosition(
+    document.querySelector('.asset-grid')!,
+  ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Render snapshots' }));
   expect(await screen.findByRole('img', { name: 'table snapshot' })).toHaveAttribute(
     'src',

@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import type { Job } from './contracts';
-import { snapshotHistory, snapshotMatches } from './snapshot-model';
+import { snapshotHistorical, snapshotHistory, snapshotMatches, snapshotResult } from './snapshot-model';
 
 function renderJob(id: string, hash: string, documentId = 'doc', updated = 1): Job {
   return {
@@ -14,6 +14,19 @@ function renderJob(id: string, hash: string, documentId = 'doc', updated = 1): J
     },
   };
 }
+
+it('keeps historical asset freshness separate from canonical draft identity', () => {
+  const receipt = snapshotHistory([renderJob('historical', 'current')], 'current', 'doc')[0];
+  receipt.result.freshness = 'unverified_assets';
+  expect(snapshotHistorical(receipt)).toBe(true);
+  expect(snapshotMatches(receipt, 'current')).toBe(true);
+  expect(snapshotMatches(receipt, 'changed')).toBe(false);
+  expect(snapshotResult(receipt.result)).toBe(true);
+  expect(snapshotResult({ ...receipt.result, freshness: 'unknown' })).toBe(false);
+  receipt.result.freshness = 'verified_assets';
+  expect(snapshotHistorical(receipt)).toBe(false);
+  expect(snapshotHistorical(undefined)).toBe(false);
+});
 
 it('prefers the exact canonical scene over a newer different scene', () => {
   const history = snapshotHistory([

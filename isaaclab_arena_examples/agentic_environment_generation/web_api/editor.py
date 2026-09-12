@@ -5,6 +5,8 @@
 
 """Authenticated prompt and YAML editor routes."""
 
+import asyncio
+import json
 import yaml
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -12,6 +14,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from . import generation
+from .preview_options import RenderOptions, normalized_options
 from .security import require_mutation, require_session
 
 router = APIRouter(prefix="/api/editor")
@@ -36,6 +39,7 @@ class SaveDraft(Draft):
 
 class SnapshotDraft(Draft):
     idempotency_key: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
+    options: RenderOptions = Field(default_factory=RenderOptions)
 
 
 class GenerateDraft(BaseModel):
@@ -169,6 +173,10 @@ async def generate(request: Request, body: GenerateDraft, session=Depends(requir
 @router.post("/snapshots", status_code=202)
 async def snapshots(request: Request, body: SnapshotDraft, session=Depends(require_mutation)):
     text, validation = frozen_draft(request, body.yaml_text, body.document_id)
+    try:
+        options = normalized_options(body.options.model_dump(), validation["spec"])
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from None
     if request.app.state.editor_execution.snapshots is None:
         raise HTTPException(503, "Snapshot adapter unavailable in this runtime")
     return submit_editor(
@@ -181,6 +189,7 @@ async def snapshots(request: Request, body: SnapshotDraft, session=Depends(requi
             "document_id": body.document_id,
             "input_hash": validation["source_hash"],
             "canonical_hash": validation["canonical_hash"],
+            "options": options,
         },
     )
 
@@ -195,3 +204,50 @@ async def artifact(request: Request, artifact_id: str):
     except (KeyError, ValueError, OSError):
         raise HTTPException(404, "Artifact not found") from None
     return FileResponse(path, media_type="image/png", headers={"X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/previews/{canonical_hash}", dependencies=[Depends(require_session)])
+async def preview(request: Request, canonical_hash: str):
+    """Recover verified or explicitly historical pixels without submitting work."""
+    import re
+
+    if not re.fullmatch(r"[a-f0-9]{64}", canonical_hash):
+        raise HTTPException(422, "Invalid canonical hash")
+    query = request.query_params
+    if set(query) - {"view", "resolution", "asset_views"} or any(len(query.getlist(key)) != 1 for key in query):
+        raise HTTPException(422, "Invalid preview query fields")
+    try:
+        if query.get("resolution", "1024") not in {"512", "1024"}:
+            raise ValueError("Invalid resolution")
+        raw_views = query.get("asset_views", "{}")
+        if len(raw_views) > 40000:
+            raise ValueError("Too many camera overrides")
+
+        def unique_pairs(pairs):
+            if len(dict(pairs)) != len(pairs):
+                raise ValueError("Duplicate camera override")
+            return dict(pairs)
+
+        asset_views = json.loads(raw_views, object_pairs_hook=unique_pairs)
+        if not isinstance(asset_views, dict):
+            raise ValueError("Camera overrides must be an object")
+        options = normalized_options({
+            "view": query.get("view", "isometric"),
+            "resolution": int(query.get("resolution", "1024")),
+            "asset_views": asset_views,
+        })
+    except (ValueError, TypeError):
+        raise HTTPException(422, "Invalid preview options") from None
+    service = request.app.state.editor_execution.snapshots
+    try:
+        receipt = (
+            await asyncio.to_thread(service.lookup, canonical_hash, options, allow_historical=True)
+            if service is not None
+            else None
+        )
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from None
+    status = "miss"
+    if receipt is not None:
+        status = "historical" if receipt["freshness"] == "unverified_assets" else "hit"
+    return {"status": status, "canonical_hash": canonical_hash, "receipt": receipt}

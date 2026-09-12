@@ -12,6 +12,7 @@ import sys
 import time
 import uuid
 from contextlib import contextmanager, nullcontext, suppress
+from pathlib import Path
 from typing import Any
 
 from isaaclab.envs.common import ViewerCfg
@@ -26,6 +27,7 @@ from isaaclab_arena_examples.agentic_environment_generation.review_gui.simapp.ki
     CAPTURE_DONE_TAIL_UPDATES,
     PRE_CAPTURE_UPDATES,
     capture_viewport_png,
+    frame_targets,
     pump_app,
     sim_preview_cache_dir,
 )
@@ -106,6 +108,41 @@ def _apply_overview_camera(env, app, num_envs: int, env_spacing: float) -> None:
     pump_app(app, count=PRE_CAPTURE_UPDATES)
 
 
+def _apply_scene_camera(env, app, spec, options, num_envs, env_spacing):
+    """Frame task assets and robot, not the floor or an unrelated background extent."""
+    if options is None:
+        _apply_overview_camera(env, app, num_envs, env_spacing)
+        return {}
+    import omni.usd
+
+    scene = env.unwrapped.scene
+    stage = omni.usd.get_context().get_stage()
+    targets = []
+    # InteractiveScene resolves cfg.prim_path to its env_regex_ns at construction.
+    # Expand only that known namespace, not arbitrary regexes from asset configs.
+    entities = {**scene.articulations, **scene.rigid_objects}
+    for asset in entities.values():
+        path = asset.cfg.prim_path
+        for env_path in scene.env_prim_paths:
+            resolved = path.replace(scene.env_regex_ns, env_path)
+            prim = stage.GetPrimAtPath(resolved)
+            if prim and prim.IsValid():
+                targets.append(resolved)
+    for ref in spec.object_references or []:
+        path = ref.prim_path
+        if not path.startswith("{ENV_REGEX_NS}/"):
+            parent = next(node for node in [spec.background, *spec.objects] if node.id == ref.parent_id)
+            path = f'{{ENV_REGEX_NS}}/{parent.registry_name}/{path.lstrip("/")}'
+        for env_path in scene.env_prim_paths:
+            resolved = path.replace("{ENV_REGEX_NS}", env_path)
+            prim = stage.GetPrimAtPath(resolved)
+            if prim and prim.IsValid():
+                targets.append(resolved)
+    if not targets:
+        targets = list(scene.env_prim_paths)
+    return frame_targets(app, stage, sorted(set(targets)), view=options["view"], resolution=options["resolution"])
+
+
 def _close_env_and_reset_sim(
     env=None,
     *,
@@ -135,6 +172,8 @@ def run_sim_preview(
     num_envs: int,
     num_steps: int,
     env_spacing: float,
+    options: dict | None = None,
+    output_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Run relation-solver preview and capture viewport frames."""
     import gymnasium as gym
@@ -142,6 +181,9 @@ def run_sim_preview(
 
     from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
     from isaaclab_arena.policy.zero_action_policy import ZeroActionPolicy, ZeroActionPolicyCfg
+    from isaaclab_arena_examples.agentic_environment_generation.review_gui.simapp.render_identity import (
+        normalize_options,
+    )
 
     started_at = time.monotonic()
     _preview_log(started_at, "run_sim_preview started")
@@ -154,6 +196,9 @@ def run_sim_preview(
         raise ValueError(f"expected mapping, got {type(raw).__name__}")
 
     graph_spec = ArenaEnvGraphSpec.model_validate(raw)
+    nodes = [graph_spec.background, graph_spec.embodiment, *graph_spec.objects, *(graph_spec.object_references or [])]
+    camera_options = normalize_options(options, {node.id for node in nodes}) if options is not None else None
+    timings = {}
     arena_env = graph_spec.to_arena_env()
     preview_name = f"{arena_env.name}_preview_{uuid.uuid4().hex[:8]}"
     arena_env.name = preview_name
@@ -163,7 +208,8 @@ def run_sim_preview(
     builder = ArenaEnvBuilder(arena_env, builder_cfg)
     policy = ZeroActionPolicy(ZeroActionPolicyCfg())
 
-    cache_dir = sim_preview_cache_dir()
+    cache_dir = Path(output_dir) if output_dir is not None else sim_preview_cache_dir()
+    cache_dir.mkdir(parents=True, exist_ok=True)
     stamp = int(time.time() * 1000)
     first_path = cache_dir / f"{preview_name}_{stamp}_first.png"
     last_path = cache_dir / f"{preview_name}_{stamp}_last.png"
@@ -179,28 +225,37 @@ def run_sim_preview(
         t_relations = time.monotonic()
         with _skip_task_viewer_cfg(arena_env):
             env_cfg, env_kwargs = builder.compose_manager_cfg()
+        timings["relations_s"] = time.monotonic() - t_relations
         _preview_log(started_at, f"relation solver finished ({time.monotonic() - t_relations:.1f}s)")
 
         env_cfg.viewer = ViewerCfg(eye=eye, lookat=target, origin_type="world")
         _preview_log(started_at, "spawning sim scene (gym.make)…")
         t_spawn = time.monotonic()
         env = builder.make_registered(env_cfg, env_kwargs)
+        timings["spawn_s"] = time.monotonic() - t_spawn
         _preview_log(started_at, f"sim scene ready ({time.monotonic() - t_spawn:.1f}s)")
 
+        t_reset = time.monotonic()
         obs, _ = env.reset()
-        _apply_overview_camera(env, app, builder_cfg.num_envs, builder_cfg.env_spacing)
+        timings["reset_s"] = time.monotonic() - t_reset
+        camera = _apply_scene_camera(env, app, graph_spec, camera_options, num_envs, env_spacing)
 
-        if capture_viewport_png(app, first_path) is None:
+        t_capture = time.monotonic()
+        resolution = camera_options["resolution"] if camera_options else None
+        if capture_viewport_png(app, first_path, resolution=resolution) is None:
             raise RuntimeError("failed to capture first-frame viewport screenshot")
 
         for _ in range(num_steps):
             action = policy.get_action(env, obs)
             obs, _, _, _, _ = env.step(action)
 
-        _apply_overview_camera(env, app, builder_cfg.num_envs, builder_cfg.env_spacing)
+        _apply_scene_camera(env, app, graph_spec, camera_options, num_envs, env_spacing)
 
-        if capture_viewport_png(app, last_path) is None:
+        if num_steps == 0:
+            last_path.write_bytes(first_path.read_bytes())
+        elif capture_viewport_png(app, last_path, resolution=resolution) is None:
             raise RuntimeError("failed to capture last-frame viewport screenshot")
+        timings["scene_capture_s"] = time.monotonic() - t_capture
 
         print(
             f"[sim_preview] captured {num_envs} envs @ {env_spacing}m spacing, {num_steps} zero-action steps "
@@ -216,6 +271,8 @@ def run_sim_preview(
             "num_envs": num_envs,
             "env_spacing": env_spacing,
             "num_steps": num_steps,
+            "timings": timings,
+            "camera": camera,
         }
     finally:
         _close_env_and_reset_sim(env, app=app, suppress_exceptions=True)

@@ -89,6 +89,10 @@ def compose_on_stand_usd(
 
     try:
         stage = Usd.Stage.CreateNew(str(tmp_path))
+        # Composition below measures heights along Z in meters. Referenced layers
+        # do not supply stage metadata to this wrapper's standalone viewers.
+        UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+        UsdGeom.SetStageMetersPerUnit(stage, 1.0)
         root = stage.DefinePrim(robot.root_prim_path, "Xform")
         robot_resolved = retrieve_file_path(robot.robot_usd_path)
         root.GetReferences().AddReference(robot_resolved, robot.root_prim_path)

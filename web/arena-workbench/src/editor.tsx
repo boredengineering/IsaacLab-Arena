@@ -8,11 +8,13 @@ import type {
   EditorIndex,
   GeneratedResult,
   Revision,
+  RenderOptions,
+
   Validation,
 } from './editor-contracts';
 import { EditorJobProgress, useEditorJob } from './editor-jobs';
-import { AssetGrid, SnapshotControls, SnapshotGallery, useSnapshots } from './snapshots';
-import { snapshotMatches } from './snapshot-model';
+import { AssetGrid, CameraSelect, defaultRenderOptions, SnapshotControls, SnapshotGallery, useSnapshots } from './snapshots';
+import { snapshotHistorical, snapshotMatches } from './snapshot-model';
 import { downloadRecoveredYaml, readDraft, storeDraft } from './draft-storage';
 import type { RecoverableDraft } from './draft-storage';
 
@@ -103,7 +105,11 @@ export function EditorView() {
   const current = validation?.text === draft ? validation.result : null;
   const valid = current?.valid === true;
   const canonicalHash = valid ? current.canonical_hash : null;
-  const snapshots = useSnapshots(canonicalHash, document?.document_id ?? '');
+  const [previewMode, setPreviewMode] = useState('assets');
+  const [cameraOptions, setCameraOptions] = useState<RenderOptions>(defaultRenderOptions);
+  const options = { ...cameraOptions, asset_views: Object.fromEntries(Object.entries(cameraOptions.asset_views)
+    .filter(([id]) => !valid || current.assets.some((asset) => asset.id === id))) };
+  const snapshots = useSnapshots(canonicalHash, document?.document_id ?? '', options);
   const generated =
     generation.job?.status === 'succeeded' && typeof generation.job.result?.yaml_text === 'string'
       ? (generation.job.result as unknown as GeneratedResult)
@@ -111,16 +117,10 @@ export function EditorView() {
   const [appliedJob, setAppliedJob] = useState('');
   const save = useMutation({
     retry: false,
-    mutationFn: async () => {
-      const text = draft;
+    mutationFn: async (payload: { yaml_text: string; document_id?: string; expected_source_hash?: string }) => {
       await api.activity();
-      const revision = await api.mutate<Revision>('/editor/save', {
-        yaml_text: text,
-        ...(document
-          ? { document_id: document.document_id, expected_source_hash: document.source_hash }
-          : {}),
-      });
-      return { revision, text };
+      const revision = await api.mutate<Revision>('/editor/save', payload);
+      return { revision, text: payload.yaml_text };
     },
   });
   function applyGenerated() {
@@ -377,7 +377,8 @@ export function EditorView() {
               </button>
               <button
                 disabled={!session || !valid || save.isPending || loading || !!recovery}
-                onClick={() => save.mutate()}
+                onClick={() => save.mutate({ yaml_text: draft, ...(document
+                  ? { document_id: document.document_id, expected_source_hash: document.source_hash } : {}) })}
               >
                 {save.isPending ? 'Saving…' : 'Save revision'}
               </button>
@@ -447,26 +448,48 @@ export function EditorView() {
             <div className="section-heading asset-heading">
               <h3>Assets</h3>
               <SnapshotControls
+                key={`${session?.session_id}:${document?.document_id}`}
                 snapshots={snapshots}
                 draft={draft}
                 documentId={document?.document_id ?? ''}
                 enabled={!!session && valid && !loading && !recovery && index.data?.capabilities.snapshots === true}
               />
             </div>
+            <div className="preview-options">
+              <label>Preview mode<select aria-label="Preview mode" value={previewMode} onChange={(e) => setPreviewMode(e.target.value)}>
+                <option value="assets">Assets</option><option value="scene">Scene</option>
+              </select></label>
+              <CameraSelect label="Scene camera" value={options.view} onChange={(view) => setCameraOptions((old) => ({ ...old, view }))} />
+              <label>Image resolution<select aria-label="Image resolution" value={options.resolution} onChange={(e) => setCameraOptions((old) => ({ ...old, resolution: Number(e.target.value) as 512 | 1024 }))}>
+                <option value="512">512 × 512</option><option value="1024">1024 × 1024</option>
+              </select></label>
+              <button disabled={!canonicalHash || snapshots.lookup.isFetching} onClick={() => void snapshots.lookup.refetch()}>Refresh saved previews</button>
+            </div>
             <p className="hint preview-status">
-              {snapshotMatches(snapshots.history[0], canonicalHash)
-                ? 'Saved previews match the validated scene.'
-                : snapshots.history.length
-                  ? 'Older previews shown. Render snapshots to update this scene.'
-                  : 'No saved previews for this scene. Render snapshots to create asset and scene images.'}
-              {' '}Rendering is an explicit GPU job; editing does not start it.
+              {snapshotHistorical(snapshots.history[0])
+                ? 'Historical saved pixels shown; asset freshness is unverified. Render explicitly to update.'
+                : snapshotMatches(snapshots.history[0], canonicalHash)
+                  ? 'Saved previews match the validated scene.'
+                  : snapshots.history.length
+                    ? 'Older previews shown. Render snapshots to update this scene.'
+                    : 'No saved previews for this scene. Render snapshots to create asset and scene images.'}
+              {' '}GPU rendering is off by default. Automatic previews require explicit consent and a bounded job budget.
             </p>
+            {snapshots.lookup.isFetching && <p role="status">Looking up saved previews…</p>}
+            {snapshots.lookup.isError && <p className="notice warning" role="alert">Preview catalogue unavailable. {snapshots.lookup.error.message} No journal fallback is trusted.</p>}
+            {snapshots.lookup.data?.status === 'miss' && <p>No saved previews for these camera options.</p>}
             <EditorJobProgress controller={snapshots.controller} />
-            <AssetGrid
+            {previewMode === 'assets' ? <AssetGrid
               assets={valid ? current.assets : []}
               receipt={snapshots.history[0]}
               stale={!snapshotMatches(snapshots.history[0], canonicalHash)}
-            />
+              options={options}
+              onCamera={(id, view) => setCameraOptions((old) => {
+                const asset_views = { ...old.asset_views };
+                if (view) asset_views[id] = view; else delete asset_views[id];
+                return { ...old, asset_views };
+              })}
+            /> : <SnapshotGallery snapshots={snapshots} canonicalHash={canonicalHash} />}
             <div className="section-heading graph-heading">
               <h3>Authored spatial graph</h3>
               <span className="muted">Synchronized with validated YAML</span>
@@ -495,10 +518,7 @@ export function EditorView() {
               </>
             )}
           </section>
-          <SnapshotGallery
-            snapshots={snapshots}
-            canonicalHash={canonicalHash}
-          />
+
         </div>
       </div>
     </main>

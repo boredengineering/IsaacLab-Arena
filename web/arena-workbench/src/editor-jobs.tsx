@@ -56,12 +56,25 @@ export function useEditorJob(kind: 'generate' | 'snapshots') {
       return accepted;
     },
   });
+  const cancel = useMutation({
+    retry: false,
+    mutationFn: async (jobId: string) => {
+      await runtime.api.activity();
+      await runtime.api.mutate(`/jobs/${encodeURIComponent(jobId)}/cancel`, {});
+      const verified = await runtime.api.get<Job>(`/jobs/${encodeURIComponent(jobId)}`);
+      if (!isJob(verified) || verified.id !== jobId) throw new Error('Invalid cancellation status response');
+      return verified;
+    },
+    onSuccess: () => { void read.refetch(); void runtime.refresh(); },
+  });
   return {
     job,
     submit,
+    cancel,
     retained,
-    busy: submit.isPending || (!!job && isActive(job)),
-    error: submit.error ?? read.error,
+    busy: submit.isPending || (!!job && isActive(job))
+      || (kind === 'snapshots' && !!workspace?.jobs.some((entry) => entry.kind === 'snapshots' && isActive(entry))),
+    error: submit.error ?? cancel.error ?? read.error,
     refresh: () => {
       void read.refetch();
       void runtime.refresh();
@@ -69,7 +82,7 @@ export function useEditorJob(kind: 'generate' | 'snapshots') {
   };
 }
 export function EditorJobProgress({ controller }: { controller: ReturnType<typeof useEditorJob> }) {
-  const { job, error, retained, submit, refresh } = controller;
+  const { job, error, retained, submit, cancel, refresh } = controller;
   return (
     <>
       {error && (
@@ -96,6 +109,10 @@ export function EditorJobProgress({ controller }: { controller: ReturnType<typeo
           </div>
           <p>{job.stage}</p>
           {isActive(job) && <progress aria-label={`${job.kind} progress`} />}
+          {['queued', 'running'].includes(job.status) && <button className="danger" disabled={cancel.isPending} onClick={() => cancel.mutate(job.id)}>
+            {cancel.isPending ? 'Requesting cancellation…' : job.kind === 'snapshots' ? 'Cancel snapshot render' : 'Cancel generation'}
+          </button>}
+          {job.status === 'cancel_requested' && <p>Cancellation requested; waiting for worker acknowledgment.</p>}
           <button className="quiet" onClick={refresh}>
             Refresh job status
           </button>

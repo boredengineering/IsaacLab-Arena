@@ -57,11 +57,38 @@ export interface Revision {
   canonical_hash: string;
   download_url: string;
 }
+export type CameraView = 'isometric' | 'front' | 'side' | 'top';
+export interface RenderOptions {
+  view: CameraView;
+  resolution: 512 | 1024;
+  asset_views: Record<string, CameraView>;
+}
+export interface SnapshotArtifact {
+  artifact_id: string;
+  url: string;
+  variants?: {
+    thumbnail: { artifact_id: string; url: string; width: number; height: number };
+    full: { artifact_id: string; url: string; width: number; height: number };
+  };
+}
 export interface SnapshotResult {
-  input_hash: string;
-  assets: { id: string; artifact_id: string; url: string; dimensions_m?: number[] }[];
-  scene: { artifact_id: string; url: string } | null;
+  input_hash?: string;
+  canonical_hash?: string;
+  cache_key?: string;
+  renderer_version?: string;
+  freshness?: 'verified_assets' | 'unverified_assets';
+  options?: RenderOptions;
+  assets: (SnapshotArtifact & { id: string; dimensions_m?: number[] })[];
+  scene: SnapshotArtifact | null;
   warnings: string[];
+  errors?: { id: string; stage: string; code: string; message: string }[];
+  partial?: boolean;
+  timings?: Record<string, number>;
+}
+export interface PreviewLookup {
+  status: 'hit' | 'historical' | 'miss';
+  canonical_hash: string;
+  receipt: SnapshotResult | null;
 }
 export interface GeneratedResult {
   yaml_text: string;

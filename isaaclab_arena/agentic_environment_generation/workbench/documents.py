@@ -27,6 +27,11 @@ def digest(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def canonical_digest(spec):
+    """Return the shared canonical scene hash, preserving existing document identities."""
+    return digest(json.dumps(spec, sort_keys=True, allow_nan=False))
+
+
 def projection(spec):
     """Project authored assets and edges without synthesizing reification statements."""
     data = spec.to_dict()
@@ -204,9 +209,7 @@ class Documents:
                 raise ValueError("YAML exceeds 256 KiB")
             spec = ArenaEnvGraphSpec.from_dict(self.resolve(text, document_id))
             result.update(projection(spec))
-            result.update(
-                valid=True, canonical_hash=digest(json.dumps(spec.to_dict(), sort_keys=True, allow_nan=False))
-            )
+            result.update(valid=True, canonical_hash=canonical_digest(spec.to_dict()))
             result["warnings"] = ["Schema validation does not certify physical stability or task success."]
         except ValidationError as error:
             result["errors"] = [

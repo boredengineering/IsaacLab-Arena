@@ -6,19 +6,22 @@ async function loadedPreviews(page: Page) {
   await expect(page.getByText('Schema valid', { exact: true })).toBeVisible();
   const index = await (await page.request.get('/api/editor')).json();
   const doc = await (await page.request.get(`/api/editor/documents/${index.default_document_id}`)).json();
-  const workspace = await (await page.request.get('/api/workspaces/default')).json();
-  const saved = workspace.jobs.find((job: { kind: string; status: string; inputs: Record<string, unknown> }) =>
-    job.kind === 'snapshots' && job.status === 'succeeded' && job.inputs.canonical_hash === doc.validation.canonical_hash);
-  expect(saved, 'Seed a real render explicitly before running cache recovery checks').toBeTruthy();
-  await expect(page.locator('.asset-grid img')).toHaveCount(saved.result.assets.length);
+  const lookup = await (await page.request.get(`/api/editor/previews/${doc.validation.canonical_hash}?view=isometric&resolution=1024&asset_views=%7B%7D`)).json();
+  expect(['hit', 'historical'], 'Seed a catalogue receipt explicitly; journal artifacts are not freshness evidence').toContain(lookup.status);
+  if (lookup.status === 'historical') expect(lookup.receipt.freshness).toBe('unverified_assets');
+  await page.getByLabel('Preview mode', { exact: true }).selectOption('assets');
+  await expect(page.locator('.asset-grid img')).toHaveCount(lookup.receipt.assets.length);
   for (const image of await page.locator('.asset-grid img').all()) {
     await image.scrollIntoViewIfNeeded();
     await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true);
   }
-  await expect(page.getByText('Matches current draft', { exact: true })).toBeVisible();
+  await page.getByLabel('Preview mode', { exact: true }).selectOption('scene');
+  await expect(page.getByText(lookup.status === 'historical'
+    ? 'Saved pixels only · render explicitly to update' : 'Matches current draft', { exact: true })).toBeVisible();
   const scene = page.locator('.scene-gallery .snapshot-image img').first();
   await scene.scrollIntoViewIfNeeded();
   await expect.poll(() => scene.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true);
+  await page.getByLabel('Preview mode', { exact: true }).selectOption('assets');
   return doc;
 }
 
@@ -32,17 +35,19 @@ test('real saved previews recover after navigation and reload, without GPU submi
   const render = await page.getByRole('button', { name: 'Render snapshots', exact: true }).boundingBox();
   const assets = await page.locator('.asset-grid').boundingBox();
   expect(render!.y).toBeLessThan(assets!.y);
-  await expect(page.getByText('Robot preview is included in the scene snapshot.')).toBeVisible();
+
   await page.getByRole('link', { name: 'Neo4j query', exact: true }).click();
   await page.getByRole('link', { name: 'Environment editor', exact: true }).click();
   await loadedPreviews(page);
   await page.reload();
   await loadedPreviews(page);
+  await page.getByLabel('Preview mode', { exact: true }).selectOption('scene');
   const editor = page.getByRole('textbox', { name: 'YAML editor' });
   await editor.click();
   await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.insertText(doc.yaml_text.replace(/^env_name:.*$/m, 'env_name: preview_recovery_modified'));
-  await expect(page.getByText('Stale · draft changed since this render', { exact: true })).toBeVisible();
+  await expect(page.getByText('Schema valid', { exact: true })).toBeVisible();
+  await expect(page.locator('.scene-gallery img')).toHaveCount(0);
   await expect(page.getByText('Matches current draft', { exact: true })).toHaveCount(0);
   await page.getByRole('switch', { name: 'Dark mode' }).click();
   await page.screenshot({ path: testInfo.outputPath('asset-previews-dark.png'), fullPage: true });

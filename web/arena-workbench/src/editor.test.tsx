@@ -10,7 +10,7 @@ beforeEach(() => sessionStorage.clear());
 const validation = {
   valid: true,
   source_hash: 'hash',
-  canonical_hash: 'canonical',
+  canonical_hash: 'a'.repeat(64),
   errors: [],
   warnings: [],
   spec: { env_name: 'real_document' },
@@ -60,6 +60,7 @@ export function editorServer() {
             }
           : validation,
       );
+    if (url.includes('/editor/previews/')) return response({ status: 'miss', canonical_hash: validation.canonical_hash, receipt: null });
     return response({ detail: 'not installed' }, 404);
   });
 }
@@ -76,23 +77,16 @@ export function mountEditor(fetcher = editorServer(), path = '/') {
 it('restores matching saved asset previews in a fresh tab without submitting a render', async () => {
   const base = editorServer();
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
-    if (url.endsWith('/workspaces/default')) return response({
-      id: 'default', name: 'Arena', event_cursor: 1,
-      jobs: [{
-        id: 'saved-render', workspace_id: 'default', kind: 'snapshots',
-        status: 'succeeded', stage: 'completed', updated_at: 10,
-        inputs: { document_id: 'frozen-fixture', canonical_hash: 'canonical', yaml_text: 'env_name: real_document' },
-        result: {
-          input_hash: 'hash', warnings: [],
-          assets: [{ id: 'table', artifact_id: 'table-image', url: '/api/editor/artifacts/table-image' }],
-          scene: { artifact_id: 'scene-image', url: '/api/editor/artifacts/scene-image' },
-        },
-      }],
-    });
+    if (url.includes('/editor/previews/')) return response({ status: 'hit', canonical_hash: validation.canonical_hash, receipt: {
+      canonical_hash: validation.canonical_hash, cache_key: 'saved-render', options: { view: 'isometric', resolution: 1024, asset_views: {} },
+      input_hash: 'hash', warnings: [], assets: [{ id: 'table', artifact_id: 'table-image', url: '/api/editor/artifacts/table-image' }],
+      scene: { artifact_id: 'scene-image', url: '/api/editor/artifacts/scene-image' },
+    } });
     return base(url, init);
   });
   const view = mountEditor(fetcher);
   expect(await screen.findByRole('img', { name: 'table snapshot' })).toHaveAttribute('src', '/api/editor/artifacts/table-image');
+  fireEvent.change(screen.getByLabelText('Preview mode'), { target: { value: 'scene' } });
   expect(screen.getByText('Matches current draft')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('link', { name: 'Neo4j query' }));
   await screen.findByRole('heading', { name: 'Neo4j query' });
@@ -102,6 +96,212 @@ it('restores matching saved asset previews in a fresh tab without submitting a r
   mountEditor(fetcher);
   await screen.findByRole('img', { name: 'table snapshot' });
   expect(fetcher.mock.calls.filter(([url]) => /generate|snapshots|\/save$/.test(url))).toHaveLength(0);
+});
+
+it('restores explicitly historical previews without calling them current or submitting automatic jobs', async () => {
+  const base = editorServer();
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { snapshots: true } });
+    if (url.includes('/editor/previews/')) {
+      const query = new URL(url, 'http://localhost').searchParams;
+      return response({ status: 'historical', canonical_hash: validation.canonical_hash, receipt: {
+        canonical_hash: validation.canonical_hash, cache_key: 'saved-history', freshness: 'unverified_assets',
+        options: { view: query.get('view'), resolution: Number(query.get('resolution')), asset_views: JSON.parse(query.get('asset_views')!) },
+        warnings: [], assets: [{ id: 'table', artifact_id: 'table-history', url: '/api/editor/artifacts/table-history' }],
+        scene: { artifact_id: 'scene-history', url: '/api/editor/artifacts/scene-history' },
+      } });
+    }
+    return base(url, init);
+  });
+  const view = mountEditor(fetcher);
+  expect(await screen.findByRole('img', { name: 'table snapshot' })).toHaveAttribute('src', '/api/editor/artifacts/table-history');
+  expect(screen.getByText('Historical preview · asset freshness unverified')).toBeInTheDocument();
+  expect(screen.queryByText(/Saved previews match the validated scene/)).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Preview mode'), { target: { value: 'scene' } });
+  expect(screen.getByRole('img', { name: 'scene snapshot saved-history' })).toBeInTheDocument();
+  expect(screen.queryByText('Matches current draft')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' }));
+  fireEvent.change(screen.getByLabelText('Scene camera'), { target: { value: 'top' } });
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.includes('view=top'))).toBe(true));
+  await screen.findByRole('img', { name: 'scene snapshot saved-history' });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1700)); });
+  fireEvent.click(screen.getByRole('link', { name: 'Neo4j query' }));
+  await screen.findByRole('heading', { name: 'Neo4j query' });
+  fireEvent.click(screen.getByRole('link', { name: 'Environment editor' }));
+  await screen.findByRole('img', { name: 'table snapshot' });
+  view.unmount();
+  sessionStorage.clear();
+  mountEditor(fetcher);
+  await screen.findByRole('img', { name: 'table snapshot' });
+  expect(screen.getByText('Historical preview · asset freshness unverified')).toBeInTheDocument();
+  expect(fetcher.mock.calls.filter(([url]) => /generate|snapshots|\/save$/.test(url))).toHaveLength(0);
+});
+
+it.each(['hit', 'historical'])('uses the read-only %s catalogue without journal fallback after a miss', async (status) => {
+  const base = editorServer();
+  let hit = true;
+  const hash = 'a'.repeat(64);
+  const receipt = { input_hash: 'hash', canonical_hash: hash, cache_key: 'cache',
+    freshness: status === 'historical' ? 'unverified_assets' : 'verified_assets',
+    options: { view: 'isometric', resolution: 1024, asset_views: {} },
+    assets: [{ id: 'table', artifact_id: 'catalogue-table', url: '/api/editor/artifacts/catalogue-table' }],
+    scene: null, warnings: [] };
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/editor/documents/')) return response({ ...(await (await base(url, init)).json()), validation: { ...validation, canonical_hash: hash } });
+    if (url.includes('/editor/previews/')) return response({ status: hit ? status : 'miss', canonical_hash: hash, receipt: hit ? receipt : null });
+    // A matching journal receipt must never override authoritative invalidation.
+    if (url.endsWith('/workspaces/default')) return response({ id: 'default', name: 'Arena', event_cursor: 1, jobs: [{
+      id: 'old', kind: 'snapshots', status: 'succeeded', stage: 'complete', workspace_id: 'default',
+      inputs: { document_id: 'frozen-fixture', canonical_hash: hash }, result: receipt,
+    }] });
+    return base(url, init);
+  });
+  const view = mountEditor(fetcher);
+  expect(await screen.findByRole('img', { name: 'table snapshot' })).toHaveAttribute('src', '/api/editor/artifacts/catalogue-table');
+  const lookup = fetcher.mock.calls.find(([url]) => url.includes('/editor/previews/'));
+  expect(lookup?.[0]).toContain(`/editor/previews/${hash}?view=isometric&resolution=1024&asset_views=`);
+  expect(lookup?.[1]?.method).toBe('GET');
+  hit = false;
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh saved previews' }));
+  await screen.findByText('No saved previews for these camera options.');
+  expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  view.unmount(); hit = false; mountEditor(fetcher);
+  await screen.findByText('No saved previews for these camera options.');
+  expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  expect(fetcher.mock.calls.filter(([url]) => /generate|snapshots|\/save$/.test(url))).toHaveLength(0);
+});
+
+it('switches asset/scene previews and submits frozen camera options without editing YAML', async () => {
+  const base = editorServer();
+  const hash = 'b'.repeat(64);
+  let release: (() => void) | undefined;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { snapshots: true } });
+    if (url.includes('/editor/documents/')) return response({ ...(await (await base(url, init)).json()), validation: { ...validation, canonical_hash: hash } });
+    if (url.includes('/editor/previews/')) return response({ status: 'miss', canonical_hash: hash, receipt: null });
+    if (url.endsWith('/session/activity')) await new Promise<void>((resolve) => { release = resolve; });
+    if (url.endsWith('/editor/snapshots')) return response({ id: 'render', kind: 'snapshots', workspace_id: 'default', status: 'queued', stage: 'queued', inputs: {} });
+    return base(url, init);
+  });
+  mountEditor(fetcher);
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  fireEvent.change(screen.getByLabelText('Preview mode'), { target: { value: 'scene' } });
+  expect(screen.queryByText('No saved preview', { exact: true })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Scene camera'), { target: { value: 'top' } });
+  fireEvent.change(screen.getByLabelText('Image resolution'), { target: { value: '512' } });
+  fireEvent.change(screen.getByLabelText('Preview mode'), { target: { value: 'assets' } });
+  fireEvent.change(screen.getByLabelText('Camera for table'), { target: { value: 'front' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Render snapshots' }));
+  await waitFor(() => expect(release).toBeDefined());
+  fireEvent.change(screen.getByLabelText('Scene camera'), { target: { value: 'side' } });
+  act(() => release!());
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith('/editor/snapshots'))).toBe(true));
+  const request = fetcher.mock.calls.find(([url]) => url.endsWith('/editor/snapshots'))!;
+  expect(JSON.parse(String(request[1]?.body))).toMatchObject({ yaml_text: 'env_name: real_document', document_id: 'frozen-fixture',
+    options: { view: 'top', resolution: 512, asset_views: { table: 'front' } } });
+  expect(screen.getByRole('textbox', { name: 'YAML editor' })).toHaveTextContent('env_name: real_document');
+});
+
+it.each(['historical-missing', 'historical-verified', 'hit-unverified', 'unknown-freshness'])('rejects inconsistent freshness %s rather than displaying it as current', async (failure) => {
+  const base = editorServer();
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/editor/previews/')) return response({
+      status: failure.startsWith('historical') ? 'historical' : 'hit', canonical_hash: validation.canonical_hash,
+      receipt: { canonical_hash: validation.canonical_hash, options: { view: 'isometric', resolution: 1024, asset_views: {} },
+        freshness: failure === 'historical-missing' ? undefined : failure === 'historical-verified' ? 'verified_assets'
+          : failure === 'hit-unverified' ? 'unverified_assets' : 'unknown',
+        assets: [{ id: 'table', artifact_id: 'unsafe', url: '/api/editor/artifacts/unsafe' }], scene: null, warnings: [],
+      },
+    });
+    return base(url, init);
+  });
+  mountEditor(fetcher);
+  await screen.findByText(/Preview catalogue unavailable/);
+  expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  expect(fetcher.mock.calls.filter(([url]) => /generate|snapshots|\/save$/.test(url))).toHaveLength(0);
+});
+
+it.each(['hash', 'options', 'malformed', 'network'])('fails closed for a %s catalogue response even with matching journal data', async (failure) => {
+  const base = editorServer();
+  const hash = validation.canonical_hash;
+  const receipt = { canonical_hash: hash, cache_key: 'unsafe', options: { view: 'isometric', resolution: 1024, asset_views: {} },
+    assets: [{ id: 'table', artifact_id: 'unsafe', url: '/api/editor/artifacts/unsafe' }], scene: null, warnings: [] };
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/editor/previews/')) {
+      if (failure === 'network') throw new TypeError('catalogue offline');
+      return response({ status: 'hit', canonical_hash: hash, receipt: { ...receipt,
+        ...(failure === 'hash' ? { canonical_hash: 'd'.repeat(64) } : failure === 'options' ? { options: { ...receipt.options, view: 'top' } } : { assets: [null] }),
+      } });
+    }
+    if (url.endsWith('/workspaces/default')) return response({ id: 'default', name: 'Arena', event_cursor: 1, jobs: [{
+      id: 'old', kind: 'snapshots', status: 'succeeded', stage: 'complete', workspace_id: 'default',
+      inputs: { canonical_hash: hash, document_id: 'frozen-fixture' }, result: { ...receipt, input_hash: 'hash' },
+    }] });
+    return base(url, init);
+  });
+  mountEditor(fetcher);
+  await screen.findByText(/Preview catalogue unavailable/);
+  expect(screen.queryByRole('img')).not.toBeInTheDocument();
+});
+
+it('does not queue another snapshot while a workspace render is already active', async () => {
+  const base = editorServer();
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { snapshots: true } });
+    if (url.endsWith('/workspaces/default')) return response({ id: 'default', name: 'Arena', event_cursor: 1, jobs: [{
+      id: 'other-tab-render', kind: 'snapshots', status: 'running', stage: 'rendering', workspace_id: 'default', inputs: {},
+    }] });
+    return base(url, init);
+  });
+  mountEditor(fetcher);
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  expect(screen.getByRole('button', { name: 'Render snapshots' })).toBeDisabled();
+  expect(screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' })).toBeDisabled();
+});
+
+it('revokes automatic preview consent when the session ends', async () => {
+  const base = editorServer();
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { snapshots: true } });
+    if (url === '/api/session' && init?.method === 'DELETE') return new Response(null, { status: 204 });
+    return base(url, init);
+  });
+  mountEditor(fetcher);
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' }));
+  expect(screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' })).toBeChecked();
+  fireEvent.click(screen.getByRole('button', { name: 'End session' }));
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' })).not.toBeChecked());
+});
+
+it('requires opt-in for automatic previews and cancels the accepted job through its existing route', async () => {
+  const base = editorServer();
+  const hash = 'c'.repeat(64);
+  let status = 'queued';
+  const job = () => ({ id: 'auto-render', kind: 'snapshots', workspace_id: 'default', status, stage: status, inputs: {} });
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { snapshots: true } });
+    if (url.includes('/editor/documents/')) return response({ ...(await (await base(url, init)).json()), validation: { ...validation, canonical_hash: hash } });
+    if (url.includes('/editor/previews/')) return response({ status: 'miss', canonical_hash: hash, receipt: null });
+    if (url.endsWith('/jobs/auto-render/cancel')) { status = 'cancel_requested'; return response(job()); }
+    if (url.endsWith('/editor/snapshots') || url.endsWith('/jobs/auto-render')) return response(job());
+    return base(url, init);
+  });
+  mountEditor(fetcher);
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const toggle = screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' });
+  expect(toggle).not.toBeChecked();
+  fireEvent.change(screen.getByLabelText('Scene camera'), { target: { value: 'front' } });
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/snapshots'))).toHaveLength(0);
+  fireEvent.click(toggle);
+  fireEvent.change(screen.getByLabelText('Scene camera'), { target: { value: 'top' } });
+  await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/snapshots'))).toHaveLength(1), { timeout: 4000 });
+  expect(screen.getByText(/1 \/ 3 automatic jobs used/)).toBeInTheDocument();
+  fireEvent.click(await screen.findByRole('button', { name: 'Cancel snapshot render' }));
+  await screen.findByText('Cancellation requested; waiting for worker acknowledgment.');
+  const cancel = fetcher.mock.calls.find(([url]) => url.endsWith('/jobs/auto-render/cancel'))!;
+  expect((cancel[1]?.headers as Record<string, string>)['X-CSRF-Token']).toBe('csrf');
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/jobs/auto-render')).length).toBeGreaterThan(0);
 });
 
 it('recovers unsaved YAML after reload without silently changing the source context', async () => {
@@ -294,6 +494,28 @@ it('retains ambiguous generation across reload and retries the frozen request wi
   await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/generate'))).toHaveLength(2));
   expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/generate'))[1][1]?.body).toBe(body);
 });
+it('freezes revision YAML and source identity at the click before asynchronous activity', async () => {
+  const base = editorServer();
+  let release: (() => void) | undefined;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/session/activity')) await new Promise<void>((resolve) => { release = resolve; });
+    if (url.endsWith('/editor/save')) return response({ revision_id: 'frozen', download_url: '/api/editor/revisions/frozen/download' });
+    return base(url, init);
+  });
+  mountEditor(fetcher);
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const cm = CodeMirrorView.findFromDOM(screen.getByRole('textbox', { name: 'YAML editor' }))!;
+  act(() => {
+    fireEvent.click(screen.getByRole('button', { name: 'Save revision' }));
+    cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: 'env_name: edited_after_click' } });
+  });
+  await waitFor(() => expect(release).toBeDefined());
+  act(() => release!());
+  await screen.findByRole('link', { name: 'Export flattened YAML' });
+  const saved = JSON.parse(String(fetcher.mock.calls.find(([url]) => url.endsWith('/editor/save'))![1]?.body));
+  expect(saved).toEqual({ yaml_text: 'env_name: real_document', document_id: 'frozen-fixture', expected_source_hash: 'hash' });
+});
+
 it('saves an immutable export and only applies generation after explicit review', async () => {
   const base = editorServer();
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
@@ -306,7 +528,7 @@ it('saves an immutable export and only applies generation after explicit review'
         revision_id: 'rev',
         yaml_text: 'env_name: real_document',
         source_hash: 'hash',
-        canonical_hash: 'canonical',
+        canonical_hash: 'a'.repeat(64),
         download_url: '/api/editor/revisions/rev/download',
       });
     if (url.endsWith('/editor/generate') || url === '/api/jobs/generation')
@@ -361,11 +583,17 @@ it('saves an immutable export and only applies generation after explicit review'
 });
 it('renders only on request, shows authenticated asset and scene images, and opens zoom', async () => {
   const base = editorServer();
+  let rendered = false;
+  const receipt = { canonical_hash: validation.canonical_hash, cache_key: 'render', options: { view: 'isometric', resolution: 1024, asset_views: {} }, input_hash: 'hash',
+    assets: [{ id: 'table', artifact_id: 'asset', url: '/api/editor/artifacts/asset' }],
+    scene: { artifact_id: 'scene', url: '/api/editor/artifacts/scene' }, warnings: [] };
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === '/api/editor') {
       const data = await (await base(url, init)).json();
       return response({ ...data, capabilities: { ...data.capabilities, snapshots: true } });
     }
+    if (url.includes('/editor/previews/')) return response({ status: rendered ? 'hit' : 'miss', canonical_hash: validation.canonical_hash, receipt: rendered ? receipt : null });
+    if (url.endsWith('/editor/snapshots')) rendered = true;
     if (url.endsWith('/editor/snapshots') || url === '/api/jobs/render')
       return response({
         id: 'render',
@@ -373,7 +601,7 @@ it('renders only on request, shows authenticated asset and scene images, and ope
         kind: 'snapshots',
         status: 'succeeded',
         stage: 'complete',
-        inputs: { document_id: 'frozen-fixture', canonical_hash: 'canonical', yaml_text: 'env_name: real_document' },
+        inputs: { document_id: 'frozen-fixture', canonical_hash: 'a'.repeat(64), yaml_text: 'env_name: real_document' },
         result: {
           input_hash: 'hash',
           assets: [{ id: 'table', artifact_id: 'asset', url: '/api/editor/artifacts/asset' }],
@@ -396,6 +624,7 @@ it('renders only on request, shows authenticated asset and scene images, and ope
     'src',
     '/api/editor/artifacts/asset',
   );
+  fireEvent.change(screen.getByLabelText('Preview mode'), { target: { value: 'scene' } });
   fireEvent.click(await screen.findByRole('button', { name: /Zoom scene snapshot/ }));
   expect(screen.getByRole('dialog')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Close image' }));

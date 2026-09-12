@@ -41,7 +41,7 @@ test('unsaved YAML recovers after reload without restarting a job', async ({ pag
 
 test('real document, live schema diagnostics, explicit reifiers and read-only load', async ({
   page,
-}) => {
+}, testInfo) => {
   const jobs: string[] = [];
   page.on('request', (r) => {
     if (
@@ -73,7 +73,7 @@ test('real document, live schema diagnostics, explicit reifiers and read-only lo
   await replaceYaml(page, doc.yaml_text);
   await expect(page.getByText('Schema valid', { exact: true })).toBeVisible();
   expect(jobs).toEqual([]);
-  await page.screenshot({ path: 'test-results/editor-real-document.png', fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('editor-real-document.png'), fullPage: true });
 });
 test('immutable save exports server YAML without changing the source document', async ({
   page,
@@ -101,7 +101,7 @@ test('immutable save exports server YAML without changing the source document', 
 });
 test('real Neo4j examples produce table and separately inspectable graph results', async ({
   page,
-}) => {
+}, testInfo) => {
   await openEditor(page);
   await page.getByRole('link', { name: 'Neo4j query', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Neo4j query', exact: true })).toBeVisible();
@@ -128,7 +128,7 @@ test('real Neo4j examples produce table and separately inspectable graph results
     await expect(page.getByRole('heading', { name: 'Node inspector' })).toBeVisible();
   }
   await expect(page.getByLabel('Authored spatial graph', { exact: true })).toHaveCount(0);
-  await page.screenshot({ path: 'test-results/editor-neo4j.png', fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('editor-neo4j.png'), fullPage: true });
 });
 test('explicit GPU render yields real decoded images, zoom and stale labels', async ({ page }) => {
   test.skip(
@@ -139,6 +139,7 @@ test('explicit GPU render yields real decoded images, zoom and stale labels', as
   const index = await openEditor(page);
   expect(index.capabilities.snapshots).toBe(true);
   await page.getByRole('button', { name: 'Render snapshots' }).click();
+  await page.getByLabel('Preview mode', { exact: true }).selectOption('scene');
   const image = page.getByRole('img', { name: /^scene snapshot / }).first();
   await expect(image).toBeVisible({ timeout: 260_000 });
   expect(

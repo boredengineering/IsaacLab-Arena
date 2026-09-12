@@ -14,6 +14,7 @@ import os
 import signal
 import socket
 import sys
+import time
 import traceback
 from pathlib import Path
 
@@ -21,43 +22,75 @@ from isaaclab_arena_examples.agentic_environment_generation.web_api.snapshot_pro
 
 
 def _render(app, request: dict, send, root: Path) -> dict:
+    from isaaclab_arena_examples.agentic_environment_generation.review_gui.simapp.render_identity import (
+        normalize_options,
+    )
     from isaaclab_arena_examples.agentic_environment_generation.review_gui.simapp.sim_preview import run_sim_preview
     from isaaclab_arena_examples.agentic_environment_generation.review_gui.simapp.thumbnail_capture import (
         render_thumbnails_with_app,
     )
     from isaaclab_arena_examples.agentic_environment_generation.web_api.snapshot_service import validated_spec
 
+    started = time.monotonic()
     spec = validated_spec(request["yaml_text"])
     if request.get("num_envs") != 1 or request.get("num_steps") != 0:
         raise ValueError("Editor snapshots permit only num_envs=1, num_steps=0")
+    nodes = [spec.background, spec.embodiment, *spec.objects, *(spec.object_references or [])]
+    options = normalize_options(request.get("options"), {node.id for node in nodes})
     output = Path(request["output_dir"])
+    root = root.resolve()
     if not output.is_relative_to(root / "renders") or output.resolve() != output:
         raise ValueError("Snapshot output is not in the owned render directory")
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
-    # Existing capture helpers derive their caches from Path.home(). Scope HOME to
-    # this exact-spec render, in this owned subprocess only. This avoids reusing the
-    # legacy USD-only image cache for specs with different constructor parameters.
-    # The API process and the operator's shared Streamlit caches remain untouched.
-    previous_home = os.environ.get("HOME")
-    os.environ["HOME"] = str(output)
+    cache = root / "isolated-thumbnails"
+    if cache.resolve() != cache:
+        raise ValueError("Thumbnail cache must not contain symlinks")
+    cache.mkdir(mode=0o700, exist_ok=True)
+    errors, timings, manifest = [], {}, {}
+    paths, dimensions, scene_path = {}, {}, None
+    send({"stage": "rendering_asset_thumbnails"})
+    asset_start = time.monotonic()
     try:
-        send({"stage": "rendering_asset_thumbnails"})
-        paths, dimensions = render_thumbnails_with_app(app, spec)
-        send({"stage": "solving_scene_and_capturing_overview"})
-        scene = run_sim_preview(app, request["yaml_text"], num_envs=1, num_steps=0, env_spacing=3.0)
+        paths, dimensions = render_thumbnails_with_app(
+            app,
+            spec,
+            options=options,
+            output_dir=output,
+            cache_dir=cache,
+            renderer_version=request.get("renderer_version", "legacy"),
+            asset_revision=request.get("asset_revision"),
+            errors=errors,
+            timings=timings,
+            manifest=manifest,
+        )
+    except Exception as exc:
+        errors.append({"id": "assets", "stage": "thumbnails", "code": type(exc).__name__, "message": str(exc)})
+    timings["assets_s"] = time.monotonic() - asset_start
+    send({"stage": "solving_scene_and_capturing_overview"})
+    scene_start = time.monotonic()
+    try:
+        scene = run_sim_preview(
+            app, request["yaml_text"], num_envs=1, num_steps=0, env_spacing=3.0, options=options, output_dir=output
+        )
         if not scene.get("ok"):
             raise RuntimeError(scene.get("error", "Scene capture failed"))
-        return {
-            "ok": True,
-            "paths": {node: str(path) for node, path in paths.items()},
-            "aabb_dimensions_m": {node: list(dims) for node, dims in dimensions.items()},
-            "scene": scene["first_frame"],
-        }
-    finally:
-        if previous_home is None:
-            os.environ.pop("HOME", None)
-        else:
-            os.environ["HOME"] = previous_home
+        scene_path = scene["first_frame"]
+        timings.update(scene.get("timings", {}))
+        manifest["scene"] = scene.get("camera", {})
+    except Exception as exc:
+        errors.append({"id": "scene", "stage": "scene", "code": type(exc).__name__, "message": str(exc)})
+    timings["scene_s"] = time.monotonic() - scene_start
+    timings["total_s"] = time.monotonic() - started
+    return {
+        "ok": bool(paths or scene_path),
+        "paths": {node: str(path) for node, path in paths.items()},
+        "aabb_dimensions_m": {node: list(dims) for node, dims in dimensions.items()},
+        "scene": scene_path,
+        "errors": errors,
+        "timings": timings,
+        "asset_manifest": manifest,
+        **({"error": "No snapshot artifacts produced"} if not paths and not scene_path else {}),
+    }
 
 
 def main() -> int:

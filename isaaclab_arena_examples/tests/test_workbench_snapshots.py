@@ -25,7 +25,7 @@ PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4
 def test_contract_freezes_pngs_and_caches_canonical_input(tmp_path, monkeypatch):
     from isaaclab_arena_examples.agentic_environment_generation.web_api.snapshot_service import SnapshotService
 
-    service = SnapshotService(tmp_path)
+    service = SnapshotService(tmp_path, asset_revision=lambda spec: "immutable-transport-fixture")
     calls = []
     stages = []
 
@@ -47,7 +47,21 @@ def test_contract_freezes_pngs_and_caches_canonical_input(tmp_path, monkeypatch)
     monkeypatch.setattr(service, "_rpc", rpc)
     yaml_text = FIXTURE.read_text()
     result = service.render(yaml_text, "job/../../not-a-path", stages.append)
-    assert set(result) == {"input_hash", "assets", "scene", "warnings"}
+    assert set(result) == {
+        "input_hash",
+        "canonical_hash",
+        "cache_key",
+        "renderer_version",
+        "freshness",
+        "options",
+        "assets",
+        "scene",
+        "warnings",
+        "errors",
+        "partial",
+        "timings",
+    }
+    assert result["freshness"] == "verified_assets"
     assert result["assets"][0]["id"] == "mug_ycb_robolab"
     assert result["assets"][0]["dimensions_m"] == [0.1, 0.2, 0.3]
     for entry in [*result["assets"], result["scene"]]:
@@ -62,7 +76,7 @@ def test_contract_freezes_pngs_and_caches_canonical_input(tmp_path, monkeypatch)
     assert "cache_hit" in stages
     assert calls[0]["num_envs"] == 1 and calls[0]["num_steps"] == 0
     service.close()
-    restored = SnapshotService(tmp_path)
+    restored = SnapshotService(tmp_path, asset_revision=lambda spec: "immutable-transport-fixture")
     monkeypatch.setattr(restored, "_rpc", rpc)
     assert restored.render(yaml_text, "after-restart", stages.append) == result
     assert len(calls) == 1
@@ -315,6 +329,7 @@ def test_real_fixture_snapshot():
         (state / "result.json").write_text(json.dumps(result, indent=2))
         assert result["scene"]
         expected = {
+            yaml.safe_load(FIXTURE.read_text())["embodiment"]["id"],
             "maple_table_robolab",
             "rubiks_cube_hot3d_robolab",
             "bowl_ycb_robolab",
@@ -328,7 +343,9 @@ def test_real_fixture_snapshot():
                 image.load()
                 assert image.format == "PNG" and min(image.size) >= 64
                 assert max(ImageStat.Stat(image.convert("RGB")).stddev) > 1
-        assert service.render(FIXTURE.read_text(), "same-input", print) == result
+        # The registry's mutable remote dependencies cannot establish current freshness.
+        assert service.lookup(result["canonical_hash"]) is None
+        assert any("revisions" in warning for warning in result["warnings"])
         print(json.dumps(result), flush=True)
     finally:
         service.close()

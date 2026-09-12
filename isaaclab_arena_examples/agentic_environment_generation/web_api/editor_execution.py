@@ -6,6 +6,7 @@
 """Serial editor execution using owned bounded workers, never HTTP-loop simulation."""
 
 import asyncio
+import inspect
 import json
 import os
 import sys
@@ -13,6 +14,8 @@ import threading
 from pathlib import Path
 
 from .generation import GENERATION_STAGES, GENERATION_TIMEOUT
+from .preview_diagnostics import clean_errors, clean_timings
+from .preview_options import normalized_options
 from .process_identity import process_identity
 
 
@@ -56,13 +59,26 @@ class EditorExecution:
             if job["kind"] == "generate":
                 result = await self.generate(supervisor, job, stage_on_loop)
             elif job["kind"] == "snapshots" and self.snapshots is not None:
-                result = await asyncio.to_thread(self.snapshots.render, job["inputs"]["yaml_text"], job_id, emit)
+                options = normalized_options(job["inputs"].get("options"))
+                kwargs = {"options": options}
+                if "options" not in inspect.signature(self.snapshots.render).parameters:
+                    # Legacy transport adapters can only honor the original default camera.
+                    if options != normalized_options():
+                        raise ValueError("Snapshot adapter does not support camera options")
+                    kwargs = {}
+                result = await asyncio.to_thread(
+                    self.snapshots.render, job["inputs"]["yaml_text"], job_id, emit, **kwargs
+                )
                 result["input_hash"] = job["inputs"]["input_hash"]
+                assert (
+                    result.get("canonical_hash", job["inputs"]["canonical_hash"]) == job["inputs"]["canonical_hash"]
+                ), "Renderer receipt does not match the validated scene"
+                result["canonical_hash"] = job["inputs"]["canonical_hash"]
             else:
                 raise ValueError("Editor adapter unavailable")
             if journal.get_job(job_id)["status"] != "cancel_requested":
                 journal.transition(job_id, "succeeded", "completed", "succeeded", result=result)
-        except Exception:
+        except Exception as exc:
             await supervisor.stop_process()
             if journal.get_job(job_id)["status"] != "cancel_requested":
                 error = (
@@ -70,7 +86,17 @@ class EditorExecution:
                     if job["kind"] == "generate"
                     else "Snapshot rendering failed; check Isaac Sim assets, GPU availability and runtime logs"
                 )
-                journal.transition(job_id, "failed", "failed", "failed", error=error)
+                diagnostics = None
+                if job["kind"] == "snapshots":
+                    diagnostics = {
+                        "canonical_hash": job["inputs"].get("canonical_hash"),
+                        "options": job["inputs"].get("options", normalized_options()),
+                        "errors": clean_errors(getattr(exc, "errors", None)) or [
+                            {"id": "scene", "stage": "snapshot", "code": "snapshot_failed", "message": error}
+                        ],
+                        "timings": clean_timings(getattr(exc, "timings", None)),
+                    }
+                journal.transition(job_id, "failed", "failed", "failed", error=error, result=diagnostics)
         finally:
             await supervisor.stop_process()
             if self.cancel_task is not None:

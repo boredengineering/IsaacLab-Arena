@@ -104,6 +104,47 @@ supported. Unsupported or disconnected clients use bounded status polling;
 observation never repeats a mutation. TanStack Query stores server state,
 while unsaved editor drafts remain independent browser state.
 
+Preview catalogue and rendering
+--------------------------------
+
+The preview catalogue is separate from the job journal. Authenticated
+``GET /api/editor/previews/{canonical_hash}`` reads an existing receipt without
+creating a job, starting Isaac Sim, or extending session activity. Camera view,
+resolution and per-asset camera overrides are part of the lookup identity.
+
+Receipts bind the canonical scene, normalized options, renderer implementation
+revision and asset dependency revision. A configured ``LocalAssetRevisions``
+provider can fingerprint trusted complete local dependency bundles. The default
+registry does not establish freshness for mutable remote dependencies: these
+receipts return ``historical`` with ``unverified_assets`` freshness, not a cache
+hit. They can be displayed with a warning, but are never reused to skip a fresh
+render. Changed known dependencies, renderer revisions, missing artifacts and
+expired receipts invalidate lookup. Historical receipts cannot bypass these
+checks, and the browser does not fall back to journal images on a catalogue miss.
+
+The private artifact store publishes authenticated full PNGs and thumbnails of
+at most 256 pixels. Default retention is 256 receipts, 512 MiB of published PNGs
+and 30 days; raw thumbnail accelerators have a separate budget. Cleanup is a
+writer/startup operation, not a GET side effect, and avoids symlinks. Isolated
+thumbnail reuse requires a complete local dependency closure plus constructor,
+camera and renderer identity; mutable remote paths alone never establish reuse.
+
+Snapshot jobs freeze isometric/front/side/top views, 512/1024 render resolution
+and optional per-asset view overrides. Reference prims are rebased from runtime
+namespaces into the original USD hierarchy before isolation and camera framing.
+Robot thumbnails show the authored USD joint pose, not a simulated configured
+joint state. Composed robot-on-stand stages declare their Z-up, meter coordinate
+system for standalone viewers. Partial render errors preserve available images
+and report node-specific diagnostics and measured stage timings.
+
+Rendering remains explicit by default. Optional automatic previews require
+per-view consent, a validated changed scene, a confirmed catalogue miss, a
+1.5-second debounce and a 10-second minimum interval. Each enable permits at
+most three attempts with one in flight. Ambiguous submissions stop automation;
+navigation, document/session changes and reload revoke consent. Historical
+receipts do not automatically trigger a render. Cancellation uses the durable
+job route and waits for actual worker cleanup.
+
 Simulation and future deployment
 --------------------------------
 

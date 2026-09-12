@@ -22,6 +22,106 @@ def login(client):
     return {"Origin": ORIGIN, "X-CSRF-Token": session["csrf_token"]}
 
 
+def test_snapshot_options_are_frozen_validated_and_idempotent(tmp_path):
+    app = create_app(tmp_path, start_paused=True)
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        body = {"yaml_text": FIXTURE.read_text(), "idempotency_key": "camera"}
+        options = {"view": "front", "resolution": 512, "asset_views": {"mug_ycb_robolab": "top"}}
+        response = client.post("/api/editor/snapshots", headers=headers, json={**body, "options": options})
+        assert response.status_code == 202, response.text
+        job = response.json()
+        assert job["inputs"]["options"] == options
+        assert "asset_views" not in job["inputs"]["yaml_text"]
+        assert (
+            client.post("/api/editor/snapshots", headers=headers, json={**body, "options": options}).json()["id"]
+            == job["id"]
+        )
+        assert client.post("/api/editor/snapshots", headers=headers, json=body).status_code == 409
+        for invalid in (
+            {"view": "back"},
+            {"resolution": "512"},
+            {"resolution": True},
+            {"asset_views": {"unknown": "top"}},
+            {"extra": 1},
+        ):
+            assert (
+                client.post("/api/editor/snapshots", headers=headers, json={**body, "options": invalid}).status_code
+                == 422
+            )
+        defaults = client.post("/api/editor/snapshots", headers=headers, json={**body, "idempotency_key": "default"})
+        assert defaults.json()["inputs"]["options"] == {"view": "isometric", "resolution": 1024, "asset_views": {}}
+
+
+@pytest.mark.parametrize("revision, status", [("transport-test-revision", "hit"), (None, "historical")])
+def test_preview_lookup_is_authenticated_read_only_and_independent_of_jobs(tmp_path, monkeypatch, revision, status):
+    from isaaclab_arena_examples.tests.test_workbench_preview_catalogue import peer
+
+    app = create_app(tmp_path, start_paused=True)
+    with TestClient(app, base_url=ORIGIN) as client:
+        assert client.get("/api/editor/previews/" + "a" * 64).status_code == 401
+        login(client)
+        service = app.state.editor_execution.snapshots
+        service.asset_revision = lambda spec: revision
+        monkeypatch.setattr(service, "_rpc", peer([]))
+        receipt = service.render(FIXTURE.read_text(), "not-in-journal", lambda _: None, {"view": "top"})
+        url = "/api/editor/previews/" + receipt["canonical_hash"]
+        monkeypatch.setattr(service, "_rpc", lambda *args: pytest.fail("GET triggered rendering"))
+        before = service._db_path.read_bytes()
+        result = client.get(url, params={"view": "top"})
+        assert result.status_code == 200, result.text
+        assert result.json() == {"status": status, "canonical_hash": receipt["canonical_hash"], "receipt": receipt}
+        assert receipt["freshness"] == ("verified_assets" if revision else "unverified_assets")
+        assert service._db_path.read_bytes() == before
+        assert client.get(url).json()["status"] == "miss"
+        assert client.get("/api/jobs").json()["jobs"] == []
+        for params in (
+            {"view": "unknown"},
+            {"resolution": "513"},
+            {"asset_views": "[]"},
+            {"asset_views": "bad"},
+            {"asset_views": '{"../escape":"top"}'},
+            {"extra": "1"},
+        ):
+            assert client.get(url, params=params).status_code == 422
+        assert client.get("/api/editor/previews/not-a-hash").status_code == 422
+        assert client.get(url, params={"asset_views": '{"not_a_scene_node":"top"}'}).status_code == 422
+        assert (
+            client.get(url, params={"asset_views": '{"mug_ycb_robolab":"top","mug_ycb_robolab":"front"}'}).status_code
+            == 422
+        )
+        assert client.get(receipt["scene"]["url"]).status_code == 200
+
+
+def test_failed_snapshot_journal_retains_structured_errors_and_timings(tmp_path, monkeypatch):
+    import time
+
+    app = create_app(tmp_path)
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        errors = [{"id": "scene", "stage": "camera", "code": "camera_failed", "message": "Camera unavailable"}]
+        monkeypatch.setattr(
+            app.state.editor_execution.snapshots,
+            "_rpc",
+            lambda *args: {"ok": False, "errors": errors, "timings": {"scene_s": 1.0}},
+        )
+        job = client.post(
+            "/api/editor/snapshots",
+            headers=headers,
+            json={"yaml_text": FIXTURE.read_text(), "idempotency_key": "structured-failure"},
+        ).json()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            current = client.get(f"/api/jobs/{job['id']}").json()
+            if current["status"] == "failed":
+                break
+            time.sleep(0.02)
+        assert current["status"] == "failed", current
+        assert current["result"]["errors"] == errors
+        assert current["result"]["timings"]["scene_s"] == 1.0
+        assert current["result"]["canonical_hash"] == job["inputs"]["canonical_hash"]
+
+
 def test_real_default_document_and_semantic_validation(tmp_path):
     with TestClient(create_app(tmp_path), base_url=ORIGIN) as client:
         assert client.get("/api/editor").status_code == 401
@@ -193,10 +293,12 @@ def test_snapshot_job_runs_off_loop_and_authenticates_artifacts(tmp_path, monkey
     from isaaclab_arena_examples.agentic_environment_generation.web_api import editor_execution
 
     worker_threads = []
+    observed_options = []
     closed = []
 
     class Service:
-        def render(self, yaml_text, job_id, emit):
+        def render(self, yaml_text, job_id, emit, options=None):
+            observed_options.append(options)
             worker_threads.append(threading.get_ident())
             emit("scene_loading")
             time.sleep(0.1)
@@ -218,7 +320,7 @@ def test_snapshot_job_runs_off_loop_and_authenticates_artifacts(tmp_path, monkey
     with TestClient(app, base_url=ORIGIN) as client:
         headers = login(client)
         assert client.get("/api/editor").json()["capabilities"]["snapshots"]
-        body = {"yaml_text": FIXTURE.read_text(), "idempotency_key": "snap1"}
+        body = {"yaml_text": FIXTURE.read_text(), "idempotency_key": "snap1", "options": {"view": "front"}}
         assert (
             client.post("/api/editor/snapshots", headers=headers, json={**body, "yaml_text": "bad"}).status_code == 422
         )
@@ -234,6 +336,8 @@ def test_snapshot_job_runs_off_loop_and_authenticates_artifacts(tmp_path, monkey
         assert current["status"] == "succeeded", current
         assert current["result"]["scene"] is None
         assert current["result"]["input_hash"] == job["inputs"]["input_hash"]
+        assert current["result"]["canonical_hash"] == job["inputs"]["canonical_hash"]
+        assert observed_options == [{"view": "front", "resolution": 1024, "asset_views": {}}]
         assert worker_threads and worker_threads[0] != app.state.editor_execution.loop_thread
         assert client.get("/api/editor/artifacts/not-indexed").status_code == 404
     assert closed

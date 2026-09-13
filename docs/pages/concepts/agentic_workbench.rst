@@ -106,9 +106,15 @@ scoped to the authenticated browser session and expire after the selected
 removed on access/periodic cleanup, session revocation, or API shutdown. Polling does not extend key
 lifetime. Tabs sharing a session share its provider settings; tab closure does
 not revoke the server entry. Durable sessions do not imply durable credentials.
-The ``ttl_minutes`` setting is a strict allowed integer, enforced server-side.
+The ``ttl_minutes`` setting is a strict allowed integer or explicit JSON ``null``,
+enforced server-side. Omission retains the 30-minute default. ``null`` selects
+**Never expires**, disabling only the key timer. Such credentials follow explicit
+session activity up to the session's absolute deadline; polling does not renew
+them. They still clear on session expiry/revocation, Forget, replacement, or API
+shutdown and never persist across restart. Public ``key_timer_disabled`` metadata
+distinguishes this mode; ``expires_at`` remains the current finite session deadline.
 Changing the dropdown does not renew existing credentials; saving again replaces
-the credential reference and its deadline. There is no unlimited lifetime.
+the credential reference and its deadline. There is no cross-session retention.
 
 Generation binds a non-secret credential reference to the submitting session.
 The worker resolves that exact reference before execution; another session cannot

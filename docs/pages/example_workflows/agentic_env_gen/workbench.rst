@@ -191,7 +191,12 @@ scene graph.
 
 Use the generation provider-settings panel to select a fixed provider endpoint,
 enter a model ID and temporary API key, and explicitly consent to session use.
-Choose a key expiration of 15 minutes, 30 minutes (default), 1 hour, or 2 hours.
+Choose a key expiration of 15 minutes, 30 minutes (default), 1 hour, 2 hours,
+or **Never expires**. The latter disables only the key timer, not session expiry:
+the key stays in API memory until the session ends or the API restarts (or you
+forget/replace it). Explicit session activity can extend its idle deadline within
+the session's absolute lifetime; polling cannot. The active status shows the
+current session deadline. Longer retention increases exposure.
 The dedicated password control clears after submission; settings expire after
 that duration or at session expiry, whichever comes first, and are removed from
 API memory on access or periodic cleanup. Changing the selection only affects

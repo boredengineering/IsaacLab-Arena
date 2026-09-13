@@ -241,7 +241,7 @@ Use the provider-settings panel beside generation:
 1. Choose OpenAI, Gemini, OpenRouter, or NVIDIA. Check the displayed destination
    endpoint; browser-entered keys cannot use a custom URL.
 2. Enter a model ID and choose **Key expiration**: 15 minutes, 30 minutes
-   (default), 1 hour, or 2 hours. Then read and accept the temporary-use notice.
+   (default), 1 hour, 2 hours, or **Never expires**. Then read and accept the temporary-use notice.
    Changing provider, model, expiration, or consent clears the key field.
 3. Paste a scoped, budget-limited API key into the dedicated password field,
    never the prompt or YAML editor, then click **Save temporary key**. This sends
@@ -254,7 +254,13 @@ The API key expires after the selected duration or at session expiry, whichever
 comes first; expired entries are removed on access or by periodic memory cleanup.
 Changing the dropdown only affects the next save. To change an active key's
 deadline, re-enter the key and save again; this replaces its reference and can
-invalidate queued jobs bound to the old reference. There is no unlimited option.
+invalidate queued jobs bound to the old reference.
+**Never expires** disables only the key timer: the key remains in API memory
+until the session ends, you forget/replace it, or the API restarts. Explicit
+session activity can extend its idle deadline, but not the session's absolute
+lifetime; polling alone cannot extend it. The active status shows **No key timer**
+and the current session deadline. Longer retention increases exposure; prefer
+the default timer when possible and forget the key when finished.
 It does not persist the key in SQLite, job inputs, YAML, or exports. The browser
 does not save it in local/session storage or the query/mutation cache, and clears
 the password field after a submission attempt. Public settings show provider,

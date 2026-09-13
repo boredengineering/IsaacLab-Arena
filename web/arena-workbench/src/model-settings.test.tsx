@@ -73,6 +73,33 @@ it.each([15, 30, 60, 120])('sends the selected %s minute expiration only on expl
   expect(screen.getByLabelText('API key')).toHaveValue('');
 });
 
+it('saves Never expires without a key timer and displays the session boundary on refresh', async () => {
+  let status: ModelSettingsStatus = empty;
+  const { fetcher, cache } = setup(async (_url, init) => {
+    if (init.method === 'PUT') status = { ...configured, key_timer_disabled: true };
+    return response(status);
+  });
+  await screen.findByText(/No provider configured/);
+  const expiry = screen.getByRole('combobox', { name: 'Key expiration' });
+  expect(screen.getByRole('option', { name: 'Never expires' })).toBeInTheDocument();
+  fireEvent.change(expiry, { target: { value: 'never' } });
+  expect(fetcher.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true);
+  fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'user-model' } });
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'dummy-never-expiry-marker' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save temporary key' }));
+  await screen.findByText(/Temporary key active.*No key timer/);
+  const put = fetcher.mock.calls.find(([, init]) => init.method === 'PUT')!;
+  expect(JSON.parse(String(put[1].body)).ttl_minutes).toBeNull();
+  expect(screen.getByLabelText('API key')).toHaveValue('');
+  expect(JSON.stringify(cache.getQueryCache().getAll().map(q => q.state))).not.toContain('dummy-never-expiry-marker');
+  expect(screen.getByText(/cleared when the session ends or the API restarts/)).toBeInTheDocument();
+  fireEvent.change(expiry, { target: { value: '30' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh provider status' }));
+  await screen.findByText(/Temporary key active.*No key timer/);
+  expect(fetcher.mock.calls.filter(([, init]) => init.method === 'PUT')).toHaveLength(1);
+});
+
 it('clears any pre-consent password when consent is first granted', async () => {
   setup();
   await screen.findByText(/No provider configured/);

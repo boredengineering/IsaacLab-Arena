@@ -74,6 +74,7 @@ async def activity(request: Request):
     session = request.app.state.sessions.activity(cookie_token(request))
     if session is None:
         raise HTTPException(401, "Session expired or revoked")
+    request.app.state.model_settings.session_activity(session)
     return session
 
 

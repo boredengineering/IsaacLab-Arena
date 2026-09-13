@@ -49,6 +49,7 @@ def checked_config(config, *, trusted_server=False):
             "expires_at",
             "credential_ref",
             "session_keys_allowed",
+            "key_timer_disabled",
         ),
         key,
     )

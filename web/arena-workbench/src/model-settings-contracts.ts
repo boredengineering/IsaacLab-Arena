@@ -24,11 +24,14 @@ export function parseModelSettings(value: unknown): ModelSettingsStatus {
     if (!PROVIDERS.some(p => p.id === v.provider) || !text(v.credential_ref)
       || typeof v.expires_at !== 'number' || !Number.isFinite(v.expires_at) || v.expires_at <= 0) return fail();
   } else if (v.credential_ref !== null || v.expires_at !== null) return fail();
+  if (v.key_timer_disabled !== undefined && typeof v.key_timer_disabled !== 'boolean') return fail();
+  if (v.key_timer_disabled === true && v.source !== 'session') return fail();
   return {
     providers: PROVIDERS.map(p => ({ ...p })), configured: v.configured, source: v.source as ModelSettingsStatus['source'],
     provider: v.provider as string | null, model: v.model as string | null,
     expires_at: v.expires_at as number | null, credential_ref: v.credential_ref as string | null,
     session_keys_allowed: v.session_keys_allowed,
+    key_timer_disabled: v.key_timer_disabled === true,
   };
 }
 export type Provider = typeof PROVIDERS[number]['id'];
@@ -41,4 +44,5 @@ export interface ModelSettingsStatus {
   expires_at: number | null;
   credential_ref: string | null;
   session_keys_allowed: boolean;
+  key_timer_disabled?: boolean;
 }

@@ -26,11 +26,11 @@ class SettingsInput(BaseModel):
     provider: Literal["openai", "gemini", "openrouter", "nvidia"]
     model: str = Field(min_length=1, max_length=256)
     api_key: str = Field(min_length=16, max_length=4096, repr=False)
-    ttl_minutes: int = Field(default=30, strict=True)
+    ttl_minutes: int | None = Field(default=30, strict=True)
 
     @model_validator(mode="after")
     def safe_metadata(self):
-        if self.ttl_minutes not in (15, 30, 60, 120):
+        if self.ttl_minutes not in (None, 15, 30, 60, 120):
             raise ValueError("Unsupported key expiration")
         checked_config({"api_key": self.api_key, "model": self.model, "base_url": ENDPOINTS[self.provider]})
         return self
@@ -59,6 +59,13 @@ class ModelSettings:
     def clear(self):
         self._records.clear()
 
+    def session_activity(self, session):
+        """Follow explicit session activity only for credentials without a key timer."""
+        self.purge()
+        record = self._records.get(session["session_id"])
+        if record is not None and record["key_timer_disabled"]:
+            record["expires_at"] = session["expires_at"]
+
     def save(self, session, body):
         self.purge()
         self.protect_public({"model": body.model, "provider": body.provider})
@@ -69,7 +76,12 @@ class ModelSettings:
             "provider": body.provider,
             "model": body.model,
             "credential_ref": secrets.token_hex(32),
-            "expires_at": min(self.clock() + body.ttl_minutes * 60, session["expires_at"]),
+            "expires_at": (
+                session["expires_at"]
+                if body.ttl_minutes is None
+                else min(self.clock() + body.ttl_minutes * 60, session["expires_at"])
+            ),
+            "key_timer_disabled": body.ttl_minutes is None,
         }
 
     def protect_public(self, value):
@@ -92,6 +104,7 @@ class ModelSettings:
             "provider": record["provider"] if record else (server or {}).get("provider"),
             "model": record["model"] if record else (server or {}).get("model"),
             "expires_at": record["expires_at"] if record else None,
+            "key_timer_disabled": record["key_timer_disabled"] if record else False,
             "credential_ref": record["credential_ref"] if record else None,
             "session_keys_allowed": allowed,
         }

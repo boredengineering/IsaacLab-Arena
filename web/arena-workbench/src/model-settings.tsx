@@ -51,7 +51,7 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
   const password = useRef<HTMLInputElement>(null);
   const [provider, setProvider] = useState<Provider>('openai');
   const [model, setModel] = useState('');
-  const [ttlMinutes, setTtlMinutes] = useState(30);
+  const [ttlMinutes, setTtlMinutes] = useState<number | null>(30);
   const [consent, setConsent] = useState(false);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -101,7 +101,7 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
     let api_key = password.current?.value ?? '';
     clearEntry();
     if (!session || pending || !consent || status.isError || !status.data?.session_keys_allowed) return;
-    if (![15, 30, 60, 120].includes(ttlMinutes)
+    if ((ttlMinutes !== null && ![15, 30, 60, 120].includes(ttlMinutes))
       || !/^[\x21-\x7e]{1,256}$/.test(model) || !/^[\x21-\x7e]{16,4096}$/.test(api_key)
       || model.includes(api_key) || provider.includes(api_key)) {
       setFailed(true);
@@ -129,7 +129,7 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
   return <section className="raw-section" aria-label="Temporary provider settings">
     <h3>Temporary provider settings</h3>
     <p className="hint">For one shared local operator, not isolated user accounts. This session is shared by tabs.
-      Keys expire after the selected duration or at session expiry, whichever comes first, and are periodically removed from API memory. Nothing is saved by this form in browser storage.
+      Timed keys expire after the selected duration or at session expiry, whichever comes first, and are periodically removed from API memory. Nothing is saved by this form in browser storage.
       Memory zeroization and process isolation cannot be guaranteed.</p>
     <p className="notice warning">Forget or replacement invalidates queued references, but generation jobs already running may finish all their bounded model calls.
       Forget may restore the server environment fallback; it cannot retract calls already sent.</p>
@@ -140,7 +140,8 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
     {status.data?.source === 'server' && <p role="status">Server environment fallback active · {status.data.provider} · {status.data.model}</p>}
     {expired && <p role="status">Temporary key expired. Refresh status or save a new key before generating.</p>}
     {status.data?.source === 'session' && !expired && <p role="status">Temporary key active · {status.data.provider} · {status.data.model}
-      {' · Expires '}{new Date(status.data.expires_at! * 1000).toLocaleString()}</p>}
+      {status.data.key_timer_disabled ? ' · No key timer · Current session deadline ' : ' · Expires '}
+      {new Date(status.data.expires_at! * 1000).toLocaleString()}</p>}
     <div className="editor-actions">
       <button type="button" disabled={!session || pending || status.isFetching} onClick={() => { clearEntry(); void status.refetch(); }}>Refresh provider status</button>
       {status.data?.source === 'session' && <button type="button" disabled={!session || pending} onClick={() => void forget()}>Forget key</button>}
@@ -151,14 +152,17 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
       </select></label>
       <label>Provider endpoint<input readOnly value={PROVIDERS.find(p => p.id === provider)!.base_url} /></label>
       <label>Model<input maxLength={256} disabled={pending} value={model} onChange={e => { clearEntry(); setModel(e.target.value); }} autoComplete="off" /></label>
-      <label>Key expiration<select aria-label="Key expiration" disabled={pending} value={ttlMinutes}
-        onChange={e => { clearEntry(); setTtlMinutes(Number(e.target.value)); }}>
+      <label>Key expiration<select aria-label="Key expiration" disabled={pending} value={ttlMinutes ?? 'never'}
+        onChange={e => { clearEntry(); setTtlMinutes(e.target.value === 'never' ? null : Number(e.target.value)); }}>
         <option value={15}>15 minutes</option>
         <option value={30}>30 minutes (default)</option>
         <option value={60}>1 hour</option>
         <option value={120}>2 hours</option>
+        <option value="never">Never expires</option>
       </select></label>
       <p className="hint">Applies on the next save, capped by session expiry. To change an active key’s deadline, re-enter the key and save again.</p>
+      <p className="hint">Never expires disables only the key timer: the key stays in memory and is cleared when the session ends or the API restarts.
+        Explicit session activity can extend its session deadline; polling cannot. Longer retention increases exposure; use Forget key when finished.</p>
       <label className="provider-consent"><input type="checkbox" disabled={pending} checked={consent} onChange={e => { clearEntry(); setConsent(e.target.checked); }} />
         I consent to sending this key to the Arena API now. When I click Generate, the selected fixed provider receives the key, prompt, scene,
         asset/task catalogues, USD context and any retrieved graph priors used by that workflow.

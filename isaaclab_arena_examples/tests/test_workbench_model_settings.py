@@ -23,7 +23,8 @@ def no_provider(monkeypatch):
     monkeypatch.setattr(generation, "generate", lambda *a, **k: pytest.fail("Unexpected provider invocation"))
 
 
-def test_settings_authenticated_save_and_forget_never_persist_key(tmp_path):
+@pytest.mark.parametrize("ttl_minutes", [30, None])
+def test_settings_authenticated_save_and_forget_never_persist_key(tmp_path, ttl_minutes):
     app = create_app(tmp_path, start_paused=True)
     with TestClient(app, base_url=ORIGIN) as client:
         assert client.get("/api/model-settings").status_code == 401
@@ -33,7 +34,7 @@ def test_settings_authenticated_save_and_forget_never_persist_key(tmp_path):
         assert empty["session_keys_allowed"] is True
         assert {p["id"] for p in empty["providers"]} == {"openai", "gemini", "openrouter", "nvidia"}
         assert client.put("/api/model-settings", json=BODY).status_code == 403
-        saved = client.put("/api/model-settings", headers=headers, json=BODY)
+        saved = client.put("/api/model-settings", headers=headers, json={**BODY, "ttl_minutes": ttl_minutes})
         assert saved.status_code == 200, saved.text
         status = saved.json()
         assert status == {
@@ -44,6 +45,7 @@ def test_settings_authenticated_save_and_forget_never_persist_key(tmp_path):
             "model": BODY["model"],
             "expires_at": status["expires_at"],
             "credential_ref": status["credential_ref"],
+            "key_timer_disabled": ttl_minutes is None,
         }
         assert status["credential_ref"]
         assert KEY not in saved.text
@@ -70,6 +72,7 @@ def test_settings_authenticated_save_and_forget_never_persist_key(tmp_path):
         {"api_key": "https://api.openai.com/v1"},
         {"api_key": "credential_ref"},
         {"api_key": "session_keys_allowed"},
+        {"api_key": "key_timer_disabled"},
     ],
 )
 def test_settings_invalid_inputs_have_generic_errors(tmp_path, changes):
@@ -113,7 +116,7 @@ def test_settings_transport_uses_configured_origin_not_forwarded_headers(tmp_pat
         )
 
 
-@pytest.mark.parametrize("ttl_minutes", [0, -1, 10, 121, 1440, "30", 30.0, True, None])
+@pytest.mark.parametrize("ttl_minutes", [0, -1, 10, 121, 1440, "30", "never", 30.0, True])
 def test_invalid_expiration_does_not_replace_existing_key(tmp_path, ttl_minutes):
     with TestClient(create_app(tmp_path), base_url=ORIGIN) as client:
         headers = login(client)
@@ -145,7 +148,37 @@ def test_selected_expiration_is_enforced_and_capped_by_session(tmp_path, ttl_min
         assert not app.state.model_settings._records
 
 
-def test_credentials_expire_without_poll_extension_and_clear_on_revoke_shutdown_restart(tmp_path):
+def test_no_key_timer_follows_session_activity_but_not_polling(tmp_path):
+    now = [1000.0]
+    app = create_app(tmp_path, clock=lambda: now[0], idle_seconds=10000, absolute_seconds=30000)
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        response = client.put("/api/model-settings", headers=headers, json={**BODY, "ttl_minutes": None})
+        assert response.status_code == 200, response.text
+        saved = response.json()
+        session_id = client.get("/api/session").json()["session_id"]
+        assert saved["key_timer_disabled"] is True
+        assert saved["expires_at"] == 11000
+        now[0] = 10999
+        assert client.get("/api/model-settings").json() == saved
+        assert client.post("/api/session/activity", headers=headers).json()["expires_at"] == 20999
+        now[0] = 11001
+        assert app.state.model_settings.resolve(session_id, saved["credential_ref"])["api_key"] == KEY
+        assert client.get("/api/model-settings").json()["expires_at"] == 20999
+        now[0] = 20998
+        assert client.post("/api/session/activity", headers=headers).json()["expires_at"] == 30998
+        now[0] = 30997
+        assert client.post("/api/session/activity", headers=headers).json()["expires_at"] == 31000
+        now[0] = 31000
+        app.state.model_settings.purge()
+        assert not app.state.model_settings._records
+        assert client.get("/api/model-settings").status_code == 401
+        with pytest.raises(ValueError, match="unavailable"):
+            app.state.model_settings.resolve(session_id, saved["credential_ref"])
+
+
+@pytest.mark.parametrize("cleanup_ttl", [30, None])
+def test_credentials_expire_without_poll_extension_and_clear_on_revoke_shutdown_restart(tmp_path, cleanup_ttl):
     now = [1000.0]
     app = create_app(tmp_path, clock=lambda: now[0])
     with TestClient(app, base_url=ORIGIN) as client:
@@ -153,22 +186,24 @@ def test_credentials_expire_without_poll_extension_and_clear_on_revoke_shutdown_
         saved = client.put("/api/model-settings", headers=headers, json=BODY).json()
         assert saved["expires_at"] == 2800
         now[0] = 2799
+        client.post("/api/session/activity", headers=headers)
         assert client.get("/api/model-settings").json() == saved
         now[0] = 2800
         assert client.get("/api/model-settings").json()["source"] == "none"
         assert not app.state.model_settings._records
-        client.put("/api/model-settings", headers=headers, json=BODY)
+        client.put("/api/model-settings", headers=headers, json={**BODY, "ttl_minutes": cleanup_ttl})
         client.delete("/api/session", headers=headers)
         assert not app.state.model_settings._records
         headers = login(client)
-        client.put("/api/model-settings", headers=headers, json=BODY)
+        client.put("/api/model-settings", headers=headers, json={**BODY, "ttl_minutes": cleanup_ttl})
         cookies = dict(client.cookies)
     assert not app.state.model_settings._records
     with TestClient(create_app(tmp_path, clock=lambda: now[0]), base_url=ORIGIN, cookies=cookies) as client:
         assert client.get("/api/model-settings").json()["source"] == "none"
 
 
-def test_capacity_and_session_deadline_bound_retention(tmp_path, monkeypatch):
+@pytest.mark.parametrize("ttl_minutes", [30, None])
+def test_capacity_and_session_deadline_bound_retention(tmp_path, monkeypatch, ttl_minutes):
     from isaaclab_arena_examples.agentic_environment_generation.web_api import model_settings
 
     monkeypatch.setattr(model_settings, "MAX_CREDENTIALS", 1)
@@ -176,7 +211,7 @@ def test_capacity_and_session_deadline_bound_retention(tmp_path, monkeypatch):
     app = create_app(tmp_path, clock=lambda: now[0], idle_seconds=60)
     with TestClient(app, base_url=ORIGIN) as client:
         first = login(client)
-        saved = client.put("/api/model-settings", headers=first, json=BODY).json()
+        saved = client.put("/api/model-settings", headers=first, json={**BODY, "ttl_minutes": ttl_minutes}).json()
         assert saved["expires_at"] == 1060
         client.cookies.clear()
         second = login(client)
@@ -191,7 +226,10 @@ def test_capacity_and_session_deadline_bound_retention(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("invalidate", ["replace", "forget", "expire", "revoke"])
-def test_session_generation_binds_reference_and_invalidated_queue_cannot_fallback(tmp_path, monkeypatch, invalidate):
+@pytest.mark.parametrize("ttl_minutes", [30, None])
+def test_session_generation_binds_reference_and_invalidated_queue_cannot_fallback(
+    tmp_path, monkeypatch, invalidate, ttl_minutes
+):
     import asyncio
     import time
 
@@ -200,7 +238,7 @@ def test_session_generation_binds_reference_and_invalidated_queue_cannot_fallbac
     monkeypatch.setattr(asyncio, "create_subprocess_exec", lambda *a, **k: pytest.fail("Invalid ref spawned a worker"))
     with TestClient(app, base_url=ORIGIN) as client:
         headers = login(client)
-        saved = client.put("/api/model-settings", headers=headers, json=BODY).json()
+        saved = client.put("/api/model-settings", headers=headers, json={**BODY, "ttl_minutes": ttl_minutes}).json()
         assert client.get("/api/editor").json()["capabilities"]["generation"] is True
         body = {"prompt": "Move cube", "idempotency_key": "scoped-job", "credential_ref": saved["credential_ref"]}
         response = client.post("/api/editor/generate", headers=headers, json=body)
@@ -231,7 +269,10 @@ def test_session_generation_binds_reference_and_invalidated_queue_cannot_fallbac
         elif invalidate == "forget":
             client.delete("/api/model-settings", headers=headers)
         elif invalidate == "expire":
-            now[0] = 2800
+            now[0] = saved["expires_at"]
+            if ttl_minutes is None:
+                client.cookies.clear()
+                headers = login(client)
         else:
             client.delete("/api/session", headers=headers)
             client.cookies.clear()

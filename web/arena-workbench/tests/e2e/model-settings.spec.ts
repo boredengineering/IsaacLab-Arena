@@ -3,7 +3,8 @@ import { expect, test } from '@playwright/test';
 // Use only synthetic markers here. Never record real credential-entry sessions.
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 
-test('temporary provider key stays out of public state and is explicitly forgotten', async ({ page, browser, baseURL }) => {
+for (const expirationValue of ['15', 'never']) {
+test(`temporary provider key (${expirationValue}) stays out of public state and is explicitly forgotten`, async ({ page, browser, baseURL }) => {
   const marker = 'dummy-browser-only-provider-key-not-a-real-secret';
   let generationRequests = 0;
   await page.route('**/api/editor/generate', async route => {
@@ -26,7 +27,7 @@ test('temporary provider key stays out of public state and is explicitly forgott
   await panel.getByLabel('Model', { exact: true }).fill('dummy-no-inference-model');
   const expiration = panel.getByRole('combobox', { name: 'Key expiration' });
   await expect(expiration).toHaveValue('30');
-  await expiration.selectOption('15');
+  await expiration.selectOption(expirationValue);
   const password = panel.getByLabel('API key', { exact: true });
   await expect(password).toHaveAttribute('type', 'password');
   await expect(panel.getByRole('button', { name: 'Save temporary key' })).toBeDisabled();
@@ -49,8 +50,15 @@ test('temporary provider key stays out of public state and is explicitly forgott
   expect(configured.provider).toBe('openai');
   expect(configured.model).toBe('dummy-no-inference-model');
   expect(configured.credential_ref).toBeTruthy();
-  expect(configured.expires_at).toBeGreaterThanOrEqual(savedAt + 15 * 60 - 1);
-  expect(configured.expires_at).toBeLessThanOrEqual(Date.now() / 1000 + 15 * 60 + 1);
+  expect(configured.key_timer_disabled).toBe(expirationValue === 'never');
+  if (expirationValue === 'never') {
+    const session = await (await page.request.get('/api/session')).json();
+    expect(configured.expires_at).toBe(session.expires_at);
+    await expect(panel.getByText(/Temporary key active.*No key timer/)).toBeVisible();
+  } else {
+    expect(configured.expires_at).toBeGreaterThanOrEqual(savedAt + 15 * 60 - 1);
+    expect(configured.expires_at).toBeLessThanOrEqual(Date.now() / 1000 + 15 * 60 + 1);
+  }
   await expiration.selectOption('120');
   const unchanged = await (await page.request.get('/api/model-settings')).json();
   expect(unchanged.expires_at).toBe(configured.expires_at);
@@ -80,6 +88,7 @@ test('temporary provider key stays out of public state and is explicitly forgott
 
   await page.reload();
   await expect(panel.getByText(/Temporary key active/)).toBeVisible();
+  if (expirationValue === 'never') await expect(panel.getByText(/Temporary key active.*No key timer/)).toBeVisible();
   await expect(password).toHaveValue('');
   await panel.getByRole('button', { name: 'Forget key' }).click();
   await expect(panel.getByText(/Temporary key active/)).toHaveCount(0);
@@ -90,3 +99,4 @@ test('temporary provider key stays out of public state and is explicitly forgott
   expect(afterJobs.jobs.map((j: { id: string }) => j.id)).toEqual(beforeJobs.jobs.map((j: { id: string }) => j.id));
   expect(generationRequests).toBe(0);
 });
+}

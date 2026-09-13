@@ -76,6 +76,20 @@ it('revokes locally on 401 without automatically creating a replacement session'
   expect(expired).toHaveBeenCalledOnce();
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
+it('does not revoke a replacement session when an older request returns 401', async () => {
+  let finish: (r: Response) => void = () => {};
+  const api = new ApiClient(vi.fn(() => new Promise<Response>(resolve => { finish = resolve; })));
+  api.session = session;
+  api.onExpired = vi.fn();
+  const request = api.mutate('/model-settings', {}, 'PUT');
+  const replacement = { ...session, session_id: 'replacement' };
+  api.session = replacement;
+  finish(reply({ detail: 'expired' }, 401));
+  await expect(request).rejects.toThrow('expired');
+  expect(api.session).toBe(replacement);
+  expect(api.onExpired).not.toHaveBeenCalled();
+});
+
 it('retains a request if a successful HTTP response does not contain an authoritative job', async () => {
   const fetcher = vi
     .fn()

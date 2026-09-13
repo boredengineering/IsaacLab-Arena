@@ -68,6 +68,7 @@ export class ApiClient {
     body?: unknown,
     csrf?: string,
   ): Promise<T> {
+    const requestSessionId = this.session?.session_id;
     const abort = new AbortController();
     const timeout = setTimeout(() => abort.abort(), 12_000);
     try {
@@ -90,7 +91,7 @@ export class ApiClient {
         value = null;
       }
       if (!response.ok) {
-        if (response.status === 401) this.expire();
+        if (response.status === 401 && this.session?.session_id === requestSessionId) this.expire();
         const detail =
           value && typeof value === 'object' && 'detail' in value
             ? typeof value.detail === 'string' ? value.detail : JSON.stringify(value.detail, null, 2)

@@ -7,11 +7,14 @@
 
 import asyncio
 import json
+import re
 import yaml
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from isaaclab_arena.agentic_environment_generation.workbench.document_yaml import parse_yaml
 
 from . import generation
 from .preview_options import RenderOptions, normalized_options
@@ -44,6 +47,7 @@ class SnapshotDraft(Draft):
 
 class GenerateDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+    credential_ref: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     prompt: str = Field(min_length=1, max_length=16000)
     document_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{32}$")
     base_yaml: str | None = Field(default=None, max_length=256 * 1024)
@@ -57,11 +61,11 @@ class GenerateDraft(BaseModel):
         return value
 
 
-@router.get("", dependencies=[Depends(require_session)])
-async def index(request: Request):
+@router.get("")
+async def index(request: Request, session=Depends(require_session)):
     documents = request.app.state.documents
     execution = request.app.state.editor_execution
-    configured = generation.configuration() is not None
+    configured = request.app.state.model_settings.status(session, request.app.state.session_keys_allowed)["configured"]
     limitations = [
         "Schema validation is not a simulation or policy evaluation.",
         "Save creates an immutable revision; downloads are explicitly flattened YAML exports.",
@@ -85,20 +89,30 @@ async def index(request: Request):
 @router.get("/documents/{document_id}", dependencies=[Depends(require_session)])
 async def document(request: Request, document_id: str):
     try:
-        return request.app.state.documents.load(document_id)
+        result = request.app.state.documents.load(document_id)
     except KeyError:
         raise HTTPException(404, "Document not found") from None
     except (ValueError, OSError):
         raise HTTPException(422, "Document source is unavailable or outside allowed roots") from None
+    protect_yaml(request, result["yaml_text"])
+    request.app.state.model_settings.protect_public(result)
+    return result
 
 
 @router.post("/validate", dependencies=[Depends(require_mutation)])
 async def validate(request: Request, body: Draft):
-    return request.app.state.documents.validate(body.yaml_text, body.document_id)
+    return checked_validation(request, body.yaml_text, body.document_id)
 
 
 @router.post("/save", dependencies=[Depends(require_mutation)])
 async def save(request: Request, body: SaveDraft):
+    request.app.state.model_settings.protect_public(body.model_dump())
+    checked_validation(request, body.yaml_text, body.document_id)
+    # Revisions retain the complete frozen source set, even if this draft drops its include.
+    includes = request.app.state.documents.frozen.get(body.document_id, {})
+    request.app.state.model_settings.protect_public(includes)
+    for text in includes.values():
+        protect_yaml(request, text)
     try:
         return request.app.state.documents.save(body.yaml_text, body.document_id, body.expected_source_hash)
     except KeyError:
@@ -113,6 +127,7 @@ async def download(request: Request, revision_id: str):
         text = request.app.state.documents.download(revision_id)
     except KeyError:
         raise HTTPException(404, "Revision not found") from None
+    protect_yaml(request, text)
     return Response(
         text,
         media_type="application/yaml",
@@ -120,14 +135,43 @@ async def download(request: Request, revision_id: str):
     )
 
 
-def frozen_draft(request, text, document_id):
+def protect_yaml(request, text):
+    """Guard raw YAML and escape spellings before errors can quote source excerpts."""
+    request.app.state.model_settings.protect_public(text)
+
+    def decode(match):
+        value = int(match.group()[2:], 16)
+        return chr(value) if value <= 0x10FFFF else match.group()
+
+    # This is a conservative secret check, not a parser: malformed YAML must still
+    # receive the normal validation diagnostics when it contains no credential.
+    unfolded = re.sub(r"\\(?:\r\n|[\r\n])[ \t]*", "", text)
+    decoded = re.sub(r"\\(?:x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8})", decode, unfolded)
+    request.app.state.model_settings.protect_public(decoded)
+    try:
+        parsed = parse_yaml(text)
+    except (ValueError, yaml.YAMLError, TypeError):
+        return  # Documents.validate owns invalid-YAML diagnostics.
+    request.app.state.model_settings.protect_public(parsed)
+
+
+def checked_validation(request, text, document_id):
+    protect_yaml(request, text)
     validation = request.app.state.documents.validate(text, document_id)
+    request.app.state.model_settings.protect_public(validation)
+    return validation
+
+
+def frozen_draft(request, text, document_id):
+    validation = checked_validation(request, text, document_id)
     if not validation["valid"]:
         raise HTTPException(422, {"message": "Invalid Arena environment specification", "errors": validation["errors"]})
     return yaml.safe_dump(validation["spec"], sort_keys=False), validation
 
 
 def submit_editor(request, session, kind, key, inputs):
+    # Both fresh submissions and safe prior replays cross this durable/public boundary.
+    request.app.state.model_settings.protect_public({"idempotency_key": key, "inputs": inputs})
     try:
         job = request.app.state.journal.submit(
             session["session_id"], "default", kind, key, inputs, max_pending=request.app.state.max_pending
@@ -140,6 +184,7 @@ def submit_editor(request, session, kind, key, inputs):
 
 @router.post("/generate", status_code=202)
 async def generate(request: Request, body: GenerateDraft, session=Depends(require_mutation)):
+    request.app.state.model_settings.protect_public(body.model_dump())
     base = body.base_yaml
     document_id = body.document_id
     if body.document_id:
@@ -152,21 +197,39 @@ async def generate(request: Request, body: GenerateDraft, session=Depends(requir
         except (KeyError, OSError, ValueError):
             raise HTTPException(404, "Document not found") from None
     validation = None
+    request.app.state.model_settings.protect_public(base)
     if base is not None:
         base, validation = frozen_draft(request, base, document_id)
-    if generation.configuration() is None:
+    inputs = {
+        "prompt": body.prompt,
+        "base_yaml": base,
+        "document_id": document_id,
+        "input_hash": validation["source_hash"] if validation else None,
+    }
+    existing = request.app.state.journal.get_submission("default", body.idempotency_key)
+    if existing is not None:
+        # Recovery is workspace-wide, not a fresh grant to consume a credential.
+        # Only use the original frozen metadata; Journal.submit compares the full
+        # fingerprint (including kind and exact ref) and never queues a replay.
+        if body.credential_ref is not None:
+            inputs["credential_ref"] = body.credential_ref
+            inputs.update({key: existing["inputs"][key] for key in ("provider", "model") if key in existing["inputs"]})
+        return submit_editor(request, session, "generate", body.idempotency_key, inputs)
+    credential = {}
+    if body.credential_ref is not None:
+        try:
+            config = request.app.state.model_settings.resolve(session["session_id"], body.credential_ref)
+        except ValueError:
+            raise HTTPException(409, "Temporary credential unavailable; save settings and submit again") from None
+        credential = {"credential_ref": body.credential_ref, "provider": config["provider"], "model": config["model"]}
+    elif generation.configuration() is None:
         raise HTTPException(503, "Generation is not configured; set a supported server-side model API key")
     return submit_editor(
         request,
         session,
         "generate",
         body.idempotency_key,
-        {
-            "prompt": body.prompt,
-            "base_yaml": base,
-            "document_id": document_id,
-            "input_hash": validation["source_hash"] if validation else None,
-        },
+        {**inputs, **credential},
     )
 
 

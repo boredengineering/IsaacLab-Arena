@@ -6,8 +6,8 @@ The primary surface is an environment editor with prompt/YAML authoring,
 validated graph inspection, immutable revision exports and real snapshots.
 Persisted Neo4j query results have a separate view. Sessions, durable jobs and
 live events support those workflows; diagnostics are not the main workspace.
-Live model generation requires explicit server configuration, and full policy
-evaluation remains outside this initial editor release. Streamlit remains
+Live model generation requires explicit temporary-session or server configuration.
+Full policy evaluation remains outside this initial editor release. Streamlit remains
 available while the broader parity gates are completed.
 
 Source ownership
@@ -83,6 +83,65 @@ cancelled and indeterminate outcomes. Cancellation requires actual worker
 acknowledgment and cleanup. After an unclean restart, work without verifiable
 completion evidence cannot be automatically replayed. Queued work requires
 explicit recovery/resume as defined by the launcher and API.
+
+Temporary provider credentials
+------------------------------
+
+Provider settings are a separate control plane, not environment YAML or durable
+job inputs. ``GET /api/model-settings`` exposes public provider/model/source/expiry
+metadata; authenticated, CSRF-protected ``PUT`` and ``DELETE`` set or forget a
+temporary session credential. Saving settings never invokes the provider. Only
+an explicit generation submission authorizes model work.
+
+The browser password field is transient. Secret-bearing requests use the API
+client directly rather than React Query mutations, whose retained variables
+would otherwise keep a copy of the key. Only public status is query-cached.
+There is no key persistence in localStorage, sessionStorage, draft recovery,
+URLs, YAML, or browser job records. Provider changes and submission attempts
+clear the input; UI errors must not echo request payloads.
+
+The Python API owns a bounded, expiring in-memory credential store. Entries are
+scoped to the authenticated browser session and expire after the selected
+15/30/60/120 minutes (default 30), capped by the session deadline. They are
+removed on access/periodic cleanup, session revocation, or API shutdown. Polling does not extend key
+lifetime. Tabs sharing a session share its provider settings; tab closure does
+not revoke the server entry. Durable sessions do not imply durable credentials.
+The ``ttl_minutes`` setting is a strict allowed integer, enforced server-side.
+Changing the dropdown does not renew existing credentials; saving again replaces
+the credential reference and its deadline. There is no unlimited lifetime.
+
+Generation binds a non-secret credential reference to the submitting session.
+The worker resolves that exact reference before execution; another session cannot
+use it, and expiry/replacement cannot silently select another credential or the
+server fallback. Recovery of an already-accepted matching submission does not
+require its old key to remain valid and does not run it again. Explicitly
+discarding an unresolved local retry clears only that tab's recovery record,
+after warning that a job may already exist; it never silently rebinds credentials
+or cancels accepted work. Raw keys never enter the journal or worker command line. The
+resolved configuration crosses a private stdin pipe to the bounded subprocess.
+Worker errors and receipts must not expose the key. An already-authorized generation
+job may finish all its bounded model calls with the resolved credential: forgetting settings is not cancellation or
+provider-side revocation, and requests already sent cannot be retracted.
+
+Browser-entered keys use fixed HTTPS provider endpoints for OpenAI, Gemini,
+OpenRouter, and NVIDIA's public API. Custom endpoint entry is intentionally absent:
+an arbitrary URL would create credential-exfiltration and SSRF risks. Redirects
+must not move authenticated requests to a different destination. Operator-managed
+server environment configuration remains a separate trusted deployment choice.
+Forgetting a temporary override can restore the server source for new requests;
+the public status must make that fallback explicit.
+
+This design limits accidental persistence, cross-session credential use, and
+endpoint substitution; it is not a secrets vault or a multi-tenant security
+boundary. The frontend proxy handles request bodies in transit. XSS, malicious
+browser extensions, debug/network traces, same-user process access, core dumps,
+swap, and privileged administrators remain part of the trusted-host threat model.
+Python/JavaScript cannot guarantee that all RAM copies are securely erased.
+Use restricted provider keys, budget limits, and revocation at the provider.
+Consent covers prompts, scene YAML, catalogues, USD context, and retrieved graph
+priors used by the selected workflow, not just transport of the API key.
+Local loopback HTTP is supported; non-loopback credential entry requires a
+configured HTTPS origin and still needs a separate authentication/TLS review.
 
 Live event contract
 -------------------

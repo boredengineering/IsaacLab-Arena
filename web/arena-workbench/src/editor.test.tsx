@@ -5,6 +5,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { createMemoryHistory } from '@tanstack/react-router';
 import { App } from './app';
 import { ApiClient } from './api';
+import { PROVIDERS } from './model-settings-contracts';
 const response = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status });
 beforeEach(() => sessionStorage.clear());
 const validation = {
@@ -494,6 +495,126 @@ it('retains ambiguous generation across reload and retries the frozen request wi
   await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/generate'))).toHaveLength(2));
   expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/generate'))[1][1]?.body).toBe(body);
 });
+it('requires explicit discard before replacing a rejected generation reference', async () => {
+  const base = editorServer();
+  const key = 'arena:editor:generate:v1';
+  const previous = { payload: { prompt: 'old prompt', credential_ref: 'expired-reference', idempotency_key: 'old-request' } };
+  sessionStorage.setItem(key, JSON.stringify(previous));
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/model-settings') return response({ providers: PROVIDERS, configured: true, source: 'session',
+      provider: 'openai', model: 'new-model', expires_at: 9999999999, credential_ref: 'replacement-reference', session_keys_allowed: true });
+    if (url.endsWith('/editor/generate')) return response({ detail: 'Temporary credential unavailable' }, 409);
+    return base(url, init);
+  });
+  mountEditor(fetcher);
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const discard = await screen.findByRole('button', { name: 'Discard unresolved request' });
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  try {
+    fireEvent.click(discard);
+    expect(JSON.parse(sessionStorage.getItem(key)!)).toEqual(previous);
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('may already have been accepted'));
+    confirm.mockReturnValue(true);
+    fireEvent.click(discard);
+    expect(sessionStorage.getItem(key)).toBeNull();
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/generate'))).toHaveLength(0);
+    fireEvent.change(screen.getByLabelText('Describe the environment and task'), { target: { value: 'new prompt' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate spec' }));
+    await screen.findByText('Temporary credential unavailable');
+    const sent = JSON.parse(String(fetcher.mock.calls.find(([url]) => url.endsWith('/editor/generate'))![1]?.body));
+    expect(sent.credential_ref).toBe('replacement-reference');
+    expect(sent.idempotency_key).not.toBe('old-request');
+    expect(sent.prompt).toBe('new prompt');
+    expect(await screen.findByRole('button', { name: 'Discard unresolved request' })).toBeEnabled();
+  } finally {
+    confirm.mockRestore();
+  }
+});
+
+it('uses session settings to enable generation and freezes the reference at click and ambiguous retry', async () => {
+  const base = editorServer();
+  let ref = 'public-ref-original';
+  let release: (() => void) | undefined;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/model-settings') return response({ providers: PROVIDERS, configured: true, source: 'session',
+      provider: 'openai', model: 'user-model', expires_at: 9999999999, credential_ref: ref, session_keys_allowed: true });
+    if (url.endsWith('/session/activity')) await new Promise<void>(resolve => { release = resolve; });
+    if (url.endsWith('/editor/generate')) throw new TypeError('network lost');
+    return base(url, init);
+  });
+  mountEditor(fetcher);
+  await screen.findByText(/Temporary key active/);
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  fireEvent.change(screen.getByLabelText('Describe the environment and task'), { target: { value: 'Make a scene' } });
+  expect(screen.getByRole('button', { name: 'Generate spec' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Generate spec' }));
+  await waitFor(() => expect(release).toBeDefined());
+  ref = 'public-ref-rotated';
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh provider status' }));
+  await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url === '/api/model-settings')).toHaveLength(2));
+  act(() => release!());
+  await screen.findByText('network lost');
+  const original = fetcher.mock.calls.find(([url]) => url.endsWith('/editor/generate'))![1]?.body;
+  expect(JSON.parse(String(original))).toMatchObject({ credential_ref: 'public-ref-original', prompt: 'Make a scene', base_yaml: 'env_name: real_document' });
+  fireEvent.click(screen.getByRole('button', { name: 'Retry generation request' }));
+  await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/session/activity'))).toHaveLength(2));
+  act(() => release!());
+  await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/generate'))).toHaveLength(2));
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/generate'))[1][1]?.body).toBe(original);
+});
+
+it.each(['unconfigured', 'expired', 'unavailable'])('does not trust stale editor capability when provider status is %s', async (state) => {
+  const base = editorServer();
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { generation: true } });
+    if (url === '/api/model-settings') return state === 'unavailable' ? response({ detail: 'offline' }, 503)
+      : response({ providers: PROVIDERS, configured: state !== 'unconfigured', source: state === 'expired' ? 'session' : 'none',
+        provider: state === 'expired' ? 'openai' : null, model: state === 'expired' ? 'model' : null,
+        expires_at: state === 'expired' ? 1 : null, credential_ref: state === 'expired' ? 'expired-ref' : null, session_keys_allowed: true });
+    return base(url, init);
+  });
+  mountEditor(fetcher);
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  await screen.findByText(state === 'unavailable' ? /Provider settings unavailable/ : state === 'expired' ? /Temporary key expired/ : /No provider configured/);
+  fireEvent.change(screen.getByLabelText('Describe the environment and task'), { target: { value: 'Make a scene' } });
+  expect(screen.getByRole('button', { name: 'Generate spec' })).toBeDisabled();
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/generate'))).toHaveLength(0);
+});
+
+it('preserves unsaved YAML, prompt and graph when saving settings and never persists the password', async () => {
+  const base = editorServer();
+  let configured = false;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/model-settings') {
+      if (init?.method === 'PUT') configured = true;
+      return response({ providers: PROVIDERS, configured, source: configured ? 'session' : 'none', provider: configured ? 'gemini' : null,
+        model: configured ? 'user-model' : null, credential_ref: configured ? 'public-ref' : null, expires_at: configured ? 9999999999 : null,
+        session_keys_allowed: true });
+    }
+    return base(url, init);
+  });
+  const storage = vi.spyOn(Storage.prototype, 'setItem');
+  mountEditor(fetcher);
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  await screen.findByText(/No provider configured/);
+  const cm = CodeMirrorView.findFromDOM(screen.getByRole('textbox', { name: 'YAML editor' }))!;
+  act(() => cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: 'env_name: unsaved_provider_test' } }));
+  fireEvent.change(screen.getByLabelText('Describe the environment and task'), { target: { value: 'Keep my prompt' } });
+  fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'gemini' } });
+  fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'user-model' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: /I consent/ }));
+  fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'dummy-editor-secret' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save temporary key' }));
+  await screen.findByText(/Temporary key active/);
+  expect(screen.getByLabelText('API key')).toHaveValue('');
+  expect(screen.getByLabelText('Describe the environment and task')).toHaveValue('Keep my prompt');
+  expect(cm.state.doc.toString()).toBe('env_name: unsaved_provider_test');
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  expect(JSON.stringify(storage.mock.calls)).not.toContain('dummy-editor-secret');
+  expect(fetcher.mock.calls.filter(([url]) => /generate|snapshots|\/save$/.test(url))).toHaveLength(0);
+  storage.mockRestore();
+});
+
 it('freezes revision YAML and source identity at the click before asynchronous activity', async () => {
   const base = editorServer();
   let release: (() => void) | undefined;

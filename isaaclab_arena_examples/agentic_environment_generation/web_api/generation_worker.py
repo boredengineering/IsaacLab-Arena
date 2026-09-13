@@ -9,9 +9,12 @@ import argparse
 import contextlib
 import ctypes
 import json
+import logging
 import os
 import signal
 import sys
+
+from .provider_security import reject_secret
 
 
 def main():
@@ -24,22 +27,33 @@ def main():
     if len(line) > 512 * 1024 or not line.endswith(b"\n"):
         return 1
     channel = sys.stdout
+    api_key = None
 
     def send(message):
+        reject_secret(message, api_key)
         channel.write(json.dumps(message, allow_nan=False) + "\n")
         channel.flush()
 
+    previous_logging_level = logging.root.manager.disable
+    logging.disable(sys.maxsize)
     try:
-        inputs = json.loads(line)
+        envelope = json.loads(line)
+        if set(envelope) != {"inputs", "config"} or not envelope["config"]:
+            raise ValueError("Invalid private generation envelope")
+        config = envelope["config"]
+        api_key = config.get("api_key")
         with open(os.devnull, "w") as sink, contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
             from .generation import generate
 
-            result = generate(inputs, lambda stage: send({"stage": stage}))
+            result = generate(envelope["inputs"], lambda stage: send({"stage": stage}), config=config)
+        reject_secret(result, config.get("api_key"))
         send({"result": result})
         return 0
     except Exception:
         send({"error": "Generation failed: check server model configuration, endpoint access, and draft validity"})
         return 1
+    finally:
+        logging.disable(previous_logging_level)
 
 
 if __name__ == "__main__":

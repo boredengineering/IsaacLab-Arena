@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRuntime } from './runtime';
+import { ModelSettings, useModelSettings } from './model-settings';
 import { CodeEditor } from './code-editor';
 import { GraphView } from './graph-view';
 import type {
@@ -54,6 +55,7 @@ export function RawTable({ title, rows }: { title: string; rows: Record<string, 
 /** Server-validated authoring surface; simulator work is always explicit. */
 export function EditorView() {
   const { api, session } = useRuntime();
+  const modelSettings = useModelSettings();
   const cache = useQueryClient();
   cache.setQueryDefaults(['editor-draft'], { gcTime: Infinity });
   const [restored] = useState(() =>
@@ -102,6 +104,7 @@ export function EditorView() {
   const latest = useRef(draft);
   latest.current = draft;
   const generation = useEditorJob('generate');
+  const generationAvailable = modelSettings.generationAvailable ?? index.data?.capabilities.generation;
   const current = validation?.text === draft ? validation.result : null;
   const valid = current?.valid === true;
   const canonicalHash = valid ? current.canonical_hash : null;
@@ -298,6 +301,7 @@ export function EditorView() {
               <h2>Generate from prompt</h2>
               <span className="tag">Draft only · no Neo4j publication</span>
             </div>
+            <ModelSettings settings={modelSettings} />
             <label htmlFor="scene-prompt">Describe the environment and task</label>
             <textarea
               id="scene-prompt"
@@ -308,7 +312,7 @@ export function EditorView() {
             />
             <div className="section-heading">
               <p className="muted">
-                {index.data?.capabilities.generation
+                {generationAvailable
                   ? 'Review generated YAML before applying it.'
                   : 'Generation unavailable — requires a configured backend adapter.'}
               </p>
@@ -316,7 +320,7 @@ export function EditorView() {
                 className="primary"
                 disabled={
                   !session ||
-                  !index.data?.capabilities.generation ||
+                  (!generationAvailable && !(generation.retained && !generation.job)) ||
                   (!prompt.trim() && !(generation.retained && !generation.job)) ||
                   generation.busy ||
                   loading ||
@@ -326,6 +330,7 @@ export function EditorView() {
                   generation.submit.mutate({
                     prompt,
                     base_yaml: draft,
+                    ...(modelSettings.credentialRef ? { credential_ref: modelSettings.credentialRef } : {}),
                     ...(document ? { document_id: document.document_id } : {}),
                   })
                 }

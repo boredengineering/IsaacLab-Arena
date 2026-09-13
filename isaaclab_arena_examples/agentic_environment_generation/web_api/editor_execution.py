@@ -13,10 +13,12 @@ import sys
 import threading
 from pathlib import Path
 
+from . import generation
 from .generation import GENERATION_STAGES, GENERATION_TIMEOUT
 from .preview_diagnostics import clean_errors, clean_timings
 from .preview_options import normalized_options
 from .process_identity import process_identity
+from .provider_security import reject_secret, worker_environment
 
 
 def make_snapshot_service(state_dir):
@@ -31,6 +33,7 @@ class EditorExecution:
     def __init__(self, state_dir, documents):
         self.state_dir = Path(state_dir)
         self.documents = documents
+        self.model_settings = None
         self.snapshots = None
         self.cancel_task = None
         self.snapshot_error = None
@@ -115,6 +118,17 @@ class EditorExecution:
             self.cancel_task = asyncio.create_task(asyncio.to_thread(self.snapshots.close))
 
     async def generate(self, supervisor, job, emit):
+        inputs = job["inputs"]
+        if "credential_ref" in inputs:
+            assert self.model_settings is not None, "Temporary credential store unavailable"
+            owner, reference = job["created_by_session_id"], inputs["credential_ref"]
+            metadata = {key: inputs[key] for key in ("provider", "model")}
+            config = self.model_settings.resolve(owner, reference)
+            if any(config[key] != inputs[key] for key in ("provider", "model")):
+                raise ValueError("Temporary credential metadata mismatch")
+        else:
+            config = generation.configuration()
+        api_key = (config or {}).get("api_key")
         async with asyncio.timeout(GENERATION_TIMEOUT):
             process = await asyncio.create_subprocess_exec(
                 sys.executable,
@@ -127,6 +141,7 @@ class EditorExecution:
                 stderr=asyncio.subprocess.DEVNULL,
                 stdin=asyncio.subprocess.PIPE,
                 start_new_session=True,
+                env=worker_environment(api_key),
                 limit=2 * 1024 * 1024,
             )
             supervisor.process = process
@@ -136,7 +151,14 @@ class EditorExecution:
             if identity is None:
                 raise ValueError("Generation worker did not start")
             supervisor.journal.record_worker(job["id"], process.pid, identity)
-            process.stdin.write((json.dumps(job["inputs"]) + "\n").encode())
+            if "credential_ref" in inputs:
+                # Spawning yields to Forget, expiry and replacement. Authorize again with
+                # the original owner/ref, with no await before releasing the private bytes.
+                config = self.model_settings.resolve(owner, reference)
+                if any(config[key] != value for key, value in metadata.items()):
+                    raise ValueError("Temporary credential metadata mismatch")
+                api_key = config["api_key"]
+            process.stdin.write((json.dumps({"inputs": inputs, "config": config}) + "\n").encode())
             await process.stdin.drain()
             process.stdin.close()
             result = None
@@ -145,6 +167,7 @@ class EditorExecution:
                 if not line:
                     break
                 message = json.loads(line)
+                reject_secret(message, api_key)
                 if set(message) == {"stage"} and message["stage"] in GENERATION_STAGES and result is None:
                     emit(message["stage"])
                 elif set(message) == {"result"} and result is None:
@@ -161,6 +184,7 @@ class EditorExecution:
             if not isinstance(result["traces"], list) or any(s not in GENERATION_STAGES for s in result["traces"]):
                 raise ValueError("Invalid generation trace")
             result["validation"] = validation
+            reject_secret(result, api_key)
             return result
 
     async def close(self):

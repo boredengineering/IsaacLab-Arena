@@ -77,8 +77,9 @@ async def activity(request: Request):
     return session
 
 
-@router.delete("/session", dependencies=[Depends(require_mutation)])
-async def revoke(request: Request, response: Response):
+@router.delete("/session")
+async def revoke(request: Request, response: Response, session=Depends(require_mutation)):
+    request.app.state.model_settings.forget(session["session_id"])
     request.app.state.sessions.revoke(cookie_token(request))
     response.delete_cookie(
         request.app.state.cookie_name,

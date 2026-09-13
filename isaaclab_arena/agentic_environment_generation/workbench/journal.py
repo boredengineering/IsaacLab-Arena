@@ -131,6 +131,14 @@ class Journal:
             self._event(db, job, "queued")
             return job
 
+    def get_submission(self, workspace_id, key):
+        """Recover a workspace-wide idempotency binding without authorizing new work."""
+        with self._lock:
+            row = self.db.execute(
+                "SELECT body FROM jobs WHERE workspace_id=? AND idempotency_key=?", (workspace_id, key)
+            ).fetchone()
+            return json.loads(row["body"]) if row else None
+
     def get_job(self, job_id):
         """Read a job or raise KeyError for an unknown identifier."""
         with self._lock:

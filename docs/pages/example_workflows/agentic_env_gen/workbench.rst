@@ -10,9 +10,9 @@ graph, asset cards, task/constraint inspection and explicit snapshot rendering.
 ``/neo4j`` provides read-only Cypher queries with separate table and graph views.
 Diagnostics are secondary at ``/developer/diagnostics``.
 
-Generation is connected to the existing agent but requires an API key configured
-in the server process environment. No live model call has been verified in this
-deployment. The workbench does not load credential files automatically or publish
+Generation is connected to the existing agent and accepts a temporary session key
+through provider settings or a key in the server process environment. No successful
+live model generation has been verified in this deployment. The workbench does not load credential files automatically or publish
 generated drafts to Neo4j. Streamlit remains available through :doc:`gui_runner`;
 this release is not full parity with every preview/evaluation workflow.
 
@@ -189,11 +189,28 @@ server-side resource limits. An unavailable database is shown explicitly and
 does not disable YAML editing. Query results are never merged into the authored
 scene graph.
 
-Configure generation only through supported server environment variables:
+Use the generation provider-settings panel to select a fixed provider endpoint,
+enter a model ID and temporary API key, and explicitly consent to session use.
+Choose a key expiration of 15 minutes, 30 minutes (default), 1 hour, or 2 hours.
+The dedicated password control clears after submission; settings expire after
+that duration or at session expiry, whichever comes first, and are removed from
+API memory on access or periodic cleanup. Changing the selection only affects
+the next save, not the current key's deadline. Keys are
+not written to job history or YAML.
+Saving settings makes no provider call. Forget the key or end the session when
+finished. An already-authorized generation job may finish all its bounded model
+calls; forgetting cannot revoke a key
+at the provider or retract submitted data. Tabs sharing a browser session share
+settings, and an API restart loses temporary credentials.
+
+For unattended use, supported server environment variables remain
 ``OPENAI_API_KEY``, ``GEMINI_API_KEY``, ``OPENROUTER_API_KEY`` or ``NV_API_KEY``,
-with the corresponding ``*_MODEL`` and ``*_BASE_URL`` when needed. Do not enter
-credentials in YAML or the browser. A generated result must be reviewed and
-explicitly applied; it cannot silently replace a newer draft.
+with the corresponding ``*_MODEL`` and ``*_BASE_URL`` when needed. Temporary
+dashboard settings override that source for explicit session-bound generation;
+forgetting them can restore the server fallback. Never enter keys in prompt,
+YAML, or query fields. A generated result must be reviewed and explicitly applied;
+it cannot silently replace a newer draft. See the architecture page's temporary
+provider credentials section for lifecycle and residual security risks.
 
 Development dependency ownership
 --------------------------------

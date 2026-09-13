@@ -12,6 +12,7 @@ interface Retained {
 export function useEditorJob(kind: 'generate' | 'snapshots') {
   const runtime = useRuntime();
   const key = `arena:editor:${kind}:v1`;
+  const [discardError, setDiscardError] = useState<Error | null>(null);
   const [retained, setRetained] = useState<Retained | null>(() => {
     try {
       const raw = sessionStorage.getItem(key);
@@ -72,9 +73,20 @@ export function useEditorJob(kind: 'generate' | 'snapshots') {
     submit,
     cancel,
     retained,
+    discard: () => {
+      if (!retained || job || submit.isPending) return;
+      try {
+        sessionStorage.removeItem(key);
+        setRetained(null);
+        setDiscardError(null);
+        submit.reset();
+      } catch {
+        setDiscardError(new Error('Could not clear local retry information. The request is still retained.'));
+      }
+    },
     busy: submit.isPending || (!!job && isActive(job))
       || (kind === 'snapshots' && !!workspace?.jobs.some((entry) => entry.kind === 'snapshots' && isActive(entry))),
-    error: submit.error ?? cancel.error ?? read.error,
+    error: discardError ?? submit.error ?? cancel.error ?? read.error,
     refresh: () => {
       void read.refetch();
       void runtime.refresh();
@@ -82,7 +94,7 @@ export function useEditorJob(kind: 'generate' | 'snapshots') {
   };
 }
 export function EditorJobProgress({ controller }: { controller: ReturnType<typeof useEditorJob> }) {
-  const { job, error, retained, submit, cancel, refresh } = controller;
+  const { job, error, retained, submit, cancel, refresh, discard } = controller;
   return (
     <>
       {error && (
@@ -91,10 +103,13 @@ export function EditorJobProgress({ controller }: { controller: ReturnType<typeo
         </p>
       )}
       {retained && !job && !submit.isPending && (
-        <p className="notice warning">
-          Submission unresolved. Retry sends the same frozen inputs and key; it does not request a
-          second job.
-        </p>
+        <div className="notice warning">
+          <p>Submission unresolved. Retry sends the same frozen inputs, credential reference and request ID.
+            A replacement API key is never substituted automatically.</p>
+          <button type="button" onClick={() => {
+            if (window.confirm('A job may already have been accepted. Check the job journal before starting another. Discard only this tab’s retry information?')) discard();
+          }}>Discard unresolved request</button>
+        </div>
       )}
       {job && (
         <div className="editor-job" role="status">

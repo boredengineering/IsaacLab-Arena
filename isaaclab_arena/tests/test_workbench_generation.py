@@ -81,7 +81,12 @@ def test_workbench_generation_adapter_validates_and_never_exposes_raw_traces(tmp
             return spec, None
 
     inputs = {"prompt": "move the cube", "base_yaml": yaml.safe_dump(spec.to_dict()) if refine else None}
-    result = generate(inputs, lambda stage: None, agent_factory=Agent, config={"model": "test"})
+    result = generate(
+        inputs,
+        lambda stage: None,
+        agent_factory=Agent,
+        config={"model": "test", "api_key": "dummy-workbench-test-key", "base_url": "https://api.openai.com/v1"},
+    )
     assert result["publication"] == "not_published"
     assert observed == (["refine"] if refine else ["generate"])
     assert "private-secret" not in str(result)

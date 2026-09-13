@@ -7,8 +7,9 @@
 
 import asyncio
 import hashlib
+import ipaddress
 import time
-from contextlib import asynccontextmanager, nullcontext
+from contextlib import asynccontextmanager, nullcontext, suppress
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -25,6 +26,8 @@ from .editor_execution import EditorExecution
 from .events import router as event_router
 from .graph_queries import router as graph_router
 from .jobs import router as job_router
+from .model_settings import ModelSettings
+from .model_settings import router as model_settings_router
 from .process_identity import recover_workers
 from .runtime import StateLease
 from .security import router as session_router
@@ -74,15 +77,22 @@ def create_app(
                     journal, clock=clock, idle_seconds=idle_seconds, absolute_seconds=absolute_seconds
                 )
                 recovered_pause = journal.begin_run()
+                app.state.model_settings = ModelSettings(clock=clock)
                 await recover_workers(journal)
                 supervisor = Supervisor(journal, enabled=diagnostics, paused=start_paused or recovered_pause)
                 app.state.editor_execution = EditorExecution(state_dir, app.state.documents)
+                app.state.editor_execution.model_settings = app.state.model_settings
                 supervisor.editor_execution = app.state.editor_execution
                 app.state.supervisor = supervisor
                 worker_task = asyncio.create_task(supervisor.run())
+                credential_task = asyncio.create_task(app.state.model_settings.maintain())
                 try:
                     yield
                 finally:
+                    app.state.model_settings.clear()
+                    credential_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await credential_task
                     await supervisor.stop()
                     await app.state.editor_execution.close()
                     await worker_task
@@ -95,6 +105,11 @@ def create_app(
     app.state.browser_origins = browser_origins
     app.state.cookie_name = f"arena_wb_{identity}"
     app.state.secure_cookie = parsed.scheme == "https"
+    try:
+        loopback = ipaddress.ip_address(parsed.hostname or "").is_loopback
+    except ValueError:
+        loopback = parsed.hostname == "localhost"
+    app.state.session_keys_allowed = parsed.scheme == "https" or loopback
     app.state.absolute_seconds = absolute_seconds
     app.state.diagnostics = diagnostics
     app.state.neo4j_available = True
@@ -135,6 +150,7 @@ def create_app(
         return {"status": "ok", "capabilities": {"diagnostic": diagnostics, "generation": False, "preview": False}}
 
     app.include_router(session_router)
+    app.include_router(model_settings_router)
     app.include_router(job_router)
     app.include_router(event_router)
     app.include_router(editor_router)

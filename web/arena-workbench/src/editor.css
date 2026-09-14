@@ -458,6 +458,18 @@ pre {
 .graph-heading .muted {
   font-size: 10px;
 }
+.graph-host {
+  min-width: 0;
+}
+.graph-rollout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
 .graph-view {
   border: 1px solid #dce3d9;
   background: white;

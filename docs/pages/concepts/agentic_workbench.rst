@@ -84,6 +84,73 @@ acknowledgment and cleanup. After an unclean restart, work without verifiable
 completion evidence cannot be automatically replayed. Queued work requires
 explicit recovery/resume as defined by the launcher and API.
 
+Graph explorer preview
+-----------------------
+
+``graphRenderer=explorer`` selects the new frontend graph explorer on the editor
+and Neo4j routes. The default remains ``legacy`` during visual acceptance.
+``GraphHost`` owns the rollout boundary and keeps **Use legacy graph** outside
+optional module loading and error boundaries. Switching renderers is local
+presentation state, not an API restart, graph write, or job submission.
+
+The implementation is under ``web/arena-workbench/src/graph-explorer/``:
+
+* ``graph-model.ts`` validates unknown projections, preserves literal IDs,
+  quarantines malformed identities/endpoints with diagnostics, and provides
+  immutable display values and indexed local filtering.
+* ``explorer-state.ts`` owns source/revision-aware selection, filters, table
+  state, and independent 2D/3D numeric presentation snapshots. Controllers stay
+  above validation withholding and raw-query tab switches; visual adapters do
+  not stay mounted when hidden.
+* ``graph-table.tsx``, ``graph-inspector.tsx`` and ``property-tree.tsx`` provide
+  semantic entity tables, endpoint navigation and bounded property inspection.
+  Neo4j's raw query-row table remains separate from these graph-entity tables.
+* ``graph-2d.tsx`` and lazily loaded ``graph-3d.tsx`` receive fresh property-free
+  mutable layout objects. Force coordinates, object endpoints, pins, cameras,
+  and graphics resources never become source YAML or cached API graph data.
+* ``renderer-contracts.ts`` defines the presentation-only adapter controls.
+  Freezing layout retains selection and navigation; stopping renderer animation
+  is reserved for hidden/disposed views, not the visible Freeze control.
+
+Authored validation belongs to a session, selected document and frozen source,
+not just matching YAML text. Reconnecting with a retained draft withholds its
+graph until current-session validation completes against that same frozen source;
+it does not silently reload includes or discard draft/prompt edits. Delayed
+responses from an obsolete owner cannot restore its graph. Applying a durable
+generation result also requires fresh validation before graph display.
+
+Graph coordinates are layout units, not scene meters. Browser WebGL in 3D uses
+browser graphics resources but launches no Isaac Sim worker. Keyboard and
+click-only pan/zoom/orbit and selected-node coordinate controls supplement drag
+gestures. Table remains available when WebGL is unsupported or lost.
+
+Search operates on returned IDs/labels/roles/types. Relationship-only matches
+bring their allowed endpoints into the context graph; explicit role/type
+exclusions still win. Neighborhoods are loaded neighbors only and never cause
+database expansion. **Reveal (clear filters)** explicitly clears visibility
+constraints rather than silently overriding them. Returned, valid, visible,
+and paginated counts must not be described as database totals.
+
+New role/type categories enter the default unfiltered view on a revision.
+Deliberate exclusions survive category disappearance and reappearance, and an
+explicit empty selection remains empty. Clear and Reveal reset that intent to
+All, including on empty graphs; Reveal keeps the search text as highlighting
+while removing visibility constraints. Truncation markers remain inspectable
+text but cannot establish relationship identity across revisions.
+
+The standalone force-graph wrappers are pinned to ``1.29.1``, Three.js and its
+types to ``0.180.0``, and TanStack Table to ``8.21.3``. The isolated spike found
+pointer-control failures with an unconstrained newer Three.js resolution;
+retain the tested single-instance dependency closure unless it is revalidated.
+Built-in HTML-capable graph labels are disabled; display labels and property
+values use text-only application rendering. Server redaction/truncation and
+frontend normalization diagnostics remain explicit.
+
+The rollout retains the original SVG implementation until user acceptance.
+Implementation evidence and remaining gates are recorded in the repository
+plan ``.agents/references/plans/tanstack_graph_explorer.md``; a passing model or
+component test does not establish 3D hardware performance or resource cleanup.
+
 Temporary provider credentials
 ------------------------------
 

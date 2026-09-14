@@ -1,0 +1,256 @@
+# Dashboard / CLI workflow parity
+
+Status: RESEARCHED AND REVIEWED PROPOSAL — scope, corrected execution/persistence protocol and independent mental-model consistency reviews passed. Ready for implementation-phase discussion, not automatic implementation. No application changes or live generation, database publication, simulation or evaluation are authorized by this document.
+
+## 1. Objective and relationship to existing plans
+
+Make the dashboard a complete, explicit adapter for the research workflows documented in `isaaclab_arena_examples/agentic_environment_generation/README.md` and its generation/evaluation guides. The default creation workflow is **from scratch, from a prompt, with Graph-RAG retrieval**. Loading a template is neither required nor an equivalent substitute.
+
+This is an extension of `tanstack_agentic_workbench_plan.md`, not a replacement architecture or another graph-renderer migration. It proposes expanding the earlier first-release exclusions around version-manager integration, publication, policy evaluation and repair. The verified graph explorer remains reusable. Existing uncommitted work is preserved. Implementation and live-run authorization remain separate gates.
+
+Parity means equivalent validated inputs, computation, durable outputs, provenance and observable side effects—not merely similar buttons, a shell text box, or an exported command the user must run manually. CLI operations without a browser implementation remain visibly blocked/deferred and prevent a blanket claim of full parity. Infrastructure installation and privileged machine administration remain operator prerequisites, separately identified rather than disguised as research features.
+
+## 2. Source-of-truth audit
+
+Repository paths are relative to the checkout. `A/` = `isaaclab_arena/agentic_environment_generation/`; `E/` = `isaaclab_arena_examples/agentic_environment_generation/`; `W/` = `E/web_api/`; `F/` = `web/arena-workbench/src/`.
+
+| Evidence | Observed boundary |
+|---|---|
+| `E/README.md:11-29,128-188` | Runtime, Neo4j, model and policy services have separate owners; database presence is not proof of eligible priors or API-process configuration. |
+| `E/README.md:345-405` | Current workbench refines loaded YAML; CLI `resolve` without `--base_spec` generates from scratch, writes versions/lineage and attempts publication; evaluation is separate. |
+| `F/editor.tsx:341-347` | The UI always submits `base_yaml` plus a loaded document ID when present. |
+| `W/editor.py:185-208` | A document ID can implicitly reload a base if base YAML is omitted. Omitting only the YAML is insufficient to select new generation. |
+| `W/generation.py:86-109` | Worker branches on base presence, suppresses publication, and may return convergence warnings. |
+| `W/editor_execution.py:120-188` | Bounded owned generation worker, private credential pipe, strict result fields and explicit `not_published` validation. Changing publication requires a contract migration, not one flag. |
+| `E/environment_generation_runner.py:47-177,239-330` | Actual modes: `schema`, `catalog`, `resolve`, `build`, `full`, `auto_heal`; model/temperature, source, version, policy, recording and repair options exist. Valid generation uses the version manager. |
+| `A/workbench/documents.py:95-116` | Current picker indexes mixed YAML by stem and cannot reliably distinguish scenes, policies, experiments or duplicate versions. |
+| `W/jobs.py:75-90`; `E/README.md:440-450` | Queue resume affects the shared queue; diagnostic wording does not constrain it to tests. Stale-socket/operator recovery needs a supported boundary. |
+
+Historical presentation commands are examples, not executable truth. In particular, `--mode generate` is not an accepted current runner mode. Do not silently translate an invalid command into a reported successful execution. The A2 catalogue records a proposed banana-to-large-plate task, not an already verified banana/bowl run.
+
+The completed static inventories are [generation runner, inherited options and side effects](dashboard_cli_workflow_parity/cli-audit.md) and [evaluation, experiments, display and operator workflows](dashboard_cli_workflow_parity/evaluation-audit.md). They are evidence appendices, not alternative implementation plans. The decision/defaults in this plan govern where an audit suggests alternatives. Neither parsed options nor documented examples are assumed implemented merely because they appear in help.
+
+The [researched persistence/execution protocol](dashboard_cli_workflow_parity/research-and-protocol.md) adds proposed authorities, invariants, commit boundaries, writer cutover, publication reconciliation and authorization semantics. Its primary-source citations and [source ledger](dashboard_cli_workflow_parity/sources.json) distinguish researched guarantees from repository-specific design decisions. The corrected protocol passed independent static review; this is design approval, not evidence that implementation fault tests have passed.
+
+The [A2 and failure-scenario walkthrough](dashboard_cli_workflow_parity/scenario-walkthrough.md) exercises the proposed mental model through explicit transitions, stop conditions and user-visible outcomes. These are design traces, not executed model/DB/GPU tests; each must become an implementation acceptance test.
+
+The [machine-readable workflow ledger](dashboard_cli_workflow_parity/workflow-parity-ledger.json) and [coverage notes](dashboard_cli_workflow_parity/ledger-notes.md) enumerate 394 distinct items across 26 source inventories, including linked policy/experiment/DCRG options and supported dynamic configuration fields. Entry counts are not feature-completion counts: 374 are not implemented, 15 partial and 5 need audit. Explicit gaps G01-G05 cover uncertain field consumers, dynamic translation, unbounded plugin extensions, runtime acceptance and effective defaults. The [review record](dashboard_cli_workflow_parity/review-record.md) preserves findings, corrections and failed reviewer attempts without treating timeouts as approval.
+
+Additional source-confirmed prerequisites: `W/provider_security.py:107-110` does not forward `NEO4J_*` into generation workers; API-side query success cannot establish worker retrieval. `W/snapshot_process.py:89-148` retains its cooperative GPU lease across snapshot jobs. Evaluation dispatch must explicitly retire/handoff the warm renderer, not wait forever behind its lease.
+
+## 3. Capability matrix and delivery gates
+
+Current state labels describe the audited checkout, not future promises.
+
+| ID | CLI / documented capability | Current dashboard | Required dashboard result |
+|---|---|---|---|
+| C01 | Schema inspection (`schema`) | Validation exists; no dedicated schema browser | Read-only versioned schema viewer/download, no agent or simulator initialization. |
+| C02 | Asset/relation/task catalogues (`catalog`) | Asset inspection only | Searchable registry-backed catalogues including supported parameters and policy restrictions; exact catalogue revision captured in generation. |
+| C03 | Prompt-only `resolve` | Missing UI path | New environment operation with no document/base dependency; actual `generate_spec` retrieval path. |
+| C04 | Base-spec + feedback refinement | Present, incomplete parity | Explicit Refine operation with frozen source/includes; preserve current refinement semantics and label its retrieval behavior honestly. |
+| C05 | Provider/model/temperature configuration | Provider/model/key present; advanced controls partial | Validated inference configuration and operator-approved endpoint profiles; private credential handling retained. |
+| C06 | Graph-RAG retrieval and fallback | Not exercised by current UI refinement | Exact consumed prior receipt, measured/structural provenance and no-match/unavailable distinction. |
+| C07 | Environment family/version/lineage | Immutable workbench revisions only | Numbered research versions linked to immutable revision and provenance; concurrency-safe allocation and complete run inventory. |
+| C08 | Neo4j publication and derivation | Read-only queries; no publication | Explicit authorized publication with a verified receipt, retry without re-generation and partial-failure recovery. |
+| C09 | YAML load/save/export and includes | Present, picker/version gaps | Typed artifact catalogue, source-path/version disambiguation, imports within approved roots, frozen includes, immutable save/export. |
+| C10 | Static snapshots | Present | Preserve scene/asset snapshots, freshness identity and explicit GPU budgets; do not label as a rollout. |
+| C11 | `build` zero-action simulation | Missing equivalent | Bounded build/reset/step job with solver-realized pose diagnostics, first/last images and recordings where requested. |
+| C12 | `full` resolve + build | Missing | Confirmed composed workflow whose build consumes the exact generated revision; generation success survives a later build failure. |
+| C13 | GR00T / OpenPI / supported policy evaluation | Not exposed | Select approved policy profile/checkpoint/config, fixed scene revision and run budget; execute and inspect actual evidence. |
+| C14 | `auto_heal` proposal | Not exposed | Explicit failed-run/config selection and repair mode, diff and diagnostics; no implicit acceptance or reevaluation. |
+| C15 | DCRG closed-loop refinement and resume | Not exposed | Separate constrained controller workflow, original durable resume semantics and predeclared budget; never conflated with legacy healing. |
+| C16 | Evaluation reports, videos, metrics, provenance | Jobs/snapshots only | Artifact-bound run browser, episode counts, policy identity and environment linkage; unknown and failed evidence retained. |
+| C17 | Service readiness, interruption/cancel/recovery | Partial; diagnostic coupling | User-facing run queue, read-only readiness checks, owned cancellation, selected-job recovery and service ownership disclosure. |
+| C18 | Interactive Kit visualization | No equivalent browser session | Explicit managed native Kit launch/session or separately approved streaming implementation; a static snapshot cannot close this row. |
+| C19 | Typed/legacy experiment batches, variations and rebuilds | Not exposed | Experiment editor/import, effective variation map, parent/run/rebuild receipts, cumulative budgets, continue-on-error and cancellation; preserve all failed/unattempted children. |
+| C20 | Advanced simulator/recording controls and policy-runner distribution | Not exposed | Validated operator-approved profiles plus supported typed controls, including USD animation and visualizer selection; distributed policy runs need an explicit owned launcher. Unsupported combinations remain blocked. |
+| C21 | Documented same-scene controller-assistance trials | Not exposed | Approved observe/offset/gate/combined profiles, privileged-state consent, immutable controller attribution, assistance traces, registration/evaluation attachment and trial retrieval; no automatic controller search. |
+
+Full research-workflow parity requires C01-C21, including experiments and documented controller-assistance trials; P1/P2 alone are not the requested completed dashboard. Training, dataset collection and arbitrary repository commands are not covered by the agentic README's generation/evaluation scope and are not claimed. Infrastructure and advanced trust exceptions below must be accepted explicitly before calling this a replacement for all operator CLI use.
+
+Installation, Docker/GPU drivers, credentials provisioning and external policy-server lifecycle must be covered by operator setup documentation and readiness UI. Do not give the browser a Docker socket, arbitrary shell, dynamic Python import, unrestricted checkpoint download, database-admin console or arbitrary host path to achieve superficial parity. Any requested privileged service-management UI is a separately reviewed extension; until supplied, report that administrative parity is intentionally not claimed.
+
+## 4. User journeys and state ownership
+
+### 4.1 New environment from prompt (default)
+
+1. Open **New environment**. Prompt-first workspace needs no selected document and does not auto-load the default YAML as generation input.
+2. Enter scenario/family name, prompt, optional registry-backed constraints, provider/model and bounded sampling settings.
+3. Select retrieval behavior: **Graph-RAG, allow disclosed no-prior fallback** (CLI-equivalent) or **Require successful retrieval service**. Empty eligible results remain distinct from a failed service. An explicit no-retrieval experiment is separately labelled and recorded, not an accidental fallback.
+4. Review an execution summary listing model/data destination, retrieval policy, output family, storage, publication choice and resource limits.
+5. Select **Generate, save version and publish** for the documented CLI-equivalent path, with explicit publication consent. **Generate draft only** remains a clearly different option. No automatic publication on a read, apply, or ordinary save.
+6. Track real stages. Review generated YAML/diff, check outcomes and the exact priors consumed; inspect authored Table/2D/3D separately from persisted results.
+7. The completed research version and publication receipt remain available even if the operator declines to replace their current editor draft. **Open generated revision** is an explicit action; a later draft edit cannot redirect the accepted job.
+8. Choose snapshot, simulation build or policy evaluation as separate actions. The optional **Generate and build** composition is a distinct authorization, not an automatic effect.
+
+### 4.2 Refine current environment
+
+Explicitly select a revision, edit a prompt/feedback and confirm its source/hash. Refine binds the selected base and frozen includes, never a later refreshed `latest` alias. Changing modes preserves separate prompt/draft contexts and invalidates stale selection/error callbacks. No old-session validation becomes current through a new scope key. Refinement currently lacks prior retrieval; adding retrieval to it is a separate algorithmic decision and not required to imitate the existing CLI branch.
+
+### 4.3 Version / run / artifact browser
+
+Separate environment specs, policy configurations, experiments and generated candidates. Show family, internal name, numbered version, immutable revision, origin path and validation state. Existing mixed YAML roots must be safely classified rather than treating every YAML as an environment. Open/download comparisons are read-only and do not regenerate, publish or evaluate. Import uses approved artifact IDs/root-scoped uploads with frozen include manifests, never unconstrained filesystem reads.
+
+### 4.4 Runs and recovery
+
+Move queue status out of diagnostic-only presentation. Show each job's kind, source revision, policy/model identity, effects, resource lease, budget and recoverability. Replace the misleading test-only resume label; a confirmation enumerates the exact queued jobs that will resume. If selected resumption cannot be implemented without altering scheduler semantics, expose whole-queue behavior explicitly and require approval for every affected job rather than silently broadening selection.
+
+## 5. Shared Python workflow architecture
+
+Reuse Python domain logic; do not call a shell with browser arguments or duplicate the agent in TypeScript. Prefer a small transport-neutral service under the existing `A/workbench/` package, with worker adapters under `W/`, plus thin CLI adapters. Proposed module names and request fields below are new design contracts, not existing symbols.
+
+Suggested boundaries: workflow request/receipt models; generation orchestration; version persistence; publication/outbox; simulation/evaluation adapters. Reuse `EnvironmentGenerationAgent`, catalogue builders, `EnvironmentVersionManager`, graph synchronizer, policy runner and existing owned-worker lifecycle. Extract the smallest shared calling boundary needed and protect CLI behavior with characterization tests before changing it.
+
+- A discriminated generation request requires `operation=new|refine`. New rejects base YAML/document IDs; refine requires a frozen valid base. Do not infer operation from empty text or silently load an implicit document.
+- Request snapshot includes prompt, family, source/include/config hashes, provider/model/temperature, retrieval policy, publication mode, limits and nonsecret credential reference. Browser-selected IDs resolve through server catalogues.
+- Generation computes a candidate with implicit agent publication disabled. One orchestrator owns persistence and publication. Audit CLI's repeated agent/runner sync and remove duplicate side effects through reviewed shared integration, not by reproducing them in the dashboard.
+- Keep `candidate_status`, `check_results`, `artifact_status`, `publication_status` and `evaluation_status` separate. A failed publication does not erase good YAML; a good YAML does not imply published or physically valid.
+- Capability metadata comes from actual available adapters and approved service profiles. Do not enable actions solely from the existence of a URL or key.
+- Long work stays outside the API event loop in owned subprocesses; Python uses the runtime interpreter and non-root identity, frontend tooling stays in its own container. Existing single-simulation ownership remains until a separate scheduler design is approved.
+
+### 5.1 Retrieval provenance
+
+Worker configuration is a prerequisite, not an optional setup note. Add an operator-approved graph connection profile resolved server-side into a private worker authorization payload, separately from provider credentials. Inject an explicit owned driver/connection factory into retrieval; do not widen environment forwarding indiscriminately or serialize Neo4j secrets in journal inputs. Bound and close the driver on every exit. An alternative brokered retrieval step is acceptable only if the agent consumes that exact captured context without secretly retrieving a second time. Test API query healthy but worker unauthorized/unreachable, secret expiry/config rotation and blocked output leakage.
+
+Capture the exact context consumed at the point of retrieval—not a later query. Receipt includes retrieval filters/config, timing/outcome, database identity without credentials, selected environment/graph revision, evaluation ID and denominator/rate where actually available, policy/checkpoint identity when known, measured versus structurally converged category, and a digest of the consumed projection. Missing provenance is unknown, never fabricated. Store bounded sensitive context in protected artifact storage; public projections use existing redaction/secret checks. A previewed prior selection is either consumed unchanged or clearly reported as a new retrieval.
+
+### 5.2 Versions and publication
+
+Preserve family, internal `env_name`, version, revision hash and stored graph identity as distinct fields. Version allocation must be serialized per family across CLI and HTTP writers, with staged writes, crash-recoverable manifests and idempotent job-to-version mapping. Do not overwrite historical source, `latest`, lineage, or a prior evaluation entry speculatively.
+
+A durable publication outbox binds an immutable version/hash to a unique intent. Publication is a separate recoverable step; read back the exact target identity/content receipt before reporting success. Neo4j and local filesystem writes are not one atomic transaction. Handle crash after graph commit before local acknowledgement by reconciling the exact intent, not re-running inference. Same-name legacy mutable graph merge is not immutable provenance: design additive revision-aware graph identities with a compatibility projection and schema tests before enabling writes. Historical records stay unchanged unless a separately approved migration exists.
+
+States should distinguish not requested, pending, verified, failed and outcome unknown. Retrying publication must not allocate another version or change the submitted model/source. Evaluation publication similarly links exact run and scene revision; do not repair old orphan links by name guessing.
+
+P2 schema fixtures must reconcile numbered filesystem versions and workbench revisions with existing DCRG canonical graph identities (`A/dcrg/graph.py:23-31`). Its canonical digest serialization differs from the workbench revision digest: record the explicit verified mapping rather than assume equal hashes. Reuse the existing DCRG identity for the same canonical scene/target where supported, without duplicate research records or forced DCRG support-reifier assumptions on unsupported tasks. Preserve DCRG's authoritative run/resume/outbox behavior; a dashboard wrapper must not replay a committed DCRG event through an independent publisher. Test generation-to-DCRG retrieval, partial-sync resume and controller attribution across publication paths before writes are enabled.
+
+### 5.3 Evaluation / build / full / healing
+
+Current generation budgets differ: dashboard agent `max_retries=1`, CLI default `3` (repair loops additionally cap at two); HTTP uses a 180-second wall limit, 45-second SDK timeout, eight completion calls, zero SDK retries and 4096 output tokens per call. These are existing safeguards, not a proven sufficient CLI-equivalent budget. Define named interactive and CLI-compatible profiles and test shared behavior under the same accepted limits. A budget-exhausted result is not a successful parity run. No profile can silently remove hard limits.
+
+Use immutable artifact IDs rather than `latest`, arbitrary filesystem paths or user-entered Python classes. Freeze policy type, configuration, server/checkpoint identity, seed/environment counts, steps, camera/video settings and success criteria. Record unknown remote RNG/checkpoint metadata explicitly. Operator-approved profiles can cover CLI custom/local endpoints without forwarding temporary browser credentials to unapproved destinations.
+
+Zero-action build/reset/steps, image snapshots and trained-policy rollout are separate jobs. Full mode composes generation then build against its receipt, with durable child linkage and cancellation at boundaries. Generated candidates failing a prerequisite do not proceed to paid/GPU stages. Resuming a completed generation followed by an indeterminate build must never repeat inference or blindly replay the build.
+
+This staged full-mode design deliberately differs from the current CLI, which starts SimulationApp before resolving. Share the revised orchestration with CLI or retain the legacy CLI order behind a documented compatibility path; characterize behavior and explicitly document the change rather than claiming identical startup order. UI creation maps to explicit `resolve`, never CLI's implicit `full` default.
+
+Resource handoff must close the warm snapshot renderer and verify its lease release before admitting a build/evaluation worker, then recreate it lazily for a later snapshot. Cancellation covers the full owned process tree, including DCRG descendants; remote policy servers stay alive unless this workbench explicitly owns them and a separate stop was authorized. A cooperative lease does not prove the GPU is unused by external processes.
+
+Use exactly one effective evaluation limit (steps, episodes or intrinsic policy length) and expose precedence before submission. Account settling/reset steps separately in cumulative budgets. G1 neutral posture-hold is not literal zero actions: preserve and label each adapter's behavior rather than silently substituting one. Episode overshoot, zero completed episodes and missing metrics remain explicit, never trimmed or converted to invented zeros.
+
+Experiments require typed YAML and documented legacy JSON imports, validated variations, ordered named children/rebuilds, cumulative budget reservation, continue-on-error/stop-on-error semantics and cancellation between children. The evidence adapter accepts both rank-based and rebuild-based episode outputs and supplies normalized metrics to diagnosis; it must not rely on an absent `summary_metrics.json` file. `auto_heal` deterministic/hybrid mode can run a depth model and write frame/audit artifacts, so separate generative-LLM permission from GPU/model-download/storage permission. Oracle-applied patches and report-only policy-planner recommendations must remain distinguishable.
+
+General artifact serving must extend beyond PNG without serving arbitrary executable HTML in the authenticated application origin. Prefer structured report rendering; otherwise sandbox reviewed HTML on an isolated origin without ambient credentials. Restrict MIME types, content disposition, paths, sizes and MP4 range access. Downloadable YAML/JSONL/HDF5/RDF/video is tied to a manifest, not a user-supplied path. Do not spawn the legacy unauthenticated `0.0.0.0` report server per run.
+
+Legacy healing must select the exact evaluation directory receipt and matching scene/policy config; prohibit global-most-recent-run inference. Return a proposed scene/config diff and new candidate identity, then require explicit reevaluation. DCRG retains its own supported task/geometry/policy/hand assumptions, run lock, budgets, receipt and resume contract. Policy/controller changes are not environment-placement proposals.
+
+### 5.4 Same-scene controller-assistance trials (required C21)
+
+The linked DCRG runbook already documents this workflow (`docs/pages/example_workflows/agentic_env_gen/dcrg.rst:211-235`; `docs/pages/concepts/dcrg.rst:105-144`); it is not conditional on a future audit. Provide an approved `Gr00tAssistedPolicy` profile with observe, offset, gate and combined modes. Require `privileged_state: true` and display `privileged_state_diagnostic`: these controls read simulator state, not vision-only model predictions. Enforce the supported single-environment, left-hand G1 joint-control contract. Reject incompatible robot/hand/environment count rather than adapting silently; these are not A2 DROID controls.
+
+Freeze the scene, checkpoint weight digests, controller/base-policy source digests, base configuration, assistance configuration, hand/frame and privilege label. Assistance config and trace paths become bounded artifact IDs; capture the full controller contract, trace and corresponding evaluation evidence. Observe mode must not alter actions; offset/gate/combined retain original bounds, time limits and fallback semantics, leaving the other arm, WBC tail, physics and task predicates unchanged.
+
+Reuse `register_environment_version`, `register_controller_variant`, `register_evaluation_run` with the exact returned composite policy identity, and `attach_controller_evaluation`. These are authorized write steps with idempotent receipts/readback, not implicit effects of selecting a profile. Inspect results through `GraphRAGRetriever.retrieve_controller_trials`, including zero-success trials and exact episode counts, separately from environment XY lineage. Register only genuinely completed evidence; keep partial/failed trials as diagnostics without fabricated completion. Changing controller identity must not create a scene-change proposal or alter environment version. No automated controller-parameter search is proposed.
+
+## 6. Security, budgets and operator setup
+
+Retain session/CSRF protection, temporary credential memory-only storage, private worker authorization, metadata-only logs and post-spawn authorization checks. A queued job cannot silently switch to a newly saved key, provider or endpoint. Preserve durable observation after session replacement without treating a new session as authorization to consume an old temporary credential.
+
+Freeze provider endpoint/profile for server-environment jobs as well as temporary-key jobs; reconfiguration must not redirect an accepted request. Model, policy and Neo4j connections are separate capabilities. Read-only readiness must not construct an agent that performs a provider ping, start a server, download a checkpoint, or launch a GPU job. A separate explicit model-test action can make a bounded billable call.
+
+Per-job limits cover wall time, provider calls/tokens/retries, graph reads/writes, worker descendants, simulation steps/environments, episodes/seeds, recordings and storage. Numeric hard limits must be selected from current adapter constraints during implementation and approved before live tests; unspecified budgets block submission rather than imply unlimited execution. DCRG additionally bounds total iterations and cumulative evaluation/call cost. Partial artifacts and accepted external effects survive cancellation; cancellation is only complete after owned workers/resources acknowledge cleanup.
+
+Expose configuration problems with actionable, redacted diagnostics and exact service ownership. Reuse the approved Neo4j database and volumes. A new empty DB is not a fix for a connection failure. Do not add secrets to YAML, exports, command history or observability payloads. Any `docker/`, shared workflow or submodule changes require explicit separate approval before edits, even if this plan mentions needed launcher improvements.
+
+## 7. Acceptance test matrix
+
+Each C-row needs a contract test, browser workflow, and genuine execution receipt where execution is its purpose. Mock tests verify boundaries, not inference or physics. No row closes solely from a disabled button or documentation.
+
+- New versus refine: request captured with absent base/document for new; refine has exact frozen base; empty text cannot become a hidden template. Toggle modes, change documents/sessions, reconnect and reject late responses without losing drafts.
+- Provider: same request model/endpoint/budget at execution; temporary credential replacement/expiry cancels authorization; no secret in snapshots, receipts, paths, traces, errors or persistence; deny real sockets in transport-only tests.
+- Retrieval: eligible measured prior, structural fallback, no matches and unavailable DB; consumed context equals retained receipt. Prohibit later-query provenance reconstruction and false policy qualification.
+- Persistence: concurrent CLI+HTTP versions, double-click/idempotent replay, crashes between staged writes/ledger/latest; no duplicate version or overwrite. Publication unavailable, partial commit, retry, readback mismatch, cancellation; no repeat inference.
+- Editor/artifacts: correct classification, duplicate names, include freezing, traversal/symlink escape, raw/canonical identity, stale validation and generated-result application.
+- Build/full: actual exact-revision construction and zero-action steps, solved poses and decoded artifacts; failure after generation preserves its result. No browser refetch launches work.
+- Evaluation: real policy profile handshake and identity, correct modalities, bounded episodes and outputs; summary denominator matches raw records, failed/zero-episode runs retained, unrelated services not stopped. Plot reported metrics only; task success uses declared criterion.
+- Heal/DCRG: exact source/run/config matching, unchanged original artifacts, proposed-versus-accepted state, cumulative limits and original resume semantics; no fallback to most recent unrelated run.
+- Controller trials: all four supported modes, observe-action equivalence, incompatible-hand/env-count rejection, explicit privilege consent, frozen source/checkpoint/config identity, bounded traces, composite policy attribution, registration/attachment/readback and zero-success retrieval. Cross-publication DCRG identity fixtures must not duplicate scenes or replay outbox events.
+- Check labels: skipped image analysis, advisory visual scores, heuristic PhysX-named checks and nonconverged fallback candidates cannot produce verified visual/physical-success badges. Require actual input artifacts and method/status for each claim; schema validity remains separate from manipulation success.
+- Lifecycle: accepted-but-lost HTTP replies, session expiry, server restart, orphan-worker receipt and unknown completion, queued cancellation, lease conflicts, recording limits and named queue resumption.
+- UI: keyboard controls, responsive layout, progress without fake percentage, zero unexpected writes on browsing, graph-view fallback, independent drafts/run observation. Native Kit/streaming is explicitly tested in its supported display environment, not inferred from MP4 output.
+- CLI parity: shared adapter tests compare structured inputs and manifests using deterministic fixtures; live LLM output need not be byte-identical. Each documented flag is mapped, deprecated with explanation, or remains an open parity gap.
+
+### A2 end-to-end acceptance scenario
+
+Source contract: `.agents/references/presentations/category_a_b_manipulation_experiments.md:568-586`. A2 is proposed **Banana to Large Plate**, family `droid_banana_to_plate`, DROID `droid_abs_joint_pos`, maple table `maple_table_robolab`, banana `banana_ycb_robolab` front-right, destination `plate_large_vomp_robolab` front-left. The catalogue's sibling banana/bowl visualization is not A2 evidence.
+
+User enters only: “Droid grasps the yellow banana from the right side of the maple table and places it onto the large white ceramic plate on the left.” Optional structured scenario constraints preserve registry and placement requirements without selecting base YAML. System resolves registered objects and task parameters, records actual retrieved priors or fallback, produces a valid scene, creates the requested version and verifies authorized publication. A2 review checks destination is the large plate, no unrelated objects/base-template remnants, and direct/reified statements are consistent. Snapshot/build and policy evaluation are separately authorized; a generated plate task is not a completed successful rollout. No historic A2 success is assumed.
+
+## 8. Implementation sequence (proposed, not authorized)
+
+1. **P0 audit/contract:** use the delivered machine-readable `workflow-parity-ledger.json` covering parser options, supported dynamically registered policy-config fields, variation mechanisms and documented non-parser operations. Close G01/G02/G05 for selected profiles through consumer/default characterization, record approved G03 profile limits, and prepare G04 runtime acceptance budgets. Each entry names source/location, effective defaults/precedence, capability ID, allowed profile, test ID and proposed disposition. Cross-check every documented workflow against this ledger before any implementation slice closes. Agree deployment, store/graph compatibility and live-test budgets. Preserve baseline tests and dirty work.
+2. **P1 safe prompt-first core:** first implement attempt/CAS state guards, immutable profile/credential-generation grants, blocked authorization and candidate-receipt recovery; then new/refine requests/UI, catalog/schema, honest readiness and exact retrieval receipts. A2 must work with no selected document. Draft-only is an intermediate milestone, not full CLI parity.
+3. **P2 research persistence:** before writes, implement store/journal/graph compatibility checks, managed-store writer cutover and backup/restore tests. Then concurrency-safe numbered versions, provenance/artifact browser, shared CLI integration and verified publication outbox with per-physical-attempt write authorization and separate reconciliation reads. Close A2 resolve parity with explicitly authorized real model/DB test.
+4. **P3 runtime build:** first enforce atomic GPU lease acquisition and warm-renderer handoff/cleanup; then zero-action execution and full composition, recordings and exact artifact view. Preserve existing snapshots/explorer and block admission when cleanup is unknown.
+5. **P4 policies/evidence:** first enforce endpoint/server/checkpoint identity at dispatch/reconnect and general evidence/media security; then GR00T/OpenPI approved profiles, typed/legacy experiments, variations/rebuilds and metrics/video browser. Unattested identity requires an explicit unverified mode, not checkpoint-verified attribution.
+6. **P5 repair/control:** first integrate owned descendants and DCRG's authoritative ledger/outbox; then legacy healing proposals, reevaluation, DCRG constrained resume and required C21 controller-assistance trials with registration, evidence attachment and retrieval.
+7. **P6 operator/display completion:** complete supported guarded socket/maintenance recovery and native Kit/display profiles plus separately approved streaming/advanced profiles. Queue visibility, authorization, resource safety and dependency checks are prerequisites in earlier phases, not deferred to P6. Privileged provisioning remains an operator prerequisite unless separately approved.
+8. **P7 acceptance/rollout:** repeat complete C01-C21 matrix through CLI and UI, independent security/lifecycle review, architecture/runbook update and user A2 walkthrough. Missing runtime evidence remains a blocked row, never a green checkbox.
+
+Keep existing refine-only and graph-legacy fallbacks during rollout. Feature-off blocks new submissions but retains observation/cancellation/recovery for previously accepted jobs and pending publication intents. Never roll back data schemas destructively or discard outbox evidence. No commits/pushes, shared-container changes or paid runs are implied by planning approval.
+
+Each phase exits only after its prerequisite contracts, negative/fault cases and capability-linked tests pass. Retain a schema-compatible recovery supervisor before any feature rollback; incompatible old binaries refuse mutation rather than downgrade accepted records. Detailed release/revocation ordering, credential renewal and remote identity decisions are in the protocol appendix. Implementation phases are discussion units, not estimates or authorization for live spend.
+
+### Phase discussion and reviewable delivery slices
+
+| Phase | User-visible deliverable | Gate before moving on |
+|---|---|---|
+| P0 | Agreed capability/option ledger, profiles, storage/graph strategy and acceptance budgets | Static coverage gaps have explicit dispositions; no unknown option silently promised. Record approved exclusions and infrastructure permissions. |
+| P1 | New from prompt and Refine are distinct; A2 can generate a reviewed draft without a document; exact prior/fallback evidence visible | Attempt/grant/session races and ambiguous-provider recovery pass hermetic tests; separately authorized live generation receipt required for runtime acceptance. |
+| P2 | A2 numbered version, lineage, explicit Neo4j publication and publication-only retry | Concurrent writer/fault/revocation/readback tests; compatible store/graph schema and backup recovery; approved real DB/model test. This is the first complete README resolve-path milestone. |
+| P3 | Snapshot versus build/zero-action versus generate-and-build are explicit, with recordings and runtime diagnostics | Actual lease handoff and owned cleanup; exact revision artifacts and bounded GPU run; no physical-success overclaim. |
+| P4 | Policy evaluation, experiments, reports/videos and exact run comparison | Verified or explicitly unverified policy identity; cumulative budgets, cancellation, artifact security and raw-count correctness. |
+| P5 | Evidence-bound repair, bounded DCRG resume and supported controller-assistance trials | Correct source/hand/policy contracts, immutable authority/outbox mapping, no duplicate completed evaluations, no invented measured improvement. |
+| P6 | Supported desktop/streaming/advanced profiles and operator recovery are understandable and verified | Each requested profile has an actual supported deployment test or a user-approved exclusion; no privileged browser shell. |
+| P7 | Full agreed research workflow demonstrated from A2 creation through downstream evidence | All C01-C21 and supported ledger cases close with receipts; unresolved cases remain visibly blocked. User acceptance and compatible rollback verified. |
+
+Start with P0 and P1, then review A2 working from a prompt before approving P2’s storage and graph changes. P2 is the first complete CLI resolve-path milestone; P1 alone must not be called full parity. I would not combine generation, publication, and policy evaluation into one large first implementation change. Keeping those boundaries separate makes failures diagnosable and protects existing research data.
+
+## 9. Decisions requiring confirmation before implementation
+
+Recommended: prompt-first default; explicitly consented “generate + version + publish” as CLI-equivalent operation; separate draft-only option; version-aware additive graph identity; one workbench-owned GPU simulation at a time; approved external policy/server profiles; native Kit launch before adding streaming infrastructure. Actual policy/checkpoint/run budgets and infrastructure-edit permission remain explicit approvals. Browser arbitrary shell/admin parity is excluded for security, not silently counted as delivered.
+
+## 10. Plan verification record
+
+### Advanced-option disposition (must remain in the implementation ledger)
+
+The CLI audit enumerates all generation-runner options, inherited Arena options and AppLauncher options with defaults and active/ignored modes. These are the proposed dispositions, not claims of current UI support:
+
+| Surface | Proposed representation / correction |
+|---|---|
+| `--mode`, `--prompt`, `--base_spec`, `--feedback` | Explicit workflow forms and immutable base IDs; reject feedback on new generation instead of retaining misleading lineage text. |
+| `--model`, `--temperature`, `--base_url`, `--api_key` | Typed controls and approved endpoint profiles; secrets only through the existing private credential mechanism. No browser arbitrary destination or argv key. |
+| `--env_name`, `--version`, `--out_dir`, `--env_graph_spec_yaml` | Safe family/version/artifact IDs and approved storage roots; display actual destinations. Correct ignored/misleading CLI semantics through shared adapters; do not emulate unlocked or destructive writes. |
+| `--eval_dir`, `--policy_config`, `--policy_ref`, `--healing_mode` | Exact evidence/config/policy IDs and explicit diagnosis modes; never latest-run guessing or `policy_ref` presented as selecting executed weights. |
+| `--num_steps`, `--num_envs`, `--env_spacing`, `--seed`, `--placement_seed`, `--no_solve_relations`, `--resolve_on_reset`, `--no-resolve_on_reset` | Bounded advanced execution fields; tri-state reset preserved; seeds do not imply remote LLM/policy determinism. |
+| `--disable_fabric`, `--presets`, `--device`, `--enable_cameras`, `--rendering_mode`, `--deterministic`, `--max_visible_envs` | Validated runtime/profile controls with effective settings shown; installed-backend capability checks. |
+| `--record_viewport_video`, `--record_camera_video`, `--anim_recording_enabled`, `--anim_recording_start_time`, `--anim_recording_stop_time` | Separate recording controls with frame/time/storage limits, actual file manifests and explicit missing/partial episode output. |
+| `--visualizer` / `--viz`, `--livestream`, `--xr`, `--experience`, `--kit_args` | Approved display/experience profiles, not raw strings. Native Kit, other installed visualizers, XR and WebRTC each need their own validated profile; unimplemented profiles remain explicitly unavailable. WebRTC routing/authentication requires separate approval, not automatic public ports. |
+| `--distributed`, `--mimic` | Advanced operator-approved execution profiles only where the selected runner/task supports them. Policy-runner torchrun ownership is a separate gate; experiment-runner distributed mode is rejected. Mimic recording/task prerequisites must be met; new training/data-generation workflows are not invented here. |
+| `--verbose`, `--info` | Redacted diagnostic verbosity, no secret/raw model payload logging. |
+| `--headless`, `--cpu`, `--list_variations`, `--external_environment_class_path` | Record deprecated/rejected/no-op behavior from the audit. Expose proper headless/device and real variation/profile controls, not buttons that reproduce no-ops; arbitrary Python imports remain operator-only. |
+| `-h`, `--help` | Contextual help and exact reproducible nonsecret command/manifest; export is supplemental, not a substitute for execution. |
+
+The delivered machine-readable ledger extends the initial generation inventory to linked policy/experiment/DCRG runners, supported configuration fields and documented non-parser operations. Its coverage notes distinguish closed AST sets from curated rules and profile-dependent schemas. Unknown options must fail closed; all named remaining audits and supported profile tests must close before full parity is claimed. Static enumeration does not establish effectiveness, protocol compatibility or runtime acceptance.
+
+- Full README and current dashboard contracts read; static generation/inherited-option and linked evaluation/workflow audits complete and retained in the linked appendices.
+- Application implementation, live inference, database writes and GPU jobs: not performed by this planning task.
+- Initial independent plan review requested an explicit controller-assistance commitment; C21 and its contracts/acceptance cases now cover it. Additional review comments produced the P0 machine-readable ledger requirement, DCRG publication-identity fixtures and explicit critic-label tests. Final independent full-plan re-review passed with no blockers or suggestions. This approves the plan's consistency, not implementation or runtime behavior.
+- The expanded static ledger contains 394 unique items in 26 disjoint inventories and covers C01-C21; its supported linked-runner/dynamic-field inventory is delivered. G01-G05 remain explicit effectiveness/profile/runtime acceptance gates, not hidden coverage claims. Source snapshots distinguish this audit from subsequent changes.
+- Deep execution review identified four design decisions (grant generations, per-write authorization/readback, remote checkpoint identity, schema rollback/phase dependencies); all were corrected. Final protocol review passed. Two timed-out review attempts produced no verdict and were replaced, not counted as approvals.
+- Independent M01-M20 mental-model review passed against I1-I10 and phase gates, including missing candidate receipts, commit-ack loss and an earlier write still in flight. This is a tabletop consistency check, not a formal proof or runtime test.
+- Primary-source citations with evidence, static coverage/count/reference checks and scoped pre-commit/whitespace checks support the planning artifacts. No production implementation, migration, model call, database mutation, GPU job, commit or push occurred in this planning task.
+
+### Planning execution and resolving documentation conflicts
+
+The [execution and reconciliation procedure](dashboard_cli_workflow_parity/execution-and-reconciliation.md) specifies prerequisites, authorization, limits, evidence and stop conditions for implementation, migration, live inference, graph writes and simulation. These activities are planned now, not left undesigned; executing them remains a separate approval. Its A2 reasoning exercise separates scenario intent, accepted CLI syntax, actual side effects and historical evidence, and provides an explicit correction/verification path for `--mode generate` and the mismatched sibling build example. No corrected command is represented as previously executed.

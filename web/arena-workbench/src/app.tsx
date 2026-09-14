@@ -23,10 +23,16 @@ import { sharedPort, type ObservationPort } from './observation';
 import { RuntimeProvider, useRuntime } from './runtime';
 import { EditorView } from './editor';
 import { Neo4jView } from './neo4j';
+import { parseGraphRenderer, type GraphRendererChoice } from './graph-host';
 import { ThemeProvider, ThemeToggle } from './theme';
 import './styles.css';
 import './editor.css';
 import './theme.css';
+
+interface WorkbenchSearch {
+  filter: 'all' | 'active' | 'terminal';
+  graphRenderer?: GraphRendererChoice;
+}
 
 const connectionLabels = {
   connecting: 'Connecting',
@@ -59,11 +65,12 @@ function Shell() {
           <Link
             className="nav-item"
             to="/workspaces/default"
+            search={(previous: WorkbenchSearch) => previous}
             activeProps={{ className: 'nav-item selected' }}
           >
             Environment editor
           </Link>
-          <Link className="nav-item" to="/neo4j" activeProps={{ className: 'nav-item selected' }}>
+          <Link className="nav-item" to="/neo4j" search={(previous: WorkbenchSearch) => previous} activeProps={{ className: 'nav-item selected' }}>
             Neo4j query
           </Link>
           <Link
@@ -495,11 +502,22 @@ function WorkspaceView({ selectedJobId }: { selectedJobId?: string }) {
     </main>
   );
 }
+function useGraphRouteProps() {
+  const { graphRenderer } = rootRoute.useSearch();
+  const navigate = useNavigate();
+  return {
+    graphRenderer: parseGraphRenderer(graphRenderer),
+    onGraphRendererChange: (renderer: GraphRendererChoice) => { void navigate({ to: '.', search: (previous: WorkbenchSearch) => ({ ...previous, graphRenderer: renderer }), replace: true }); },
+  };
+}
+function EditorRoute() { return <EditorView {...useGraphRouteProps()} />; }
+function Neo4jRoute() { return <Neo4jView {...useGraphRouteProps()} />; }
 const rootRoute = createRootRoute({
   component: Shell,
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): WorkbenchSearch => ({
     filter:
       search.filter === 'active' || search.filter === 'terminal' ? search.filter : ('all' as const),
+    ...(search.graphRenderer === undefined ? {} : { graphRenderer: parseGraphRenderer(search.graphRenderer) }),
   }),
   notFoundComponent: () => (
     <main className="workspace">
@@ -511,12 +529,12 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: EditorView,
+  component: EditorRoute,
 });
 const workspaceRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/workspaces/default',
-  component: EditorView,
+  component: EditorRoute,
 });
 const diagnosticsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -531,7 +549,7 @@ const jobRoute = createRoute({
 const neo4jRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/neo4j',
-  component: Neo4jView,
+  component: Neo4jRoute,
 });
 const routeTree = rootRoute.addChildren([
   indexRoute,

@@ -2,10 +2,10 @@
 
 ## Status and decision boundary
 
-- **Status:** proposed; implementation is **not approved or started** by this document.
+- **Status:** implementation approved by the user; staged implementation is in progress. Final visual acceptance and removal of the legacy fallback remain separate gates.
 - **Research date:** 2026-09-13.
 - **Requested outcome:** replace the limiting authored spatial-graph diagram with a shared, inspectable **Table / 2D / 3D** explorer, with dragging and other navigation controls.
-- **Repository baseline:** `dev/0.3.0-prerelease`; the existing provider-key lifetime changes are unrelated and must remain intact.
+- **Repository baseline:** `dev/0.3.0-prerelease`, commit `af6774ec6`, clean at implementation start; the existing provider-key lifetime behavior is unrelated and must remain intact.
 - **Scope of this planning task:** repository inspection, public documentation research, design, acceptance criteria, and independent review. No dependency installation, application-source migration, server restart, database write, paid inference, or Isaac Sim run is required to approve this plan.
 - All proposed filenames, interfaces, budgets, and milestones below are **design proposals**, not claims that those implementations exist. Research establishes documented capabilities, not compatibility or performance in this checkout.
 
@@ -566,6 +566,44 @@ Questions intentionally left to evidence rather than guesses:
 - Initial independent full-plan review: **revise**. Three blockers were identified and addressed in this document: (1) keyboard and click/tap-only alternatives for manipulation, (2) exact edge-match/endpoint visibility and Reveal rules, and (3) an explicit shared-boundary rollback selector plus scoped dependency reversal. Additional comments produced bounded property-tree rendering, presentation-only snapshots, a per-mode freeze transition matrix, and delayed-import/session-race acceptance. These are design corrections, not executed feature tests.
 - Focused independent re-review of the corrected plan: **PASS**, with no blocking contradictions. The reviewer confirmed the non-drag controls, ordered visibility/Reveal policy, concrete rollback, presentation-only snapshots, freeze transitions, bounded inspection, and delayed-import handling. This verdict concerns the plan, not demonstrated renderer behavior. Implementation remains unapproved.
 - Implementation/test checklist items above remain unchecked; planning is not feature completion.
+
+## 14. Implementation execution record
+
+The user approved implementation after the reviewed plan. Earlier planning-review statements that implementation was unapproved describe that historical gate, not the current authorization.
+
+- [x] Rechecked checkout and discovered the existing non-root frontend/runtime deployment.
+- [x] Baseline frontend suite: 131 tests passed before graph changes.
+- [x] Phase 0 core renderer compatibility and interaction spike; later hardware gates verified in the integrated implementation.
+- [x] Shared immutable model and accessible Table/controller engineering acceptance.
+- [x] 2D adapter engineering acceptance.
+- [x] Lazy 3D adapter and bounded failure/lifecycle engineering acceptance.
+- [x] Authored/persisted integration and legacy-switch rollback acceptance.
+- [x] Browser, bounded performance, security and independent implementation review.
+- [x] Architecture/runbook update and preview handoff.
+- [ ] User visual acceptance and separately approved fallback removal.
+
+Only completed, tool-backed gates are checked here. Review findings remain blockers until their regressions and re-review pass; the legacy renderer remains the default.
+
+### Evidence collected during implementation
+
+- Isolated spike: standalone wrappers `1.29.1`, TanStack Table `8.21.3`, and Three/types `0.180.0` passed the core interaction gate. An unconstrained Three `0.186.0` closure produced real pointer errors and was rejected. Evidence: `/eval/.graph-explorer-spike/README.md` and its lockfile/browser reports. The production dependency graph has one deduplicated Three instance.
+- The implementation initially reproduced a rapid-3D-switch `layout.tick` error. Removing reheat before deferred graph initialization fixed the recorded 20-cycle failure; both software and NVIDIA hardware checks subsequently passed with zero leftover graph canvases/pending RAF callbacks.
+- Hardware renderer: ANGLE EGL reports `NVIDIA RTX PRO 6000 Blackwell Workstation Edition`, not SwiftShader. Hardware acceptance reports are under `/eval/graph-explorer-acceptance/`, including `hardware-report.json`, `hardware-extra-report.json`, and `live-report.json`.
+- The real authenticated API/default document and a bounded, explicit Neo4j query were exercised through Table/2D/3D and legacy rollback. Source YAML/canonical hash and job IDs were unchanged. These checks did not invoke generation, save, or simulation.
+- Synthetic 50/100 and 256/512 node/edge fixtures became 2D-ready in under one second in the recorded hardware run. Browser RAF interval p95 was about 16.8 ms; these are browser responsiveness samples, not a general renderer throughput guarantee. The 1,000/2,000 fixture used the explicit Table fallback.
+- Post-GC heap readings across 20 mixed-mode cycles rose from 32,122,668 bytes after the first 3D load to 34,557,048 bytes at the end. This records a trend, not proof of zero memory/GPU-resource leakage; no unbounded-retention claim is made.
+- First full implementation review found authored-session validation ownership and newly introduced role/type filtering bugs. Session/source ownership now passes focused regressions and independent re-review. A further Clear/Reveal-on-empty-graph intent bug was corrected by resetting filter intent and category history together. The model/state/controller regression run passed 51 tests, and the final focused filter re-review passed without blockers. Review also prompted bounded full-key/type inspection, conservative truncated-edge identity, and stronger rollback assertions.
+- Independent renderer review found a 3D engine-stop/update feedback loop, refresh-triggered resource disposal churn, offscreen animation, selection-only layout reconstruction, coincident-edge hit geometry, and inconsistent layout/camera bounds. Scoped fixes passed seven actual-engine NVIDIA regressions and final independent re-review with no concrete blockers. Idle commits/publications stabilized; selection retained DTOs; custom node/sprite resources had zero style-change disposals and exactly one teardown disposal; offscreen RAF paused; coincident edge picking and million-unit fit/focus passed. Details: `/eval/graph-explorer-acceptance/renderer-review-closure.md`.
+
+### Final verification and handoff
+
+- Parent rerun: **229 frontend tests in 32 files passed**; TypeScript and production Vite build passed. **37 API graph/projection/editor validation tests passed**, with unrelated tests deselected.
+- Parent final NVIDIA browser run: **20 tests passed, zero failed/skipped/flaky**, covering synthetic API fixtures with real engines, dedicated engine regressions, density limits, and real authenticated authored/Neo4j data. Machine-readable evidence: `/eval/graph-explorer-acceptance/final-report.json` and `final-summary.json`; screenshots: `final-results/`. Host counterparts are under `/home/tarfy/eval/graph-explorer-acceptance/`.
+- Pre-commit passed across all 54 changed files; whitespace checks and the strict Sphinx build passed. No commits or pushes were made.
+- Production build retains the large-chunk warning. Initial application JS is 339.62 kB gzip; the separate lazy 3D chunk is 307.96 kB gzip. These are final build sizes, not deltas or network timing guarantees.
+- Preview: `http://localhost:3001/workspaces/default?graphRenderer=explorer` (HTTP 200 and live browser workflow verified). Use **Use legacy graph** for local rollback; legacy remains the default.
+- Remaining acceptance limits: user review of dense labels, depth occlusion, contrast and narrow/expanded ergonomics; long-duration GPU/heap behavior is not proven by bounded lifecycle tests. Actual-engine StrictMode and topology-replacement disposal coverage is a non-blocking follow-up identified by final review. No universal leak-free or performance guarantee is claimed.
+- No generation, simulation, save, provider-setting, or graph-publication jobs were submitted by these checks. The live graph query was an explicit bounded read, and source/job-list invariance was verified.
 
 ## Sources
 

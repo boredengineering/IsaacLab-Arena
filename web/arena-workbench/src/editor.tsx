@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRuntime } from './runtime';
 import { ModelSettings, useModelSettings } from './model-settings';
 import { CodeEditor } from './code-editor';
-import { GraphView } from './graph-view';
+import { GraphHost, type GraphRolloutProps } from './graph-host';
 import type {
   EditorDocument,
   EditorIndex,
@@ -18,6 +18,10 @@ import { AssetGrid, CameraSelect, defaultRenderOptions, SnapshotControls, Snapsh
 import { snapshotHistorical, snapshotMatches } from './snapshot-model';
 import { downloadRecoveredYaml, readDraft, storeDraft } from './draft-storage';
 import type { RecoverableDraft } from './draft-storage';
+
+type OwnedValidation = { text: string; result: Validation; owner: string };
+const validationOwner = (sessionId: string | undefined, documentId: string, document: EditorDocument | null) =>
+  JSON.stringify([sessionId, documentId, document?.document_id, document?.source_hash]);
 
 export function RawTable({ title, rows }: { title: string; rows: Record<string, unknown>[] }) {
   return (
@@ -53,7 +57,7 @@ export function RawTable({ title, rows }: { title: string; rows: Record<string, 
   );
 }
 /** Server-validated authoring surface; simulator work is always explicit. */
-export function EditorView() {
+export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = () => {} }: GraphRolloutProps = {}) {
   const { api, session } = useRuntime();
   const modelSettings = useModelSettings();
   const cache = useQueryClient();
@@ -65,7 +69,7 @@ export function EditorView() {
       document: EditorDocument | null;
       draft: string;
       prompt: string;
-      validation: { text: string; result: Validation } | null;
+      validation: OwnedValidation | null;
       recovery: RecoverableDraft | null;
     }>(['editor-draft']),
   );
@@ -84,7 +88,7 @@ export function EditorView() {
   );
   const [document, setDocument] = useState<EditorDocument | null>(restored?.document ?? null);
   const [draft, setDraft] = useState(restored?.draft ?? '');
-  const [validation, setValidation] = useState<{ text: string; result: Validation } | null>(
+  const [validation, setValidation] = useState<OwnedValidation | null>(
     restored?.validation ?? null,
   );
   const [error, setError] = useState('');
@@ -105,7 +109,11 @@ export function EditorView() {
   latest.current = draft;
   const generation = useEditorJob('generate');
   const generationAvailable = modelSettings.generationAvailable ?? index.data?.capabilities.generation;
-  const current = validation?.text === draft ? validation.result : null;
+  const owner = validationOwner(session?.session_id, documentId, document);
+  const latestOwner = useRef(owner);
+  latestOwner.current = owner;
+  const current = session && loadedDocumentId === documentId && validation?.owner === owner && validation.text === draft
+    ? validation.result : null;
   const valid = current?.valid === true;
   const canonicalHash = valid ? current.canonical_hash : null;
   const [previewMode, setPreviewMode] = useState('assets');
@@ -136,7 +144,8 @@ export function EditorView() {
     )
       return;
     setDraft(generated.yaml_text);
-    setValidation({ text: generated.yaml_text, result: generated.validation });
+    // Durable job validation has no current session/source ownership. Validate the applied draft anew.
+    setValidation(null);
     setAppliedJob(generation.job!.id);
   }
   useEffect(() => {
@@ -154,7 +163,7 @@ export function EditorView() {
           setDocument(doc);
           setLoadedDocumentId(documentId);
           setDraft(doc.yaml_text);
-          setValidation({ text: doc.yaml_text, result: doc.validation });
+          setValidation({ text: doc.yaml_text, result: doc.validation, owner: validationOwner(session.session_id, documentId, doc) });
         }
       })
       .catch((e) => {
@@ -168,7 +177,10 @@ export function EditorView() {
     };
   }, [api, documentId, session?.session_id]);
   async function validate(text = draft) {
+    if (!session || loading || loadedDocumentId !== documentId) return;
     const sequence = ++request.current;
+    const isCurrent = () => sequence === request.current && latest.current === text &&
+      latestOwner.current === owner && api.session?.session_id === session.session_id;
     setChecking(true);
     setError('');
     try {
@@ -176,22 +188,22 @@ export function EditorView() {
         yaml_text: text,
         ...(document ? { document_id: document.document_id } : {}),
       });
-      if (sequence === request.current && latest.current === text) setValidation({ text, result });
+      if (isCurrent()) setValidation({ text, result, owner });
     } catch (e) {
-      if (sequence === request.current) setError(e instanceof Error ? e.message : String(e));
+      if (isCurrent()) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      if (sequence === request.current) setChecking(false);
+      if (isCurrent()) setChecking(false);
     }
   }
   useEffect(() => {
     setChecking(false);
-    if (!session || !draft || validation?.text === draft || loading || !index.data) return;
+    if (!session || !draft || current || loading || loadedDocumentId !== documentId || !index.data) return;
     const timer = setTimeout(() => void validate(draft), 650);
     return () => {
       clearTimeout(timer);
       request.current++;
     };
-  }, [draft, documentId, session?.session_id, loading, index.data]);
+  }, [draft, documentId, session?.session_id, loading, index.data, validation]);
   function chooseDocument(id: string) {
     if (
       document &&
@@ -499,9 +511,11 @@ export function EditorView() {
               <h3>Authored spatial graph</h3>
               <span className="muted">Synchronized with validated YAML</span>
             </div>
-            {valid ? (
-              <GraphView graph={current.graph} label="Authored spatial graph" />
-            ) : (
+            <GraphHost graph={session && valid && !loading ? current.graph : null}
+              scopeKey={`authored:${session?.session_id ?? 'expired'}:${document?.document_id ?? documentId}`}
+              revisionKey={canonicalHash ?? ''} label="Authored spatial graph" sourceKind="authored"
+              renderer={graphRenderer} onRendererChange={onGraphRendererChange} />
+            {!valid && (
               <div className="empty-state">
                 {draft
                   ? 'Graph withheld until this draft validates. No stale graph is presented as current.'

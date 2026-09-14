@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRuntime } from './runtime';
 import { CodeEditor } from './code-editor';
-import { GraphView } from './graph-view';
+import { GraphHost, type GraphRolloutProps } from './graph-host';
 import type { QueryResult } from './editor-contracts';
 interface Example {
   id: string;
@@ -10,7 +10,7 @@ interface Example {
   query: string;
   params: Record<string, unknown>;
 }
-export function Neo4jView() {
+export function Neo4jView({ graphRenderer = 'legacy', onGraphRendererChange = () => {} }: GraphRolloutProps = {}) {
   const { api, session } = useRuntime();
   const status = useQuery({
     queryKey: ['neo4j-status', session?.session_id],
@@ -50,13 +50,14 @@ export function Neo4jView() {
   }
   const run = useMutation({
     retry: false,
-    mutationFn: async () => {
-      const submitted = { query, params: parsed };
+    mutationFn: async (submission: { query: string; params: Record<string, unknown>; sessionId: string; resultId: string }) => {
+      const submitted = { query: submission.query, params: submission.params };
       await api.activity();
-      return { submitted, result: await api.mutate<QueryResult>('/graph/query', submitted) };
+      if (api.session?.session_id !== submission.sessionId) throw new Error('Session changed; run the query explicitly in the current session.');
+      return { submitted, sessionId: submission.sessionId, resultId: submission.resultId, result: await api.mutate<QueryResult>('/graph/query', submitted) };
     },
   });
-  const result = run.data?.result;
+  const result = run.data?.sessionId === session?.session_id ? run.data?.result : undefined;
   const stale =
     !!run.data &&
     (run.data.submitted.query !== query ||
@@ -127,7 +128,7 @@ export function Neo4jView() {
                 run.isPending ||
                 !status.data?.available
               }
-              onClick={() => run.mutate()}
+              onClick={() => session && run.mutate({ query, params: parsed, sessionId: session.session_id, resultId: crypto.randomUUID() })}
             >
               {run.isPending ? 'Running query…' : 'Run read-only query'}
             </button>
@@ -176,9 +177,11 @@ export function Neo4jView() {
                   Graph
                 </button>
               </div>
-              {tab === 'graph' ? (
-                <GraphView graph={result.graph} label="Persisted Neo4j query graph" />
-              ) : (
+              <GraphHost graph={session ? result.graph : null} visible={tab === 'graph'}
+                scopeKey={`persisted:${session?.session_id ?? 'expired'}:${run.data?.resultId ?? 'none'}`}
+                revisionKey={run.data?.resultId ?? ''} label="Persisted Neo4j query graph" sourceKind="persisted"
+                renderer={graphRenderer} onRendererChange={onGraphRendererChange} />
+              {tab === 'table' && (
                 <div className="table-scroll">
                   <table aria-label="Neo4j query results">
                     <thead>

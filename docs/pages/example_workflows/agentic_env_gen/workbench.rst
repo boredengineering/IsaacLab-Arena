@@ -24,6 +24,40 @@ physical validation or task success.
 See :doc:`../../concepts/agentic_workbench` for application ownership,
 networking, session/job semantics and future deployment boundaries.
 
+Trying the graph explorer preview
+----------------------------------
+
+After launching the existing workbench, choose **Try graph explorer**, or open
+``http://localhost:3001/workspaces/default?graphRenderer=explorer``. This is a
+preview rollout; **Use legacy graph** returns to the existing SVG view without
+changing the draft or restarting the API. Keep your usual hostname for cookies
+and draft recovery.
+
+* **Table** has Nodes and Relationships views with sorting, pagination and
+  explicit Inspect buttons. Selection is shared with the visual modes.
+* **2D** supports node dragging, pan/zoom, pins, Fit visible and Focus selection.
+  Dragging pins a node. Freeze layout keeps inspection and camera controls
+  working; Unpin while frozen takes effect when layout resumes.
+* **3D** loads only when selected and supports orbit/pan/zoom. It is a
+  relationship diagram, not the Isaac Sim scene. If WebGL fails, use Table or
+  2D. A failed module download may require reloading; preserve unsaved work first.
+* **Navigation controls** and inspector coordinate/nudge controls provide
+  keyboard and click-only alternatives. Coordinates are graph-layout units,
+  not physical poses. No YAML edits or simulator/model calls result.
+* Search and role/type filters affect returned entities only. Reveal explicitly
+  clears visibility filters. No follow-up database query is sent on selection.
+* **Expand graph** gives the diagram more room; Escape closes it. Layout state
+  is in-memory only and resets on reload or a new source/session.
+
+In ``/neo4j?graphRenderer=explorer``, run an explicit read-only query and select
+the outer **Graph** tab to explore its returned entities. The outer **Table**
+still displays raw query rows, including scalar results. It is different from
+the explorer's Nodes/Relationships table. Existing query limits are unchanged.
+
+Visualizations above 512 valid nodes or 1,024 valid relationships use an explicit
+Table fallback; frontend normalization has separate diagnostic safety limits.
+Do not infer graph completeness or physical validity from any renderer.
+
 Prerequisites and scope
 -----------------------
 

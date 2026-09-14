@@ -4,6 +4,13 @@ Status: implementation approved and in progress. The user approved the revised p
 
 ## 1. Decision and scope
 
+Planning extension: [Dashboard / CLI workflow parity](dashboard_cli_workflow_parity.md)
+audits the full README workflow and proposes prompt-first Graph-RAG generation,
+version/lineage publication, build/evaluation and repair parity. It is a proposal,
+not an implementation-completion claim or authorization for live jobs. The
+first-release exclusions below describe the original scope; the extension tracks
+the requested expansion without rewriting historical acceptance evidence.
+
 Build a TanStack research workbench around the existing agentic environment workflow, not a visual reskin of Streamlit and not a replacement robotics backend.
 
 Selected frontend for this revision: React + TypeScript + Vite, TanStack Router and Query, built and served from a dedicated frontend container. Add TanStack Table for evidence tables. Start with a read-only interactive graph renderer, not a drag-to-mutate scene editor. TanStack Start and SSR are not needed for this local application; do not create a second authoritative backend in JavaScript.

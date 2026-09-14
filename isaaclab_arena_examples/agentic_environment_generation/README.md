@@ -232,6 +232,25 @@ Open **http://localhost:3001**. Keep using the same hostname while editing:
 Unsaved drafts have per-tab reload recovery, but browser storage is not durable
 project storage. Save and export work you want to keep.
 
+### Graph explorer preview
+
+Choose **Try graph explorer**, or append `graphRenderer=explorer` to the workbench
+URL. The legacy SVG remains the default until visual acceptance; **Use legacy
+graph** switches back without changing YAML or restarting the API.
+
+The explorer offers **Table / 2D / 3D**, with a shared node/relationship inspector,
+search and role/type filters. Drag nodes to pin their layout positions; use
+**Freeze layout**, **Fit visible**, and **Expand graph** for inspection. Navigation
+buttons and coordinate/nudge controls provide keyboard and click-only alternatives.
+Layout coordinates do not change object poses. The optional WebGL 3D mode is a
+relationship diagram, not a scene preview; Table and 2D remain fallback choices.
+
+On the Neo4j page the outer Table still contains raw query rows, while the graph
+explorer's Table lists returned Nodes/Relationships. Selecting or rearranging
+entities sends no database-expansion, generation, or simulator request. For
+controls, limits, and recovery, see the
+[workbench runbook](../../docs/pages/example_workflows/agentic_env_gen/workbench.rst).
+
 ## 5. Configure model access
 
 ### Temporary dashboard key (recommended for local interactive use)

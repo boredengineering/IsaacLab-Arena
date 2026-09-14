@@ -1,15 +1,20 @@
+/** JSON wire values include whole-property truncation/redaction sentinels. */
+export type JSONValue = null | boolean | number | string | readonly JSONValue[] | { readonly [key: string]: JSONValue };
+
+/** Compile-time wire shape only; normalize unknown API data before graph exploration. */
 export interface GraphNode {
   id: string;
   label: string;
   role: string;
-  properties: Record<string, unknown>;
+  labels?: readonly string[];
+  properties: JSONValue;
 }
 export interface GraphEdge {
   id: string;
   source: string;
   target: string;
   label: string;
-  properties: Record<string, unknown>;
+  properties: JSONValue;
 }
 export interface Graph {
   nodes: GraphNode[];

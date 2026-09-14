@@ -22,11 +22,78 @@ For the full setup, start Neo4j and Arena, configure their connection and model
 access, then launch the workbench. Neither launcher starts Neo4j or a policy
 server. The Python API runs **inside Arena**, not in another API container.
 
-**Current integration boundary:** the dashboard refines its loaded YAML through
-`refine_spec`, which does not retrieve Graph-RAG priors. From-scratch
-`generate_spec` retrieves priors; use the CLI path below for that workflow.
-Starting Neo4j enables persisted graph inspection but does not automatically make
-every dashboard generation graph-backed.
+**Current integration boundary:** revised APIs expose prompt-first generation as
+well as refinement. `refine_spec` does not retrieve new Graph-RAG priors;
+from-scratch generation has its own authorized retrieval path. Managed research
+retrieval integration is still under review, not proof of end-to-end P2 parity.
+Starting Neo4j does not automatically configure generation or publish drafts.
+
+### Opt-in managed research preview
+
+**Admin CLI operating requirement:** initialization and backup are offline-only
+and require `--attest-quiescent`. Close all journal connections and keep API/workers
+offline throughout. The CLI never stops them implicitly. Lock checks reject
+attached WAL connections and conflicting rollback transactions, but cannot prove
+that every idle connection is absent. The reviewed private-copy preflight does
+not rely on SQLite `mode=ro` being physically nonmutating. These preview commands
+are not approval for a deployment cutover or proof of power-loss durability.
+
+Generation and **Apply generated YAML** remain draft-only. **Save revision** /
+export saves an editor snapshot; the separate **Save Research Version** action
+persists an exact accepted candidate as a numbered, immutable research version.
+Publication and policy evaluation are separate operations, not consequences of
+saving. Managed publication/retrieval/worker integration remains unfinished or
+under review; code and synthetic browser tests do not establish live deployment.
+
+The Python API's `research_roots` / repeatable `--research-store ID=ABSOLUTE_PATH`
+configuration exposes already initialized roots. The default stays empty and
+`research_versions` is advertised only with configured roots. GET discovery does
+not initialize or migrate anything. Before enabling a profile, back up and review
+the existing P1 journal, then explicitly run `research_admin init-store` against
+the supported current schema and a new owner-private local root outside
+`generated_envs` / `eval_output`. Incompatible schemas fail closed; there is no
+silent P1 migration or claim that legacy writers are safe for managed storage.
+
+Follow the [managed operator runbook](../../docs/pages/example_workflows/agentic_env_gen/workbench.rst#managed-research-preview-operator-onboarding)
+for actual initialization, API profile, backup, checkpoint verification/estimate,
+and inactive restore-preparation commands. Its paths are operator-replaced
+absolute placeholders, not chosen deployment locations. Backups contain private
+Sessions-derived journal state. The cooperative local-filesystem deadline is not
+a hard I/O deadline or power-loss proof. Prepared restore **never activates** the
+API, undoes graph effects, or automatically replays queued work.
+
+For optional managed CLI resolve from a prompt, use the already-running API and
+its server-configured model, in the intended non-root Arena shell. This command
+authorizes model work; it is not a health check. Replace the path/profile/origin
+and retain the exact operation ID before submission:
+
+```bash
+/isaac-sim/python.sh isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+  --mode resolve \
+  --prompt "Droid grasps the yellow banana from the maple table and places it onto the large white ceramic plate." \
+  --managed_api_socket /REPLACE/private-ipc/api.sock \
+  --managed_api_origin http://localhost:3001 \
+  --managed_store_id research --managed_family banana_plate \
+  --managed_operation_id REPLACE_WITH_RETAINED_OPERATION_ID
+```
+
+Do not add `--base_spec` for prompt-first generation or put an API key in argv.
+Managed resolve rejects credential/endpoint/sampling overrides; temporary dashboard
+keys do not configure this CLI. Recover ambiguous results by rerunning unchanged
+with the same operation ID, including from replacement session S2. Exact accepted
+lookup precedes fresh model preflight, so changed current model settings do not
+silently replace accepted work. A timeout is not cancellation or retry permission.
+
+Retain exact store/family/source/parent identity for research saves; select an
+immutable parent explicitly in the UI, never guess from `latest`. The current
+managed CLI saves with no parent and verifies commit/artifact readback. It reports
+`publication=not_requested`. The old CLI without managed flags is preserved below
+and still has its separate publication attempt.
+
+**Remaining acceptance:** approve spend/token/time and retrieval/GPU budgets before
+live work, then obtain exact-operation recovery and artifact/runtime evidence on
+the reviewed deployment. Publication, retrieval and worker end-to-end proof and
+physical evaluation remain separate authorized acceptance, not synthetic-test claims.
 
 ## 1. Prepare the runtime
 
@@ -344,22 +411,49 @@ support and does not establish successful live inference with a real key.
 
 ## 6. Generate, review, and save
 
-With model access configured:
+After deploying the revised API, its `generation_modes` capability exposes
+**New environment from prompt** and **Refine current environment**. An older
+running API omits that capability and retains the legacy refinement UI; loading
+a template is not a substitute for upgrading to the prompt-first workflow.
 
-1. Load a valid starting document.
-2. Enter a prompt, for example:
+With model access and a run budget configured:
 
-   > Keep the DROID robot and maple table. Place the cube and bowl on the table,
-   > and make the task pick up the cube and place it in the bowl.
+1. Select **New environment from prompt**. No document is required, and an open
+   document is not submitted as a base. For A2, enter:
 
-3. Click **Generate spec** and follow the job status.
-4. Review the returned YAML and warnings, then click **Apply generated YAML**.
-5. Check validation and **Save revision** / export again.
+   > Droid grasps the yellow banana from the right side of the maple table and
+   > places it onto the large white ceramic plate on the left.
 
-The current dashboard submits the editor YAML as the generation base: this
-refines the loaded environment rather than always generating from scratch.
-Applying a result changes only the editor draft. Generated drafts are **not
-published to Neo4j**, and generation does not run simulation or policy evaluation.
+2. Select the retrieval policy. Requiring the service stops generation if
+   retrieval is unavailable; an empty successful retrieval can still have no
+   eligible priors. Allowing fallback records unavailable retrieval explicitly.
+3. Click **Generate spec** once and follow the existing job.
+4. Inspect the YAML, warnings and last generation evidence: exact consumed
+   context, context/catalogue digests, measured versus structural precedent,
+   evaluation/policy identities when known, and retrieval limits/timing.
+5. For A2, verify DROID, `banana_ycb_robolab`, `plate_large_vomp_robolab`, and
+   banana-to-large-plate task parameters. Banana-to-bowl is not A2. Schema
+   validation alone does not prove the requested task or physical success.
+6. Explicitly **Apply generated YAML**. A New result detaches old document/include
+   context, then validates again. **Save revision** / export remains editor-draft
+   persistence, not the numbered research-version/publication workflow.
+
+For refinement, load a valid document and select **Refine current environment**.
+It freezes the explicit base and does not retrieve new graph priors. Applying an
+old result against changed source identity requires confirmation and detaches
+foreign includes, even when raw YAML text matches.
+
+Graph retrieval needs explicit `NEO4J_URI`, `NEO4J_USER`, and `NEO4J_PASSWORD`
+in the API's server environment; `NEO4J_DATABASE` defaults to `neo4j`. Provision
+secrets privately through the operator-managed configuration described above, never in prompts,
+URLs, command arguments or committed files. Query-page connectivity alone does
+not prove the generation worker has this authorized profile. The worker receives
+only the scoped private configuration; it never discovers default credentials.
+
+Generated drafts are **not published to Neo4j**, and generation does not run
+simulation or policy evaluation. This is P1 draft-only functionality, not full
+CLI `resolve` parity. Live A2 acceptance has not been established by the synthetic
+browser or subprocess tests.
 
 Do not resubmit an expensive job just because a browser connection was lost.
 Submitted jobs survive browser refreshes; recover the existing job status first.
@@ -369,9 +463,18 @@ replacement key. If it cannot be accepted, inspect the job journal first, then u
 request. Discard clears this tab's retry information only; it does not cancel or
 delete an already-accepted job.
 
+For **blocked authorization**, select the job (including jobs from another tab)
+and explicitly reauthorize or cancel. Reauthorization preserves the original
+prompt/profile and appends a linked grant. A definitively rejected renewal offers
+**Use current credentials** only after its durable rejection is verified; an
+ambiguous response keeps the same request ID/reference. Correcting credentials
+does not itself submit work. Indeterminate work cannot use this renewal path.
+Cancellation distinguishes never-released work, unknown external outcomes and
+preserved accepted candidates; cancelling does not prove a provider did no work.
+
 ### From-scratch Graph-RAG generation (CLI)
 
-For actual prior retrieval, run the following **inside the non-root Arena shell**
+For the CLI's versioned Graph-RAG resolve path, run **inside the non-root Arena shell**
 where you verified Neo4j and configured your model credentials. Select a supported
 model and endpoint for your provider; the runner accepts `--model` and
 `--base_url` overrides. Do not pass a secret through `--api_key` on the command line.

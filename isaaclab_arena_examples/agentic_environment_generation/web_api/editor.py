@@ -6,17 +6,19 @@
 """Authenticated prompt and YAML editor routes."""
 
 import asyncio
+import hashlib
 import json
 import re
 import yaml
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from isaaclab_arena.agentic_environment_generation.workbench.document_yaml import parse_yaml
 
-from . import generation
+from . import catalogues, generation
 from .preview_options import RenderOptions, normalized_options
 from .security import require_mutation, require_session
 
@@ -47,11 +49,26 @@ class SnapshotDraft(Draft):
 
 class GenerateDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+    operation: Literal["new", "refine"] | None = None
+    retrieval_policy: Literal["allow_fallback", "require_service"] = "allow_fallback"
     credential_ref: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     prompt: str = Field(min_length=1, max_length=16000)
     document_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{32}$")
     base_yaml: str | None = Field(default=None, max_length=256 * 1024)
     idempotency_key: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
+
+    @model_validator(mode="after")
+    def explicit_operation(self):
+        """Keep new generation distinct from frozen-base refinement and legacy requests."""
+        if self.operation == "new" and self.model_fields_set & {"base_yaml", "document_id"}:
+            raise ValueError("New generation cannot include a base document")
+        if self.operation == "refine" and not self.base_yaml:
+            raise ValueError("Refinement requires explicit base YAML")
+        if self.operation != "new" and self.retrieval_policy == "require_service":
+            raise ValueError("Required retrieval is only supported for new generation")
+        if self.base_yaml is not None and len(self.base_yaml.encode("utf-8")) > 256 * 1024:
+            raise ValueError("YAML exceeds 256 KiB")
+        return self
 
     @field_validator("prompt")
     @classmethod
@@ -79,6 +96,9 @@ async def index(request: Request, session=Depends(require_session)):
         "documents": documents.index(),
         "capabilities": {
             "generation": configured,
+            "generation_modes": True,
+            "research_versions": bool(request.app.state.research_roots),
+            "publication_execution": getattr(request.app.state, "publication_admitting", False) is True,
             "snapshots": execution.snapshots is not None,
             "neo4j": getattr(request.app.state, "neo4j_available", False),
         },
@@ -182,8 +202,34 @@ def submit_editor(request, session, kind, key, inputs):
     return job
 
 
+@router.get("/generate/operations/{idempotency_key}", dependencies=[Depends(require_session)])
+async def generation_operation(request: Request, idempotency_key: str, request_sha256: str):
+    """Read an exact accepted request without consulting configuration or issuing grants."""
+    query = request.query_params
+    if (
+        not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", idempotency_key)
+        or not re.fullmatch(r"[a-f0-9]{64}", request_sha256)
+        or set(query) != {"request_sha256"}
+        or len(query.getlist("request_sha256")) != 1
+    ):
+        raise HTTPException(422, "Invalid operation lookup")
+    prior = request.app.state.journal.get_submission("default", idempotency_key)
+    if prior is not None and (prior["kind"] != "generate" or prior["inputs"].get("request_sha256") != request_sha256):
+        raise HTTPException(409, "Idempotency key already bound to different inputs")
+    return {"job": prior}
+
+
 @router.post("/generate", status_code=202)
 async def generate(request: Request, body: GenerateDraft, session=Depends(require_mutation)):
+    request_hash = hashlib.sha256(
+        json.dumps(body.model_dump(), sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    prior = request.app.state.journal.get_submission("default", body.idempotency_key)
+    if body.operation is not None and prior is not None and "request_sha256" in prior["inputs"]:
+        if prior["kind"] != "generate" or prior["inputs"]["request_sha256"] != request_hash:
+            raise HTTPException(409, "Idempotency key already bound to different inputs")
+        # Exact recovery returns the already-guarded durable record, not a new grant.
+        return prior
     request.app.state.model_settings.protect_public(body.model_dump())
     base = body.base_yaml
     document_id = body.document_id
@@ -206,6 +252,9 @@ async def generate(request: Request, body: GenerateDraft, session=Depends(requir
         "document_id": document_id,
         "input_hash": validation["source_hash"] if validation else None,
     }
+    if body.operation is not None:
+        inputs.update(operation=body.operation, retrieval_policy=body.retrieval_policy, request_sha256=request_hash)
+        inputs["execution_catalogue_sha256"] = catalogues.execution_catalogue_sha256()
     existing = request.app.state.journal.get_submission("default", body.idempotency_key)
     if existing is not None:
         # Recovery is workspace-wide, not a fresh grant to consume a credential.
@@ -214,7 +263,31 @@ async def generate(request: Request, body: GenerateDraft, session=Depends(requir
         if body.credential_ref is not None:
             inputs["credential_ref"] = body.credential_ref
             inputs.update({key: existing["inputs"][key] for key in ("provider", "model") if key in existing["inputs"]})
+        if body.operation is not None and "workflow_authorization" in existing["inputs"]:
+            inputs["workflow_authorization"] = existing["inputs"]["workflow_authorization"]
         return submit_editor(request, session, "generate", body.idempotency_key, inputs)
+    if body.operation is not None:
+        if body.credential_ref is not None:
+            inputs["credential_ref"] = body.credential_ref
+        try:
+            metadata = request.app.state.workflow_authorization.capture(
+                session,
+                request.app.state.journal.workflow_operation_id("default", body.idempotency_key, inputs),
+                credential_ref=body.credential_ref,
+                retrieval=body.operation == "new",
+                require_service=body.retrieval_policy == "require_service",
+            )
+        except ValueError:
+            raise HTTPException(503, "Workflow configuration unavailable") from None
+        if body.credential_ref is not None:
+            inputs["credential_ref"] = body.credential_ref
+        try:
+            return submit_editor(
+                request, session, "generate", body.idempotency_key, {**inputs, "workflow_authorization": metadata}
+            )
+        except Exception:
+            request.app.state.workflow_authorization.rollback(metadata)
+            raise
     credential = {}
     if body.credential_ref is not None:
         try:

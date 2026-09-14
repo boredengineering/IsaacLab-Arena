@@ -12,6 +12,8 @@ from pathlib import Path
 from isaaclab_arena.agentic_environment_generation.workbench.documents import Documents
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
+from . import graph_access
+from .catalogues import execution_catalogue_sha256
 from .provider_security import bounded_client, checked_config, reject_secret
 
 GENERATION_TIMEOUT = 180
@@ -58,7 +60,7 @@ def configuration():
     return None
 
 
-def generate(inputs, emit, *, agent_factory=None, config=None):
+def generate(inputs, emit, *, agent_factory=None, config=None, graph_config=None, managed_context=None):
     """Run a fresh bounded agent and return only schema-validated output and allowlisted stages."""
     config = configuration() if config is None else config
     config = checked_config(config, trusted_server=isinstance(config, dict) and config.get("trusted_server") is True)
@@ -68,14 +70,35 @@ def generate(inputs, emit, *, agent_factory=None, config=None):
         )
 
         with bounded_client(config):
-            result = _generate(inputs, emit, agent_factory=EnvironmentGenerationAgent, config=config)
+            result = _generate(
+                inputs,
+                emit,
+                agent_factory=EnvironmentGenerationAgent,
+                config=config,
+                graph_config=graph_config,
+                managed_context=managed_context,
+            )
     else:
-        result = _generate(inputs, emit, agent_factory=agent_factory, config=config)
+        result = _generate(
+            inputs,
+            emit,
+            agent_factory=agent_factory,
+            config=config,
+            graph_config=graph_config,
+            managed_context=managed_context,
+        )
     reject_secret(result, config["api_key"])
+    reject_secret(result, (graph_config or {}).get("password"))
     return result
 
 
-def _generate(inputs, emit, *, agent_factory, config):
+def _generate(inputs, emit, *, agent_factory, config, graph_config=None, managed_context=None):
+    if managed_context is not None:
+        from .managed_retrieval import checked_context
+
+        if inputs.get("operation") != "new" or graph_config is None:
+            raise ValueError("Managed retrieval requires authorized New generation")
+        managed_context = checked_context(managed_context, graph_config)
     traces = []
 
     def progress(stage):
@@ -83,12 +106,57 @@ def _generate(inputs, emit, *, agent_factory, config):
             traces.append(stage)
             emit(stage)
 
-    progress("agent_initializing")
-    agent = agent_factory(**config, max_tokens=4096, max_retries=1, load_dotenv=False)
-    # Transport budgets (including initialization) are installed before constructing the real agent.
     documents = Documents(Path("."))
     base = inputs.get("base_yaml")
     kwargs = {"publish_to_graph": False, "progress": progress}
+    operation = inputs.get("operation")
+    metadata = {}
+    if operation is not None:
+        if operation not in {"new", "refine"}:
+            raise ValueError("Unsupported generation operation")
+        if operation == "new" and (base is not None or inputs.get("document_id") is not None):
+            raise ValueError("New generation cannot include a base document")
+        if operation == "refine" and not base:
+            raise ValueError("Refinement requires an explicit base")
+        policy = inputs.get("retrieval_policy", "allow_fallback")
+        if policy not in {"allow_fallback", "require_service"} or (
+            operation == "refine" and policy != "allow_fallback"
+        ):
+            raise ValueError("Unsupported retrieval policy")
+        from isaaclab_arena.agentic_environment_generation.environment_generation_agent import (
+            build_asset_catalogue,
+            build_relation_catalogue,
+            build_task_catalogue,
+        )
+
+        assets, relations, tasks = build_asset_catalogue(), build_relation_catalogue(), build_task_catalogue()
+        digest = execution_catalogue_sha256(assets=assets, relations=relations, tasks=tasks)
+        expected = inputs.get("execution_catalogue_sha256")
+        if type(expected) is not str or digest != expected:
+            raise ValueError("Execution catalogue identity mismatch")
+        progress("catalogues_loading")
+        kwargs.update(asset_catalog=assets, relation_catalog=relations, task_catalog=tasks)
+        metadata = {"operation": operation, "catalogue_sha256": digest}
+        if operation == "new":
+            progress("graph_priors_loading")
+            options = {} if managed_context is None else {"managed_context": managed_context}
+            snapshot = graph_access.retrieve_snapshot(inputs["prompt"], graph_config, **options)
+            reject_secret(snapshot, config["api_key"])
+            reject_secret(snapshot, (graph_config or {}).get("password"))
+            if policy == "require_service" and snapshot["status"] == "unavailable":
+                raise ValueError("Required graph retrieval unavailable")
+            kwargs["prior_context"] = snapshot["exact_context"]
+        else:
+            from isaaclab_arena.agentic_environment_generation.prior_receipt import empty_snapshot
+
+            snapshot = empty_snapshot("", status="not_requested", warning=None)
+        from isaaclab_arena.agentic_environment_generation.prior_receipt import validate_prior_snapshot
+
+        validate_prior_snapshot(snapshot, prompt=inputs["prompt"] if operation == "new" else "")
+        metadata["prior_snapshot"] = snapshot
+    progress("agent_initializing")
+    agent = agent_factory(**config, max_tokens=4096, max_retries=1, load_dotenv=False)
+    # Transport budgets (including initialization) precede real agent construction.
     if base is not None:
         validation = documents.validate(base)
         if not validation["valid"]:
@@ -108,6 +176,7 @@ def _generate(inputs, emit, *, agent_factory, config):
     if telemetry is None or not telemetry.converged:
         warnings.append("Agent did not converge on all physical/semantic checks; review the draft before use.")
     return {
+        **metadata,
         "yaml_text": text,
         "validation": validation,
         "traces": traces,

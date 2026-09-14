@@ -83,8 +83,16 @@ async def resume_queue(request: Request):
 @router.post("/jobs/{job_id}/cancel", dependencies=[Depends(require_mutation)])
 async def cancel(request: Request, job_id: str):
     current = lookup(request, job_id)
+    if current["status"] == "blocked_authorization":
+        journal = request.app.state.journal
+        attempt = journal.get_attempt(job_id)
+        if attempt is not None:
+            journal.cancel_attempt(
+                job_id, attempt["attempt_id"], attempt["generation"], expected_state="blocked_authorization"
+            )
+        return journal.get_job(job_id)
     if current["status"] == "queued":
-        return request.app.state.journal.transition(job_id, "cancelled", "cancelled", "cancelled")
+        current = request.app.state.journal.cancel_queued(job_id)
     if current["status"] == "running":
         return request.app.state.supervisor.request_cancel(job_id)
     return current

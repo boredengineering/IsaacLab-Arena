@@ -1,6 +1,16 @@
 # Dashboard / CLI workflow parity
 
-Status: RESEARCHED AND REVIEWED PROPOSAL — scope, corrected execution/persistence protocol and independent mental-model consistency reviews passed. Ready for implementation-phase discussion, not automatic implementation. No application changes or live generation, database publication, simulation or evaluation are authorized by this document.
+Status: DELIVERY ORDER REVISED — UI-FIRST COVERAGE REVIEW. P1/P2 implementation exists but is not fully accepted or deployed. The user requested a complete dashboard view and coverage review before further backend complexity. The earlier protocol reviews remain design evidence, not approval of this revision or proof of runtime success. Current verification and the test-isolation incident are recorded in [implementation progress](dashboard_cli_workflow_parity/implementation-progress.md). No live generation, graph writes, recovery, simulation or evaluation are authorized by this document.
+
+## 0. Current priority: show the whole workflow first
+
+Build a complete navigable, frontend-only preview covering C01–C21 before expanding endpoints, storage, scheduling or recovery. Review the user's journey from prompt through versions, publication, build/evaluation, repair/DCRG, experiments and evidence. Keep the environment workspace central and diagnostics secondary. Preserve existing working code and reuse its visual language; do not introduce another frontend framework or parallel backend.
+
+The [UI-first screen map and walkthrough gate](dashboard_cli_workflow_parity/ui-first-review.md) defines concrete forms, capability-to-screen coverage, the full option-ledger reconciliation, example-state behaviour, isolation and acceptance. Its immediate order is **U0 structure → U1 complete preview → U2 user coverage review → U3 minimal vertical integrations**. P0–P7 below retain dependency/runtime acceptance meaning but no longer prescribe backend-first delivery before the user sees the complete product.
+
+The preview must be visibly labelled example-only and technically disconnected from production runtime/session/API/credential code. No real jobs, graph queries/writes, provider calls or fabricated success claims. UI coverage, backend implementation, deployment and runtime verification are separate statuses. A complete preview does not close any executable parity row. The incident does not block an isolated UI preview, but live rollout and legacy execution verification remain gated.
+
+Do not add backend capability until the user has reviewed the complete U1 preview, gaps/simplifications are recorded, and the next real workflow is approved. Any new endpoint must serve a concrete reviewed UI action that cannot safely use an existing contract. Detailed requirements and safety invariants below remain in force.
 
 ## 1. Objective and relationship to existing plans
 
@@ -34,13 +44,13 @@ The [researched persistence/execution protocol](dashboard_cli_workflow_parity/re
 
 The [A2 and failure-scenario walkthrough](dashboard_cli_workflow_parity/scenario-walkthrough.md) exercises the proposed mental model through explicit transitions, stop conditions and user-visible outcomes. These are design traces, not executed model/DB/GPU tests; each must become an implementation acceptance test.
 
-The [machine-readable workflow ledger](dashboard_cli_workflow_parity/workflow-parity-ledger.json) and [coverage notes](dashboard_cli_workflow_parity/ledger-notes.md) enumerate 394 distinct items across 26 source inventories, including linked policy/experiment/DCRG options and supported dynamic configuration fields. Entry counts are not feature-completion counts: 374 are not implemented, 15 partial and 5 need audit. Explicit gaps G01-G05 cover uncertain field consumers, dynamic translation, unbounded plugin extensions, runtime acceptance and effective defaults. The [review record](dashboard_cli_workflow_parity/review-record.md) preserves findings, corrections and failed reviewer attempts without treating timeouts as approval.
+The [machine-readable workflow ledger](dashboard_cli_workflow_parity/workflow-parity-ledger.json) and [coverage notes](dashboard_cli_workflow_parity/ledger-notes.md) enumerate 394 distinct items across 26 source inventories, including linked policy/experiment/DCRG options and supported dynamic configuration fields. The original audit recorded 374 not implemented, 15 partial and 5 needing audit; these are historical ledger dispositions, not current implementation status or feature-completion counts. Preserve that inventory and its source hashes; current evidence belongs in implementation progress and the UI coverage index. Explicit gaps G01-G05 cover uncertain field consumers, dynamic translation, unbounded plugin extensions, runtime acceptance and effective defaults. The [review record](dashboard_cli_workflow_parity/review-record.md) preserves findings, corrections and failed reviewer attempts without treating timeouts as approval.
 
 Additional source-confirmed prerequisites: `W/provider_security.py:107-110` does not forward `NEO4J_*` into generation workers; API-side query success cannot establish worker retrieval. `W/snapshot_process.py:89-148` retains its cooperative GPU lease across snapshot jobs. Evaluation dispatch must explicitly retire/handoff the warm renderer, not wait forever behind its lease.
 
 ## 3. Capability matrix and delivery gates
 
-Current state labels describe the audited checkout, not future promises.
+The "Current dashboard" column records the original planning audit, not today's implementation status. See implementation progress for current evidence and the UI-first appendix for planned screen coverage. Required outcomes remain authoritative.
 
 | ID | CLI / documented capability | Current dashboard | Required dashboard result |
 |---|---|---|---|
@@ -186,7 +196,9 @@ Source contract: `.agents/references/presentations/category_a_b_manipulation_exp
 
 User enters only: “Droid grasps the yellow banana from the right side of the maple table and places it onto the large white ceramic plate on the left.” Optional structured scenario constraints preserve registry and placement requirements without selecting base YAML. System resolves registered objects and task parameters, records actual retrieved priors or fallback, produces a valid scene, creates the requested version and verifies authorized publication. A2 review checks destination is the large plate, no unrelated objects/base-template remnants, and direct/reified statements are consistent. Snapshot/build and policy evaluation are separately authorized; a generated plate task is not a completed successful rollout. No historic A2 success is assumed.
 
-## 8. Implementation sequence (proposed, not authorized)
+## 8. Delivery sequence and retained backend dependency phases
+
+The active delivery sequence is U0–U3 in the UI-first appendix. First make all planned workflows inspectable, obtain the user's coverage review, then integrate one chosen vertical workflow at a time. The following P0–P7 phases preserve dependency ordering and acceptance obligations for real operations; they are not instructions to resume backend expansion ahead of the UI review. Completed work is retained, and unapproved live actions stay blocked.
 
 1. **P0 audit/contract:** use the delivered machine-readable `workflow-parity-ledger.json` covering parser options, supported dynamically registered policy-config fields, variation mechanisms and documented non-parser operations. Close G01/G02/G05 for selected profiles through consumer/default characterization, record approved G03 profile limits, and prepare G04 runtime acceptance budgets. Each entry names source/location, effective defaults/precedence, capability ID, allowed profile, test ID and proposed disposition. Cross-check every documented workflow against this ledger before any implementation slice closes. Agree deployment, store/graph compatibility and live-test budgets. Preserve baseline tests and dirty work.
 2. **P1 safe prompt-first core:** first implement attempt/CAS state guards, immutable profile/credential-generation grants, blocked authorization and candidate-receipt recovery; then new/refine requests/UI, catalog/schema, honest readiness and exact retrieval receipts. A2 must work with no selected document. Draft-only is an intermediate milestone, not full CLI parity.
@@ -214,9 +226,11 @@ Each phase exits only after its prerequisite contracts, negative/fault cases and
 | P6 | Supported desktop/streaming/advanced profiles and operator recovery are understandable and verified | Each requested profile has an actual supported deployment test or a user-approved exclusion; no privileged browser shell. |
 | P7 | Full agreed research workflow demonstrated from A2 creation through downstream evidence | All C01-C21 and supported ledger cases close with receipts; unresolved cases remain visibly blocked. User acceptance and compatible rollback verified. |
 
-Start with P0 and P1, then review A2 working from a prompt before approving P2’s storage and graph changes. P2 is the first complete CLI resolve-path milestone; P1 alone must not be called full parity. I would not combine generation, publication, and policy evaluation into one large first implementation change. Keeping those boundaries separate makes failures diagnosable and protects existing research data.
+The earlier recommendation to start with P0/P1 has been superseded by the implementation already performed and the user's UI-first direction. Review the complete U1 preview before further backend expansion. P2 remains the first complete CLI resolve-path acceptance milestone; P1 or a complete preview alone is not full parity. Keep generation, publication and policy evaluation separate in both UI confirmations and implementation so failures remain diagnosable and research data is protected.
 
-## 9. Decisions requiring confirmation before implementation
+## 9. Decisions requiring confirmation before further integration
+
+First confirm workflow coverage and simplifications in the U2 preview review, then choose the next real vertical integration. Existing cross-session publication recovery policy, incident recovery, live targets/budgets and controlled rollout remain separate unapproved decisions; preview selection does not resolve them implicitly.
 
 Recommended: prompt-first default; explicitly consented “generate + version + publish” as CLI-equivalent operation; separate draft-only option; version-aware additive graph identity; one workbench-owned GPU simulation at a time; approved external policy/server profiles; native Kit launch before adding streaming infrastructure. Actual policy/checkpoint/run budgets and infrastructure-edit permission remain explicit approvals. Browser arbitrary shell/admin parity is excluded for security, not silently counted as delivered.
 

@@ -13,6 +13,7 @@ from pathlib import Path
 import uvicorn
 
 from .application import create_app
+from .research_profiles import parse_research_roots
 from .runtime import StateLease, UnixListener, validate_layout
 
 
@@ -36,11 +37,25 @@ def main():
     parser.add_argument("--socket", type=Path, required=True)
     parser.add_argument("--origin", default="http://127.0.0.1:3000")
     parser.add_argument("--diagnostics", action="store_true", help="Enable test-only bounded diagnostic subprocesses")
+    parser.add_argument(
+        "--research-store",
+        action="append",
+        default=[],
+        metavar="ID=ABSOLUTE_PATH",
+        help="Expose an already initialized managed store; never initialize or migrate it",
+    )
     args = parser.parse_args()
     try:
+        research_roots = parse_research_roots(args.research_store)
         validate_layout(args.state_dir, args.socket)
         with StateLease(args.state_dir) as lease:
-            app = create_app(args.state_dir, origin=args.origin, diagnostics=args.diagnostics, _state_lease=lease)
+            app = create_app(
+                args.state_dir,
+                origin=args.origin,
+                diagnostics=args.diagnostics,
+                research_roots=research_roots,
+                _state_lease=lease,
+            )
             with UnixListener(args.socket) as listener:
                 config = uvicorn.Config(
                     app,

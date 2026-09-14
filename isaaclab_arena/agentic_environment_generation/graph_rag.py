@@ -7,13 +7,27 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import time
+from itertools import islice
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import neo4j
 
+from isaaclab_arena.agentic_environment_generation.graph_cleanup import GraphCleanupError, graph_session
 from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import get_neo4j_driver
+from isaaclab_arena.agentic_environment_generation.prior_receipt import SnapshotRejected as _SnapshotRejected
+from isaaclab_arena.agentic_environment_generation.prior_receipt import (
+    bounded_text,
+    effective_settings,
+    empty_snapshot,
+    format_prior_context,
+)
+from isaaclab_arena.agentic_environment_generation.prior_receipt import keyword_filters as _keyword_filters
+from isaaclab_arena.agentic_environment_generation.prior_receipt import validate_prior, validate_prior_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +42,7 @@ logger = logging.getLogger(__name__)
 #      "1.0 over 4 episodes" when the 1.0 came from a single-episode run.
 _EVALUATED_PRIORS_QUERY = """
 MATCH (e:EnvironmentGraph)
+WHERE NOT EXISTS { MATCH (e)-[:HAS_REVISION]->(:WorkbenchRevision) }
 OPTIONAL MATCH (e)-[:HAS_EMBODIMENT]->(emb:Embodiment)
 OPTIONAL MATCH (e)-[:HAS_TERRAIN]->(bg:Fixture)
 WITH e, emb, bg
@@ -68,6 +83,7 @@ LIMIT $limit
 _STRUCTURAL_PRIORS_QUERY = """
 MATCH (e:EnvironmentGraph)
 WHERE e.converged = true
+  AND NOT EXISTS { MATCH (e)-[:HAS_REVISION]->(:WorkbenchRevision) }
 OPTIONAL MATCH (e)-[:HAS_EMBODIMENT]->(emb:Embodiment)
 OPTIONAL MATCH (e)-[:HAS_TERRAIN]->(bg:Fixture)
 WITH e, emb, bg
@@ -96,40 +112,264 @@ LIMIT $limit
 """
 
 
-def _keyword_filters(prompt: str) -> tuple[str, str]:
-    """Derive embodiment and fixture substring filters from a generation prompt."""
-    p = prompt.lower()
-    if "g1" in p:
-        embodiment = "g1"
-    elif "droid" in p:
-        embodiment = "droid"
-    elif "franka" in p:
-        embodiment = "franka"
-    else:
-        embodiment = ""
+# Snapshot-only projections follow the writers in lpg_neo4j_sync.py and dcrg/graph.py.
+# Checkpoint identity exists on DCRGControllerVariant, not on generic Policy nodes.
+_SNAPSHOT_EVALUATED_QUERY = _EVALUATED_PRIORS_QUERY.replace(
+    "RETURN e.name AS name,",
+    """CALL { WITH best_ev MATCH (best_ev)-[r:EVALUATED_GRAPH]->()
+       WITH r LIMIT 2 RETURN count(r) AS _graph_links }
+CALL { WITH best_ev MATCH (other:EvaluationRun {id: best_ev.id})
+       WITH other LIMIT 2 RETURN count(other) AS _run_ids }
+CALL { WITH best_ev MATCH (best_ev)-[r:USED_POLICY]->(policy)
+       WITH r, policy LIMIT 2
+       RETURN collect({valid_label: policy:Policy, identity: policy.name}) AS _policies }
+CALL { WITH best_ev MATCH (trial)-[r:BASED_ON_EVALUATION]->(best_ev)
+       WITH r, trial LIMIT 2
+       CALL { WITH trial MATCH (trial)-[r:BASED_ON_EVALUATION]->(target)
+              WITH r, target LIMIT 2
+              RETURN count(r) AS evaluation_links, collect(labels(target)) AS evaluation_labels }
+       CALL { WITH trial MATCH (trial)-[r:TRIAL_CONTROLLER]->(variant)
+              WITH r, variant LIMIT 2
+              RETURN collect({valid_label: variant:DCRGControllerVariant,
+                              identity: variant.checkpoint_identity, id: variant.id,
+                              policy_identity: variant.policy_identity}) AS variants }
+       RETURN collect({valid_label: trial:DCRGControllerTrial, variants: variants,
+                       trial_id: trial.id, run_id: trial.run_id, env_name: trial.env_name,
+                       env_version: trial.version, variant_id: trial.variant_id,
+                       policy_identity: trial.policy_identity, evaluation_links: evaluation_links,
+                       evaluation_labels: evaluation_labels}) AS _controllers }
+RETURN best_ev.id AS evaluation_id, e.version AS graph_version,
+       best_ev.policy_identity AS _run_policy, best_ev.env_name AS _run_env_name,
+       best_ev.env_version AS _run_env_version,
+       _graph_links, _run_ids, _policies, _controllers,
+       elementId(e) AS _physical_root_id, elementId(best_ev) AS _physical_run_id,
+       CASE WHEN e.spec_json IS NOT NULL AND e.version IS NOT NULL THEN
+         {name: e.name, sha256: e.version, spec_json: e.spec_json} ELSE null END AS _canonical_proof,
+       coalesce(head(_policies).identity, best_ev.policy_identity) AS policy_identity,
+       head(head(_controllers).variants).identity AS checkpoint_identity,
+       e.name AS name,""",
+)
 
-    if "shelv" in p or "rack" in p:
-        fixture = "wireshelving"
-    elif "kitchen" in p or "counter" in p:
-        fixture = "kitchen"
-    elif "table" in p or "desk" in p:
-        fixture = "table"
-    else:
-        fixture = ""
 
-    return embodiment, fixture
+_SNAPSHOT_STRUCTURAL_QUERY = _STRUCTURAL_PRIORS_QUERY.replace(
+    "RETURN e.name AS name,",
+    """RETURN null AS evaluation_id, e.version AS graph_version,
+       elementId(e) AS _physical_root_id, null AS _physical_run_id,
+       CASE WHEN e.spec_json IS NOT NULL AND e.version IS NOT NULL THEN
+         {name: e.name, sha256: e.version, spec_json: e.spec_json} ELSE null END AS _canonical_proof,
+       null AS policy_identity, null AS checkpoint_identity, e.name AS name,""",
+)
+# Keep an overflow sentinel: clipping to the accepted bound would hide evidence loss.
+_SNAPSHOT_EVALUATED_QUERY = _SNAPSHOT_EVALUATED_QUERY.replace(
+    "       objects,\n       relations,", "       objects[..33] AS objects,\n       relations[..33] AS relations,"
+).replace("e.task_description AS task_description", "left(e.task_description, 4097) AS task_description")
+_SNAPSHOT_STRUCTURAL_QUERY = _SNAPSHOT_STRUCTURAL_QUERY.replace(
+    "       objects,\n       relations,", "       objects[..33] AS objects,\n       relations[..33] AS relations,"
+).replace("e.task_description AS task_description", "left(e.task_description, 4097) AS task_description")
+
+
+def _snapshot_text(value):
+    bounded_text(value)
+    return value
+
+
+def _validate_legacy_provenance(record):
+    """Require bounded independent relationship evidence, including wrong labels."""
+    for field in ("_graph_links", "_run_ids"):
+        if type(record.get(field)) is not int or record[field] != 1:
+            raise _SnapshotRejected("invalid_record")
+    policies, controllers = record.get("_policies"), record.get("_controllers")
+    if type(policies) is not list or len(policies) > 1 or type(controllers) is not list or len(controllers) > 1:
+        raise _SnapshotRejected("invalid_record")
+    policy = None
+    if policies:
+        p = policies[0]
+        if type(p) is not dict or set(p) != {"valid_label", "identity"} or p["valid_label"] is not True:
+            raise _SnapshotRejected("invalid_record")
+        policy = p["identity"]
+        bounded_text(policy, nullable=False)
+    run_policy = record.get("_run_policy")
+    if run_policy is not None:
+        bounded_text(run_policy, nullable=False)
+        if policy is not None and run_policy != policy:
+            raise _SnapshotRejected("invalid_record")
+        policy = run_policy
+    if record.get("_run_env_name") not in (None, record.get("name")) or record.get("_run_env_version") not in (
+        None,
+        record.get("graph_version"),
+    ):
+        raise _SnapshotRejected("invalid_record")
+    checkpoint = None
+    if controllers:
+        c = controllers[0]
+        if type(c) is not dict or c.get("valid_label") is not True:
+            raise _SnapshotRejected("invalid_record")
+        for field in ("trial_id", "run_id", "env_name", "env_version", "variant_id", "policy_identity"):
+            bounded_text(c.get(field), nullable=False)
+        if (
+            type(c.get("evaluation_links")) is not int
+            or c["evaluation_links"] != 1
+            or type(c.get("evaluation_labels")) is not list
+            or len(c["evaluation_labels"]) != 1
+            or type(c["evaluation_labels"][0]) is not list
+            or "EvaluationRun" not in c["evaluation_labels"][0]
+            or c["trial_id"] != record.get("evaluation_id")
+            or c["run_id"] != record.get("evaluation_id")
+            or c["env_name"] != record.get("name")
+            or c["env_version"] != record.get("graph_version")
+            or c["policy_identity"] != policy
+            or run_policy != policy
+            or record.get("_run_env_name") != c["env_name"]
+            or record.get("_run_env_version") != c["env_version"]
+        ):
+            raise _SnapshotRejected("invalid_record")
+        variants = c.get("variants")
+        if type(variants) is not list or len(variants) != 1:
+            raise _SnapshotRejected("invalid_record")
+        v = variants[0]
+        if type(v) is not dict or v.get("valid_label") is not True:
+            raise _SnapshotRejected("invalid_record")
+        for field in ("identity", "id", "policy_identity"):
+            bounded_text(v.get(field), nullable=False)
+        if v["id"] != c["variant_id"] or v["policy_identity"] != policy:
+            raise _SnapshotRejected("invalid_record")
+        checkpoint = v["identity"]
+    if policy != record.get("policy_identity") or checkpoint != record.get("checkpoint_identity"):
+        raise _SnapshotRejected("invalid_record")
+
+
+def _deduplicate_candidates(records, priors, *, rank=True):
+    """Deduplicate verified identities; mixed rank is rate, episodes, name, version, run.
+
+    All identity ties retain source order (legacy first), never incidental payload
+    fields. With no managed candidates preserve the legacy database ordering.
+    """
+    candidates = []
+    proofs = {}
+    runs = {}
+    physical_runs = {}
+    for index, (record, prior) in enumerate(zip(records, priors, strict=True)):
+        proof = record.get("_canonical_proof")
+        key = ("unproven", index)
+        if proof is not None:
+            if type(proof) is not dict or set(proof) != {"name", "sha256", "spec_json"}:
+                raise _SnapshotRejected("invalid_record")
+            name, digest, payload = (proof[k] for k in ("name", "sha256", "spec_json"))
+            if (
+                type(payload) is not str
+                or len(payload) > 65536
+                or type(digest) is not str
+                or len(digest) != 64
+                or any(c not in "0123456789abcdef" for c in digest)
+                or name != prior["name"]
+                or digest != prior["graph_version"]
+            ):
+                raise _SnapshotRejected("invalid_record")
+            try:
+                decoded = json.loads(payload)
+                canonical = json.dumps(decoded, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            except (ValueError, TypeError):
+                raise _SnapshotRejected("invalid_record") from None
+            if (
+                type(decoded) is not dict
+                or canonical != payload
+                or hashlib.sha256(payload.encode()).hexdigest() != digest
+            ):
+                raise _SnapshotRejected("invalid_record")
+            key = ("canonical", name, digest, payload)
+            projection = {
+                k: v
+                for k, v in prior.items()
+                if k
+                not in (
+                    "success_rate",
+                    "episodes",
+                    "evaluation_id",
+                    "policy_identity",
+                    "checkpoint_identity",
+                    "evidence",
+                )
+            }
+            if key in proofs and proofs[key] != projection:
+                raise _SnapshotRejected("invalid_record")
+            proofs[key] = projection
+        elif record.get("_physical_root_id") is not None:
+            root = _snapshot_text(record.get("_physical_root_id"))
+            run = _snapshot_text(record.get("_physical_run_id"))
+            key = ("physical", root, run)
+        run_key = (key, prior["evaluation_id"])
+        if run_key in runs and runs[run_key] != prior:
+            raise _SnapshotRejected("invalid_record")
+        runs[run_key] = prior
+        physical_run = _snapshot_text(record.get("_physical_run_id"))
+        if physical_run is not None:
+            physical_root = _snapshot_text(record.get("_physical_root_id"))
+            identity = (physical_root, prior)
+            if physical_run in physical_runs:
+                if physical_runs[physical_run] != identity:
+                    raise _SnapshotRejected("invalid_record")
+                continue
+            physical_runs[physical_run] = identity
+        candidates.append((key, prior))
+    if rank:
+        candidates.sort(
+            key=lambda item: (
+                -(item[1]["success_rate"] or 0),
+                -(item[1]["episodes"] or 0),
+                item[1]["name"],
+                item[1]["graph_version"] or "",
+                item[1]["evaluation_id"] or "",
+            )
+        )
+    chosen = {}
+    for key, prior in candidates:
+        chosen.setdefault(key, prior)
+    return list(chosen.values())
+
+
+def _snapshot_prior(record: Any, evidence: str, min_success_rate: float, min_episodes: int) -> dict[str, Any]:
+    """Project only schema-backed fields, rejecting lossy or malformed evidence."""
+    prior: dict[str, Any] = {
+        field: _snapshot_text(record.get(field))
+        for field in (
+            "name",
+            "task_description",
+            "task_composition",
+            "embodiment",
+            "background",
+            "evaluation_id",
+            "graph_version",
+            "policy_identity",
+            "checkpoint_identity",
+        )
+    }
+    for field in ("objects", "relations"):
+        values = record.get(field)
+        if type(values) is not list:
+            raise _SnapshotRejected("invalid_record")
+        if len(values) > 32:
+            raise _SnapshotRejected("bounds_exceeded")
+        # Cypher collect can contain the OPTIONAL MATCH all-null relation placeholder.
+        # Only that exact placeholder is omitted; never coerce malformed evidence.
+        prior[field] = (
+            [value for value in values if value is not None]
+            if field == "objects"
+            else [value for value in values if value != {"relation_type": None, "manifold": None, "anchor": None}]
+        )
+    prior.update(success_rate=record.get("best_success_rate"), episodes=record.get("episodes"), evidence=evidence)
+    return validate_prior(prior, evidence, min_success_rate, min_episodes)
 
 
 def _row_to_prior(record: Any, evidence: str) -> dict[str, Any]:
     """Convert one Cypher record into a prior, dropping null relation placeholders."""
-    relations = [r for r in (record["relations"] or []) if r and r.get("relation_type")]
+    relations = [r for r in record["relations"] or [] if r and r.get("relation_type")]
     return {
         "name": record["name"],
         "task_description": record["task_description"],
         "task_composition": record["task_composition"],
         "embodiment": record["embodiment"],
         "background": record["background"],
-        "objects": [o for o in (record["objects"] or []) if o],
+        "objects": [o for o in record["objects"] or [] if o],
         "relations": relations,
         "success_rate": record["best_success_rate"],
         "episodes": record["episodes"],
@@ -142,6 +382,188 @@ class GraphRAGRetriever:
 
     def __init__(self, driver: neo4j.Driver | None = None):
         self._driver = driver
+        self._snapshot_driver = driver
+
+    def retrieve_prior_snapshot(
+        self,
+        prompt: str,
+        limit: int = 2,
+        min_success_rate: float = 0.0,
+        min_episodes: int = 1,
+        *,
+        managed_selection_provider=None,
+        database: str | None = None,
+    ) -> dict[str, Any]:
+        """Return bounded provenance and the exact context for explicit-driver retrieval.
+
+        The managed callback is a trusted computing boundary: it validates its own
+        publication and evaluation readback, declares its authorized ``.database``,
+        and cooperates with the deadline. Metadata is not a sandbox or proof of
+        callback behavior. Legacy rows receive identical validation with or without it.
+
+        Args:
+            prompt: Generation prompt used only to derive keyword filters.
+            limit: Maximum priors, from one to five.
+            min_success_rate: Exclusive success-rate lower bound, from zero to one.
+            min_episodes: Minimum completed episodes, from one to one million.
+            managed_selection_provider: Trusted readback callback; receives only the explicitly injected driver.
+            database: Explicit authorized database, required for combined managed retrieval.
+
+        Returns:
+            JSON-safe status, derived_filters, priors, exact_context, context_sha256,
+            and safe warning codes. Unconfigured retrieval never discovers credentials.
+        """
+        valid = (
+            type(prompt) is str
+            and len(prompt) <= 16384
+            and type(limit) is int
+            and 1 <= limit <= 5
+            and type(min_success_rate) in (int, float)
+            and 0 <= min_success_rate <= 1
+            and type(min_episodes) is int
+            and 1 <= min_episodes <= 1000000
+            and (
+                database is None
+                or (type(database) is str and 0 < len(database) <= 128 and database.strip() == database)
+            )
+            and (
+                managed_selection_provider is None
+                or (database is not None and getattr(managed_selection_provider, "database", None) == database)
+            )
+        )
+        emb_filter, fixture_filter = _keyword_filters(prompt) if valid else ("", "")
+        receipt = empty_snapshot(prompt if valid else "")
+        if valid:
+            receipt["effective_settings"] = effective_settings(limit, min_success_rate, min_episodes)
+        started = time.monotonic()
+        deadline = started + 180.0
+
+        def query_timeout():
+            remaining = deadline - time.monotonic()
+            if not 0 < remaining <= 180.0:
+                raise _SnapshotRejected("retrieval_failed")
+            return min(5.0, remaining)
+
+        def finish():
+            if self._snapshot_driver is not None and valid:
+                elapsed = time.monotonic() - started
+                if not 0 <= elapsed < 180.0:
+                    settings = receipt["effective_settings"]
+                    receipt.update(empty_snapshot(prompt, warning="retrieval_failed"))
+                    receipt["effective_settings"] = settings
+                    # Retrieval started, but no bounded measurement can be recorded.
+                    # Never clip elapsed time or claim that retrieval did not start.
+                    receipt["timing"] = {"source": "unavailable", "elapsed_seconds": None}
+                else:
+                    receipt["timing"] = {"source": "local_monotonic", "elapsed_seconds": elapsed}
+            return validate_prior_snapshot(receipt, prompt=prompt if valid else "")
+
+        if not valid:
+            receipt["warnings"] = ["invalid_request"]
+            return finish()
+        if self._snapshot_driver is None:
+            return finish()
+        try:
+            from neo4j import Query
+
+            params = dict(
+                emb_filter=emb_filter,
+                fixture_filter=fixture_filter,
+                limit=limit,
+                min_success_rate=min_success_rate,
+                min_episodes=min_episodes,
+            )
+            candidate_limit = 100 if managed_selection_provider is not None else limit
+            params["limit"] = candidate_limit + 1 if managed_selection_provider is not None else limit
+            evidence = "measured"
+            managed = []
+            if managed_selection_provider is not None:
+                query_timeout()
+                managed = list(
+                    islice(
+                        managed_selection_provider(
+                            self._snapshot_driver,
+                            min_success_rate=min_success_rate,
+                            min_episodes=min_episodes,
+                            embodiment=emb_filter or None,
+                            fixture=fixture_filter or None,
+                            limit=32,
+                            deadline_monotonic=deadline,
+                        ),
+                        33,
+                    )
+                )
+                if len(managed) > 32:
+                    raise _SnapshotRejected("bounds_exceeded")
+                query_timeout()
+                managed_priors = []
+                for record in managed:
+                    managed_priors.append(
+                        _snapshot_prior(
+                            record,
+                            "measured" if record.get("best_success_rate") is not None else "unevaluated",
+                            min_success_rate,
+                            min_episodes,
+                        )
+                    )
+                    if (emb_filter and emb_filter not in (record.get("embodiment") or "")) or (
+                        fixture_filter and fixture_filter not in (record.get("background") or "")
+                    ):
+                        raise _SnapshotRejected("invalid_record")
+                _deduplicate_candidates(managed, managed_priors)
+            session_options = dict(default_access_mode="READ", fetch_size=6)
+            if database is not None:
+                session_options["database"] = database
+            query_timeout()
+            with graph_session(self._snapshot_driver.session(**session_options)) as session:
+                records = list(
+                    islice(
+                        session.run(Query(_SNAPSHOT_EVALUATED_QUERY, timeout=query_timeout()), **params),
+                        candidate_limit + 1,
+                    )
+                )
+                query_timeout()
+                if len(records) > candidate_limit:
+                    raise _SnapshotRejected("bounds_exceeded")
+                for record in records:
+                    _validate_legacy_provenance(record)
+                records += [r for r in managed if r.get("best_success_rate") is not None]
+                if not records:
+                    evidence = "unevaluated"
+                    records = list(
+                        islice(
+                            session.run(Query(_SNAPSHOT_STRUCTURAL_QUERY, timeout=query_timeout()), **params),
+                            candidate_limit + 1,
+                        )
+                    )
+                    if len(records) > candidate_limit:
+                        raise _SnapshotRejected("bounds_exceeded")
+                    query_timeout()
+                    records += managed
+            priors = [_snapshot_prior(record, evidence, min_success_rate, min_episodes) for record in records]
+            priors = _deduplicate_candidates(records, priors, rank=bool(managed))[:limit]
+            context = format_prior_context(priors)
+            if len(context.encode("utf-8")) > 32768 or len(json.dumps(priors, allow_nan=False)) > 65536:
+                raise _SnapshotRejected("bounds_exceeded")
+        except GraphCleanupError:
+            raise
+        except _SnapshotRejected as exc:
+            receipt["warnings"] = [exc.args[0]]
+            return finish()
+        except (TypeError, KeyError, AttributeError):
+            receipt["warnings"] = ["invalid_record"]
+            return finish()
+        except Exception:
+            receipt["warnings"] = ["retrieval_failed"]
+            return finish()
+        receipt.update(
+            status=(("measured" if evidence == "measured" else "structural") if priors else "empty"),
+            priors=priors,
+            exact_context=context,
+            context_sha256=hashlib.sha256(context.encode("utf-8")).hexdigest(),
+            warnings=[],
+        )
+        return finish()
 
     def get_driver(self) -> neo4j.Driver:
         if self._driver is None:
@@ -149,11 +571,7 @@ class GraphRAGRetriever:
         return self._driver
 
     def retrieve_prior_subgraphs(
-        self,
-        prompt: str,
-        limit: int = 2,
-        min_success_rate: float = 0.0,
-        min_episodes: int = 1,
+        self, prompt: str, limit: int = 2, min_success_rate: float = 0.0, min_episodes: int = 1
     ) -> list[dict[str, Any]]:
         """Retrieve prior environment subgraphs, ranked by measured evaluation outcome.
 
@@ -182,7 +600,7 @@ class GraphRAGRetriever:
 
         try:
             driver = self.get_driver()
-            with driver.session() as session:
+            with graph_session(driver.session()) as session:
                 records = list(session.run(_EVALUATED_PRIORS_QUERY, **params))
                 if records:
                     return [_row_to_prior(r, "measured") for r in records]
@@ -190,52 +608,17 @@ class GraphRAGRetriever:
                 structural = {k: v for k, v in params.items() if k not in ("min_success_rate", "min_episodes")}
                 records = list(session.run(_STRUCTURAL_PRIORS_QUERY, **structural))
                 return [_row_to_prior(r, "unevaluated") for r in records]
-        except Exception as exc:
+        except GraphCleanupError:
+            raise
+        except Exception:
             # Generation must not depend on the experience memory being reachable, but a silent
             # miss is indistinguishable from an empty graph, so say which happened.
-            logger.warning("Graph-RAG retrieval failed (%s: %s); continuing without priors.", type(exc).__name__, exc)
+            logger.warning("Graph-RAG unavailable; continuing without priors.")
             return []
 
     def format_priors_as_context(self, priors: list[dict[str, Any]]) -> str:
         """Format retrieved subgraphs into a prompt context block."""
-        if not priors:
-            return ""
-
-        measured = [p for p in priors if p.get("evidence") == "measured"]
-        if measured:
-            header = [
-                "### Prior Environment Subgraphs (Graph-RAG, ranked by measured success rate):",
-                "These structural patterns come from environments that were evaluated and scored above zero.",
-            ]
-        else:
-            header = [
-                "### Prior Environment Subgraphs (Graph-RAG, structural precedent only):",
-                "No evaluated environment cleared the evidence bar. The patterns below are structurally",
-                "valid but carry NO evidence that a policy performs well in them -- reuse their grounding",
-                "and relations, not their assumed quality.",
-            ]
-        lines = [*header, ""]
-
-        for idx, p in enumerate(priors, 1):
-            if p.get("evidence") == "measured":
-                outcome = f"success_rate={p.get('success_rate')} over {p.get('episodes')} episode(s)"
-            else:
-                outcome = "never evaluated"
-            lines.append(f"Example {idx} ({p.get('name', 'env')}) -- {outcome}:")
-            lines.append(f"  - Task: {p.get('task_description')}")
-            if p.get("task_composition"):
-                lines.append(f"  - Composition: {p.get('task_composition')}")
-            lines.append(f"  - Embodiment: {p.get('embodiment')}")
-            lines.append(f"  - Background: {p.get('background')}")
-            lines.append(f"  - Objects: {', '.join(p.get('objects', []))}")
-            for rel in p.get("relations", []):
-                lines.append(
-                    f"  - Relation: {rel.get('relation_type')}"
-                    f" (manifold={rel.get('manifold')}, anchor={rel.get('anchor')})"
-                )
-            lines.append("")
-
-        return "\n".join(lines)
+        return format_prior_context(priors, structural_outcome="never evaluated")
 
     def retrieve_refinement_history(
         self,
@@ -293,11 +676,7 @@ class GraphRAGRetriever:
             return [dict(record) for record in records]
 
     def retrieve_controller_trials(
-        self,
-        source_env_name: str,
-        checkpoint_identity: str,
-        experiment_id: str | None = None,
-        limit: int = 20,
+        self, source_env_name: str, checkpoint_identity: str, experiment_id: str | None = None, limit: int = 20
     ) -> list[dict[str, Any]]:
         """Retrieve measured same-scene interventions, including zero-success trials.
 
@@ -361,10 +740,7 @@ class GraphRAGRetriever:
             episodes = json.loads(evaluation["episode_results_json"])
             _verified(
                 [{"properties": evaluation}],
-                {
-                    **_episode_metrics(episodes),
-                    "policy_identity": variant["policy_identity"],
-                },
+                {**_episode_metrics(episodes), "policy_identity": variant["policy_identity"]},
                 "controller evaluation",
             )
             events = [episode.get("progress", {}).get("events") for episode in episodes]

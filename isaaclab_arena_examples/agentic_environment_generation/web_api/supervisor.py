@@ -53,6 +53,11 @@ class Supervisor:
                 job = executable[0]
                 if job["kind"] == "diagnostic":
                     await self.execute(job)
+                elif job["kind"] == "generate" and job["inputs"].get("operation") in (
+                    "new",
+                    "refine",
+                ):
+                    await self.editor_execution.execute_managed(self, job)
                 else:
                     await self.editor_execution.execute(self, job)
                 continue
@@ -94,7 +99,10 @@ class Supervisor:
             async with asyncio.timeout(inputs["steps"] * inputs["delay_seconds"] + 10):
                 stages = ["diagnostic_ready"]
                 for step in range(1, inputs["steps"] + 1):
-                    stages.extend([f"diagnostic_step_{step}_started", f"diagnostic_step_{step}_completed"])
+                    stages.extend([
+                        f"diagnostic_step_{step}_started",
+                        f"diagnostic_step_{step}_completed",
+                    ])
                 for stage in stages:
                     message = json.loads(await self.process.stdout.readline())
                     if self.journal.get_job(self.job_id)["status"] == "cancel_requested":
@@ -131,7 +139,13 @@ class Supervisor:
 
     def request_cancel(self, job_id):
         """Record intent before signaling; the reader commits cancellation only after reaping."""
-        job = self.journal.transition(job_id, "cancel_requested", "cleanup_requested", "cancel_requested")
+        attempt = self.journal.get_attempt(job_id)
+        if attempt is not None:
+            state = attempt.pop("state")
+            self.journal.request_cancel_attempt(job_id, **attempt, expected_state=state)
+            job = self.journal.get_job(job_id)
+        else:
+            job = self.journal.transition(job_id, "cancel_requested", "cleanup_requested", "cancel_requested")
         if self.job_id == job_id and job["kind"] == "snapshots" and self.editor_execution is not None:
             self.editor_execution.request_cancel()
         if self.job_id == job_id and self._process_group is not None:

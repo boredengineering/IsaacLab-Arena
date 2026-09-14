@@ -22,6 +22,9 @@ import { isActive, type Job, type Workspace } from './contracts';
 import { sharedPort, type ObservationPort } from './observation';
 import { RuntimeProvider, useRuntime } from './runtime';
 import { EditorView } from './editor';
+import { useEditorJob } from './editor-jobs';
+import { GenerationReauthorization, isBlockedGeneration } from './generation-reauthorization';
+import { useModelSettings } from './model-settings';
 import { Neo4jView } from './neo4j';
 import { parseGraphRenderer, type GraphRendererChoice } from './graph-host';
 import { ThemeProvider, ThemeToggle } from './theme';
@@ -291,6 +294,16 @@ function DiagnosticControls({ jobs }: { jobs: Job[] }) {
 function StatusBadge({ job }: { job: Job }) {
   return <span className={`job-status ${job.status}`}>{job.status.replaceAll('_', ' ')}</span>;
 }
+function BlockedJobActions({ job }: { job: Job }) {
+  useModelSettings(); // Reuse public, session-scoped settings observation on deep links.
+  const runtime = useRuntime();
+  const { cancel } = useEditorJob('generate');
+  return <>
+    <GenerationReauthorization job={job} onVerified={runtime.refresh} />
+    <button className="danger" disabled={!runtime.session || cancel.isPending} onClick={() => cancel.mutate(job.id)}>Cancel generation</button>
+    {cancel.error && <p role="alert">{cancel.error.message}</p>}
+  </>;
+}
 function JobInspector({ job }: { job?: Job }) {
   const runtime = useRuntime();
   const cancel = useMutation({
@@ -360,6 +373,7 @@ function JobInspector({ job }: { job?: Job }) {
           Cancellation requested. Waiting for worker cleanup acknowledgment; not yet cancelled.
         </p>
       )}
+      {isBlockedGeneration(job) && <BlockedJobActions key={job.id} job={job} />}
       {['queued', 'running'].includes(job.status) && (
         <button
           className="danger"

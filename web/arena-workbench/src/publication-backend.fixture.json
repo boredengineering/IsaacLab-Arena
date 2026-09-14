@@ -1,0 +1,9 @@
+{
+  "source": "research_projection.project_scene; graph_access.checked_graph_config; research_graph_transport.IMMUTABLE_SCOPE_DECLARATION",
+  "canonical_identity": {
+    "name": "workbench__79ed43e1216515bd5408531ae9e86b82dd9b32de186ee6a35c3dea021b884581",
+    "sha256": "79ed43e1216515bd5408531ae9e86b82dd9b32de186ee6a35c3dea021b884581"
+  },
+  "database": "research.graph",
+  "declaration": "Deployment excludes outside writers from canonical owned root fields, effect markers, revision-scoped nodes and incident relationships for the publication lifetime; cooperative exclusive-scope writers only atomically create absent content and never mutate, delete, repair, or extend existing owned content. Schema remains stable."
+}

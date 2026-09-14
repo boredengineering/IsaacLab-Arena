@@ -7,8 +7,14 @@ export const statuses = [
   'failed',
   'cancelled',
   'indeterminate',
+  'blocked_authorization',
 ] as const;
 export type JobStatus = (typeof statuses)[number];
+export interface ExecutionEvidence {
+  released: boolean;
+  candidate_accepted: boolean;
+  outcome: 'not_released' | 'unknown' | 'candidate_accepted';
+}
 export interface Job {
   id: string;
   workspace_id: string;
@@ -21,6 +27,7 @@ export interface Job {
   result: Record<string, unknown> | null;
   error: string | null;
   created_by_session_id: string;
+  execution?: ExecutionEvidence;
 }
 export interface Workspace {
   id: string;
@@ -53,6 +60,13 @@ export interface JobRequest {
 }
 export const isActive = (job: Job) =>
   ['queued', 'running', 'cancel_requested'].includes(job.status);
+export function isExecutionEvidence(value: unknown): value is ExecutionEvidence {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const e = value as ExecutionEvidence;
+  return (e.outcome === 'not_released' && e.released === false && e.candidate_accepted === false)
+    || (e.outcome === 'unknown' && e.released === true && e.candidate_accepted === false)
+    || (e.outcome === 'candidate_accepted' && e.released === true && e.candidate_accepted === true);
+}
 export function isJob(value: unknown): value is Job {
   if (!value || typeof value !== 'object') return false;
   const j = value as Job;
@@ -65,6 +79,7 @@ export function isJob(value: unknown): value is Job {
     !!j.inputs &&
     typeof j.inputs === 'object' &&
     !Array.isArray(j.inputs) &&
+    (j.execution === undefined || isExecutionEvidence(j.execution)) &&
     (j.kind !== 'diagnostic' ||
       (typeof j.inputs.steps === 'number' && typeof j.inputs.delay_seconds === 'number'))
   );

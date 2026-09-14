@@ -45,7 +45,7 @@ export interface Validation {
 export interface EditorIndex {
   default_document_id: string;
   documents: { id: string; name: string; source: string }[];
-  capabilities: { generation: boolean; snapshots: boolean; neo4j: boolean };
+  capabilities: { generation: boolean; snapshots: boolean; neo4j: boolean; generation_modes?: boolean; research_versions?: boolean; publication_execution?: boolean };
   limitations: string[];
 }
 export interface EditorDocument {

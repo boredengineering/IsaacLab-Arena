@@ -4,6 +4,9 @@ import { useRuntime } from './runtime';
 import { ModelSettings, useModelSettings } from './model-settings';
 import { CodeEditor } from './code-editor';
 import { GraphHost, type GraphRolloutProps } from './graph-host';
+import { GenerationEvidence } from './generation-evidence';
+import { MetadataBrowser } from './metadata-browser';
+import { ResearchVersions } from './research-versions';
 import type {
   EditorDocument,
   EditorIndex,
@@ -20,6 +23,8 @@ import { downloadRecoveredYaml, readDraft, storeDraft } from './draft-storage';
 import type { RecoverableDraft } from './draft-storage';
 
 type OwnedValidation = { text: string; result: Validation; owner: string };
+// Local-only identity: never send this to the document catalogue or validation API.
+const NEW_DOCUMENT = 'local:new-environment';
 const validationOwner = (sessionId: string | undefined, documentId: string, document: EditorDocument | null) =>
   JSON.stringify([sessionId, documentId, document?.document_id, document?.source_hash]);
 
@@ -84,7 +89,7 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
   });
   const [documentId, setDocumentId] = useState(restored?.documentId ?? recovery?.documentId ?? '');
   const [loadedDocumentId, setLoadedDocumentId] = useState(
-    restored?.loadedDocumentId ?? (restored?.document ? restored.documentId : ''),
+    restored?.loadedDocumentId ?? (restored?.document ? restored.documentId : recovery?.documentId === NEW_DOCUMENT ? NEW_DOCUMENT : ''),
   );
   const [document, setDocument] = useState<EditorDocument | null>(restored?.document ?? null);
   const [draft, setDraft] = useState(restored?.draft ?? '');
@@ -95,19 +100,31 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
   const [prompt, setPrompt] = useState(restored?.prompt ?? '');
+  const [generationMode, setGenerationMode] = useState<'new' | 'refine'>('new');
+  const [retrievalPolicy, setRetrievalPolicy] = useState<'allow_fallback' | 'require_service'>('allow_fallback');
+  const modesAvailable = index.data?.capabilities.generation_modes === true;
   useEffect(() => {
     cache.setQueryData(['editor-draft'], { documentId, loadedDocumentId, document, draft, prompt, validation, recovery });
   }, [cache, documentId, loadedDocumentId, document, draft, prompt, validation, recovery]);
   useEffect(() => {
-    if (recovery || loading || !document || loadedDocumentId !== documentId) return;
-    setStorageError(!storeDraft(draft === document.yaml_text && !prompt ? null : {
-      version: 1, documentId, viewId: document.document_id, sourceHash: document.source_hash, draft, prompt,
+    if (recovery || loading || (!document && documentId !== NEW_DOCUMENT) || loadedDocumentId !== documentId) return;
+    setStorageError(!storeDraft(draft === (document?.yaml_text ?? '') && !prompt ? null : {
+      version: 1, documentId, viewId: document?.document_id ?? NEW_DOCUMENT, sourceHash: document?.source_hash ?? '', draft, prompt,
     }));
   }, [recovery, loading, document, loadedDocumentId, documentId, draft, prompt]);
   const request = useRef(0);
   const latest = useRef(draft);
   latest.current = draft;
   const generation = useEditorJob('generate');
+  const retryGeneration = !!generation.retained && !generation.job;
+  // Accepted inputs, not a tab's retry payload, define the durable operation.
+  const generationInputs = generation.job ? generation.job.inputs : generation.retained?.payload;
+  const frozenMode = generationInputs?.operation;
+  const selectedMode = (generation.busy || retryGeneration) && (frozenMode === 'new' || frozenMode === 'refine')
+    ? frozenMode : generationMode;
+  const frozenPolicy = generationInputs?.retrieval_policy;
+  const selectedPolicy = (generation.busy || retryGeneration) && (frozenPolicy === 'allow_fallback' || frozenPolicy === 'require_service')
+    ? frozenPolicy : retrievalPolicy;
   const generationAvailable = modelSettings.generationAvailable ?? index.data?.capabilities.generation;
   const owner = validationOwner(session?.session_id, documentId, document);
   const latestOwner = useRef(owner);
@@ -121,8 +138,13 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
   const options = { ...cameraOptions, asset_views: Object.fromEntries(Object.entries(cameraOptions.asset_views)
     .filter(([id]) => !valid || current.assets.some((asset) => asset.id === id))) };
   const snapshots = useSnapshots(canonicalHash, document?.document_id ?? '', options);
+  const candidateValidation = generation.job?.result?.validation;
+  const cancelledCandidate = generation.job?.status === 'cancelled' &&
+    candidateValidation !== null && typeof candidateValidation === 'object' &&
+    'valid' in candidateValidation && candidateValidation.valid === true;
   const generated =
-    generation.job?.status === 'succeeded' && typeof generation.job.result?.yaml_text === 'string'
+    (generation.job?.status === 'succeeded' || cancelledCandidate) &&
+      typeof generation.job?.result?.yaml_text === 'string' && generation.job.result.yaml_text.trim()
       ? (generation.job.result as unknown as GeneratedResult)
       : null;
   const [appliedJob, setAppliedJob] = useState('');
@@ -136,13 +158,30 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
   });
   function applyGenerated() {
     if (!generated) return;
+    const inputs = generationInputs;
+    const isNew = inputs?.operation === 'new';
+    const hasSourceIdentity = !!inputs && ('document_id' in inputs || 'input_hash' in inputs);
+    // Missing legacy provenance can only be applied detached, never reconstructed from retry storage.
+    // A selected source may still be loading; never bind an old candidate to its includes.
+    const sourceChanged = !hasSourceIdentity || loadedDocumentId !== documentId ||
+      (inputs?.document_id ?? null) !== (document?.document_id ?? null) ||
+      (typeof inputs?.input_hash === 'string' && inputs.input_hash !== current?.source_hash);
     if (
-      draft !== generation.retained?.payload.base_yaml &&
+      (isNew || (sourceChanged && hasSourceIdentity) || draft !== (inputs?.base_yaml ?? generated.yaml_text)) &&
       !window.confirm(
-        'Your draft changed after generation started. Replace it with the generated YAML?',
+        isNew ? 'Replace the current draft with this new environment? The previous document context will be detached.'
+          : sourceChanged ? 'The source document or frozen inputs changed after generation started. Apply the generated YAML as a detached draft without the current source includes?'
+            : 'Your draft changed after generation started. Replace it with the generated YAML?',
       )
     )
       return;
+    if (isNew || sourceChanged) {
+      request.current++;
+      setDocumentId(NEW_DOCUMENT);
+      setLoadedDocumentId(NEW_DOCUMENT);
+      setDocument(null);
+      setLoading(false);
+    }
     setDraft(generated.yaml_text);
     // Durable job validation has no current session/source ownership. Validate the applied draft anew.
     setValidation(null);
@@ -152,7 +191,7 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
     if (index.data && !documentId) setDocumentId(index.data.default_document_id);
   }, [index.data, documentId]);
   useEffect(() => {
-    if (!documentId || !session || (document && loadedDocumentId === documentId)) return;
+    if (!documentId || documentId === NEW_DOCUMENT || !session || (document && loadedDocumentId === documentId)) return;
     let active = true;
     setLoading(true);
     setError('');
@@ -206,8 +245,8 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
   }, [draft, documentId, session?.session_id, loading, index.data, validation]);
   function chooseDocument(id: string) {
     if (
-      document &&
-      draft !== document.yaml_text &&
+      (document || documentId === NEW_DOCUMENT) &&
+      draft !== (document?.yaml_text ?? '') &&
       !window.confirm('Discard this unsaved draft and load another document?')
     )
       return;
@@ -236,6 +275,7 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
             <option value="" disabled>
               Select a document
             </option>
+            {documentId === NEW_DOCUMENT && <option value={NEW_DOCUMENT}>New environment</option>}
             {index.data?.documents.map((doc) => (
               <option key={doc.id} value={doc.id}>
                 {doc.name}
@@ -244,28 +284,28 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
           </select>
         </label>
         <span className="source-path">
-          {document?.source ?? 'Connect to load an environment document'}
+          {documentId === NEW_DOCUMENT ? 'Local new environment · no source includes' : document?.source ?? 'Connect to load an environment document'}
         </span>
         <span className="tag">
           {loading
             ? 'Loading…'
-            : document && draft !== document.yaml_text
+            : documentId === NEW_DOCUMENT || (document && draft !== document.yaml_text)
               ? 'Unsaved draft'
               : document
                 ? 'Source loaded'
                 : 'No document loaded'}
         </span>
       </div>
-      {recovery && document && !loading && (
+      {recovery && (document || documentId === NEW_DOCUMENT) && !loading && (
         <div className="notice warning" role="alert">
           <strong>Unsaved draft recovered from this tab</strong>
           <span>
-            {recovery.viewId === document.document_id && recovery.sourceHash === document.source_hash
+            {recovery.viewId === (document?.document_id ?? NEW_DOCUMENT) && recovery.sourceHash === (document?.source_hash ?? '')
               ? 'Restore it explicitly, or keep the source currently shown. No job will be restarted.'
               : 'The source or included YAML changed. Download your draft before discarding it; automatic context substitution is blocked.'}
           </span>
           <div className="editor-actions">
-            <button disabled={recovery.viewId !== document.document_id || recovery.sourceHash !== document.source_hash}
+            <button disabled={recovery.viewId !== (document?.document_id ?? NEW_DOCUMENT) || recovery.sourceHash !== (document?.source_hash ?? '')}
               onClick={() => {
                 if (recovery.draft !== draft) setValidation(null);
                 setDraft(recovery.draft); setPrompt(recovery.prompt); setRecovery(null);
@@ -306,6 +346,8 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
           {error}
         </p>
       )}
+      {modesAvailable && <MetadataBrowser />}
+      {index.data?.capabilities.research_versions === true && <ResearchVersions candidate={generation.job} publicationExecution={index.data.capabilities.publication_execution === true} />}
       <div className="editor-grid">
         <div className="author-column">
           <section className="prompt-section">
@@ -314,6 +356,19 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
               <span className="tag">Draft only · no Neo4j publication</span>
             </div>
             <ModelSettings settings={modelSettings} />
+            {modesAvailable && <fieldset disabled={generation.busy || retryGeneration}>
+              <legend>Generation mode</legend>
+              <label><input type="radio" name="generation-mode" checked={selectedMode === 'new'}
+                onChange={() => setGenerationMode('new')} />New environment from prompt</label>
+              <label><input type="radio" name="generation-mode" checked={selectedMode === 'refine'}
+                onChange={() => setGenerationMode('refine')} />Refine current environment</label>
+              {selectedMode === 'new' && <label>Retrieval policy<select aria-label="Retrieval policy" value={selectedPolicy}
+                onChange={(e) => setRetrievalPolicy(e.target.value === 'require_service' ? 'require_service' : 'allow_fallback')}>
+                <option value="allow_fallback">Allow fallback when retrieval service is unavailable</option>
+                <option value="require_service">Require read-only retrieval service</option>
+              </select></label>}
+              <p className="hint">GraphRAG retrieval evidence pending · no retrieval claimed.</p>
+            </fieldset>}
             <label htmlFor="scene-prompt">Describe the environment and task</label>
             <textarea
               id="scene-prompt"
@@ -335,15 +390,17 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
                   (!generationAvailable && !(generation.retained && !generation.job)) ||
                   (!prompt.trim() && !(generation.retained && !generation.job)) ||
                   generation.busy ||
-                  loading ||
+                  (!retryGeneration && ((loading && (!modesAvailable || generationMode !== 'new')) ||
+                    (modesAvailable && generationMode === 'refine' && !valid))) ||
                   (!!recovery && !(generation.retained && !generation.job))
                 }
                 onClick={() =>
                   generation.submit.mutate({
                     prompt,
-                    base_yaml: draft,
+                    ...(modesAvailable ? { operation: generationMode, retrieval_policy: generationMode === 'new' ? retrievalPolicy : 'allow_fallback' } : {}),
+                    ...(!modesAvailable || generationMode === 'refine' ? { base_yaml: draft,
+                      ...(document ? { document_id: document.document_id } : {}) } : {}),
                     ...(modelSettings.credentialRef ? { credential_ref: modelSettings.credentialRef } : {}),
-                    ...(document ? { document_id: document.document_id } : {}),
                   })
                 }
               >
@@ -355,10 +412,13 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
               </button>
             </div>
             <EditorJobProgress controller={generation} />
+            {generated && cancelledCandidate && <p className="notice warning">Committed candidate from a cancelled job · job not successful. Review before applying; no outcome is inferred from receipts.</p>}
+            {generated && <GenerationEvidence value={generated} />}
             {generated && appliedJob !== generation.job?.id && (
               <div className="generated-review">
                 <h3>Generated YAML · review before applying</h3>
                 <pre>{generated.yaml_text}</pre>
+
                 {generated.warnings?.map((warning, i) => (
                   <p key={i}>{warning}</p>
                 ))}

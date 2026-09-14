@@ -216,6 +216,95 @@ priors used by the selected workflow, not just transport of the API key.
 Local loopback HTTP is supported; non-loopback credential entry requires a
 configured HTTPS origin and still needs a separate authentication/TLS review.
 
+Prompt-first generation and recovery
+------------------------------------
+
+The revised API advertises ``generation_modes`` independently from current model
+readiness. New requests explicitly use ``operation=new`` and reject base/document
+fields; refinement requires a frozen valid base. An older API without this
+capability retains the legacy UI. Deployment and live-model acceptance are
+separate from component tests; the P1 path returns drafts, not published research
+versions or evaluated policies.
+
+Model and retrieval-read grants freeze separate private configurations and bind
+to the durable request and exact attempt generation. They expire after at most
+180 seconds, also capped by session/credential deadlines. The journal claims
+attempts transactionally. The coordinator rechecks authorization after spawning
+the owned worker and records release immediately before private pipe dispatch.
+Queued work cannot silently adopt a replacement credential or endpoint.
+
+Graph retrieval requires an explicit server profile. The owned driver is closed
+on all paths, and measured, structural, empty, unavailable and not-requested
+outcomes remain distinct. The shared ``prior_receipt.py`` validator checks bounded
+fields, evidence consistency, canonical consumed context, digest, effective
+settings and timing without re-querying. The catalogue digest is frozen at
+submission and checked against the actual catalogue before external work.
+
+Protected modern candidate receipts are immutable SQLite records capped at
+2 MiB. Parent-side validation precedes acceptance. Restart adoption requires
+verified receipt identity and recorded worker cleanup; released work without a
+receipt remains indeterminate rather than being replayed. Cancellation preserves
+accepted candidates and execution-outcome evidence independently from its local
+lifecycle status. Stopping a worker does not establish that a provider did no work.
+
+Blocked, unreleased work supports explicit reauthorization through
+``POST /api/editor/generations/{job_id}/reauthorize``. Linked append-only grants
+preserve original inputs; indeterminate work cannot use this route. Failed
+renewal requests retain their request ID/reference until acceptance or durable
+rejection is established. Rejection seals serialize against acceptance, are
+capped at 128 per job, and never consume the accepted-generation slot. An
+authenticated exact disposition read can recover the proof; missing records,
+generic conflicts and commit failures are not rejection proof. Secret screening
+precedes persistence or reflection of fresh request fields.
+
+The browser offers explicitly selected controls for blocked jobs discovered in
+other tabs, preserves ambiguous requests, and fences dispatch and late responses
+by session/request ownership. Correcting a definitively rejected credential
+requires separate confirmation and does not itself submit work. Applying a new
+or foreign-source candidate detaches includes and revalidates in the current
+session.
+
+Managed research preview boundary
+----------------------------------
+
+Editor drafts, numbered managed research versions, graph publication and policy
+evaluation are distinct states. Generation/Apply and editor Save revision remain
+draft operations; explicit Save Research Version commits exact candidate identity,
+immutable artifacts and optional immutable parent lineage. It requests neither
+publication nor evaluation. Managed publication, retrieval-provider and worker
+integration remain unfinished or under review, not a completed P2 deployment.
+
+Operator-supplied ``research_roots`` (Python launcher ``--research-store``) are
+opt-in; the empty default is unchanged. ``research_versions`` indicates configured
+roots, not verified storage readiness. Discovery GETs never initialize or migrate.
+Explicit offline ``research_admin init-store`` follows journal backup/review and
+requires the supported current P1 schema. It does not construct a Journal or own
+API lifecycle; incompatible schemas fail closed rather than silently migrating.
+Managed roots are separate from legacy ``generated_envs`` / ``eval_output``.
+
+The reviewed WAL-sidecar-safe admin preflight requires the documented offline,
+trusted-owner Linux/POSIX-VFS scope, not an assumption that SQLite read-only queries
+leave sidecars unchanged. Initialization/backup require ``--attest-quiescent`` and
+closed connections throughout. A private main-plus-WAL copy preserves authoritative
+WAL data. Conflicting locks fail busy without an implicit API stop, but idle rollback
+connections may hold no lock. Physical preservation excludes access timestamps;
+the runbook is not approval for a live cutover or proof of power-loss durability.
+
+Save and generation recovery bind exact operation IDs across replacement sessions,
+including S2, not ``latest`` or guessed family versions. The managed CLI consults
+accepted-request identity before fresh server-model preflight; changed current
+model settings cannot silently replace accepted work. Its current save has no
+parent and publication is explicitly not requested. Legacy CLI behavior is not
+changed or certified safe for concurrent managed-store writing.
+
+Private checkpoints include Sessions-derived journal state. Their bounded local
+filesystem copying uses a cooperative deadline, not a hard bound on blocked I/O
+or proof of power-loss durability. Prepared restore produces only an inactive
+database marked ``activation_required``: never activation, graph undo, or automatic
+queue replay. Reconciliation and cutover need a separate authorized procedure.
+See :doc:`../example_workflows/agentic_env_gen/workbench` for exact operator commands
+and the remaining budget/runtime-proof acceptance boundary.
+
 Live event contract
 -------------------
 

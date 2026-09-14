@@ -4,6 +4,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { createMemoryHistory } from '@tanstack/react-router';
 import { App } from './app';
 import { ApiClient } from './api';
+import { PROVIDERS } from './model-settings-contracts';
 const session = { session_id: 'session1', csrf_token: 'csrf', expires_at: 9999999999 };
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
 function server(diagnostic = false) {
@@ -35,6 +36,23 @@ beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
   delete document.documentElement.dataset.theme;
+});
+it('offers blocked-job renewal and cancellation on a fresh deep link without editor retention', async () => {
+  const base = server();
+  const job = { id: 'blocked', workspace_id: 'default', kind: 'generate', status: 'blocked_authorization', stage: 'blocked', inputs: { operation: 'new' }, created_at: 0, updated_at: 0, result: null, error: null, created_by_session_id: 'session1' };
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/workspaces/default')) return response({ id: 'default', name: 'Arena', jobs: [job], event_cursor: 0 });
+    if (url.endsWith('/model-settings')) return response({ providers: PROVIDERS, session_keys_allowed: true, credential_ref: null, configured: true, source: 'server', provider: 'openai', model: 'test', expires_at: null });
+    if (url.endsWith('/jobs/blocked/cancel')) { job.status = 'cancelled'; return response(job); }
+    if (url.endsWith('/jobs/blocked')) return response(job);
+    return base(url, init);
+  });
+  mount(fetcher, '/jobs/blocked');
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Reauthorize generation' })).toBeEnabled());
+  expect(screen.getAllByRole('button', { name: /cancel generation|request cancellation/i })).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel generation' }));
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith('/jobs/blocked/cancel'))).toBe(true));
+  expect(sessionStorage.getItem('arena:editor:generate:v1')).toBeNull();
 });
 it('toggles the sidebar theme and retains it across reload without submitting jobs', async () => {
   const fetcher = server();

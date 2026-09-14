@@ -18,6 +18,7 @@ class Sessions:
         self.clock = clock
         self.idle_seconds = idle_seconds
         self.absolute_seconds = absolute_seconds
+        self.on_invalidate = lambda owner: None
         with journal._transaction() as db:
             db.execute("""CREATE TABLE IF NOT EXISTS sessions (
                 digest TEXT PRIMARY KEY, session_id TEXT NOT NULL, csrf_token TEXT NOT NULL,
@@ -33,6 +34,15 @@ class Sessions:
             if row is None or self.clock() >= min(row["expires_at"], row["absolute_at"]):
                 return None
             return {key: row[key] for key in ("session_id", "csrf_token", "expires_at")}
+
+    def get_by_id(self, session_id):
+        """Validate internal ownership without exposing the cookie or its digest."""
+        # A single read also works inside the coordinator's existing release transaction.
+        with self.journal._lock:
+            row = self.journal.db.execute("SELECT * FROM sessions WHERE session_id=?", (session_id,)).fetchone()
+            if row is None or self.clock() >= min(row["expires_at"], row["absolute_at"]):
+                return None
+            return {key: row[key] for key in ("session_id", "expires_at")}
 
     @staticmethod
     def _digest(token):
@@ -72,4 +82,7 @@ class Sessions:
     def revoke(self, token):
         """Revoke this browser credential without touching its jobs."""
         with self.journal._transaction() as db:
+            row = db.execute("SELECT session_id FROM sessions WHERE digest=?", (self._digest(token),)).fetchone()
             db.execute("DELETE FROM sessions WHERE digest=?", (self._digest(token),))
+        if row is not None:
+            self.on_invalidate(row["session_id"])

@@ -13,7 +13,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from . import generation
+from . import generation, graph_access
 from .provider_security import ENDPOINTS, PROVIDERS, checked_config, reject_secret
 from .security import require_mutation, require_session
 
@@ -42,11 +42,16 @@ class ModelSettings:
     def __init__(self, *, clock=time.time):
         self.clock = clock
         self._records = {}
+        self.on_invalidate = lambda owner: None
+        self.protect_grants = lambda value: None
+        self.purge_grants = lambda: None
 
     def forget(self, session_id):
         self._records.pop(session_id, None)
+        self.on_invalidate(session_id)
 
     def purge(self):
+        self.purge_grants()
         for session_id, record in tuple(self._records.items()):
             if self.clock() >= record["expires_at"]:
                 self.forget(session_id)
@@ -71,6 +76,7 @@ class ModelSettings:
         self.protect_public({"model": body.model, "provider": body.provider})
         if session["session_id"] not in self._records and len(self._records) >= MAX_CREDENTIALS:
             raise HTTPException(409, "Temporary credential capacity reached; try again after expiry")
+        self.forget(session["session_id"])
         self._records[session["session_id"]] = {
             "api_key": body.api_key,
             "provider": body.provider,
@@ -87,6 +93,8 @@ class ModelSettings:
     def protect_public(self, value):
         """Reject active credential material before public validation or durable submission."""
         try:
+            self.protect_grants(value)
+            reject_secret(value, (graph_access.configuration() or {}).get("password"))
             for record in self._records.values():
                 reject_secret(value, record["api_key"])
             reject_secret(value, (generation.configuration() or {}).get("api_key"))
@@ -108,6 +116,11 @@ class ModelSettings:
             "credential_ref": record["credential_ref"] if record else None,
             "session_keys_allowed": allowed,
         }
+
+    def credential_expiry(self, session_id, credential_ref):
+        """Return the exact original reference deadline, never replacement metadata."""
+        self.resolve(session_id, credential_ref)
+        return self._records[session_id]["expires_at"]
 
     def resolve(self, session_id, credential_ref):
         """Resolve exactly this session's live reference, never a fallback or replacement."""

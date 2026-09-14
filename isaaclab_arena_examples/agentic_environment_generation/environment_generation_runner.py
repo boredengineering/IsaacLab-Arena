@@ -46,6 +46,21 @@ DEFAULT_PROMPT = "Franka picks up a cube from the maple table and places it into
 
 def add_agentic_env_gen_runner_cli_args(parser: argparse.ArgumentParser) -> None:
     group = parser.add_argument_group("Agentic Environment Generation Runner")
+    for name in (
+        "api_socket",
+        "api_origin",
+        "store_id",
+        "family",
+        "operation_id",
+        "publication_profile",
+        "publication_revision",
+        "publication",
+        "publication_request_id",
+        "reservation_id",
+        "publication_effect_id",
+        "publication_previous_request_id",
+    ):
+        group.add_argument(f"--managed_{name}", type=Path if name == "api_socket" else str, default=None)
     group.add_argument(
         "--mode",
         type=str,
@@ -732,6 +747,27 @@ def main() -> int:
     parser = get_isaaclab_arena_cli_parser()
     add_agentic_env_gen_runner_cli_args(parser)
     args_cli = parser.parse_args()
+
+    if any(
+        getattr(args_cli, f"managed_{name}") is not None
+        for name in (
+            "api_socket",
+            "api_origin",
+            "store_id",
+            "family",
+            "operation_id",
+            "publication_profile",
+            "publication_revision",
+            "publication",
+            "publication_request_id",
+            "reservation_id",
+            "publication_effect_id",
+            "publication_previous_request_id",
+        )
+    ):
+        from isaaclab_arena_examples.agentic_environment_generation.managed_workflow_cli import run_managed
+
+        return run_managed(args_cli, argv=sys.argv[1:])
 
     if args_cli.mode == "schema":
         print_schema()

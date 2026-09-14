@@ -9,20 +9,33 @@ export class ApiError extends Error {
   }
 }
 export class ApiClient {
-  session: Session | null = null;
+  private currentSession: Session | null = null;
+  private epoch = 0;
+  get session() { return this.currentSession; }
+  set session(value: Session | null) {
+    this.epoch++;
+    this.currentSession = value;
+    this.connecting = undefined;
+  }
+  get sessionGeneration() { return this.epoch; }
   onExpired: () => void = () => {};
   private connecting?: Promise<Session>;
   constructor(private fetcher: typeof fetch = (...args) => fetch(...args)) {}
 
   connect(): Promise<Session> {
     if (!this.connecting) {
-      const establish = () => this.request<Session>('/sessions', 'POST', {});
+      const epoch = this.epoch;
+      const assertCurrent = () => {
+        if (this.epoch !== epoch) throw new Error('Session changed; reconnect explicitly.');
+      };
+      const establish = () => { assertCurrent(); return this.request<Session>('/sessions', 'POST', {}); };
       const request = globalThis.navigator?.locks
         ? navigator.locks.request('arena-workbench:session', establish)
         : establish();
-      this.connecting = request
+      const connecting = request
         .then(async (response) => {
           const s = await response;
+          assertCurrent();
           if (
             !s ||
             typeof s.session_id !== 'string' ||
@@ -36,8 +49,9 @@ export class ApiClient {
           return s;
         })
         .finally(() => {
-          this.connecting = undefined;
+          if (this.connecting === connecting) this.connecting = undefined;
         });
+      this.connecting = connecting;
     }
     return this.connecting;
   }
@@ -50,12 +64,20 @@ export class ApiClient {
     return this.request<T>(path, method, body, this.session.csrf_token);
   }
   async activity() {
-    this.session = await this.mutate<Session>('/session/activity', {});
+    const epoch = this.epoch;
+    const session = this.session;
+    const updated = await this.mutate<Session>('/session/activity', {});
+    if (epoch !== this.epoch || !session || updated?.session_id !== session.session_id
+      || updated.csrf_token !== session.csrf_token || !Number.isFinite(updated.expires_at))
+      throw new Error('Session changed; retry explicitly in the current session.');
+    // Activity updates the deadline, not the ownership generation.
+    this.currentSession = updated;
     return this.session;
   }
   async revoke() {
+    const epoch = this.epoch;
     await this.mutate('/session', {}, 'DELETE');
-    this.expire();
+    if (epoch === this.epoch) this.expire();
   }
   expire() {
     this.session = null;
@@ -68,7 +90,7 @@ export class ApiClient {
     body?: unknown,
     csrf?: string,
   ): Promise<T> {
-    const requestSessionId = this.session?.session_id;
+    const requestEpoch = this.epoch;
     const abort = new AbortController();
     const timeout = setTimeout(() => abort.abort(), 12_000);
     try {
@@ -91,7 +113,7 @@ export class ApiClient {
         value = null;
       }
       if (!response.ok) {
-        if (response.status === 401 && this.session?.session_id === requestSessionId) this.expire();
+        if (response.status === 401 && this.epoch === requestEpoch) this.expire();
         const detail =
           value && typeof value === 'object' && 'detail' in value
             ? typeof value.detail === 'string' ? value.detail : JSON.stringify(value.detail, null, 2)

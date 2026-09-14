@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from isaaclab_arena.agentic_environment_generation.graph_cleanup import GraphCleanupError
 from isaaclab_arena.agentic_environment_generation.inference_backend import InferenceBackend
 from isaaclab_arena.agentic_environment_generation.prim_path_inference import PrimPathInference
 from isaaclab_arena.agentic_environment_generation.spec_inference import SpecInference
@@ -142,6 +143,7 @@ class EnvironmentGenerationAgent:
         *,
         publish_to_graph: bool = True,
         progress: Callable[[str], None] | None = None,
+        prior_context: str | None = None,
     ) -> tuple[ArenaEnvGraphSpec | None, dict[str, Any] | None]:
         """Call the model with user prompt and return the parsed ArenaEnvGraphSpec.
 
@@ -162,6 +164,8 @@ class EnvironmentGenerationAgent:
                 ``TaskRegistry`` tasks marked ``@agent_ready``.
             publish_to_graph: Publish the completed spec to Neo4j; False returns an unpublished draft.
             progress: Observer of real execution stages, without estimated percentages.
+            prior_context: Exact prior context to consume without retrieval, including an empty
+                string. None preserves legacy CLI Graph-RAG retrieval.
 
         Returns:
             A ``(spec, data)`` tuple. On success, ``spec`` is validated and
@@ -183,18 +187,24 @@ class EnvironmentGenerationAgent:
         task_catalog = task_catalog or build_task_catalogue()
 
         emit("graph_priors_loading")
-        # Retrieve Graph-RAG priors from Neo4j LPG memory
-        try:
-            from isaaclab_arena.agentic_environment_generation.graph_rag import GraphRAGRetriever
+        if prior_context is not None:
+            if prior_context:
+                prompt = f"{prompt}\n\n{prior_context}"
+        else:
+            # Retrieve Graph-RAG priors from Neo4j LPG memory for legacy CLI callers.
+            try:
+                from isaaclab_arena.agentic_environment_generation.graph_rag import GraphRAGRetriever
 
-            retriever = GraphRAGRetriever()
-            priors = retriever.retrieve_prior_subgraphs(prompt, limit=2)
-            rag_context = retriever.format_priors_as_context(priors)
-            if rag_context:
-                prompt = f"{prompt}\n\n{rag_context}"
-                self._traces.append(f"[GraphRAG] Injected {len(priors)} verified environment priors from Neo4j.")
-        except Exception as exc:  # pragma: no cover
-            self._traces.append(f"[GraphRAG] Prior retrieval skipped: {exc}")
+                retriever = GraphRAGRetriever()
+                priors = retriever.retrieve_prior_subgraphs(prompt, limit=2)
+                rag_context = retriever.format_priors_as_context(priors)
+                if rag_context:
+                    prompt = f"{prompt}\n\n{rag_context}"
+                    self._traces.append(f"[GraphRAG] Injected {len(priors)} verified environment priors from Neo4j.")
+            except GraphCleanupError:
+                raise
+            except Exception:
+                self._traces.append("[GraphRAG] Prior retrieval unavailable; continuing without priors.")
 
         emit("spec_inference")
         spec, data = self.spec_inference.infer(
@@ -212,7 +222,7 @@ class EnvironmentGenerationAgent:
                 total_llm_calls=backend_tel.total_calls if backend_tel else 0,
                 repair_iterations=0,
                 prompt_tokens=backend_tel.total_prompt_tokens if backend_tel else 0,
-                completion_tokens=backend_tel.total_completion_tokens if backend_tel else 0,
+                completion_tokens=(backend_tel.total_completion_tokens if backend_tel else 0),
                 total_tokens=backend_tel.total_tokens if backend_tel else 0,
                 duration_s=duration_s,
                 converged=False,
@@ -434,7 +444,7 @@ class EnvironmentGenerationAgent:
                 total_llm_calls=backend_tel.total_calls if backend_tel else 0,
                 repair_iterations=0,
                 prompt_tokens=backend_tel.total_prompt_tokens if backend_tel else 0,
-                completion_tokens=backend_tel.total_completion_tokens if backend_tel else 0,
+                completion_tokens=(backend_tel.total_completion_tokens if backend_tel else 0),
                 total_tokens=backend_tel.total_tokens if backend_tel else 0,
                 duration_s=duration_s,
                 converged=False,
@@ -689,13 +699,7 @@ def _ground_telescopic_dollhouse_spec(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphS
     has_bg_anchor = any(r.kind == "is_anchor" and r.subject == spec.background.id for r in spec.relations)
     if not has_bg_anchor:
         spec.relations.insert(
-            0,
-            SpatialRelationSpec(
-                kind="is_anchor",
-                subject=spec.background.id,
-                reference=None,
-                params={},
-            ),
+            0, SpatialRelationSpec(kind="is_anchor", subject=spec.background.id, reference=None, params={})
         )
 
     anchored_subjects = {r.subject for r in spec.relations if r.kind == "is_anchor"}
@@ -725,10 +729,7 @@ def _ground_telescopic_dollhouse_spec(spec: ArenaEnvGraphSpec) -> ArenaEnvGraphS
             if not has_rel:
                 spec.relations.append(
                     SpatialRelationSpec(
-                        kind="on",
-                        subject=obj.id,
-                        reference=target_fixture_id,
-                        params={"surface_anchor": "table_top"},
+                        kind="on", subject=obj.id, reference=target_fixture_id, params={"surface_anchor": "table_top"}
                     )
                 )
 
@@ -864,9 +865,7 @@ class RelationCatalogue:
         return f"RELATIONS ({len(self.relations)}):\n" + "\n".join(lines)
 
 
-def build_relation_catalogue(
-    registry: ObjectRelationLibraryRegistry | None = None,
-) -> RelationCatalogue:
+def build_relation_catalogue(registry: ObjectRelationLibraryRegistry | None = None) -> RelationCatalogue:
     """Collect registered object relations from ``ObjectRelationLibraryRegistry``."""
     registry = registry or ObjectRelationLibraryRegistry()
     catalogue = RelationCatalogue()
@@ -875,9 +874,7 @@ def build_relation_catalogue(
         assert issubclass(relation_cls, RelationBase), f"{name!r} is not a RelationBase subclass"
         catalogue.relations.append(
             RelationCatalogueEntry(
-                name=name,
-                unary=relation_cls.is_unary(),
-                summary=_first_docstring_line(relation_cls),
+                name=name, unary=relation_cls.is_unary(), summary=_first_docstring_line(relation_cls)
             )
         )
     return catalogue

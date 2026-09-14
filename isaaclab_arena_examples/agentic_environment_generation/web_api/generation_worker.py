@@ -14,6 +14,7 @@ import os
 import signal
 import sys
 
+from .graph_access import checked_graph_config
 from .provider_security import reject_secret
 
 
@@ -28,9 +29,11 @@ def main():
         return 1
     channel = sys.stdout
     api_key = None
+    graph_password = None
 
     def send(message):
         reject_secret(message, api_key)
+        reject_secret(message, graph_password)
         channel.write(json.dumps(message, allow_nan=False) + "\n")
         channel.flush()
 
@@ -38,15 +41,37 @@ def main():
     logging.disable(sys.maxsize)
     try:
         envelope = json.loads(line)
-        if set(envelope) != {"inputs", "config"} or not envelope["config"]:
+        inputs = envelope.get("inputs") if isinstance(envelope, dict) else None
+        modern = isinstance(inputs, dict) and inputs.get("operation") in {"new", "refine"}
+        expected = {"inputs", "config", "graph_config"} if modern else {"inputs", "config"}
+        if modern and "managed_context" in envelope:
+            expected.add("managed_context")
+        if not isinstance(envelope, dict) or set(envelope) != expected or not isinstance(envelope["config"], dict):
             raise ValueError("Invalid private generation envelope")
         config = envelope["config"]
         api_key = config.get("api_key")
+        options = {}
+        if modern:
+            if set(config) - {"api_key", "model", "base_url", "provider", "trusted_server"}:
+                raise ValueError("Invalid private model configuration fields")
+            digest = inputs.get("execution_catalogue_sha256")
+            if type(digest) is not str or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+                raise ValueError("Invalid execution catalogue identity")
+            graph = envelope["graph_config"]
+            graph = checked_graph_config(graph) if graph is not None else None
+            graph_password = (graph or {}).get("password")
+            options["graph_config"] = graph
+            from .managed_retrieval import private_context
+
+            managed = private_context(inputs, envelope)
+            if managed is not None:
+                options["managed_context"] = managed
         with open(os.devnull, "w") as sink, contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
             from .generation import generate
 
-            result = generate(envelope["inputs"], lambda stage: send({"stage": stage}), config=config)
+            result = generate(envelope["inputs"], lambda stage: send({"stage": stage}), config=config, **options)
         reject_secret(result, config.get("api_key"))
+        reject_secret(result, graph_password)
         send({"result": result})
         return 0
     except Exception:

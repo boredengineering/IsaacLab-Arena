@@ -67,8 +67,20 @@ class StateLease:
     def __init__(self, state_dir):
         self.path = Path(state_dir)
         self.lock = None
+        self._retentions = set()
+        self._exit_requested = False
+
+    def retain(self):
+        """Return an explicit cleanup token; outer exit cannot release its lock."""
+        if self.lock is None or self.lock.fd is None or self._exit_requested:
+            raise RuntimeError("State lease is not active")
+        token = _StateLeaseRetention(self)
+        self._retentions.add(token)
+        return token
 
     def __enter__(self):
+        if self.lock is not None:
+            raise RuntimeError("State lease cannot be re-entered")
         if os.geteuid() == 0:
             raise RuntimeError("Workbench must run as a non-root user")
         self.path = controlled_directory(self.path, 0o700)
@@ -77,8 +89,26 @@ class StateLease:
         return self
 
     def __exit__(self, *args):
-        if self.lock is not None:
+        self._exit_requested = True
+        if self.lock is not None and not self._retentions:
             self.lock.__exit__(*args)
+
+
+class _StateLeaseRetention:
+    """Explicit lifetime: never unlock implicitly on garbage collection."""
+
+    def __init__(self, lease):
+        self._lease = lease
+
+    def release(self):
+        """Release only after the owner has proved physical cleanup complete."""
+        lease = self._lease
+        if lease is None:
+            return
+        lease._retentions.remove(self)
+        self._lease = None
+        if lease._exit_requested and not lease._retentions:
+            lease.lock.__exit__(None, None, None)
 
 
 class UnixListener:

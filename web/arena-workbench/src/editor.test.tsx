@@ -75,6 +75,32 @@ export function mountEditor(fetcher = editorServer(), path = '/') {
     />,
   );
 }
+it.each([undefined, false, true, 'true'])('passes only explicit publication execution capability through the editor: %s', async capability => {
+ const base = editorServer(), res = 'a'.repeat(32), rev = 'b'.repeat(32), digest = 'c'.repeat(64);
+ const reservation = { store_id: 'local', registry_id: 'registry', reservation_id: res, revision_id: rev, version: 1, family: 'Example', workflow_id: 'prepared', parent_revision_id: null, source: { job_id: 'd'.repeat(32), attempt_id: 'e'.repeat(32), generation: 1, receipt_sha256: digest, request_sha256: digest }, publication_request: { effect_id: 'effect', target_profile: { profile_id: 'profile', revision: digest, scope_ownership: 'cooperative_immutable' } } };
+ const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+  if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { research_versions: true, publication_execution: capability } });
+  if (url.endsWith('/research/stores')) return response({ stores: [{ store_id: 'local', available: true }] });
+  if (url.includes('/versions?')) return response({ versions: [{ ...reservation, state: 'committed', source_job_id: reservation.source.job_id, manifest_digest: digest }], latest_version: 1, next_after_version: null });
+  if (url.endsWith(`/versions/${res}`)) return response({ reservation, manifest: { digest, binding: reservation }, relative_directory: 'final/Example/v1', publication_intent_id: 'effect' });
+  return base(url, init);
+ });
+ const view = mountEditor(fetcher);
+ await screen.findByRole('button', { name: 'Open research versions' });
+ await waitFor(() => expect(view.container.querySelector('.cm-content')?.textContent).toContain('real_document'));
+ const yaml = view.container.querySelector('.cm-content')?.textContent;
+ fireEvent.click(screen.getByRole('button', { name: 'Open research versions' }));
+ await screen.findByRole('option', { name: 'local' });
+ fireEvent.change(screen.getByLabelText('Research store'), { target: { value: 'local' } });
+ fireEvent.change(screen.getByLabelText('Research family'), { target: { value: 'Example' } });
+ fireEvent.click(await screen.findByRole('button', { name: 'Select version 1' }));
+ await screen.findByRole('link', { name: 'Download verified source' });
+ if (capability === true) expect(screen.getByRole('button', { name: 'Open publication execution' })).toBeEnabled();
+ else expect(screen.queryByRole('button', { name: 'Open publication execution' })).not.toBeInTheDocument();
+ expect(fetcher.mock.calls.some(([u]) => /publication-binding|\/publications\//.test(u))).toBe(false);
+ expect(fetcher.mock.calls.some(([u, o]) => /\/research\//.test(u) && o?.method !== 'GET')).toBe(false);
+ expect(view.container.querySelector('.cm-content')?.textContent).toBe(yaml);
+});
 it('restores matching saved asset previews in a fresh tab without submitting a render', async () => {
   const base = editorServer();
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {

@@ -5,6 +5,10 @@
 # Use run_workbench.sh to discover required paths and numeric identities.
 services:
   frontend:
+    # Supplied from current Docker daemon RAM by the workbench launcher.
+    mem_limit: ${FRONTEND_MEMORY_BYTES:?run the host resource preflight first}
+    memswap_limit: ${FRONTEND_MEMORY_BYTES:?run the host resource preflight first}
+    pids_limit: 256
     build:
       context: ${WORKBENCH_BUILD_CONTEXT:-../..}
       dockerfile: docker/workbench/Dockerfile.frontend

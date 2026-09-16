@@ -14,6 +14,9 @@ import os
 import signal
 import sys
 
+from isaaclab_arena.agentic_environment_generation.workbench.generation_diagnostics import GENERATION_STAGES
+
+from .generation_diagnostics import classify_failure
 from .graph_access import checked_graph_config
 from .provider_security import reject_secret
 
@@ -30,12 +33,20 @@ def main():
     channel = sys.stdout
     api_key = None
     graph_password = None
+    stage = "worker_starting"
 
     def send(message):
         reject_secret(message, api_key)
         reject_secret(message, graph_password)
         channel.write(json.dumps(message, allow_nan=False) + "\n")
         channel.flush()
+
+    def progress(value):
+        nonlocal stage
+        if type(value) is not str or value not in GENERATION_STAGES:
+            raise ValueError("Invalid generation stage")
+        send({"stage": value})
+        stage = value
 
     previous_logging_level = logging.root.manager.disable
     logging.disable(sys.maxsize)
@@ -69,13 +80,15 @@ def main():
         with open(os.devnull, "w") as sink, contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
             from .generation import generate
 
-            result = generate(envelope["inputs"], lambda stage: send({"stage": stage}), config=config, **options)
+            result = generate(envelope["inputs"], progress, config=config, **options)
         reject_secret(result, config.get("api_key"))
         reject_secret(result, graph_password)
         send({"result": result})
         return 0
-    except Exception:
-        send({"error": "Generation failed: check server model configuration, endpoint access, and draft validity"})
+    except Exception as exc:
+        # Even static markers may collide with a protected credential. Emit nothing.
+        with contextlib.suppress(Exception):
+            send({"error": classify_failure(exc, stage)})
         return 1
     finally:
         logging.disable(previous_logging_level)

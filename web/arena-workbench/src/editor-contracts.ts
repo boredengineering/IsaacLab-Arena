@@ -45,7 +45,7 @@ export interface Validation {
 export interface EditorIndex {
   default_document_id: string;
   documents: { id: string; name: string; source: string; kind?: 'discovered_file' | 'editor_revision'; revision_id?: string; source_hash?: string; canonical_hash?: string }[];
-  capabilities: { generation: boolean; snapshots: boolean; neo4j: boolean; build?: boolean; policy_evaluation?: boolean; generation_modes?: boolean; research_versions?: boolean; publication_execution?: boolean; manual_research_save?: boolean; research_version_open?: boolean };
+  capabilities: { generation: boolean; snapshots: boolean; neo4j: boolean; build?: boolean; policy_evaluation?: boolean; generation_modes?: boolean; workflow_readiness?: boolean; research_versions?: boolean; publication_execution?: boolean; manual_research_save?: boolean; research_version_open?: boolean };
   limitations: string[];
 }
 export interface EditorDocument {

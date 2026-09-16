@@ -37,6 +37,7 @@ from .process_identity import recover_workers
 from .publication_authorization import PublicationAuthorization
 from .publication_routes import router as publication_router
 from .publication_scheduler import PublicationScheduler
+from .readiness import router as readiness_router
 from .research_profiles import configured_publication_profiles, configured_research_roots
 from .research_routes import router as research_router
 from .runtime import StateLease
@@ -427,6 +428,7 @@ def create_app(
     app.include_router(job_router)
     app.include_router(event_router)
     app.include_router(editor_router)
+    app.include_router(readiness_router)
     app.include_router(evaluate_router)
     app.include_router(research_router)
     app.include_router(publication_router)

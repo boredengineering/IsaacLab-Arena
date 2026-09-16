@@ -18,15 +18,68 @@ API = "isaaclab_arena_examples/tests/test_workbench_editor_revision_api.py"
 
 
 class CoreRunnerTests(unittest.TestCase):
-    def test_manual_research_is_explicit_only_and_keeps_all_selection_guards(self):
-        manual = "isaaclab_arena_examples/tests/test_workbench_manual_research_versions.py"
-        self.assertEqual(backend_checks.selection([manual]), [manual])
+    def test_generation_diagnostics_are_explicit_only(self):
+        selected = "isaaclab_arena_examples/tests/test_workbench_generation_diagnostics.py"
+        self.assertEqual(backend_checks.selection([selected]), [selected])
         self.assertEqual(backend_checks.selection([]), [CORE, API])
-        self.assertFalse(backend_checks.core_only([manual]))
-        for names in ([manual, manual], [manual + "::test_x"], [manual, "--live"],
-                      [manual.replace("manual_research_versions", "research_store")]):
+        self.assertFalse(backend_checks.core_only([selected]))
+        self.assertFalse(backend_checks.core_only([CORE, selected]))
+        for names in ([selected, selected], [selected + "::test_x"], [selected, "--live"],
+                      [selected.replace("generation_diagnostics", "generation_diagnostics_unapproved")]):
             with self.assertRaises(ValueError):
                 backend_checks.selection(names)
+
+    def test_model_profiles_are_explicit_only(self):
+        for selected in ("isaaclab_arena/tests/test_inference_profiles.py",
+                         "isaaclab_arena_examples/tests/test_workbench_model_settings.py"):
+            self.assertEqual(backend_checks.selection([selected]), [selected])
+            self.assertEqual(backend_checks.selection([]), [CORE, API])
+            self.assertFalse(backend_checks.core_only([selected]))
+            for names in ([selected, selected], [selected + "::test_x"], [selected, "--live"],
+                          ["isaaclab_arena/tests/test_inference_profiles_unapproved.py"]):
+                with self.assertRaises(ValueError):
+                    backend_checks.selection(names)
+
+    def test_inference_units_are_explicit_only_and_keep_other_boundaries(self):
+        selected = "isaaclab_arena/tests/test_inference_backend.py"
+        self.assertEqual(backend_checks.selection([selected]), [selected])
+        self.assertEqual(backend_checks.selection([]), [CORE, API])
+        self.assertFalse(backend_checks.core_only([selected]))
+        for names in ([selected, selected], [selected + "::test_x"], [selected, "--live"],
+                      [selected.replace("inference_backend", "environment_generation_agent")]):
+            with self.assertRaises(ValueError):
+                backend_checks.selection(names)
+
+    def test_inference_unit_profile_only_allows_mockable_constructors(self):
+        from types import SimpleNamespace
+        from api import make_profile
+        counts = dict.fromkeys(("network", "provider", "graph", "render", "workload", "subprocess"), 0)
+        profile = backend_checks.inference_unit_profile(make_profile(counts))
+        def frame(owner, module="synthetic", name="__init__"):
+            return SimpleNamespace(f_globals={"__name__": module}, f_code=SimpleNamespace(co_name=name),
+                                   f_locals={"self": type(owner, (), {})()})
+        for owner in ("InferenceBackend", "OpenAI"):
+            profile(frame(owner), "call", None)
+        for owner in ("EnvironmentGenerationAgent", "AsyncOpenAI"):
+            with self.assertRaisesRegex(RuntimeError, "provider"):
+                profile(frame(owner), "call", None)
+        with self.assertRaisesRegex(RuntimeError, "graph"):
+            profile(frame("Driver", "neo4j"), "call", None)
+        self.assertEqual(counts["provider"], 2)
+        self.assertEqual(counts["graph"], 1)
+
+    def test_explicit_research_and_graph_queries_keep_all_selection_guards(self):
+        for name, sibling in (("manual_research_versions", "research_store"), ("graph_queries", "graph_access")):
+            selected = f"isaaclab_arena_examples/tests/test_workbench_{name}.py"
+            with self.subTest(selected=selected):
+                self.assertEqual(backend_checks.selection([selected]), [selected])
+                self.assertEqual(backend_checks.selection([]), [CORE, API])
+                self.assertFalse(backend_checks.core_only([selected]))
+                self.assertFalse(backend_checks.core_only([CORE, selected]))
+                for names in ([selected, selected], [selected + "::test_x"], [selected, "--live"],
+                              [selected.replace(name, sibling)]):
+                    with self.assertRaises(ValueError):
+                        backend_checks.selection(names)
 
     def test_core_import_boundary_blocks_api_but_does_not_fake_drivers(self):
         counts = dict.fromkeys(("network", "provider", "graph", "render", "workload", "subprocess"), 0)

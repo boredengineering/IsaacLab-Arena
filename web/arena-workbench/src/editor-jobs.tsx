@@ -5,6 +5,7 @@ import { useRuntime } from './runtime';
 import { isActive, isJob, type Job, type Workspace } from './contracts';
 import { workspaceKey } from './cache';
 import { GenerationReauthorization, isBlockedGeneration } from './generation-reauthorization';
+import { GenerationDiagnostic } from './generation-diagnostic';
 import { parseGraphRenderer } from './graph-host';
 
 // Router search reducers can receive unvalidated URL fields as well as route state.
@@ -228,8 +229,9 @@ export function EditorJobProgress({ controller }: { controller: ReturnType<typeo
             Refresh job status
           </button>
           {job.error && <p className="error-text">{job.error}</p>}
+          {job.kind === 'generate' && <GenerationDiagnostic value={job.diagnostic} />}
           {job.status === 'indeterminate' && (
-            <p>Execution was interrupted. No automatic retry or successful outcome is assumed.</p>
+            <p>No verified completion was recorded. {job.kind === 'generate' && !job.diagnostic ? 'A specific cause was not retained for this attempt. ' : ''}No automatic retry or successful outcome is assumed.</p>
           )}
         </div>
       )}

@@ -8,6 +8,7 @@
 import argparse
 import fcntl
 import http.client
+import importlib.util
 import json
 import os
 import select
@@ -19,7 +20,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -169,13 +170,50 @@ def health(socket_path, origin):
         connection.close()
 
 
+def recover(state, socket_path):
+    """Remove only a proven stale owned socket under all four lifecycle leases."""
+    prepare(state, socket_path)
+    # Load only the existing stdlib ownership helpers, not web_api's application factory.
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "isaaclab_arena_examples/agentic_environment_generation/web_api/runtime.py"
+    )
+    spec = importlib.util.spec_from_file_location("_workbench_socket_runtime", source)
+    assert spec and spec.loader
+    backend = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(backend)
+    with ExitStack() as leases:
+        for path in (
+            state / "control.lock",
+            state / "process-supervisor.lock",
+            state / "launcher.lock",
+            socket_path.with_name(socket_path.name + ".lock"),
+        ):
+            leases.enter_context(backend.FileLease(path))
+        try:
+            socket_path.lstat()
+        except FileNotFoundError:
+            return False
+        # Do not enter UnixListener: recovery must neither bind nor start the API.
+        backend.UnixListener(socket_path)._remove_stale()
+        directory = os.open(socket_path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        return True
+
+
 def preflight(state, socket_path, port):
     """Verify IPC/SQLite/locking support and fail rather than weaken transport."""
     prepare(state, socket_path)
     if socket_path.exists() or socket_path.is_symlink():
-        raise RuntimeError("API socket already exists; refusing unsafe unlink or adopting another launcher")
+        raise RuntimeError("API socket already exists; use explicit recover to check staleness, never unlink manually")
     if port:
         with socket.socket() as listener:
+            # A stopped frontend can leave accepted connections in TIME_WAIT.
+            # Match server bind semantics without permitting a live listener.
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 listener.bind(("127.0.0.1", port))
             except OSError as error:
@@ -208,7 +246,7 @@ def serve(args):
     os.umask(0o077)
     with supervisor_lock(state):
         if socket_path.exists() or socket_path.is_symlink():
-            raise RuntimeError("Socket already exists; refusing unsafe unlink")
+            raise RuntimeError("Socket already exists; use explicit recover to check staleness, never unlink manually")
         child = None
         stopping = False
 
@@ -255,13 +293,13 @@ def serve(args):
                 os.killpg(child.pid, signal.SIGTERM)
                 child.wait(timeout=10)
             marker.unlink(missing_ok=True)
-        # Backend owns socket cleanup; this helper never unlinks a socket.
+        # Backend owns serve-time socket cleanup; stale recovery is a separate explicit action.
 
 
 def main():
     """Run one private lifecycle operation; never start a simulator or dependency."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["preflight", "serve", "status", "stop", "lock"])
+    parser.add_argument("action", choices=["preflight", "serve", "status", "stop", "lock", "recover"])
     parser.add_argument("--state-dir", required=True)
     parser.add_argument("--socket", required=True)
     parser.add_argument("--origin", required=True)
@@ -283,6 +321,8 @@ def main():
         print(json.dumps({"stopped": stop(state)}))
     elif args.action == "preflight":
         preflight(state, socket_path, args.port)
+    elif args.action == "recover":
+        print(json.dumps({"recovered": recover(state, socket_path)}))
     else:
         serve(args)
 

@@ -104,6 +104,28 @@ def _driver_fixture(query_type="r", records=None):
     return driver, transaction
 
 
+@pytest.mark.parametrize("database", [None, "workbench-queries"])
+def test_query_service_selects_configured_database_for_explain_and_read(monkeypatch, database):
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.graph_queries import GraphQueryService
+
+    if database is None:
+        monkeypatch.delenv("NEO4J_DATABASE", raising=False)
+    else:
+        monkeypatch.setenv("NEO4J_DATABASE", database)
+    driver, transaction = _driver_fixture()
+    query, params = "RETURN $name AS name", {"name": "existing-scene"}
+    result = GraphQueryService(driver_factory=lambda: driver).query(query, params)
+    driver.__enter__.return_value.session.assert_called_once_with(
+        database=database, default_access_mode="READ", fetch_size=200
+    )
+    session = driver.__enter__.return_value.session.return_value.__enter__.return_value
+    session.begin_transaction.assert_called_once_with(timeout=5)
+    assert [call.args for call in transaction.run.call_args_list] == [("EXPLAIN " + query, params), (query, params)]
+    assert result["rows"] == [["existing-scene"]]
+    transaction.rollback.assert_called_once()
+    transaction.commit.assert_not_called()
+
+
 def test_query_service_checks_explain_and_never_commits_or_exceeds_row_limit():
     from isaaclab_arena_examples.agentic_environment_generation.web_api.graph_queries import GraphQueryService
 

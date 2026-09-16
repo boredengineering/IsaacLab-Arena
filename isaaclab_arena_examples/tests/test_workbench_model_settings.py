@@ -5,6 +5,7 @@
 
 """Temporary credentials: real HTTP boundaries, dummy secrets, no inference."""
 
+import copy
 import json
 
 import pytest
@@ -19,8 +20,212 @@ BODY = {"provider": "openai", "model": "explicit-test-model", "api_key": KEY}
 
 @pytest.fixture(autouse=True)
 def no_provider(monkeypatch):
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import editor_execution, graph_access
+
     monkeypatch.setattr(generation, "configuration", lambda: None)
+    monkeypatch.setattr(graph_access, "configuration", lambda: None)
+
+    def unavailable(_state):
+        raise RuntimeError("Metadata-only profile has no renderer")
+
+    monkeypatch.setattr(editor_execution, "make_snapshot_service", unavailable)
     monkeypatch.setattr(generation, "generate", lambda *a, **k: pytest.fail("Unexpected provider invocation"))
+
+
+def test_documented_profile_catalogue_is_available_without_configuration(tmp_path):
+    with TestClient(create_app(tmp_path, start_paused=True), base_url=ORIGIN) as client:
+        login(client)
+        response = client.get("/api/model-settings")
+        assert response.status_code == 200
+        public = response.json()
+        assert public["profile_catalogue_version"] == "harness-model-profiles/v1"
+        assert public["effective_profile"] is None
+        assert public["profiles"] == [
+            {
+                "id": "openai-" + model,
+                "revision": 1,
+                "provider": "openai",
+                "model": model,
+                "endpoint": "https://api.openai.com/v1",
+                "support": "documented",
+                "documentation_urls": urls,
+                "request_policy": {
+                    "api": "chat_completions",
+                    "structured_output": "json_schema",
+                    "temperature_mode": temperature,
+                    "token_limit_parameter": tokens,
+                    "store": store,
+                },
+            }
+            for model, urls, temperature, tokens, store in [
+                (
+                    "gpt-4.1",
+                    ["https://developers.openai.com/api/docs/models/gpt-4.1"],
+                    "configured",
+                    "max_tokens",
+                    None,
+                ),
+                (
+                    "gpt-6-astra",
+                    [
+                        "https://developers.openai.com/api/docs/models/gpt-6-astra",
+                        "https://developers.openai.com/api/docs/guides/latest-model",
+                    ],
+                    "omitted",
+                    "max_completion_tokens",
+                    False,
+                ),
+            ]
+        ]
+        assert client.get("/api/jobs").json()["jobs"] == []
+
+
+@pytest.mark.parametrize(
+    "provider, model, expected",
+    [
+        ("openai", "gpt-4.1", "openai-gpt-4.1"),
+        ("openai", "gpt-6-astra", "openai-gpt-6-astra"),
+        ("openai", "gpt-6-astra-latest", None),
+        ("gemini", "gpt-6-astra", None),
+        ("openrouter", "gpt-4.1", None),
+        ("nvidia", "gpt-6-astra", None),
+    ],
+)
+def test_effective_profile_preserves_actual_session_identity(tmp_path, provider, model, expected):
+    with TestClient(create_app(tmp_path, start_paused=True), base_url=ORIGIN) as client:
+        headers = login(client)
+        response = client.put(
+            "/api/model-settings", headers=headers, json={**BODY, "provider": provider, "model": model}
+        )
+        assert response.status_code == 200
+        public = response.json()
+        assert public["effective_profile"] == {
+            "id": expected,
+            "support": "documented" if expected else "unverified",
+            "verification": "not_checked",
+        }
+        assert (public["provider"], public["model"]) == (provider, model)
+        assert client.get("/api/model-settings").json() == public
+        assert client.get("/api/jobs").json()["jobs"] == []
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "profile_catalogue_version",
+        "effective_profile",
+        "documentation_urls",
+        "token_limit_parameter",
+        "temperature_mode",
+        "max_completion_tokens",
+        "harness-model-profiles/v1",
+        "openai-gpt-6-astra",
+        "https://developers.openai.com/api/docs/models/gpt-4.1",
+    ],
+)
+def test_profile_secret_collision_rejected_before_replacement(tmp_path, marker):
+    app = create_app(tmp_path, start_paused=True)
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        saved = client.put("/api/model-settings", headers=headers, json=BODY).json()
+        before = copy.deepcopy(app.state.model_settings._records)
+        response = client.put("/api/model-settings", headers=headers, json={**BODY, "api_key": marker})
+        assert response.status_code == 422
+        assert response.json() == {"detail": "Invalid request input"}
+        assert app.state.model_settings._records == before
+        assert client.get("/api/model-settings").json() == saved
+
+
+@pytest.mark.parametrize("encoding", ["literal", "escaped"])
+def test_new_profile_projection_screened_against_active_keys_before_replacement(tmp_path, monkeypatch, encoding):
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import model_settings
+
+    app = create_app(tmp_path, start_paused=True)
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        assert client.put("/api/model-settings", headers=headers, json=BODY).status_code == 200
+        before = copy.deepcopy(app.state.model_settings._records)
+        catalogue = model_settings.inference_profile_catalogue()
+        marker = KEY if encoding == "literal" else '"' + "".join("\\x%02x" % ord(c) for c in KEY) + '"'
+        catalogue[0]["documentation_urls"].append(marker)
+        monkeypatch.setattr(model_settings, "inference_profile_catalogue", lambda: copy.deepcopy(catalogue))
+        invalidated = []
+        app.state.model_settings.on_invalidate = invalidated.append
+        response = client.put("/api/model-settings", headers=headers, json={**BODY, "api_key": KEY + "-replacement"})
+        assert response.status_code == 422
+        assert response.json() == {"detail": "Invalid request input"}
+        assert app.state.model_settings._records == before
+        assert invalidated == []
+        read = client.get("/api/model-settings")
+        assert read.status_code == 422
+        assert KEY not in read.text
+        assert app.state.model_settings._records == before
+
+
+def test_status_records_are_detached_and_reads_do_not_mutate_credentials():
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.model_settings import (
+        ModelSettings,
+        SettingsInput,
+    )
+
+    settings = ModelSettings(clock=lambda: 1000.0)
+    session = {"session_id": "synthetic-session", "expires_at": 10000.0}
+    settings.save(session, SettingsInput(**BODY, ttl_minutes=None))
+    before = copy.deepcopy(settings._records)
+    original = copy.deepcopy(settings.status(session, True))
+    changed = settings.status(session, True)
+    changed["profiles"][0]["documentation_urls"].append("mutated")
+    changed["profiles"][0]["request_policy"]["store"] = True
+    changed["effective_profile"]["verification"] = "mutated"
+    provider = changed["providers"][0]
+    old_label = provider["label"]
+    try:
+        provider["label"] = "mutated"
+        assert settings.status(session, True) == original
+        assert settings._records == before
+    finally:
+        provider["label"] = old_label
+
+
+@pytest.mark.parametrize(
+    "model, endpoint, expected",
+    [
+        ("gpt-6-astra", "https://api.openai.com/v1/", "openai-gpt-6-astra"),
+        ("gpt-4.1", "https://api.openai.com/v1", "openai-gpt-4.1"),
+        ("gpt-6-astra", "https://private-operator.invalid/secret-path", None),
+        ("gpt-4.1", "https://api.openai.com/v1?private=operator", None),
+        ("gpt-4.1-custom", "https://api.openai.com/v1", None),
+    ],
+)
+def test_server_profile_uses_actual_endpoint_without_exposing_override(
+    tmp_path, monkeypatch, model, endpoint, expected
+):
+    server = {**BODY, "model": model, "base_url": endpoint, "trusted_server": True}
+    monkeypatch.setattr(generation, "configuration", lambda: server)
+    before = copy.deepcopy(server)
+    app = create_app(tmp_path, start_paused=True)
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        response = client.get("/api/model-settings")
+        public = response.json()
+        assert public["source"] == "server"
+        assert public["model"] == model
+        assert public["provider"] == "openai"
+        assert public["effective_profile"] == {
+            "id": expected,
+            "support": "documented" if expected else "unverified",
+            "verification": "not_checked",
+        }
+        assert "base_url" not in public and "endpoint" not in public["effective_profile"]
+        if "private" in endpoint:
+            assert endpoint not in response.text
+        assert KEY not in response.text
+        assert server == before
+        assert app.state.model_settings._records == {}
+        saved = client.put("/api/model-settings", headers=headers, json={**BODY, "model": "gpt-4.1"})
+        assert saved.json()["effective_profile"]["id"] == "openai-gpt-4.1"
+        assert client.delete("/api/model-settings", headers=headers).json() == public
+        assert client.get("/api/jobs").json()["jobs"] == []
 
 
 @pytest.mark.parametrize("ttl_minutes", [30, None])
@@ -41,6 +246,7 @@ def test_settings_authenticated_save_and_forget_never_persist_key(tmp_path, ttl_
             **empty,
             "source": "session",
             "configured": True,
+            "effective_profile": {"id": None, "support": "unverified", "verification": "not_checked"},
             "provider": "openai",
             "model": BODY["model"],
             "expires_at": status["expires_at"],

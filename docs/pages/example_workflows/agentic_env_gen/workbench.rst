@@ -24,6 +24,50 @@ physical validation or task success.
 See :doc:`../../concepts/agentic_workbench` for application ownership,
 networking, session/job semantics and future deployment boundaries.
 
+Generation diagnostics and dependency readiness
+------------------------------------------------
+
+The editor's **Workflow readiness** panel separates installed adapters and
+configuration from observed execution. Its initial metadata read makes no
+provider, Neo4j, policy-server or simulator calls. **Check dependencies** explicitly
+checks the configured retrieval database with a bounded, rolled-back read and
+the fixed local policy TCP ports. It does not generate a specification, submit a
+job, start a service, initialize a research store or publish to Neo4j.
+
+* A configured model key is not a successful provider/model test. Agent
+  initialization itself makes a small completion request, so authentication,
+  model access or request-parameter errors can occur at ``agent_initializing``.
+* Graph-RAG uses explicit ``NEO4J_URI``, ``NEO4J_USER``, ``NEO4J_PASSWORD`` and
+  ``NEO4J_DATABASE`` in the **API process**. The API does not read ``.env`` or
+  inherit the CLI's default graph password. A working legacy graph-browser query
+  does not establish that generation uses the same database/configuration.
+* For a Graph-RAG experiment, choose **Require read-only retrieval service**.
+  **Allow fallback** may intentionally generate without priors. A successful
+  database read does not establish that a generation consumed useful priors;
+  inspect that job's retrieval receipt.
+* Policy checks show only TCP reachability. They do not verify protocol,
+  checkpoint identity, modalities or embodiment compatibility. The web evaluation
+  profiles currently cover DROID, not the catalog's G1/GR1 scenario matrix.
+* Research-version, publication and managed-retrieval configuration are reported
+  separately. None is enabled by a dependency check. A timed-out check can retain
+  its concurrency slot until the underlying driver returns; another check is
+  rejected rather than spawning unbounded background probes.
+
+New generation failures retain a bounded diagnostic code and last reported
+stage in the durable job. The browser shows static remediation guidance, not raw
+provider bodies, exception messages, credentials or stack traces. Released work
+without an accepted candidate remains **indeterminate**, even when an error is
+classified. Diagnostics never authorize replay or prove that the provider did
+no work. Older attempts without diagnostics retain their original unknown cause.
+
+The scenario reference is
+``.agents/references/agentic_env_generation/env_gen_test.md``. It is a historical
+catalog, not a current executable script: its ``--mode generate`` examples do
+not match the current runner's ``resolve`` mode, and its G1 geometry/ports must
+not replace the contracts in :doc:`dcrg`. This readiness slice does not claim
+that the catalog's versioning, multi-embodiment evaluation or auto-healing loop
+has full TanStack UI parity.
+
 Trying the graph explorer preview
 ----------------------------------
 
@@ -103,6 +147,27 @@ completion evidence remains indeterminate rather than being rerun blindly.
 Do not delete another process's socket or kill operator-owned policy servers
 when troubleshooting the workbench.
 
+After an unclean shutdown, an owned Unix socket can remain without a listener.
+Use the explicit recovery command with the same runtime/port/development options
+as the normal launcher, for example::
+
+    sh docker/workbench/run_workbench.sh recover --dev --port 3010
+
+Recovery holds the control, supervisor, API-state and socket leases. It removes
+only a same-owner socket whose connection is refused and whose inode is unchanged,
+then syncs the IPC directory. Live sockets, foreign owners, symlinks, non-socket
+paths and busy leases are refused. A missing socket returns ``recovered: false``.
+This command does not open the journal, resume jobs or start services. Start the
+workbench separately and review the recovered queue before explicitly resuming it.
+
+Container memory/PID limits are described in ``docker/RESOURCE_LIMITS.md``.
+The launchers compute budgets from the selected Docker daemon's RAM and reserve
+at least 25 percent for activity outside one editor/Arena/frontend trio. The
+Workbench launcher supplies fresh frontend limits to both Compose modes; the
+editor validates its explicit flags before creation. Existing containers are not
+reconfigured merely by attaching. These limits exclude GPU VRAM and do not cap
+other projects, concurrent clones or image-build processes.
+
 Verification record
 -------------------
 
@@ -170,6 +235,28 @@ names use separate browser cookies and draft storage, so keep the same hostname
 while editing. Lifecycle-control, process-supervisor and
 backend-instance locks have distinct names to avoid conflicting with each
 other during startup.
+
+Host-network editor port safety
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The repository's editor devcontainer uses ``--network=host``. Reach published
+workbench ports directly from the host browser; do not forward them through VS
+Code. A tunnel from a host loopback port back to the same port in this container
+can connect to its own listener, multiplying forwarding processes rather than
+reaching the dashboard. The workspace disables automatic forwarding and tunnel
+restoration, and the devcontainer ignores automatic application-port forwarding.
+
+These settings do not close existing tunnels. In VS Code's **Ports** panel, use
+**Stop Forwarding Port** for old dashboard forwards, including 3001, 3002 and
+3010, before restarting services. Close browser tabs retrying those endpoints
+while removing the forwards. Do not kill unrelated port owners or select a new
+port merely to hide an old tunnel. Use the same explicitly selected ``--port``
+for all workbench lifecycle commands; the frontend publication and API Origin
+must agree. The earlier launch examples use 3001, not a reserved port assignment.
+
+Check this policy without starting services::
+
+    python3 .devcontainer/test_port_configuration.py -v
 
 Using the editor
 ----------------

@@ -29,6 +29,7 @@ import { useJobCancellation } from './job-cancellation';
 import { BuildOutcome } from './build-environment';
 import { EvaluationOutcome } from './evaluate-policy';
 import { GenerationReauthorization, isBlockedGeneration } from './generation-reauthorization';
+import { GenerationDiagnostic } from './generation-diagnostic';
 import { useModelSettings } from './model-settings';
 import { Neo4jView } from './neo4j';
 import { parseGraphRenderer, type GraphRendererChoice } from './graph-host';
@@ -413,6 +414,7 @@ function JobInspector({ job }: { job?: Job }) {
       <h3>Job outcome</h3>
       <BuildOutcome job={job} />
       <EvaluationOutcome job={job} />
+      {job.kind === 'generate' && <GenerationDiagnostic value={job.diagnostic} />}
       {job.kind === 'evaluate' && job.result ? null : job.result ? (
         <pre data-testid="job-result">{JSON.stringify(job.result, null, 2)}</pre>
       ) : (
@@ -425,8 +427,7 @@ function JobInspector({ job }: { job?: Job }) {
       )}
       {job.status === 'indeterminate' && (
         <p className="notice warning">
-          Execution was interrupted without a verified outcome. This job will not be automatically
-          replayed.
+          No verified completion was recorded. {job.kind === 'generate' && !job.diagnostic ? 'A specific cause was not retained for this attempt. ' : ''}This job will not be automatically replayed.
         </p>
       )}
       {job.status === 'cancel_requested' && (

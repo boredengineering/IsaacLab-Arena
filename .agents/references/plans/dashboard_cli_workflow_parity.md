@@ -1,5 +1,11 @@
 # Dashboard / CLI workflow parity
 
+## Proposed prerequisite slice: research stack readiness and startup
+
+The user requested an integrated validation/startup path for Arena/API, Neo4j and the correct GR00T policy, then explicitly requested a plan review before implementation. The [research-stack readiness appendix](dashboard_cli_workflow_parity/research-stack-readiness.md) defines the proposed C17/X01 extension: stronger worker-path/protocol/model checks, an API-independent V7 stack panel, and a paired host-side allowlisted startup helper. Existing readiness metadata/TCP checks are partial foundations, not correct-model or complete-workflow validation.
+
+This new scope is **planning-only pending review and protected-infrastructure approval**. It does not authorize Docker edits or service startup. Preserve all existing functionality and previous work. The proposal makes service preparation the next prerequisite to the full graph-backed workflow; it does not replace generation, geometry validation, repair/DCRG or their existing acceptance requirements. Initial deployment requires a separately approved frontend-only rollout, and loaded-policy identity may require an explicitly reviewed GR00T serving-wrapper rollout. No browser Docker socket, automatic queued-job release, database replacement or model download is proposed.
+
 ## Active delivery instruction: functional local prototype
 
 Current implementation: Build and fixed-profile GR00T/OpenPI Evaluate controls, harness adapters, local measured-result views and artifact downloads have completed focused tests and scoped independent review. Real GPU/policy-server execution remains unperformed. The README's existing policy runner is reused; web evaluation disables implicit graph/lineage writes rather than treating missing credentials as a publication policy. See implementation progress for the fixed prototype profile and live-run limits.

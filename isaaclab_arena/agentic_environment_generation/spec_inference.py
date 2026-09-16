@@ -21,6 +21,7 @@ from isaaclab_arena.agentic_environment_generation.spec_validation import (
     collect_agent_ready_task_validation_traces,
     format_validation_error,
 )
+from isaaclab_arena.agentic_environment_generation.spec_wire_adapter import SpecWireAdapter
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
 
@@ -29,7 +30,9 @@ class SpecInference:
 
     def __init__(self, inference_backend: InferenceBackend):
         self._inference_backend = inference_backend
-        self._schema = build_strict_schema(ArenaEnvGraphSpec)
+        profile = inference_backend.inference_profile
+        self._wire_adapter = SpecWireAdapter() if profile is not None and profile["provider"] == "openai" else None
+        self._schema = self._wire_adapter.schema if self._wire_adapter else build_strict_schema(ArenaEnvGraphSpec)
 
     def infer(
         self,
@@ -49,15 +52,16 @@ class SpecInference:
             task_catalog: Task vocabulary for the user message.
 
         Returns:
-            A ``(spec, data)`` tuple. On success, ``spec`` is validated and ``data`` is the
-            parsed model JSON. On failure, ``spec`` is ``None`` and ``data`` is the raw
-            response object.
+            A ``(spec, data)`` tuple. ``data`` is parsed domain JSON, with wire maps
+            decoded for documented OpenAI profiles. On domain-validation failure,
+            ``spec`` is ``None`` and ``data`` retains that candidate's evidence.
+            Malformed wire data fails before domain validation, without coercion.
         """
         data = self._inference_backend.run_json(
             StructuredOutputRequest(
                 schema_name="ArenaEnvGraphSpec",
                 schema=self._schema,
-                system=self._system_prompt(),
+                system=self._request_system_prompt(),
                 user=self._user_message(
                     prompt,
                     asset_catalog,
@@ -65,8 +69,11 @@ class SpecInference:
                     task_catalog,
                 ),
                 retry_label="generate_spec",
+                parse_json=self._wire_adapter.parse_json if self._wire_adapter else None,
             )
         )
+        if self._wire_adapter:
+            data = self._wire_adapter.decode(data)
         try:
             spec = ArenaEnvGraphSpec.model_validate(data)
         except ValidationError as exc:
@@ -104,7 +111,12 @@ class SpecInference:
         Returns:
             A ``(spec, data)`` tuple with the repaired spec or raw dict on failure.
         """
-        prev_json = previous_spec.to_dict() if isinstance(previous_spec, ArenaEnvGraphSpec) else previous_spec
+        if isinstance(previous_spec, ArenaEnvGraphSpec):
+            prev_json = previous_spec.model_dump(mode="json") if self._wire_adapter else previous_spec.to_dict()
+        else:
+            prev_json = previous_spec
+        if self._wire_adapter:
+            prev_json = self._wire_adapter.encode(prev_json)
         repair_user_msg = self._repair_user_message(
             original_prompt=original_prompt,
             previous_spec=prev_json,
@@ -116,11 +128,14 @@ class SpecInference:
             StructuredOutputRequest(
                 schema_name="ArenaEnvGraphSpec",
                 schema=self._schema,
-                system=self._system_prompt(),
+                system=self._request_system_prompt(),
                 user=repair_user_msg,
                 retry_label="repair_spec",
+                parse_json=self._wire_adapter.parse_json if self._wire_adapter else None,
             )
         )
+        if self._wire_adapter:
+            data = self._wire_adapter.decode(data)
         try:
             spec = ArenaEnvGraphSpec.model_validate(data)
         except ValidationError as exc:
@@ -128,6 +143,29 @@ class SpecInference:
             return None, data
         traces.extend(collect_agent_ready_task_validation_traces(spec))
         return spec, data
+
+    def _request_system_prompt(self) -> str:
+        prompt = self._system_prompt()
+        if not self._wire_adapter:
+            return prompt
+        return prompt.replace("OUTPUT SCHEMA STRUCTURE:", "DOMAIN EXAMPLE (not the wire output format):") + r"""
+STRICT WIRE FORMAT — arena-spec-params-entries/v1:
+The domain example and catalog describe semantics, not the response encoding.
+Keep the complete scene structure as JSON objects/arrays matching the response schema.
+ONLY each schema-declared freeform params map (assets, object references, tasks,
+spatial relations) is an array of unique {"key": string, "value_json": string} entries.
+Each value_json is valid JSON text for exactly ONE original parameter value,
+including nested objects, arrays, strings, numbers, booleans and null. Preserve
+nested keys and values; do not recursively convert dictionaries inside value_json.
+Example domain params {"surface_anchor":"table_top","initial_pose":{"position_xyz":[0,0,1]}}
+becomes params [{"key":"surface_anchor","value_json":"\"table_top\""},
+{"key":"initial_pose","value_json":"{\"position_xyz\":[0,0,1]}"}].
+An empty params map is []. Never encode the entire scene as a JSON string.
+Emit every schema property (use null only where the schema allows it), with no
+extra properties, duplicate keys, nonfinite numbers, markdown fences or comments.
+The previous repair candidate, when present, uses this same map encoding but may
+be incomplete or domain-invalid; preserve its valid data and fix the feedback.
+"""
 
     @staticmethod
     def _repair_user_message(

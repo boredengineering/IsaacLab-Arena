@@ -40,6 +40,16 @@ class CoreImportBoundary:
         return None
 
 
+def inference_unit_profile(profile):
+    """Allow only sync SDK/backend units; retain every other execution guard."""
+    def guarded(frame, event, arg):
+        if (event == "call" and frame.f_code.co_name == "__init__"
+                and type(frame.f_locals.get("self")).__name__ in {"InferenceBackend", "OpenAI"}):
+            return
+        return profile(frame, event, arg)
+    return guarded
+
+
 def inside(names):
     # This shim imports only stdlib + trusted harness before kernel denial.
     from api import (MetadataReplay, capture_git_metadata, make_audit, make_profile,
@@ -66,6 +76,18 @@ def inside(names):
         replay = MetadataReplay(metadata, counts)
         sys.addaudithook(make_audit(counts))
         profile = make_profile(counts)
+        if names == ["isaaclab_arena/tests/test_inference_backend.py"]:
+            # Network/process audit remains installed. A missed test mock fails
+            # before HTTP dispatch, including in an initializer.
+            from openai import DefaultHttpxClient
+            with DefaultHttpxClient(trust_env=False) as client:
+                transport_type = type(client._transport)
+            def denied_transport(*args, **kwargs):
+                counts["provider"] += 1
+                raise RuntimeError("Inference units require a synthetic SDK transport")
+            transport_type.handle_request = denied_transport
+            profile = inference_unit_profile(profile)
+            proof["scope"] = "synthetic SDK transport units; no live model execution"
         sys.setprofile(profile)
         threading.setprofile(profile)
         sys.path[:0] = ["/source"] if core else ["/source", "/pydeps"]

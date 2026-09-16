@@ -43,6 +43,35 @@ function retainedClick(button: HTMLElement): () => void {
 async function ready() { await waitFor(() => expect(screen.getByRole('button', { name: 'Save durable revision' })).toBeEnabled()); }
 beforeEach(() => { sessionStorage.clear(); Object.defineProperty(globalThis, 'crypto', { configurable: true, value: webcrypto }); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+it.each(['binding ABA', 'client', 'generation', 'disconnect', 'read ABA', 'write ABA', 'unmount'] as const)('blocks the retained export default action after %s', async change => {
+  let frozen!: EditorSaveRequest;
+  const s = server(async (_, init) => {
+    if (init.method === 'POST') frozen = JSON.parse(String(init.body));
+    return response(receipt(frozen));
+  });
+  const view = mount(s.api, { readEnabled: true }); await ready();
+  fireEvent.click(screen.getByRole('button', { name: 'Save durable revision' }));
+  const link = await screen.findByRole('link', { name: 'Export flattened YAML' });
+  const key = Object.keys(link).find(name => name.startsWith('__reactProps$'))!;
+  const click = (link as unknown as Record<string, { onClick: (event: { preventDefault: () => void }) => void }>)[key].onClick;
+  expect(click).toBeTypeOf('function');
+  const preventDefault = vi.fn(); act(() => click({ preventDefault }));
+  expect(preventDefault).not.toHaveBeenCalled();
+  if (change === 'binding ABA') { view.update({ bindingKey: 'B' }); view.update({ bindingKey: 'draft-A' }); }
+  if (change === 'client') view.update({}, server(async () => response({})).api);
+  if (change === 'generation') s.api.session = { ...session };
+  if (change === 'disconnect') s.api.session = null;
+  if (change === 'read ABA') { view.update({ readEnabled: false }); view.update({ readEnabled: true }); }
+  if (change === 'write ABA') { view.update({ enabled: false }); view.update({ enabled: true }); }
+  if (change === 'unmount') view.unmount();
+  act(() => click({ preventDefault }));
+  expect(preventDefault).toHaveBeenCalledOnce();
+  if (change === 'generation' || change === 'disconnect') view.update({});
+  if (change === 'write ABA') expect(screen.getByRole('link', { name: 'Export flattened YAML' })).toHaveAttribute('href', receipt(frozen).revision.download_url);
+  else expect(screen.queryByRole('link', { name: 'Export flattened YAML' })).not.toBeInTheDocument();
+  expect(s.saves().map(([, init]) => init.method)).toEqual(['POST', 'GET']);
+});
+
 it.each([{ bindingKey: 'x'.repeat(2049) }, { expectedSourceHash: 'not-a-hash' }, { documentId: '' }])('never writes a fresh request that recovery would reject: %j', async props => {
   const s = server(async () => { throw new Error('must not POST'); }); mount(s.api, props); await ready();
   fireEvent.click(screen.getByRole('button', { name: 'Save durable revision' }));
@@ -65,6 +94,7 @@ it('admits explicit retained receipt GET and Open independently of current draft
   await waitFor(() => expect(onSaved).toHaveBeenCalledExactlyOnceWith(receipt(request).revision));
   expect(onOpen).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: 'Open saved revision' })).toBeEnabled();
+  expect(screen.getByRole('link', { name: 'Export flattened YAML' })).toHaveAttribute('href', receipt(request).revision.download_url);
   fireEvent.click(screen.getByRole('button', { name: 'Open saved revision' }));
   expect(onOpen).toHaveBeenCalledExactlyOnceWith(receipt(request).revision.open_source);
   expect(s.saves().map(([url, init]) => [url, init.method])).toEqual([['/api/editor/save-requests/read-only', 'GET']]);
@@ -429,11 +459,12 @@ it.each(['quota', 'lost', 'read-blocked'] as const)('keeps checked ACK in memory
   await waitFor(() => expect(reads).toBeGreaterThan(0));
   expect(s.saves().filter(([, init]) => init.method === 'POST')).toHaveLength(1); expect(onSaved).not.toHaveBeenCalled();
 });
-it.each(['bad POST', 'different GET', 'oversized ACK'] as const)('fails closed on %s, retains evidence and never claims Saved', async fault => {
+it.each(['bad POST', 'different GET', 'oversized ACK', 'untrusted download URL'] as const)('fails closed on %s, retains evidence and never claims Saved', async fault => {
   let frozen!: EditorSaveRequest;
   const s = server(async (_, init) => {
     if (init.method === 'POST') { frozen = JSON.parse(String(init.body)); const ack = receipt(frozen);
       if (fault === 'bad POST') ack.revision.source_hash = '0'.repeat(64);
+      if (fault === 'untrusted download URL') ack.revision.download_url = 'https://untrusted.invalid/export.yaml';
       if (fault === 'oversized ACK') Object.assign(ack, { junk: 'x'.repeat(262145) });
       return response(ack); }
     return response(receipt(frozen, 'd'.repeat(32)));
@@ -442,6 +473,7 @@ it.each(['bad POST', 'different GET', 'oversized ACK'] as const)('fails closed o
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Conflict'));
   expect(onSaved).not.toHaveBeenCalled(); expect(sessionStorage.getItem(KEY)).not.toBeNull();
   expect(screen.getByRole('button', { name: 'Retry exact save' })).toBeDisabled();
+  expect(screen.queryByRole('link', { name: 'Export flattened YAML' })).not.toBeInTheDocument();
 });
 it.each(['unsupported', 'blocked storage', 'corrupt', 'oversized', 'changed generation'] as const)('blocks fresh POST for %s without replacing evidence', async fault => {
   const s = server(async () => { throw new Error('must not dispatch'); }, fault !== 'unsupported');

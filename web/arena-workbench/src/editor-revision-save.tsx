@@ -51,6 +51,9 @@ export function EditorRevisionSave(props: EditorRevisionSaveProps) {
   const generation = api.sessionGeneration;
   const readEnabled = props.readEnabled ?? props.enabled;
   const owner = useMemo(() => ({}), [api, generation, props.bindingKey, props.enabled, readEnabled, supported]);
+  // A new draft can retire write permission without retiring the checked saved
+  // artifact. Read/activity, source and session changes still retire that result.
+  const resultOwner = useMemo(() => ({}), [api, generation, props.bindingKey, readEnabled, supported]);
   const currentOwner = useRef(owner); currentOwner.current = owner;
   const onSaved = useRef(props.onSaved); onSaved.current = props.onSaved;
   const onOpen = useRef(props.onOpen); onOpen.current = props.onOpen;
@@ -62,8 +65,8 @@ export function EditorRevisionSave(props: EditorRevisionSaveProps) {
   const [status, setStatus] = useState(initial.error ?? (pending ? 'Unknown — retained save; check status or retry exact save' : 'Ready'));
   const [blocked, setBlocked] = useState(!!initial.error);
   const [saved, setSaved] = useState<{ revision: EditorRevision; request: EditorSaveRequest; owner: object }>();
-  const revision = saved?.owner === owner ? saved.revision : undefined;
-  const alreadySaved = saved?.owner === owner && saved.request.yaml_text === props.draft
+  const revision = saved?.owner === resultOwner ? saved.revision : undefined;
+  const alreadySaved = saved?.owner === resultOwner && saved.request.yaml_text === props.draft
     && saved.request.document_id === props.documentId && saved.request.expected_source_hash === props.expectedSourceHash;
   const visibleStatus = status === 'Saved' ? !revision ? 'Retired saved result — reopen in the current session'
     : alreadySaved ? status : 'Saved frozen revision — current draft has unsaved changes' : status;
@@ -160,7 +163,7 @@ export function EditorRevisionSave(props: EditorRevisionSaveProps) {
         throw error;
       }
       baseline.current = null; setPending(undefined);
-      setSaved({ revision: checked.revision, request: record.request, owner }); setStatus('Saved');
+      setSaved({ revision: checked.revision, request: record.request, owner: resultOwner }); setStatus('Saved');
       if (current()) onSaved.current?.(checked.revision);
     } catch (error) {
       if (!current()) return;
@@ -187,5 +190,7 @@ export function EditorRevisionSave(props: EditorRevisionSaveProps) {
     {pending && <><button type="button" disabled={!readAllowed || working} onClick={() => void run(false)}>Check save status</button>
       <button type="button" disabled={!allowed || working || !matches || !retentionFits || !!pending.accepted || storageLost.current} onClick={() => void run(true)}>Retry exact save</button></>}
     {revision && <button type="button" disabled={!readAllowed} onClick={() => { if (current() && readAllowed) onOpen.current?.(revision.open_source); }}>Open saved revision</button>}
+    {revision && readAllowed && <a href={revision.download_url} download
+      onClick={event => { if (!current() || !readAllowed) event.preventDefault(); }}>Export flattened YAML</a>}
   </section>;
 }

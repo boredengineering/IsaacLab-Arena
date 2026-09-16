@@ -12,6 +12,8 @@ from isaaclab_arena_examples.agentic_environment_generation.web_api import build
 
 @pytest.mark.parametrize("visibility", ["", "0", "2,4", "GPU-unit-fixture"])
 def test_build_preserves_runtime_experience_and_gpu_restrictions(monkeypatch, visibility):
+    monkeypatch.setenv("ISAAC_PATH", "/synthetic/isaac")
+    monkeypatch.setenv("CARB_APP_PATH", "/synthetic/isaac/kit")
     monkeypatch.setenv("EXP_PATH", "/synthetic/isaac/apps")
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visibility)
     monkeypatch.setenv("NVIDIA_VISIBLE_DEVICES", "none")
@@ -21,6 +23,8 @@ def test_build_preserves_runtime_experience_and_gpu_restrictions(monkeypatch, vi
     monkeypatch.setenv("OMNICLIENT_HUB_MODE", "enabled")
     assert hasattr(build_execution, "build_environment"), "Build needs its simulator-specific environment projection"
     environment = build_execution.build_environment()
+    assert environment["ISAAC_PATH"] == "/synthetic/isaac"
+    assert environment["CARB_APP_PATH"] == "/synthetic/isaac/kit"
     assert environment["EXP_PATH"] == "/synthetic/isaac/apps"
     assert environment["CUDA_VISIBLE_DEVICES"] == visibility
     assert environment["NVIDIA_VISIBLE_DEVICES"] == "none"
@@ -29,14 +33,18 @@ def test_build_preserves_runtime_experience_and_gpu_restrictions(monkeypatch, vi
 
 
 def test_build_does_not_invent_runtime_paths_or_device_selection(monkeypatch):
-    for name in ("EXP_PATH", "CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES"):
+    for name in ("ISAAC_PATH", "CARB_APP_PATH", "EXP_PATH", "CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES"):
         monkeypatch.delenv(name, raising=False)
     assert hasattr(build_execution, "build_environment"), "Build needs its simulator-specific environment projection"
     environment = build_execution.build_environment()
-    assert not {"EXP_PATH", "CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES"} & environment.keys()
+    assert (
+        not {"ISAAC_PATH", "CARB_APP_PATH", "EXP_PATH", "CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES"}
+        & environment.keys()
+    )
 
 
-def test_process_launch_uses_the_build_environment_projection(monkeypatch, tmp_path):
+@pytest.mark.parametrize("kind", ["build", "evaluate"])
+def test_process_launch_uses_the_build_environment_projection(monkeypatch, tmp_path, kind):
     import asyncio
     import os
     from types import SimpleNamespace
@@ -54,8 +62,12 @@ def test_process_launch_uses_the_build_environment_projection(monkeypatch, tmp_p
     supervisor = SimpleNamespace(stopping=False, journal=SimpleNamespace(get_job=lambda _id: {"status": "running"}))
     try:
         with pytest.raises(RuntimeError, match="simulated spawn stop"):
-            asyncio.run(build_execution.run_worker(execution, supervisor, {"id": "build-unit", "inputs": {}}))
-        assert captured == [expected]
+            asyncio.run(build_execution.run_worker(execution, supervisor, {"id": "a" * 32, "kind": kind, "inputs": {}}))
+        cache = tmp_path / "simulation-tmp"
+        assert captured == [{**expected, "TMPDIR": str(cache)}]
+        assert cache.is_dir()
+        assert cache.stat().st_uid == os.getuid()
+        assert cache.stat().st_mode & 0o777 == 0o700
     finally:
         if execution.build_owner_fd is not None:
             os.close(execution.build_owner_fd)

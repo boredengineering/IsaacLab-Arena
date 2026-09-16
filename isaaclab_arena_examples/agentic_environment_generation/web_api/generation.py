@@ -10,25 +10,15 @@ import yaml
 from pathlib import Path
 
 from isaaclab_arena.agentic_environment_generation.workbench.documents import Documents
+from isaaclab_arena.agentic_environment_generation.workbench.generation_diagnostics import GENERATION_STAGES
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
 from . import graph_access
 from .catalogues import execution_catalogue_sha256
+from .generation_diagnostics import SafeGenerationFailure
 from .provider_security import bounded_client, checked_config, reject_secret
 
 GENERATION_TIMEOUT = 180
-GENERATION_STAGES = frozenset({
-    "agent_initializing",
-    "catalogues_loading",
-    "graph_priors_loading",
-    "spec_inference",
-    "prim_paths_resolving",
-    "spatial_grounding",
-    "validation_iteration_1",
-    "validation_iteration_2",
-    "generation_completed",
-    "result_validating",
-})
 
 
 def configuration():
@@ -144,7 +134,7 @@ def _generate(inputs, emit, *, agent_factory, config, graph_config=None, managed
             reject_secret(snapshot, config["api_key"])
             reject_secret(snapshot, (graph_config or {}).get("password"))
             if policy == "require_service" and snapshot["status"] == "unavailable":
-                raise ValueError("Required graph retrieval unavailable")
+                raise SafeGenerationFailure("required_retrieval_unavailable")
             kwargs["prior_context"] = snapshot["exact_context"]
         else:
             from isaaclab_arena.agentic_environment_generation.prior_receipt import empty_snapshot
@@ -160,17 +150,17 @@ def _generate(inputs, emit, *, agent_factory, config, graph_config=None, managed
     if base is not None:
         validation = documents.validate(base)
         if not validation["valid"]:
-            raise ValueError("Invalid frozen generation base")
+            raise SafeGenerationFailure("invalid_specification")
         spec, _ = agent.refine_spec(ArenaEnvGraphSpec.from_dict(validation["spec"]), inputs["prompt"], **kwargs)
     else:
         spec, _ = agent.generate_spec(inputs["prompt"], **kwargs)
     if spec is None:
-        raise ValueError("Model did not produce a valid Arena environment specification")
+        raise SafeGenerationFailure("invalid_specification")
     progress("result_validating")
     text = yaml.safe_dump(spec.to_dict(), sort_keys=False)
     validation = documents.validate(text)
     if not validation["valid"]:
-        raise ValueError("Generated result failed Arena schema validation")
+        raise SafeGenerationFailure("invalid_specification")
     warnings = ["Not published to Neo4j. No simulation or policy evaluation was run."]
     telemetry = agent.telemetry
     if telemetry is None or not telemetry.converged:

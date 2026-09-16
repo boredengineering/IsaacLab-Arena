@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRuntime } from './runtime';
 import { ApiError } from './api';
 import { parseModelSettings, PROVIDERS, type Provider } from './model-settings-contracts';
@@ -10,17 +10,20 @@ export function useModelSettings(active = true) {
   const { api, session } = useRuntime();
   const owner = clientSessionScope(api, session);
   const live = useRef<string | null>(owner.id);
+  const readLifetime = useRef(0);
   useLayoutEffect(() => {
-    live.current = owner.id;
-    return () => { live.current = null; };
-  }, [owner.id]);
+    live.current = active ? owner.id : null;
+    return () => { live.current = null; readLifetime.current++; };
+  }, [active, owner.id]);
   const status = useQuery({
     queryKey: owner.queryKey,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
+      const lifetime = readLifetime.current;
+      const current = () => !signal.aborted && lifetime === readLifetime.current && live.current === owner.id && owner.current();
       try {
-        if (live.current !== owner.id || !owner.current()) throw new Error();
+        if (!current()) throw new Error();
         const value = await api.get<unknown>('/model-settings');
-        if (live.current !== owner.id || !owner.current()) throw new Error();
+        if (!current()) throw new Error();
         return parseModelSettings(value);
       }
       catch (error) { throw new ApiError('Provider settings unavailable', error instanceof ApiError ? error.status : 0); }
@@ -63,6 +66,18 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
   const password = useRef<HTMLInputElement>(null);
   const [provider, setProvider] = useState<Provider>('openai');
   const [model, setModel] = useState('');
+  const [preset, setPreset] = useState('custom');
+  const cache = useQueryClient().getQueryCache();
+  const entryEpoch = useRef(0);
+  const [entryRevision, setEntryRevision] = useState(0);
+  const currentMetadata = () => {
+    const query = cache.find({ queryKey: owner.queryKey });
+    return !!session && owner.current() && query?.state.status === 'success'
+      && query.state.fetchStatus === 'idle' && !query.state.isInvalidated && query.state.data === status.data;
+  };
+  const metadataCurrent = currentMetadata();
+  const profiles = metadataCurrent ? status.data?.profiles : undefined;
+  const selectedProfile = profiles?.find(p => p.provider === provider && p.model === model);
   const [ttlMinutes, setTtlMinutes] = useState<number | null>(30);
   const [consent, setConsent] = useState(false);
   const [pending, setPending] = useState(false);
@@ -77,9 +92,23 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
     return () => { lifetime.current++; };
   }, [owner.id]);
   function clearEntry() {
+    setEntryRevision(++entryEpoch.current);
     if (password.current) password.current.value = '';
     setConsent(false);
   }
+  useLayoutEffect(() => {
+    // Query notifications precede React commits. Revoke retained handlers even on
+    // fetch/invalidate -> identical-data ABA, not just object-identity changes.
+    let previous = cache.find({ queryKey: owner.queryKey })?.state.data;
+    const retire = () => { clearEntry(); setPreset('custom'); };
+    retire();
+    return cache.subscribe(event => {
+      if (event.query !== cache.find({ queryKey: owner.queryKey }) || event.type !== 'updated') return;
+      const changed = previous !== event.query.state.data;
+      previous = event.query.state.data;
+      if (changed || event.action.type === 'fetch' || event.action.type === 'invalidate' || event.action.type === 'error') retire();
+    });
+  }, [cache, owner.id]);
   useLayoutEffect(() => {
     const input = password.current;
     clearEntry();
@@ -120,9 +149,11 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
   }
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (entryRevision !== entryEpoch.current) return;
+    const admitted = currentMetadata();
     let api_key = password.current?.value ?? '';
     clearEntry();
-    if (!owner.current() || sending.current || !consent || status.isError || !status.data?.session_keys_allowed) return;
+    if (!admitted || sending.current || !consent || !status.data?.session_keys_allowed) return;
     if ((ttlMinutes !== null && ![15, 30, 60, 120].includes(ttlMinutes))
       || !/^[\x21-\x7e]{1,256}$/.test(model) || !/^[\x21-\x7e]{16,4096}$/.test(api_key)
       || model.includes(api_key) || provider.includes(api_key)) {
@@ -166,22 +197,52 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
     {!session && <p className="muted">Connect a session to manage temporary keys.</p>}
     {status.isError && <p className="notice warning">Provider settings unavailable. Refresh to verify configuration.</p>}
     {status.data?.session_keys_allowed === false && <p className="notice warning">Temporary key entry requires a configured HTTPS or loopback origin.</p>}
-    {status.data?.source === 'none' && <p role="status">No provider configured.</p>}
-    {status.data?.source === 'server' && <p role="status">Server environment fallback active · {status.data.provider} · {status.data.model}</p>}
+    {metadataCurrent && status.data?.source === 'none' && <p role="status">No provider configured.</p>}
+    {metadataCurrent && status.data?.source === 'server' && <p role="status">Server environment fallback active · {status.data.provider} · {status.data.model}</p>}
     {expired && <p role="status">Temporary key expired. Refresh status or save a new key before generating.</p>}
-    {status.data?.source === 'session' && !expired && <p role="status">Temporary key active · {status.data.provider} · {status.data.model}
+    {metadataCurrent && status.data?.source === 'session' && !expired && <p role="status">Temporary key active · {status.data.provider} · {status.data.model}
       {status.data.key_timer_disabled ? ' · No key timer · Current session deadline ' : ' · Expires '}
       {new Date(status.data.expires_at! * 1000).toLocaleString()}</p>}
+    {metadataCurrent && status.data?.configured && !expired && <p role="status">Credential configured · not tested.
+      {status.data.effective_profile?.support === 'documented'
+        ? ' Effective profile: documented adapter profile · not live verified.'
+        : ' Effective profile: compatibility unverified.'}</p>}
+    <p className="hint">Live structured-output test: not yet run · unavailable. Saving credentials is not a provider test.</p>
     <div className="editor-actions">
       <button type="button" disabled={!session || pending || status.isFetching} onClick={() => { clearEntry(); void status.refetch(); }}>Refresh provider status</button>
       {status.data?.source === 'session' && <button type="button" disabled={!session || pending} onClick={() => void forget()}>Forget key</button>}
     </div>
     <form className="model-settings-form" onSubmit={save} autoComplete="off">
-      <label>Provider<select aria-label="Provider" disabled={pending} value={provider} onChange={e => { clearEntry(); setProvider(e.target.value as Provider); }}>
+      <label>Model profile<select aria-label="Model profile" disabled={pending || !profiles?.length} value={preset}
+        onChange={e => {
+          if (entryRevision !== entryEpoch.current) return;
+          const admitted = currentMetadata();
+          clearEntry();
+          if (!admitted) return;
+          const profile = profiles?.find(p => p.id === e.target.value);
+          setPreset(profile?.id ?? 'custom');
+          if (profile) { setProvider(profile.provider); setModel(profile.model); }
+        }}>
+        <option value="custom">Custom model (enter exact model ID)</option>
+        {profiles?.map(p => <option key={p.id} value={p.id}>{p.model}</option>)}
+      </select></label>
+      {!profiles && <p className="hint">Profile presets unavailable · compatibility unverified. Custom model entry remains available when credential settings can be read.</p>}
+      {selectedProfile ? <div className="hint" aria-label="Selected model compatibility">
+        <p>Documented adapter profile · not live verified. Applies on the next explicit save, not the active credential.</p>
+        <p>Chat Completions · structured output: json_schema · Temperature: {selectedProfile.request_policy.temperature_mode} ·
+          Token limit parameter: {selectedProfile.request_policy.token_limit_parameter}
+          {selectedProfile.request_policy.token_limit_parameter === 'max_completion_tokens'
+            ? ' (completion budget includes reasoning tokens, not only visible output).'
+            : ' (output token budget; not a context-window size).'}
+          {' '}Store: {selectedProfile.request_policy.store === false ? 'false' : 'omitted (provider default)'}.</p>
+        <p>These are adapter parameters, not verified model access, context limits or live structured-output results.</p>
+        {selectedProfile.documentation_urls.map((url, index) => <a key={url} href={url} target="_blank" rel="noreferrer noopener">Profile documentation {index + 1}</a>)}
+      </div> : model && <p className="hint">Custom profile · unverified. No documented adapter match is available; model access and structured-output compatibility are not checked.</p>}
+      <label>Provider<select aria-label="Provider" disabled={pending} value={provider} onChange={e => { clearEntry(); setPreset('custom'); setProvider(e.target.value as Provider); }}>
         {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
       </select></label>
       <label>Provider endpoint<input readOnly value={PROVIDERS.find(p => p.id === provider)!.base_url} /></label>
-      <label>Model<input maxLength={256} disabled={pending} value={model} onChange={e => { clearEntry(); setModel(e.target.value); }} autoComplete="off" /></label>
+      <label>Model<input maxLength={256} disabled={pending} value={model} onChange={e => { clearEntry(); setPreset('custom'); setModel(e.target.value); }} autoComplete="off" /></label>
       <label>Key expiration<select aria-label="Key expiration" disabled={pending} value={ttlMinutes ?? 'never'}
         onChange={e => { clearEntry(); setTtlMinutes(e.target.value === 'never' ? null : Number(e.target.value)); }}>
         <option value={15}>15 minutes</option>
@@ -198,8 +259,8 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
         asset/task catalogues, USD context and any retrieved graph priors used by that workflow.
         Saving does not test the key or call the provider.</label>
       <p className="hint">Select the provider, model and expiration, then confirm consent before pasting the key. Changing these fields clears the password.</p>
-      <label>API key<input maxLength={4096} disabled={pending || !session || status.isError || !status.data?.session_keys_allowed} ref={password} type="password" autoComplete="new-password" /></label>
-      <button type="submit" disabled={!session || status.isError || !status.data?.session_keys_allowed || !consent || pending || !model.trim()}>Save temporary key</button>
+      <label>API key<input maxLength={4096} disabled={pending || !metadataCurrent || !status.data?.session_keys_allowed} ref={password} type="password" autoComplete="new-password" /></label>
+      <button type="submit" disabled={!metadataCurrent || !status.data?.session_keys_allowed || !consent || pending || !model.trim()}>Save temporary key</button>
     </form>
     {failed && <p className="notice error" role="alert">Could not update temporary provider settings. Re-enter the key to try again.</p>}
   </section>;

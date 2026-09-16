@@ -28,7 +28,7 @@ BUILD_ERROR = "Build failed or exceeded its budget; check Isaac Sim assets, GPU 
 def build_environment():
     """Preserve simulator paths and GPU restrictions without inherited credentials."""
     environment = worker_environment(None)
-    for name in ("EXP_PATH", "CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES"):
+    for name in ("ISAAC_PATH", "CARB_APP_PATH", "EXP_PATH", "CUDA_VISIBLE_DEVICES", "NVIDIA_VISIBLE_DEVICES"):
         if name in os.environ:
             environment[name] = os.environ[name]
     environment["OMNICLIENT_HUB_MODE"] = "disabled"
@@ -145,6 +145,10 @@ async def run_worker(execution, supervisor, job):
     cancelled(supervisor, job_id)
     root = execution.state_dir / ("evaluation-logs" if evaluation else "build-logs")
     root.mkdir(mode=0o700, exist_ok=True)
+    # Isaac Lab mirrors remote USDs under TMPDIR and reuses existing files.
+    # Keep both GPU workers away from unreadable caches left by root CLI runs.
+    temp = execution.state_dir / "simulation-tmp"
+    temp.mkdir(mode=0o700, exist_ok=True)
     reader, execution.build_owner_fd = os.pipe()
     try:
         fd = os.open(root / f"{uuid.uuid4().hex}.log", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -161,7 +165,7 @@ async def run_worker(execution, supervisor, job):
                 stdin=asyncio.subprocess.PIPE,
                 start_new_session=True,
                 pass_fds=(reader, execution.build_lease_fd),
-                env=build_environment(),
+                env={**build_environment(), "TMPDIR": str(temp)},
                 limit=receipt_limit,
             )
             supervisor.process = process

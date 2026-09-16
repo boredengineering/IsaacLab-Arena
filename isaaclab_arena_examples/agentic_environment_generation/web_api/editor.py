@@ -16,11 +16,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from isaaclab_arena.agentic_environment_generation.workbench.editor_revision_storage import RevisionBusy, RevisionError, RevisionUncertain
+from isaaclab_arena.agentic_environment_generation.workbench.editor_revision_storage import (
+    RevisionBusy,
+    RevisionError,
+    RevisionUncertain,
+)
 
 from . import catalogues, generation
 from .preview_options import RenderOptions, normalized_options
-from .public_records import protect_public_record as protect_editor_job, protect_yaml
+from .public_records import protect_public_record as protect_editor_job
+from .public_records import protect_yaml
 from .security import require_mutation, require_session
 
 router = APIRouter(prefix="/api/editor")
@@ -41,7 +46,9 @@ class Draft(BaseModel):
 
 class SaveDraft(Draft):
     expected_source_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
-    idempotency_key: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+    idempotency_key: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    )
 
 
 class SnapshotDraft(Draft):
@@ -94,7 +101,9 @@ async def index(request: Request, session=Depends(require_session)):
         "Save creates an immutable revision; downloads are explicitly flattened YAML exports.",
     ]
     if not configured:
-        limitations.append("Generation is not configured; set a supported API key in the server environment.")
+        limitations.append(
+            "Generation is not configured; use Temporary provider settings or explicit server credentials."
+        )
     if execution.snapshot_error:
         limitations.append(execution.snapshot_error)
     try:
@@ -102,7 +111,9 @@ async def index(request: Request, session=Depends(require_session)):
     except RevisionError:
         raise HTTPException(422, "Invalid editor revision bundle") from None
     except RevisionBusy:
-        raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+        raise HTTPException(
+            503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}
+        ) from None
     except (RevisionUncertain, OSError):
         raise HTTPException(503, "Revision data unavailable; retain the exact request") from None
     return {
@@ -111,6 +122,7 @@ async def index(request: Request, session=Depends(require_session)):
         "capabilities": {
             "generation": configured,
             "generation_modes": True,
+            "workflow_readiness": True,
             "durable_editor_save": True,
             "research_versions": bool(request.app.state.research_roots),
             "manual_research_save": bool(request.app.state.research_roots),
@@ -130,13 +142,18 @@ async def document(request: Request, document_id: str):
     try:
         if document_id.startswith("research-version:"):
             from .research_routes import open_research_version
+
             result = open_research_version(request, document_id)
         else:
-            result = request.app.state.documents.load(document_id, protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle))
+            result = request.app.state.documents.load(
+                document_id, protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle)
+            )
     except RevisionError:
         raise HTTPException(422, "Invalid editor revision bundle") from None
     except RevisionBusy:
-        raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+        raise HTTPException(
+            503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}
+        ) from None
     except RevisionUncertain:
         raise HTTPException(503, "Revision data unavailable; retain the exact request") from None
     except KeyError:
@@ -161,12 +178,16 @@ async def save(request: Request, body: SaveDraft):
         try:
             # Exact committed replay must precede resolution of an expired view.
             return request.app.state.documents.save(
-                body.yaml_text, body.document_id, body.expected_source_hash,
+                body.yaml_text,
+                body.document_id,
+                body.expected_source_hash,
                 idempotency_key=body.idempotency_key,
                 protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle),
             )
         except RevisionBusy:
-            raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+            raise HTTPException(
+                503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}
+            ) from None
         except KeyError:
             raise HTTPException(404, "Document not found") from None
         except RevisionError as error:
@@ -174,7 +195,9 @@ async def save(request: Request, body: SaveDraft):
                 raise HTTPException(422, "Invalid environment specification") from None
             raise HTTPException(409, "Revision request conflicts with stored data or source") from None
         except (RevisionUncertain, OSError):
-            raise HTTPException(503, "Revision save outcome is uncertain; check the exact saved request before retrying") from None
+            raise HTTPException(
+                503, "Revision save outcome is uncertain; check the exact saved request before retrying"
+            ) from None
     checked_validation(request, body.yaml_text, body.document_id)
     # Revisions retain the complete frozen source set, even if this draft drops its include.
     includes = request.app.state.documents.frozen.get(body.document_id, {})
@@ -199,7 +222,9 @@ async def save_request(request: Request, idempotency_key: str):
             idempotency_key, protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle)
         )
     except RevisionBusy:
-        raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+        raise HTTPException(
+            503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}
+        ) from None
     except KeyError:
         raise HTTPException(404, "Save request not found") from None
     except RevisionError:
@@ -211,11 +236,15 @@ async def save_request(request: Request, idempotency_key: str):
 @router.get("/revisions/{revision_id}/download", dependencies=[Depends(require_session)])
 async def download(request: Request, revision_id: str):
     try:
-        text = request.app.state.documents.download(revision_id, protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle))
+        text = request.app.state.documents.download(
+            revision_id, protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle)
+        )
     except RevisionError:
         raise HTTPException(422, "Invalid editor revision bundle") from None
     except RevisionBusy:
-        raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+        raise HTTPException(
+            503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}
+        ) from None
     except (RevisionUncertain, OSError):
         raise HTTPException(503, "Revision data unavailable; retain the exact request") from None
     except KeyError:
@@ -246,7 +275,9 @@ def checked_validation(request, text, document_id):
         except RevisionError:
             raise HTTPException(422, "Invalid editor revision bundle") from None
         except RevisionBusy:
-            raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+            raise HTTPException(
+                503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}
+            ) from None
         except (RevisionUncertain, OSError):
             raise HTTPException(503, "Revision data unavailable; retain the exact request") from None
         except KeyError:
@@ -321,13 +352,17 @@ async def generate(request: Request, body: GenerateDraft, session=Depends(requir
         try:
             request.app.state.documents.resolve_view(body.document_id)
             if base is None:
-                document = request.app.state.documents.load(body.document_id, protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle))
+                document = request.app.state.documents.load(
+                    body.document_id, protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle)
+                )
                 base = document["yaml_text"]
                 document_id = document["document_id"]
         except RevisionError:
             raise HTTPException(422, "Invalid editor revision bundle") from None
         except RevisionBusy:
-            raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+            raise HTTPException(
+                503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}
+            ) from None
         except RevisionUncertain:
             raise HTTPException(503, "Revision data unavailable; retain the exact request") from None
         except (KeyError, OSError, ValueError):

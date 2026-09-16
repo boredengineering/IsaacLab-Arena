@@ -18,8 +18,20 @@ const empty: ModelSettingsStatus = { providers, configured: false, source: 'none
   expires_at: null, credential_ref: null, session_keys_allowed: true };
 const configured: ModelSettingsStatus = { ...empty, configured: true, source: 'session', provider: 'openai', model: 'user-model',
   expires_at: 9999999999, credential_ref: 'public-ref-one' };
+const documented: ModelSettingsStatus = { ...empty, profile_catalogue_version: 'harness-model-profiles/v1', effective_profile: null,
+  profiles: [
+    { id: 'openai-gpt-4.1', revision: 1, provider: 'openai', model: 'gpt-4.1', endpoint: providers[0].base_url,
+      support: 'documented', documentation_urls: ['https://platform.openai.com/docs/models/gpt-4.1'],
+      request_policy: { api: 'chat_completions', structured_output: 'json_schema', temperature_mode: 'configured', token_limit_parameter: 'max_tokens', store: null } },
+    { id: 'openai-gpt-6-astra', revision: 1, provider: 'openai', model: 'gpt-6-astra', endpoint: providers[0].base_url,
+      support: 'documented', documentation_urls: ['https://developers.openai.com/api/docs/models/gpt-6-astra'],
+      request_policy: { api: 'chat_completions', structured_output: 'json_schema', temperature_mode: 'omitted', token_limit_parameter: 'max_completion_tokens', store: false } },
+  ] };
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
-function Harness() { return <ModelSettings settings={useModelSettings()} />; }
+function Harness({ active = true }: { active?: boolean }) {
+  const settings = useModelSettings(active);
+  return active ? <ModelSettings settings={settings} /> : null;
+}
 function delayed<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>(done => { resolve = done; });
@@ -48,7 +60,7 @@ function setup(handler?: (url: string, init: RequestInit) => Promise<Response>) 
   runtime.current = { api, session: api.session };
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const view = render(<QueryClientProvider client={cache}><Harness /></QueryClientProvider>);
-  return { ...view, api, cache, fetcher, redraw: () => view.rerender(<QueryClientProvider client={cache}><Harness /></QueryClientProvider>) };
+  return { ...view, api, cache, fetcher, redraw: (active = true) => view.rerender(<QueryClientProvider client={cache}><Harness active={active} /></QueryClientProvider>) };
 }
 beforeEach(() => { sessionStorage.clear(); localStorage.clear(); });
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
@@ -383,4 +395,185 @@ it('preserves unsent credentials across ordinary activity and no-op redraws', as
   expect(screen.getByLabelText('API key')).toHaveValue('dummy-scope-boundary-marker');
   expect(screen.getByRole('checkbox')).toBeChecked();
   expect(view.fetcher.mock.calls.filter(([url]) => url === '/api/model-settings')).toHaveLength(1);
+});
+
+it.each(documented.profiles!)('selects $model only on explicit preset choice and saves credentials without claiming a live test', async profile => {
+  let metadata = documented;
+  const view = setup(async (_url, init) => {
+    if (init.method === 'PUT') metadata = { ...documented, ...configured, model: profile.model,
+      effective_profile: { id: profile.id, support: 'documented', verification: 'not_checked' } };
+    return response(metadata);
+  });
+  await screen.findByText(/No provider configured/);
+  const selector = screen.getByRole('combobox', { name: 'Model profile' });
+  expect(screen.getByRole('option', { name: profile.model, exact: true })).toHaveValue(profile.id);
+  expect(selector).toHaveValue('custom');
+  expect(screen.getByLabelText('Model')).toHaveValue('');
+  enterDummyKey();
+  fireEvent.change(selector, { target: { value: profile.id } });
+  expect(screen.getByLabelText('Provider')).toHaveValue(profile.provider);
+  expect(screen.getByLabelText('Model')).toHaveValue(profile.model);
+  expect(screen.getByLabelText('Provider endpoint')).toHaveValue(providers[0].base_url);
+  expect(screen.getByLabelText('API key')).toHaveValue('');
+  expect(screen.getByRole('checkbox')).not.toBeChecked();
+  expect(screen.getByText(/Documented adapter profile · not live verified/)).toBeInTheDocument();
+  expect(screen.getByText(/Chat Completions.*json_schema/)).toBeInTheDocument();
+  expect(screen.getByText(new RegExp('Temperature: ' + profile.request_policy.temperature_mode))).toBeInTheDocument();
+  expect(screen.getByText(new RegExp(profile.request_policy.token_limit_parameter))).toBeInTheDocument();
+  if (profile.request_policy.token_limit_parameter === 'max_completion_tokens') {
+    expect(screen.getByText(/includes reasoning tokens/)).toBeInTheDocument();
+  }
+  expect(screen.getByRole('link', { name: 'Profile documentation 1' })).toHaveAttribute('href', profile.documentation_urls[0]);
+  expect(view.fetcher.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true);
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'dummy-profile-save-marker' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save temporary key' }));
+  await screen.findByText(/Credential configured · not tested/);
+  expect(screen.getByText(/Live structured-output test: not yet run · unavailable/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /test/i })).not.toBeInTheDocument();
+  const writes = view.fetcher.mock.calls.filter(([, init]) => init.method === 'PUT');
+  expect(writes).toHaveLength(1);
+  expect(JSON.parse(String(writes[0][1].body))).toEqual({ provider: profile.provider, model: profile.model,
+    api_key: 'dummy-profile-save-marker', ttl_minutes: 30 });
+  expect(view.fetcher.mock.calls.every(([url]) => url === '/api/model-settings')).toBe(true);
+  expect(screen.getByLabelText('API key')).toHaveValue('');
+  expect(view.cache.getMutationCache().getAll()).toHaveLength(0);
+  expect(JSON.stringify(view.cache.getQueryCache().getAll().map(q => q.state))).not.toContain('dummy-profile-save-marker');
+});
+
+it.each(['legacy', 'unknown-provider', 'malformed'] as const)('keeps %s credential configuration separate from compatibility and allows explicit custom entry', async mode => {
+  const metadata = mode === 'legacy' ? configured : mode === 'unknown-provider'
+    ? { ...configured, ...documented, configured: true, source: 'server', provider: 'unknown-provider', model: 'gpt-6-astra',
+      effective_profile: { id: null, support: 'unverified', verification: 'not_checked' } }
+    : { ...configured, ...documented, configured: true, source: 'session', provider: 'openai', model: 'user-model',
+      credential_ref: 'public-ref-one', expires_at: 9999999999, profiles: [{ private: 'dummy-metadata-secret' }] };
+  const view = setup(async () => response(metadata));
+  await screen.findByText(/Credential configured · not tested/);
+  expect(screen.getByText(/Effective profile: compatibility unverified/)).toBeInTheDocument();
+  expect(screen.queryByText(/Provider settings unavailable/)).not.toBeInTheDocument();
+  if (mode !== 'unknown-provider') expect(screen.getByText(/Profile presets unavailable/)).toBeInTheDocument();
+  expect(screen.getByLabelText('Model')).toHaveValue('');
+  fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'nvidia' } });
+  enterDummyKey();
+  expect(screen.getByText(/Custom profile · unverified/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save temporary key' })).toBeEnabled();
+  expect(JSON.stringify(view.cache.getQueryCache().getAll().map(q => q.state))).not.toContain('dummy-metadata-secret');
+  expect(view.fetcher.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true);
+});
+
+function reactHandler<T>(node: Element, name: string): T {
+  const key = Object.getOwnPropertyNames(node).find(k => k.startsWith('__reactProps$'))!;
+  return (node as unknown as Record<string, Record<string, T>>)[key][name];
+}
+
+it.each(['focus', 'invalidate', 'source', 'profile', 'session'] as const)('retires preset consent and key at the %s metadata boundary, including retained submit handlers', async boundary => {
+  const pendingRead = delayed<Response>();
+  const view = setup(async () => response(documented));
+  await screen.findByText(/No provider configured/);
+  fireEvent.change(screen.getByRole('combobox', { name: 'Model profile' }), { target: { value: 'openai-gpt-6-astra' } });
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'dummy-retired-profile-marker' } });
+  const form = screen.getByRole('button', { name: 'Save temporary key' }).closest('form')!;
+  const submit = reactHandler<(e: { preventDefault: () => void }) => Promise<void>>(form, 'onSubmit');
+  const key = clientSessionScope(view.api, view.api.session).queryKey;
+  const query = view.cache.getQueryCache().find({ queryKey: key })!;
+  expect(query).toBeDefined();
+  view.fetcher.mockImplementation(async () => pendingRead.promise);
+  await act(async () => {
+    if (boundary === 'focus') window.dispatchEvent(new Event('focus'));
+    if (boundary === 'invalidate') query.invalidate();
+    if (boundary === 'source') view.cache.setQueryData(key, { ...documented, source: 'server', configured: true,
+      provider: 'openai', model: 'gpt-4.1', effective_profile: { id: 'openai-gpt-4.1', support: 'documented', verification: 'not_checked' } });
+    if (boundary === 'profile') view.cache.setQueryData(key, { ...documented, profiles: [] });
+    if (boundary === 'session') replaceSettingsOwner(view, 'same-id', false);
+    void submit({ preventDefault: () => {} });
+  });
+  expect(view.fetcher.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true);
+  expect(screen.getByLabelText('API key')).toHaveValue('');
+  expect(screen.getByRole('checkbox')).not.toBeChecked();
+  if (boundary === 'session') view.redraw();
+  expect(screen.getByRole('combobox', { name: 'Model profile' })).toHaveValue('custom');
+  if (boundary === 'focus' || boundary === 'invalidate') {
+    expect(screen.queryByText(/Documented adapter profile · not live verified/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save temporary key' })).toBeDisabled();
+  }
+  await act(async () => { pendingRead.resolve(response(documented)); });
+  expect(screen.getByRole('checkbox')).not.toBeChecked();
+  expect(view.fetcher.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true);
+});
+
+it('does not resurrect documented support from retained data after a failed refresh', async () => {
+  let fail = false;
+  setup(async () => fail ? response({ detail: 'dummy-profile-read-error' }, 503) : response(documented));
+  await screen.findByText(/No provider configured/);
+  fireEvent.change(screen.getByRole('combobox', { name: 'Model profile' }), { target: { value: 'openai-gpt-6-astra' } });
+  expect(screen.getByText(/Documented adapter profile · not live verified/)).toBeInTheDocument();
+  fail = true;
+  fireEvent.focus(window);
+  await screen.findByText(/Provider settings unavailable/);
+  expect(screen.queryByText(/Documented adapter profile · not live verified/)).not.toBeInTheDocument();
+  expect(screen.getByText(/Profile presets unavailable/)).toBeInTheDocument();
+  expect(screen.getByLabelText('API key')).toHaveValue('');
+  expect(screen.getByRole('combobox', { name: 'Model profile' })).toHaveValue('custom');
+});
+
+it('rejects retained preset selection before a same-ID session replacement renders', async () => {
+  const view = setup(async () => response(documented));
+  await screen.findByText(/No provider configured/);
+  const select = screen.getByRole('combobox', { name: 'Model profile' });
+  const change = reactHandler<(e: { target: { value: string } }) => void>(select, 'onChange');
+  replaceSettingsOwner(view, 'same-id', false);
+  act(() => change({ target: { value: 'openai-gpt-6-astra' } }));
+  expect(screen.getByLabelText('Model')).toHaveValue('');
+  expect(view.fetcher.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true);
+});
+
+it('withholds stale credential-active claims during a refresh failure', async () => {
+  let fail = false;
+  setup(async () => fail ? response({}, 503) : response(configured));
+  await screen.findByText(/Temporary key active/);
+  fail = true;
+  fireEvent.focus(window);
+  await screen.findByText(/Provider settings unavailable/);
+  expect(screen.queryByText(/Temporary key active/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Credential configured · not tested/)).not.toBeInTheDocument();
+});
+
+it('drops late profile metadata when the settings source is deactivated and requires a fresh read on return', async () => {
+  const old = delayed<Response>();
+  const fresh = delayed<Response>();
+  let reads = 0;
+  const view = setup(async () => ++reads === 1 ? old.promise : fresh.promise);
+  await waitFor(() => expect(reads).toBe(1));
+  const key = clientSessionScope(view.api, view.api.session).queryKey;
+  view.redraw(false);
+  await act(async () => { old.resolve(response(documented)); });
+  expect(view.cache.getQueryData(key)).toBeUndefined();
+  view.redraw(true);
+  await waitFor(() => expect(reads).toBe(2));
+  expect(screen.getByRole('combobox', { name: 'Model profile' })).toBeDisabled();
+  await act(async () => { fresh.resolve(response(documented)); });
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Model profile' })).toBeEnabled());
+  expect(screen.getByRole('combobox', { name: 'Model profile' })).toHaveValue('custom');
+  expect(screen.getByLabelText('Model')).toHaveValue('');
+  expect(view.fetcher.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true);
+});
+
+it.each(['submit', 'preset'] as const)('retired %s handlers cannot erase a newly consented password after profile or session replacement', async action => {
+  const view = setup(async () => response(documented));
+  await screen.findByText(/No provider configured/);
+  enterDummyKey();
+  const form = screen.getByRole('button', { name: 'Save temporary key' }).closest('form')!;
+  const submit = reactHandler<(e: { preventDefault: () => void }) => Promise<void>>(form, 'onSubmit');
+  const change = reactHandler<(e: { target: { value: string } }) => void>(screen.getByRole('combobox', { name: 'Model profile' }), 'onChange');
+  replaceSettingsOwner(view, 'same-id');
+  await waitFor(() => expect(screen.getByLabelText('API key')).toBeEnabled());
+  enterDummyKey('dummy-fresh-profile-owner');
+  await act(async () => {
+    if (action === 'submit') await submit({ preventDefault: () => {} });
+    else change({ target: { value: 'openai-gpt-6-astra' } });
+  });
+  expect(screen.getByLabelText('API key')).toHaveValue('dummy-fresh-profile-owner');
+  expect(screen.getByRole('checkbox')).toBeChecked();
+  expect(view.fetcher.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true);
 });

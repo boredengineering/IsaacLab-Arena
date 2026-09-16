@@ -1,4 +1,5 @@
 /** Durable transport contract shared by diagnostic and editor jobs. */
+import { isGenerationDiagnostic, type GenerationDiagnosticRecord } from './generation-diagnostic-contract';
 export const statuses = [
   'queued',
   'running',
@@ -28,6 +29,7 @@ export interface Job {
   error: string | null;
   created_by_session_id: string;
   execution?: ExecutionEvidence;
+  diagnostic?: GenerationDiagnosticRecord;
 }
 export interface Workspace {
   id: string;
@@ -82,6 +84,7 @@ export function isJob(value: unknown): value is Job {
     typeof j.inputs === 'object' &&
     !Array.isArray(j.inputs) &&
     (j.execution === undefined || isExecutionEvidence(j.execution)) &&
+    (j.diagnostic === undefined || isGenerationDiagnostic(j.diagnostic)) &&
     (j.kind !== 'diagnostic' ||
       (typeof j.inputs.steps === 'number' && typeof j.inputs.delay_seconds === 'number'))
   );

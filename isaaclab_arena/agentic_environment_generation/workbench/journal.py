@@ -474,6 +474,32 @@ class Journal:
             self._transition(db, job_id, "running", stage, "stage_changed")
             return True
 
+    def record_attempt_diagnostic(self, job_id, attempt_id, generation, *, expected_state, diagnostic, protect_public):
+        """Append guarded static evidence only for the exact unfinished generation attempt."""
+        from .generation_diagnostics import checked_diagnostic
+
+        value = checked_diagnostic(diagnostic)
+        public = {"diagnostic": value, "kind": "generation_diagnostic"}
+        body = _json(public)
+        protect_public(public)
+        if _json(public) != body:
+            raise ValueError("Public diagnostic guard must not mutate values")
+        if expected_state not in ("claimed", "released"):
+            return False
+        with self._transaction() as db:
+            if not self._attempt_matches(db, job_id, attempt_id, generation, expected_state):
+                return False
+            job = self.get_job(job_id)
+            if job["kind"] != "generate" or self.get_candidate_receipt(job_id, attempt_id, generation) is not None:
+                return False
+            if "diagnostic" in job:
+                return job["diagnostic"] == value
+            job["diagnostic"] = value
+            job["updated_at"] = time.time()
+            db.execute("UPDATE jobs SET body=? WHERE id=?", (_json(job), job_id))
+            self._event(db, job, "generation_diagnostic")
+            return True
+
     def cancel_queued(self, job_id):
         """Cancel queued work atomically, including a renewed but unclaimed attempt."""
         with self._transaction() as db:

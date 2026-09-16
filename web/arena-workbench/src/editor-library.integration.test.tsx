@@ -94,6 +94,76 @@ async function openFile() {
 }
 beforeEach(() => {sessionStorage.clear(); localStorage.clear(); vi.stubGlobal('crypto', webcrypto);});
 
+it('exports the verified durable revision from the mounted V7 App without opening or replacing the draft', async () => {
+  let release!: (response: Response) => void;
+  const fixture = setup('/workspaces/default?layout=v7', (url, init) => {
+    if (url.startsWith('/api/editor/save-requests/')) return new Promise<Response>(resolve => {release = resolve;});
+    if (url === '/api/editor/validate' && JSON.parse(String(init?.body)).yaml_text === 'invalid: [') return wire({...projection('invalid: ['), valid: false, errors: ['Invalid YAML']});
+  });
+  await waitFor(() => expect(text()).toBe(source));
+  edit(); fireEvent.click(screen.getByRole('button', {name: 'Validate schema'}));
+  await waitFor(() => expect(screen.getByRole('button', {name: 'Save durable revision'})).toBeEnabled());
+  expect(screen.queryByRole('button', {name: 'Save revision'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', {name: 'Export flattened YAML'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name: 'Save durable revision'}));
+  await waitFor(() => expect(release).toBeTypeOf('function'));
+  expect(screen.queryByRole('link', {name: 'Export flattened YAML'})).not.toBeInTheDocument();
+  const request = JSON.parse(String(fixture.fetcher.mock.calls.find(([url]) => url === '/api/editor/save')![1]?.body));
+  await act(async () => release(wire(await makeReceipt(request))));
+  const link = await screen.findByRole('link', {name: 'Export flattened YAML'});
+  expect(link).toHaveAttribute('href', `/api/editor/revisions/${revisionId}/download`);
+  expect(link).toHaveAttribute('download');
+  expect(within(screen.getByRole('region', {name: 'Durable editor save'})).getByRole('link', {name: 'Export flattened YAML'})).toBe(link);
+  expect(text()).toBe(edited);
+  expect(screen.getByLabelText('Document')).toHaveValue('fixture');
+  expect(screen.getByRole('button', {name: 'Download current YAML'})).toBeEnabled();
+  edit('invalid: [');
+  fireEvent.click(screen.getByRole('button', {name: 'Validate schema'}));
+  await screen.findByText('Invalid YAML');
+  expect(screen.getByRole('button', {name: 'Save durable revision'})).toBeDisabled();
+  expect(screen.getByRole('link', {name: 'Export flattened YAML'})).toHaveAttribute('href', `/api/editor/revisions/${revisionId}/download`);
+  expect(screen.getByText('Saved frozen revision — current draft has unsaved changes')).toBeVisible();
+  const blobs: Blob[] = [];
+  vi.spyOn(URL, 'createObjectURL').mockImplementation(blob => {blobs.push(blob as Blob); return 'blob:current-draft';});
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  fireEvent.click(screen.getByRole('button', {name: 'Download current YAML'}));
+  expect(blobs).toHaveLength(1);
+  const downloaded = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsText(blobs[0]);
+  });
+  expect(downloaded).toBe('invalid: [');
+  expect(request.yaml_text).toBe(edited);
+  expect(fixture.fetcher.mock.calls.filter(([url]) => url === '/api/editor/save')).toHaveLength(1);
+  expect(fixture.fetcher.mock.calls.some(([url]) => /generate|snapshots|\/build$|\/evaluate$/.test(url))).toBe(false);
+});
+
+it('mounts advertised workflow readiness in the real App without replacing authoring state or dispatching work', async () => {
+  const ready = {schema_version: 1, checked_at: null, provider: {configured: false, source: 'none', verification: 'not_checked'}, graph: {configured: false, status: 'not_configured'}, dependencies: {openai: true, neo4j: true, isaacsim: true}, runtime: {build_adapter: true, evaluation_adapter: true, simulation: 'not_checked'}, policy_servers: [{profile: 'gr00t-droid', host: '127.0.0.1', port: 5555, status: 'not_checked'}, {profile: 'openpi-droid', host: '127.0.0.1', port: 8000, status: 'not_checked'}], workflow: {research_versions: false, publication: false, managed_retrieval: false, scenario_harness: 'cli_only', evaluation_scope: 'droid_fixed_profiles'}};
+  const fixture = setup('/workspaces/default?layout=v7', url => {
+    if (url === '/api/editor') return wire({default_document_id: 'fixture', documents: [file], capabilities: {workflow_readiness: true}, limitations: []});
+    if (url === '/api/editor/readiness') return wire(ready);
+    if (url === '/api/editor/readiness/check') return wire({...ready, checked_at: 123});
+  });
+  await screen.findByText('Graph-RAG: not configured');
+  await waitFor(() => expect(text()).toBe(source)); edit();
+  fireEvent.click(screen.getByRole('button', {name: 'Check dependencies'}));
+  await screen.findByText(/Last explicit check:/);
+  expect(text()).toBe(edited);
+  expect(fixture.fetcher.mock.calls.filter(([url]) => url === '/api/editor/readiness/check')).toHaveLength(1);
+  expect(fixture.fetcher.mock.calls.some(([url, init]) => init?.method === 'POST' && /\/editor\/(save|generate|snapshots|build|evaluate)$/.test(url))).toBe(false);
+});
+
+it('renders a durable generation diagnostic in the real historical job inspector without replay', async () => {
+  const job = {id: 'observed-generation', workspace_id: 'default', kind: 'generate', status: 'indeterminate', stage: 'indeterminate', inputs: {}, result: null, error: null, created_at: 0, updated_at: 0, created_by_session_id: session.session_id, diagnostic: {schema_version: 1, code: 'provider_request_rejected', stage: 'agent_initializing'}};
+  const fixture = setup('/jobs/observed-generation?layout=v7', url => {
+    if (url === '/api/workspaces/default') return wire({id: 'default', name: 'Workspace', jobs: [job], event_cursor: 1});
+    if (url === '/api/jobs/observed-generation') return wire(job);
+  });
+  await screen.findByText('The provider rejected the request.');
+  expect(screen.getByText(/does not prove that the provider performed no work/)).toBeVisible();
+  expect(fixture.fetcher.mock.calls.some(([url, init]) => init?.method === 'POST' && /\/editor\/(generate|build|evaluate|snapshots)$/.test(url))).toBe(false);
+});
+
 it.each(['verified', 'origin', 'root', 'canonical', 'manifest', 'source', 'family', 'view', 'late-session', 'late-navigation-ABA', 'late-source-ABA', 'late-detail-refresh'])('production durable → numbered save → dirty-confirmed exact research Open: %s', async outcome => {
   const preferences = outcome === 'verified' ? persistentPreferenceFixture() : undefined;
   const reservationId = '4'.repeat(32), researchRevision = '5'.repeat(32), manifestDigest = '6'.repeat(64), researchView = '7'.repeat(32);
@@ -803,17 +873,55 @@ it.each(['verified', 'wrong hash'])('requires explicit confirmed exact receipt O
   expect(fixture.fetcher.mock.calls.some(([url]) => url === '/api/editor/save')).toBe(false);
 });
 
-it('restores immutable-source backup explicitly using source ID, frozen view and root hash without replay', async () => {
-  const backup = {version: 1, documentId: revisionSource, viewId: reopenedView, sourceHash: hash(edited), draft: edited + '# retained', prompt: 'review later'};
-  sessionStorage.setItem('arena.editor.draft.v1', JSON.stringify(backup));
-  const {fetcher} = setup('/workspaces/default', url => url === '/api/editor' ? wire({default_document_id: 'fixture', documents: [file, revisionRow], capabilities: {}, limitations: []}) : undefined);
+it.each(['verified', 'unavailable', 'origin', 'root'])('restores immutable-source backup through its issued view without descriptor reissue or replay: %s', async outcome => {
+  let descriptorOpens = 0;
+  let reloading = false;
+  const issued = new Map<string, object>();
+  const transport = (url: string) => {
+    if (url === '/api/editor') return wire({default_document_id: 'fixture', documents: [file, revisionRow], capabilities: {}, limitations: []});
+    if (url === `/api/editor/documents/${encodeURIComponent(revisionSource)}`) {
+      // The real backend issues a fresh UUID on every descriptor open.
+      const id = (++descriptorOpens === 1 ? '3' : '4').repeat(32);
+      const doc = {document_id: id, source: revisionSource, source_origin: {kind: 'editor_revision', id: revisionSource}, yaml_text: edited, source_hash: hash(edited), validation: projection(edited)};
+      issued.set(id, doc);
+      return wire(doc);
+    }
+
+    const doc = issued.get(url.slice('/api/editor/documents/'.length));
+    if (url.startsWith('/api/editor/documents/') && doc) {
+      if (reloading && outcome === 'unavailable') return wire({detail: 'Issued view unavailable'}, 404);
+      return wire({...doc, ...(reloading && outcome === 'origin' ? {source_origin: {kind: 'editor_revision', id: 'editor-revision:' + 'f'.repeat(32)}} : {}), ...(reloading && outcome === 'root' ? {source_hash: '0'.repeat(64)} : {})});
+    }
+  };
+  const first = setup('/workspaces/default', transport);
+  await waitFor(() => expect(text()).toBe(source));
+  fireEvent.change(screen.getByRole('combobox', {name: 'Document'}), {target: {value: revisionSource}});
+  await waitFor(() => expect(text()).toBe(edited));
+  edit(edited + '# retained');
+  fireEvent.change(screen.getByLabelText('Describe the environment and task'), {target: {value: 'review later'}});
+  const retained = sessionStorage.getItem('arena.editor.draft.v1')!;
+  const backup = JSON.parse(retained);
+  expect(backup).toMatchObject({documentId: revisionSource, viewId: reopenedView, sourceHash: hash(edited), draft: edited + '# retained', prompt: 'review later'});
+  first.unmount(); first.cache.clear(); reloading = true;
+  const {fetcher} = setup('/workspaces/default', transport);
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url === `/api/editor/documents/${reopenedView}`)).toBe(true));
+  expect(descriptorOpens).toBe(1);
+  if (outcome !== 'verified') {
+    await screen.findByText(outcome === 'unavailable' ? 'Issued view unavailable' : 'Source identity or hash verification failed. No replacement or recent open recorded.');
+    expect(screen.getByRole('button', {name: 'Restore draft'})).toBeDisabled();
+    expect(sessionStorage.getItem('arena.editor.draft.v1')).toBe(retained);
+    expect(fetcher.mock.calls.some(([url, init]) => init?.method === 'POST' && /save|generate|snapshots|build|evaluate|publications/.test(url))).toBe(false);
+    return;
+  }
   await waitFor(() => expect(screen.getByRole('button', {name: 'Restore draft'})).toBeEnabled());
   expect(text()).toBe(edited);
   fireEvent.click(screen.getByRole('button', {name: 'Restore draft'}));
   expect(text()).toBe(backup.draft);
   expect(screen.getByLabelText('Describe the environment and task')).toHaveValue(backup.prompt);
   expect(JSON.parse(sessionStorage.getItem('arena.editor.draft.v1')!)).toMatchObject({documentId: revisionSource, viewId: reopenedView, sourceHash: hash(edited)});
-  expect(fetcher.mock.calls.some(([url, init]) => init?.method === 'POST' && /save|generate|snapshots|publications/.test(url))).toBe(false);
+  fireEvent.click(screen.getByRole('button', {name: 'Validate schema'}));
+  await waitFor(() => expect(fetcher.mock.calls.some(([url, init]) => url === '/api/editor/validate' && JSON.parse(init!.body as string).document_id === reopenedView)).toBe(true));
+  expect(fetcher.mock.calls.some(([url, init]) => init?.method === 'POST' && /save|generate|snapshots|build|evaluate|publications/.test(url))).toBe(false);
 });
 
 it('withholds catalogue actions throughout refresh and unavailable state without changing retained inspection', async () => {
@@ -1440,4 +1548,3 @@ it('withholds a mismatched typed default load before publishing draft or validat
   expect(screen.getByRole('button', {name: 'Save durable revision'})).toBeDisabled();
   expect(recentIds()).toEqual([]);
 });
-

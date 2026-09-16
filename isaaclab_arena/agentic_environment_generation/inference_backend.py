@@ -13,13 +13,16 @@ import copy
 import json
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from openai import OpenAI
+from openai import APIStatusError, OpenAI
 from openai.types.chat import ChatCompletionMessage
 from pydantic import BaseModel
+
+from isaaclab_arena.agentic_environment_generation import inference_profiles
 
 
 def _load_dotenv_if_present() -> None:
@@ -139,6 +142,44 @@ class StructuredOutputRequest:
     system: str
     user: str
     retry_label: str
+    parse_json: Callable[[str], dict[str, Any]] | None = None
+    """Optional raw-content parser; None preserves legacy tolerant parsing."""
+
+
+def completion_request_parameters(
+    *,
+    model: str,
+    base_url: str,
+    temperature: float,
+    max_tokens: int,
+    ping: bool = False,
+    configured_base_url: str | None = None,
+) -> dict[str, Any]:
+    """Select chat parameters for an exact model and actual client endpoint.
+
+    Only ``gpt-6-astra`` on the official OpenAI v1 endpoint uses the Astra
+    profile: no sampling temperature, explicit ``store=False``, and the same
+    token ceiling expressed as ``max_completion_tokens`` (including reasoning).
+    The initializer uses at most eight tokens, never more than that ceiling.
+    Every other pair retains the legacy temperature/max_tokens profile, including
+    its eight-token ping. This pure helper is also the source for future profile
+    reporting; it does not infer model families or provider identity from substrings.
+    ``store=False`` opts out of completion storage, not provider abuse-log retention.
+    """
+    profile = inference_profiles.resolve_inference_profile(
+        model, base_url if configured_base_url is None else configured_base_url, actual_base_url=base_url
+    )
+    if profile is not None:
+        policy = profile["request_policy"]
+        omitted = policy["temperature_mode"] == "omitted"
+        ceiling = (min(8, max_tokens) if omitted else 8) if ping else max_tokens
+        parameters: dict[str, Any] = {policy["token_limit_parameter"]: ceiling}
+        if not omitted:
+            parameters["temperature"] = temperature
+        if policy["store"] is not None:
+            parameters["store"] = policy["store"]
+        return parameters
+    return {"temperature": temperature, "max_tokens": 8 if ping else max_tokens}
 
 
 class InferenceBackend:
@@ -254,12 +295,13 @@ class InferenceBackend:
             resolved_model = raw_model
         client = OpenAI(api_key=resolved_api_key, base_url=resolved_base_url)
         self._client: OpenAI = client
+        self._configured_base_url = resolved_base_url
         self._model = resolved_model
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._max_retries = max_retries
         self._telemetry = InferenceTelemetryTracker()
-        _ping(client, resolved_model)
+        _ping(client, resolved_model, max_tokens=max_tokens, configured_base_url=resolved_base_url)
 
     @property
     def model(self) -> str:
@@ -275,6 +317,13 @@ class InferenceBackend:
     def telemetry(self) -> InferenceTelemetryTracker:
         """Telemetry tracker recording call counts, tokens, and latencies."""
         return self._telemetry
+
+    @property
+    def inference_profile(self):
+        """Return a documented policy only for both declared and actual endpoints."""
+        return inference_profiles.resolve_inference_profile(
+            self._model, self._configured_base_url, actual_base_url=str(self._client.base_url)
+        )
 
     def run_json(self, request: StructuredOutputRequest) -> dict[str, Any]:
         """Call a JSON-schema structured-output endpoint and parse the response as JSON.
@@ -310,8 +359,13 @@ class InferenceBackend:
                             "schema": request.schema,
                         },
                     },
-                    temperature=self._temperature,
-                    max_tokens=self._max_tokens,
+                    **completion_request_parameters(
+                        model=self._model,
+                        base_url=str(self._client.base_url),
+                        temperature=self._temperature,
+                        max_tokens=self._max_tokens,
+                        configured_base_url=self._configured_base_url,
+                    ),
                 )
                 duration_s = time.perf_counter() - start_time
                 choices = getattr(resp, "choices", None) or []
@@ -319,11 +373,13 @@ class InferenceBackend:
                     f"Model {self._model!r} returned HTTP 200 with no choices "
                     "(content filter / guardrail / rate-limit response with empty body)."
                 )
-                text = _extract_response_text(choices[0].message)
+                text = choices[0].message.content if request.parse_json else _extract_response_text(choices[0].message)
                 assert text, (
                     f"Model {self._model!r} returned an empty structured-outputs envelope. "
                     "Verify the endpoint/model supports response_format=json_schema."
                 )
+
+                parsed = request.parse_json(text) if request.parse_json else json.loads(text, strict=False)
 
                 # Record successful call telemetry
                 usage = getattr(resp, "usage", None)
@@ -344,10 +400,7 @@ class InferenceBackend:
                     )
                 )
 
-                # ``strict=False`` lets json.loads accept unescaped control characters
-                # (e.g. literal tabs) inside JSON strings — DeepSeek-v4-flash is known
-                # to emit these.
-                return json.loads(text, strict=False)
+                return parsed
             except Exception as exc:
                 duration_s = time.perf_counter() - start_time
                 self._telemetry.calls.append(
@@ -362,9 +415,11 @@ class InferenceBackend:
                     )
                 )
                 last_exc = exc
+                if isinstance(exc, APIStatusError) and exc.status_code in (400, 401, 403, 404, 422):
+                    # Repeating identical invalid requests cannot repair their contract.
+                    break
         raise RuntimeError(
-            f"Model {self._model!r} failed {request.retry_label} after "
-            f"{1 + self._max_retries} attempts. Last error: {last_exc}"
+            f"Model {self._model!r} failed {request.retry_label} after {attempt + 1} attempts. Last error: {last_exc}"
         ) from last_exc
 
     def multimodal_chat(self, prompt: str, images: dict[str, Any]) -> str:
@@ -397,8 +452,13 @@ class InferenceBackend:
             model=self._model,
             messages=[{"role": "user", "content": content_payload}],
             response_format={"type": "json_object"},
-            temperature=self._temperature,
-            max_tokens=self._max_tokens,
+            **completion_request_parameters(
+                model=self._model,
+                base_url=str(self._client.base_url),
+                temperature=self._temperature,
+                max_tokens=self._max_tokens,
+                configured_base_url=self._configured_base_url,
+            ),
         )
         choice = resp.choices[0] if resp.choices else None
         text = (choice.message.content if choice and choice.message else "") or ""
@@ -419,13 +479,15 @@ def build_strict_schema(model_cls: type[BaseModel]) -> dict[str, Any]:
     return schema
 
 
-def _ping(client: OpenAI, model: str) -> str:
+def _ping(client: OpenAI, model: str, *, max_tokens: int = 8, configured_base_url: str | None = None) -> str:
     """Smoke-test the endpoint + API key + model with a minimal request.
 
     Args:
         client: An OpenAI-compatible client (typically ``openai.OpenAI``).
         model: Model identifier forwarded to
             ``client.chat.completions.create(model=...)``.
+        max_tokens: Configured completion ceiling; the Astra ping cannot exceed it.
+        configured_base_url: Original endpoint literal, before SDK normalization.
 
     Returns:
         The model's response text.
@@ -434,8 +496,14 @@ def _ping(client: OpenAI, model: str) -> str:
     resp = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": "Respond with exactly: OK"}],
-        temperature=0,
-        max_tokens=8,
+        **completion_request_parameters(
+            model=model,
+            base_url=str(client.base_url),
+            temperature=0,
+            max_tokens=max_tokens,
+            ping=True,
+            configured_base_url=configured_base_url,
+        ),
     )
     choices = getattr(resp, "choices", None) or []
     assert choices, (

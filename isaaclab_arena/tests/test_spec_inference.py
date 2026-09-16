@@ -12,23 +12,28 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from isaaclab_arena.agentic_environment_generation.inference_backend import InferenceBackend, InferenceTelemetryTracker
 from isaaclab_arena.agentic_environment_generation.spec_inference import SpecInference
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 from isaaclab_arena.tests.utils.agentic_environment_generation import catalog as make_catalog
-from isaaclab_arena.tests.utils.agentic_environment_generation import (
-    chat_response,
-    inference_backend,
-    minimal_spec_dict,
-)
+from isaaclab_arena.tests.utils.agentic_environment_generation import chat_response, minimal_spec_dict
 from isaaclab_arena.tests.utils.agentic_environment_generation import relation_catalog as make_relation_catalog
 from isaaclab_arena.tests.utils.agentic_environment_generation import task_catalog as make_task_catalog
 
 
 @pytest.fixture
-def spec_inference(stub_openai):
-    """A ``SpecInference`` backed by a mocked OpenAI client."""
-    _, client = stub_openai
-    return SpecInference(inference_backend(stub_openai)), client
+def spec_inference():
+    """Use real run_json with a synthetic client, no SDK constructor/ping/probe."""
+    backend = InferenceBackend.__new__(InferenceBackend)
+    backend._client = MagicMock()
+    backend._client.base_url = "https://legacy.invalid/v1"
+    backend._configured_base_url = "https://legacy.invalid/v1"
+    backend._model = "test-model"
+    backend._temperature = 0.2
+    backend._max_tokens = 4096
+    backend._max_retries = 3
+    backend._telemetry = InferenceTelemetryTracker()
+    return SpecInference(backend), backend.client
 
 
 def _infer(

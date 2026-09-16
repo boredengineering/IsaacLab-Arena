@@ -73,6 +73,10 @@ services:
   isaaclab-arena:
     image: isaaclab_arena:latest
     container_name: isaaclab_arena-latest
+    # Refresh exports with docker/resource_limits.py before invoking Compose.
+    mem_limit: ${ARENA_MEMORY_BYTES:?run the host resource preflight first}
+    memswap_limit: ${ARENA_MEMORY_BYTES:?run the host resource preflight first}
+    pids_limit: 2048
     network_mode: host
     ipc: host
     privileged: true

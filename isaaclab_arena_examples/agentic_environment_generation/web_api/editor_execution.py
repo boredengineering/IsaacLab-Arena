@@ -6,12 +6,15 @@
 """Serial editor execution using owned bounded workers, never HTTP-loop simulation."""
 
 import asyncio
+import contextlib
 import inspect
 import json
 import os
 import sys
 import threading
 from pathlib import Path
+
+from isaaclab_arena.agentic_environment_generation.workbench.generation_diagnostics import checked_diagnostic
 
 from . import generation
 from .generation import GENERATION_STAGES, GENERATION_TIMEOUT
@@ -148,6 +151,9 @@ class EditorExecution:
         supervisor.job_id = job_id
         secrets = []
         authorization_failed = False
+        diagnostic = None
+        last_stage = "worker_starting"
+        failure_code = "internal_error"
 
         def authorize():
             nonlocal authorization_failed
@@ -175,6 +181,7 @@ class EditorExecution:
         try:
             private = authorize()
             async with asyncio.timeout(GENERATION_TIMEOUT):
+                failure_code = "worker_exited"
                 process = await asyncio.create_subprocess_exec(
                     sys.executable,
                     "-u",
@@ -205,32 +212,60 @@ class EditorExecution:
                 process.stdin.close()
                 accepted = False
                 for _ in range(64):
+                    failure_code = "worker_exited"
                     line = await process.stdout.readline()
                     if not line:
                         break
+                    failure_code = "worker_protocol"
                     message = json.loads(line)
                     protect(message)
+                    if type(message) is not dict:
+                        raise ValueError("Invalid generation frame")
+                    if set(message) == {"error"} and not accepted:
+                        value = checked_diagnostic(message["error"])
+                        if value["stage"] != last_stage:
+                            raise ValueError("Invalid diagnostic stage")
+                        diagnostic = value
+                        break
                     if set(message) == {"stage"} and message["stage"] in GENERATION_STAGES and not accepted:
-                        journal.progress_attempt(
+                        if journal.progress_attempt(
                             job_id,
                             **attempt,
                             expected_state="released",
                             stage=message["stage"],
-                        )
+                        ):
+                            last_stage = message["stage"]
                     elif set(message) == {"result"} and not accepted:
                         receipt = self.validate_managed_receipt(job, message["result"])
                         protect(receipt)
                         accepted = journal.commit_candidate(job_id, **attempt, receipt=receipt)
                         if not accepted:
                             return
+
                     else:
                         raise ValueError("Invalid generation receipt")
                 await process.wait()
-        except Exception:
+                if not accepted and diagnostic is None:
+                    diagnostic = checked_diagnostic({"schema_version": 1, "code": failure_code, "stage": last_stage})
+        except Exception as exc:
             # No exception text crosses the durable/public boundary.
-            pass
+            if not authorization_failed and diagnostic is None:
+                diagnostic = checked_diagnostic({
+                    "schema_version": 1,
+                    "code": "worker_timeout" if isinstance(exc, TimeoutError) else failure_code,
+                    "stage": last_stage,
+                })
         finally:
-            # A cleanup failure deliberately retains running state and worker ownership.
+            # Diagnostic reads, guards, and writes are best effort, never cleanup gates.
+            with contextlib.suppress(Exception):
+                current = journal.get_attempt(job_id)
+                if current and all(current[key] == value for key, value in attempt.items()):
+                    state = current["state"]
+                    if diagnostic is not None and state in {"claimed", "released"}:
+                        journal.record_attempt_diagnostic(
+                            job_id, **attempt, expected_state=state, diagnostic=diagnostic, protect_public=protect
+                        )
+            # Persist evidence before cleanup; failed cleanup retains running state and ownership.
             await supervisor.stop_process()
             journal.worker_cleaned(job_id)
             current = journal.get_attempt(job_id)

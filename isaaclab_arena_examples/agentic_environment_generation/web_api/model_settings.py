@@ -13,6 +13,12 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from isaaclab_arena.agentic_environment_generation.inference_profiles import (
+    PROFILE_CATALOGUE_VERSION,
+    inference_profile_catalogue,
+    resolve_inference_profile,
+)
+
 from . import generation, graph_access
 from .provider_security import ENDPOINTS, PROVIDERS, checked_config, reject_secret
 from .public_records import screen_public_record
@@ -74,6 +80,7 @@ class ModelSettings:
 
     def save(self, session, body):
         self.purge()
+
         # The candidate key is not active yet. Screen only its public projection
         # against both policies before replacement can invalidate existing grants.
         def protect_candidate(value):
@@ -83,11 +90,7 @@ class ModelSettings:
             except ValueError:
                 raise HTTPException(422, "Invalid request input") from None
 
-        screen_public_record({"model": body.model, "provider": body.provider}, protect_candidate)
-        if session["session_id"] not in self._records and len(self._records) >= MAX_CREDENTIALS:
-            raise HTTPException(409, "Temporary credential capacity reached; try again after expiry")
-        self.forget(session["session_id"])
-        self._records[session["session_id"]] = {
+        candidate = {
             "api_key": body.api_key,
             "provider": body.provider,
             "model": body.model,
@@ -99,6 +102,11 @@ class ModelSettings:
             ),
             "key_timer_disabled": body.ttl_minutes is None,
         }
+        screen_public_record(self._public_metadata(candidate, None, True), protect_candidate)
+        if session["session_id"] not in self._records and len(self._records) >= MAX_CREDENTIALS:
+            raise HTTPException(409, "Temporary credential capacity reached; try again after expiry")
+        self.forget(session["session_id"])
+        self._records[session["session_id"]] = candidate
 
     def protect_public(self, value):
         """Reject active credential material before public validation or durable submission."""
@@ -115,8 +123,31 @@ class ModelSettings:
         self.purge()
         record = self._records.get(session["session_id"])
         server = generation.configuration() if record is None else None
+        # Unsafe legacy/operator metadata is withheld, not rewritten. Expiry and
+        # Forget still remove authority normally; no historical key denylist.
+        return screen_public_record(self._public_metadata(record, server, allowed), self.protect_public)
+
+    @staticmethod
+    def _public_metadata(record, server, allowed):
+        """Build detached metadata without mutating credentials or exposing endpoints."""
+        config = record if record is not None else server
+        profile = resolve_inference_profile(
+            (config or {}).get("model"),
+            ENDPOINTS.get(record["provider"]) if record is not None else (server or {}).get("base_url"),
+        )
         public = {
-            "providers": list(PROVIDERS),
+            "profile_catalogue_version": PROFILE_CATALOGUE_VERSION,
+            "profiles": inference_profile_catalogue(),
+            "effective_profile": (
+                {
+                    "id": profile["id"] if profile else None,
+                    "support": "documented" if profile else "unverified",
+                    "verification": "not_checked",
+                }
+                if config is not None
+                else None
+            ),
+            "providers": [dict(provider) for provider in PROVIDERS],
             "configured": record is not None or server is not None,
             "source": "session" if record else "server" if server else "none",
             "provider": record["provider"] if record else (server or {}).get("provider"),
@@ -126,9 +157,7 @@ class ModelSettings:
             "credential_ref": record["credential_ref"] if record else None,
             "session_keys_allowed": allowed,
         }
-        # Unsafe legacy/operator metadata is withheld, not rewritten. Expiry and
-        # Forget still remove authority normally; no historical key denylist.
-        return screen_public_record(public, self.protect_public)
+        return public
 
     def credential_expiry(self, session_id, credential_ref):
         """Return the exact original reference deadline, never replacement metadata."""

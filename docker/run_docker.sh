@@ -102,6 +102,11 @@ if [ "$CONTAINER_SUFFIX_EXPLICIT" = false ]; then
     [ -n "$derived" ] && CONTAINER_SUFFIX="-${derived}"
 fi
 
+# Always discover daemon RAM before any build/removal; inherited overrides are ignored.
+# Keep assignment separate from eval so a failed preflight stops this set -e script.
+RESOURCE_ENV=$(python3 "$SCRIPT_DIR/resource_limits.py")
+eval "$RESOURCE_ENV"
+
 # Display the values being used
 echo "Using Docker image: $DOCKER_IMAGE_NAME:$DOCKER_VERSION_TAG"
 
@@ -146,6 +151,9 @@ if [ "$( docker container inspect -f '{{.State.Running}}' $DOCKER_IMAGE_NAME'-'$
   docker exec -it $DOCKER_IMAGE_NAME-$DOCKER_VERSION_TAG$CONTAINER_SUFFIX su $(id -un)
 else
     DOCKER_RUN_ARGS=("--name" "$DOCKER_IMAGE_NAME-$DOCKER_VERSION_TAG$CONTAINER_SUFFIX"
+                    "--memory" "$ARENA_MEMORY_BYTES"
+                    "--memory-swap" "$ARENA_MEMORY_BYTES"
+                    "--pids-limit" "$ARENA_PIDS_LIMIT"
                     "--privileged"
                     "--ulimit" "memlock=-1"
                     "--ulimit" "stack=-1"

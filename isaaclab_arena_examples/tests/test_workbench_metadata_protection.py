@@ -236,6 +236,6 @@ def test_metadata_suite_selection_is_explicit_only_and_does_not_expand_defaults(
     assert selection([path]) == [path]
     assert not core_only([path])
     for invalid in ([path, path], [path + "::test_example"], ["-k"], ["--collect-only"],
-                    ["isaaclab_arena_examples/tests/test_workbench_model_settings.py"]):
+                    ["isaaclab_arena_examples/tests/test_workbench_unapproved_models.py"]):
         with pytest.raises(ValueError, match="Only unique approved"):
             selection(invalid)

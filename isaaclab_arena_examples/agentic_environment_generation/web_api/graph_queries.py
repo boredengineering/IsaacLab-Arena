@@ -7,6 +7,7 @@
 
 import asyncio
 import json
+import os
 import re
 import threading
 import time
@@ -183,7 +184,9 @@ class GraphQueryService:
         started = time.monotonic()
         projection = GraphProjection()
         with self.driver_factory() as driver:
-            with driver.session(default_access_mode="READ", fetch_size=200) as session:
+            with driver.session(
+                database=os.environ.get("NEO4J_DATABASE"), default_access_mode="READ", fetch_size=200
+            ) as session:
                 with session.begin_transaction(timeout=5) as transaction:
                     try:
                         summary = transaction.run("EXPLAIN " + query, params).consume()

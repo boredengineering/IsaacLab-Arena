@@ -205,7 +205,7 @@ def test_generation_worker_reads_config_envelope_and_suppresses_secret_output(mo
     assert json.loads(output.out) == (
         {"result": {"value": "safe"}}
         if outcome == "success"
-        else {"error": "Generation failed: check server model configuration, endpoint access, and draft validity"}
+        else {"error": {"schema_version": 1, "code": "internal_error", "stage": "worker_starting"}}
     )
 
 

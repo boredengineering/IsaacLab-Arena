@@ -111,6 +111,28 @@ class DiscoveryTests(unittest.TestCase):
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_preflight_allows_time_wait_but_refuses_live_listener(self):
+        runtime = load("runtime")
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            with socket.socket() as listener:
+                listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                listener.bind(("127.0.0.1", 0))
+                listener.listen(1)
+                port = listener.getsockname()[1]
+                with patch.object(runtime, "prepare"):
+                    with self.assertRaisesRegex(RuntimeError, "unavailable"):
+                        runtime.preflight(state, state / "api.sock", port)
+                with socket.create_connection(("127.0.0.1", port), timeout=2) as peer:
+                    connection, _ = listener.accept()
+                    connection.close()
+                    self.assertEqual(peer.recv(1), b"")
+            with socket.socket() as plain:
+                with self.assertRaises(OSError):
+                    plain.bind(("127.0.0.1", port))
+            with patch.object(runtime, "prepare"):
+                runtime.preflight(state, state / "api.sock", port)
+
     def test_api_child_uses_runtime_interpreter_not_an_early_exiting_shell_wrapper(self):
         runtime = load("runtime")
         command = runtime.inherited_api_command("/state", "/ipc/api.sock", "http://127.0.0.1:3001", True)
@@ -196,6 +218,92 @@ class RuntimeTests(unittest.TestCase):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_observation_and_stop_do_not_require_capacity_discovery(self):
+        tool = load("workbench")
+        config = dict(
+            host_root="/host/clone",
+            ipc_host="/host/ipc",
+            port=3010,
+            frontend_uid=1000,
+            frontend_gid=1234,
+            api_gid=1234,
+            project="arena-test",
+            dev=True,
+        )
+        for command in ("ps", "stop"):
+            with (
+                self.subTest(command=command),
+                patch.object(
+                    tool, "resource_environment", side_effect=RuntimeError("capacity unavailable")
+                ) as capacity,
+                patch.object(tool, "run", return_value="ok") as execute,
+            ):
+                self.assertEqual(tool.compose(config, command), "ok")
+                capacity.assert_not_called()
+                self.assertEqual(execute.call_args.kwargs["env"]["FRONTEND_MEMORY_BYTES"], "6291456")
+
+    def test_explicit_stop_attempts_api_cleanup_when_frontend_stop_fails(self):
+        tool = load("workbench")
+        with (
+            patch.object(tool, "compose", side_effect=RuntimeError("frontend stop failed")),
+            patch.object(tool, "runtime_call", return_value="stopped") as runtime,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "frontend stop failed"):
+                tool.lifecycle({}, "stop")
+            runtime.assert_called_once_with({}, "stop")
+
+    def test_start_rollback_attempts_api_cleanup_when_frontend_stop_fails(self):
+        tool = load("workbench")
+
+        def compose(config, command, *args):
+            if command in ("up", "stop"):
+                raise RuntimeError(f"{command} failed")
+            return ""
+
+        def runtime(config, command, **kwargs):
+            if command == "status":
+                return json.dumps({"owned": runtime_calls.call_count > 1, "healthy": True})
+            return ""
+
+        with (
+            patch.object(tool, "compose", side_effect=compose),
+            patch.object(tool, "runtime_call", side_effect=runtime) as runtime_calls,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "stop failed"):
+                tool.lifecycle({}, "start")
+            self.assertEqual(runtime_calls.call_args.args, ({}, "stop"))
+            self.assertTrue(any(call.args == ({}, "serve") for call in runtime_calls.call_args_list))
+
+    def test_launcher_overwrites_inherited_limits_with_fresh_daemon_budget(self):
+        tool = load("workbench")
+        config = dict(
+            host_root="/host/clone",
+            ipc_host="/host/ipc",
+            port=3010,
+            frontend_uid=1000,
+            frontend_gid=1234,
+            api_gid=1234,
+            project="arena-test",
+            dev=True,
+        )
+        budget = {"FRONTEND_MEMORY_BYTES": "4294967296", "FRONTEND_PIDS_LIMIT": "256"}
+        with (
+            patch.dict(os.environ, FRONTEND_MEMORY_BYTES="999999999999"),
+            patch.object(tool, "resource_environment", create=True, return_value=budget) as discover,
+            patch.object(tool, "run", return_value="configured") as execute,
+        ):
+            self.assertEqual(tool.compose(config, "config", "--quiet"), "configured")
+        discover.assert_called_once_with()
+        for key, value in budget.items():
+            self.assertEqual(execute.call_args.kwargs["env"][key], value)
+        with (
+            patch.object(tool, "resource_environment", create=True, side_effect=RuntimeError("no capacity")),
+            patch.object(tool, "run") as execute,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "no capacity"):
+                tool.compose(config, "config")
+            execute.assert_not_called()
+
     @unittest.skipUnless(shutil.which("docker"), "Docker Compose CLI required")
     def test_compose_resolves_only_frontend_loopback_and_narrow_mounts(self):
         env = dict(
@@ -207,6 +315,8 @@ class ConfigurationTests(unittest.TestCase):
             WORKBENCH_SOURCE_HOST="/host/clone/web/arena-workbench",
             WORKBENCH_HTTP_PORT="3333",
             COMPOSE_DISABLE_ENV_FILE="true",
+            FRONTEND_MEMORY_BYTES="4294967296",
+            FRONTEND_PIDS_LIMIT="256",
         )
         base = ["docker", "compose", "--env-file", "/dev/null", "-p", "arena-wb-test", "-f", str(ROOT / "compose.yaml")]
         for dev in (False, True):
@@ -221,6 +331,9 @@ class ConfigurationTests(unittest.TestCase):
             self.assertEqual(service["user"], "2001:2002")
             self.assertEqual(service["group_add"], ["1234"])
             self.assertTrue(service["read_only"])
+            self.assertEqual(int(service["mem_limit"]), 4294967296)
+            self.assertEqual(int(service["memswap_limit"]), 4294967296)
+            self.assertEqual(int(service["pids_limit"]), 256)
             mounts = {m["target"]: m for m in service["volumes"]}
             self.assertEqual(
                 set(mounts), {"/run/arena-api", "/app", "/app/node_modules"} if dev else {"/run/arena-api"}

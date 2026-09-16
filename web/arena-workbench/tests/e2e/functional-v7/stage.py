@@ -17,6 +17,12 @@ BACKEND_TESTS = (
     "isaaclab_arena_examples/tests/test_workbench_editor_revision_api.py",
 )
 EXPLICIT_BACKEND_TESTS = (
+    "isaaclab_arena_examples/tests/test_workbench_generation_diagnostics.py",
+    "isaaclab_arena/tests/test_spec_wire_adapter.py",
+    "isaaclab_arena/tests/test_spec_inference.py",
+    "isaaclab_arena/tests/test_inference_profiles.py",
+    "isaaclab_arena_examples/tests/test_workbench_model_settings.py",
+    "isaaclab_arena/tests/test_inference_backend.py",
     "isaaclab_arena_examples/tests/test_workbench_build.py",
     "isaaclab_arena_examples/tests/test_workbench_build_environment.py",
     "isaaclab_arena_examples/tests/test_workbench_evaluation_harness.py",
@@ -27,6 +33,7 @@ EXPLICIT_BACKEND_TESTS = (
     "isaaclab_arena_examples/tests/test_workbench_public_job_protection.py",
     "isaaclab_arena_examples/tests/test_workbench_metadata_protection.py",
     "isaaclab_arena_examples/tests/test_workbench_renewal_public_protection.py",
+    "isaaclab_arena_examples/tests/test_workbench_graph_queries.py",
 )
 FRONTEND = Path("web/arena-workbench")
 HARNESS = FRONTEND / "tests/e2e/functional-v7"
@@ -143,6 +150,9 @@ def stage(root, destination, browser, backend_tests=()):
         capture(FIXTURE)
         if backend_tests:
             capture(BACKEND_FIXTURE)
+        if "isaaclab_arena/tests/test_spec_wire_adapter.py" in backend_tests:
+            capture("isaaclab_arena_environments/robolab/tasks/banana_on_plate.yaml")
+            capture("isaaclab_arena_environments/robolab/scenes/bagel_plate_banana_bowl.yaml")
         for relative in source.files(HARNESS, {".py", ".mjs"}):
             capture(relative)
         if browser:

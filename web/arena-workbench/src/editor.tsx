@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRuntime } from './runtime';
 import type { ApiClient } from './api';
 import { ModelSettings, useModelSettings } from './model-settings';
+import { WorkflowReadiness } from './workflow-readiness';
 import { CodeEditor } from './code-editor';
 import { GraphHost, type GraphRolloutProps } from './graph-host';
 import { GenerationEvidence } from './generation-evidence';
@@ -352,8 +353,12 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
       && (exactRecovery || ownsIndexPermission()) && draftController.check(operation);
     setLoading(true);
     setError('');
+    // Descriptor opens issue fresh UUIDs. Recovery must retain the original
+    // view so the backend can verify its complete frozen include context.
+    const loadId = documentId.startsWith('editor-revision:') && recovery?.documentId === documentId
+      ? recovery.viewId : documentId;
     api
-      .get<EditorDocument>(`/editor/documents/${encodeURIComponent(documentId)}`)
+      .get<EditorDocument>(`/editor/documents/${encodeURIComponent(loadId)}`)
       .then(async (doc) => {
         if (!ownsLoad()) return;
         if (documentId.startsWith('research-version:') && recovery?.documentId === documentId && recovery.researchIdentity) {
@@ -553,6 +558,8 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
                 : 'No document loaded'}
         </span>
       </div>
+      {index.data?.capabilities.workflow_readiness === true && <WorkflowReadiness active={active}
+        providerRevision={`${modelSettings.status.data?.source ?? 'unknown'}:${modelSettings.credentialRef ?? ''}:${modelSettings.generationAvailable}`} />}
       {recovery && (
         <div className="notice warning" role="alert">
           <strong>Unsaved draft recovered from this tab</strong>

@@ -142,19 +142,23 @@ class ConfinedReadTests(unittest.TestCase):
 
 class StagingTests(unittest.TestCase):
     def test_backend_selection_adds_only_exact_test_closure_and_approved_fixture(self):
-        selected = "isaaclab_arena/tests/test_workbench_editor_revisions.py"
         fixture = "isaaclab_arena/tests/test_data/minimal_maple_table_env_graph.yaml"
-        self.put(selected, b"from isaaclab_arena.backend_helper import VALUE\n")
         self.put("isaaclab_arena/backend_helper.py", b"VALUE = 1\n")
         self.put("isaaclab_arena/tests/conftest.py", b"raise Exception('must not stage')\n")
         self.put("isaaclab_arena/tests/unapproved.py", b"raise Exception('must not stage')\n")
         self.put(fixture, b"env_name: synthetic\n")
-        manifest = staging.stage(self.root, self.destination, False, backend_tests=[selected])
-        self.assertIn(selected, manifest)
-        self.assertIn("isaaclab_arena/backend_helper.py", manifest)
-        self.assertIn(fixture, manifest)
-        self.assertNotIn("isaaclab_arena/tests/conftest.py", manifest)
-        self.assertNotIn("isaaclab_arena/tests/unapproved.py", manifest)
+        for index, selected in enumerate((
+                "isaaclab_arena/tests/test_workbench_editor_revisions.py",
+                "isaaclab_arena_examples/tests/test_workbench_graph_queries.py")):
+            with self.subTest(selected=selected):
+                self.put(selected, b"from isaaclab_arena.backend_helper import VALUE\n")
+                destination = self.base / f"stage-{index}"
+                manifest = staging.stage(self.root, destination, False, backend_tests=[selected])
+                self.assertIn(selected, manifest)
+                self.assertIn("isaaclab_arena/backend_helper.py", manifest)
+                self.assertIn(fixture, manifest)
+                self.assertNotIn("isaaclab_arena/tests/conftest.py", manifest)
+                self.assertNotIn("isaaclab_arena/tests/unapproved.py", manifest)
 
     def test_backend_selection_rejects_unapproved_paths_before_capture(self):
         for selected in (["../outside.py"], ["isaaclab_arena/tests/unapproved.py"], ["-p", "plugin"],

@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import os
+import runpy
 import subprocess
 import sys
 import threading
@@ -18,6 +19,7 @@ from pathlib import Path, PurePosixPath
 
 HERE = Path(__file__).resolve().parent
 LOCAL_ROOT = HERE.parent.parent
+resource_environment = runpy.run_path(str(HERE.parent / "resource_limits.py"))["resource_environment"]
 
 
 def run(command, **kwargs):
@@ -184,6 +186,12 @@ def discover(args):
 def compose(config, *command):
     """Run only this clone's frontend project; disable implicit .env reads."""
     env = dict(os.environ)
+    if command and command[0] in {"ps", "stop"}:
+        # Interpolation only: these commands cannot create/update container limits.
+        # Observation and cleanup must remain available if capacity discovery fails.
+        env.update(FRONTEND_MEMORY_BYTES="6291456", FRONTEND_PIDS_LIMIT="256")
+    else:
+        env.update(resource_environment())
     env.update({
         "COMPOSE_DISABLE_ENV_FILE": "true",
         "WORKBENCH_BUILD_CONTEXT": str(LOCAL_ROOT),
@@ -284,16 +292,18 @@ def operation_lock(config):
 
 
 def main():
-    """Expose read-only inspect/config/status and explicit start/stop lifecycle."""
+    """Expose read-only inspection and explicit start/stop/socket recovery."""
     parser = argparse.ArgumentParser(
         description=__doc__,
         epilog=(
             "inspect/config/status do not launch services. start launches only the frontend and UDS API; "
             "stop stops this clone's frontend and verified workbench-owned API supervisor, never Arena/Neo4j/GR00T. "
+            "recover removes only a proven stale owned API socket under all lifecycle leases; it starts no services "
+            "and never opens the job journal or resumes jobs. "
             "Run with the same identity/port/dev options for each lifecycle command. No .env files are read."
         ),
     )
-    parser.add_argument("action", choices=["inspect", "config", "start", "status", "stop"])
+    parser.add_argument("action", choices=["inspect", "config", "start", "status", "stop", "recover"])
     parser.add_argument("--runtime", help="Exact existing Arena container name or full ID")
     parser.add_argument("--host-root", help="Canonical host clone path if mount discovery is ambiguous")
     parser.add_argument("--api-user", help="Existing non-root account name or UID (default: unique /home account)")
@@ -314,6 +324,9 @@ def main():
     elif args.action == "status":
         print(runtime_call(config, "status"))
         print(compose(config, "ps", "--all"))
+    elif args.action == "recover":
+        # Recovery holds control.lock itself alongside the supervisor/backend/socket leases.
+        print(runtime_call(config, "recover"))
     else:
         with operation_lock(config):
             lifecycle(config, args.action)
@@ -322,8 +335,10 @@ def main():
 def lifecycle(config, action):
     """Start or stop only this workbench while its operation lock is held."""
     if action == "stop":
-        print(compose(config, "stop", "frontend"))
-        print(runtime_call(config, "stop"))
+        try:
+            print(compose(config, "stop", "frontend"))
+        finally:
+            print(runtime_call(config, "stop"))
         print(runtime_call(config, "status"))
     else:
         # Check ownership/collisions before building or launching. No automatic dependency start.
@@ -347,8 +362,10 @@ def lifecycle(config, action):
             print(compose(config, "up", "-d", "--no-deps", "--wait", "--wait-timeout", "90", "frontend"))
         except BaseException:
             # Never touch external services; leave durable job state and logs intact.
-            compose(config, "stop", "frontend")
-            runtime_call(config, "stop")
+            try:
+                compose(config, "stop", "frontend")
+            finally:
+                runtime_call(config, "stop")
             raise
         print(runtime_call(config, "status"))
         print(compose(config, "ps"))

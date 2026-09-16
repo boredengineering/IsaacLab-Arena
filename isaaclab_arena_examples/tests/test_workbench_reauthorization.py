@@ -53,10 +53,43 @@ def test_explicit_renewal_freezes_inputs_and_replays_without_configuration(tmp_p
         assert app.state.workflow_authorization.resolve(renewed)["config"] == configs[0]
         attempt = app.state.journal.claim_attempt(job["id"])
         assert attempt["generation"] == old["generation"] + 1
-        monkeypatch.setattr(generation, "configuration", lambda: pytest.fail("Replay read model"))
-        monkeypatch.setattr(graph_access, "configuration", lambda: pytest.fail("Replay read graph"))
-        assert client.post(url, headers=headers, json=body).json() == renewed
-        assert client.post(url, headers=headers, json={**body, "credential_ref": "a" * 64}).status_code == 409
+        # Current-policy scanning may observe absent server settings. Recovery
+        # must not resolve the original configuration or issue renewed authority.
+        monkeypatch.setattr(generation, "configuration", lambda: None)
+        monkeypatch.setattr(graph_access, "configuration", lambda: None)
+        policy_checks = []
+        protect_public = app.state.model_settings.protect_public
+
+        def current_policy(value):
+            policy_checks.append(True)
+            return protect_public(value)
+
+        with monkeypatch.context() as replay_patch:
+            replay_patch.setattr(
+                app.state.model_settings, "resolve", lambda *a, **k: pytest.fail("Replay resolved credentials")
+            )
+            replay_patch.setattr(
+                app.state.workflow_authorization, "resolve", lambda *a, **k: pytest.fail("Replay resolved workflow")
+            )
+            replay_patch.setattr(
+                app.state.workflow_authorization, "capture_renewal", lambda *a, **k: pytest.fail("Replay captured grants")
+            )
+            replay_patch.setattr(
+                app.state.workflow_authorization.grants, "issue", lambda *a, **k: pytest.fail("Replay issued grant")
+            )
+            replay_patch.setattr(
+                app.state.workflow_authorization.grants, "resolve", lambda *a, **k: pytest.fail("Replay resolved grant")
+            )
+            replay_patch.setattr(app.state.supervisor.wake, "set", lambda: pytest.fail("Replay woke dispatch"))
+            replay_patch.setattr(app.state.model_settings, "protect_public", current_policy)
+            before_replay = list(app.state.journal.db.iterdump())
+            replay = client.post(url, headers=headers, json=body)
+            assert replay.status_code == 202, replay.text
+            assert replay.json() == renewed
+            assert policy_checks, "Accepted recovery must still apply current response policy"
+            assert list(app.state.journal.db.iterdump()) == before_replay
+            assert client.post(url, headers=headers, json={**body, "credential_ref": "a" * 64}).status_code == 409
+            assert list(app.state.journal.db.iterdump()) == before_replay
     for path in tmp_path.rglob("*"):
         if path.is_file():
             for secret in (

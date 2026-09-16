@@ -12,7 +12,7 @@ import os
 import torch
 import tqdm
 from importlib import import_module
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import warp as wp
 
@@ -606,9 +606,25 @@ def list_variations(args_parser: argparse.ArgumentParser) -> None:
     print(arena_builder.get_variations_catalogue_as_string())
 
 
-def main():
+def main(
+    *,
+    on_evaluation_completed: Callable[[dict[str, Any]], None] | None = None,
+    publish_to_graph: bool = True,
+    telemetry_env_name: str | None = None,
+    update_lineage: bool = True,
+):
     """Run an IsaacLab Arena environment with a policy.
+
     Use --distributed with torchrun command for one process per GPU on multi-GPU machines. AppLauncher uses LOCAL_RANK for device.
+
+    Args:
+        on_evaluation_completed: Trusted Python-only rank-zero callback after environment
+            close and report creation, before report serving and potentially process-terminating
+            simulation shutdown. Receives paths, plain metrics, effective rollout budgets
+            (excluding settling), and static telemetry/lineage warning codes.
+        publish_to_graph: Publish telemetry to Neo4j; False keeps telemetry local only.
+        telemetry_env_name: Explicit telemetry identity; None retains CLI name resolution.
+        update_lineage: Update the legacy version ledger; False skips its imports and writes.
     """
     args_parser = get_isaaclab_arena_cli_parser()
     # We do this as the parser is shared between the example environment and policy runner
@@ -716,8 +732,9 @@ def main():
             ang_vel_thresh=getattr(args_cli, "settle_ang_vel_thresh", 1.0),
         )
 
+        plain_metrics = metrics_to_plain_python_types(metrics) if metrics is not None else None
         if metrics is not None:
-            print(f"[Rank {local_rank}/{world_size}] Metrics: {metrics_to_plain_python_types(metrics)}")
+            print(f"[Rank {local_rank}/{world_size}] Metrics: {plain_metrics}")
 
         # NOTE(huikang, 2025-12-30)Explicitly clean up the remote policy client / server.
         # Do NOT rely on a __del__ destructor in policy for this, since destructors are
@@ -732,54 +749,70 @@ def main():
         # Write and serve the evaluation report.
         # Only the local rank 0 writes/serves it, to avoid races on a shared output dir.
         if get_local_rank() == 0:
+            warnings = []
             if metrics is not None:
                 try:
                     from isaaclab_arena.evaluation.telemetry_to_prov import record_eval_telemetry_to_prov
 
-                    env_name = _resolve_telemetry_env_name(args_cli)
+                    env_name = (
+                        _resolve_telemetry_env_name(args_cli) if telemetry_env_name is None else telemetry_env_name
+                    )
                     policy_name = getattr(args_cli, "policy_type", None)
-                    plain_metrics = metrics_to_plain_python_types(metrics)
                     record_eval_telemetry_to_prov(
                         output_dir=output_dir,
                         env_name=env_name,
                         metrics=plain_metrics if isinstance(plain_metrics, dict) else {},
                         policy_name=policy_name,
+                        publish_to_graph=publish_to_graph,
                     )
 
                     # Auto-update EnvironmentVersionManager lineage ledger if inside versioned tree
-                    try:
-                        from isaaclab_arena.agentic_environment_generation.version_manager import (
-                            EnvironmentVersionManager,
-                        )
+                    if update_lineage:
+                        try:
+                            from isaaclab_arena.agentic_environment_generation.version_manager import (
+                                EnvironmentVersionManager,
+                            )
 
-                        yaml_arg = getattr(args_cli, "env_graph_spec_yaml", None)
-                        if yaml_arg:
-                            from pathlib import Path
+                            yaml_arg = getattr(args_cli, "env_graph_spec_yaml", None)
+                            if yaml_arg:
+                                from pathlib import Path
 
-                            p = Path(yaml_arg).resolve()
-                            if "generated_envs" in p.parts:
-                                idx = p.parts.index("generated_envs")
-                                if len(p.parts) > idx + 2 and p.parts[idx + 2].startswith("v"):
-                                    e_name = p.parts[idx + 1]
-                                    v_str = p.parts[idx + 2][1:]
-                                    if v_str.isdigit():
-                                        v_num = int(v_str)
-                                        vm = EnvironmentVersionManager(e_name)
-                                        vm.record_evaluation_metrics(
-                                            version=v_num,
-                                            metrics=plain_metrics if isinstance(plain_metrics, dict) else {},
-                                            eval_output_dir=output_dir,
-                                        )
-                                        print(
-                                            f"[policy_runner] 📜 Auto-updated lineage ledger for {e_name} v{v_num} with"
-                                            " evaluation metrics."
-                                        )
-                    except Exception as exc:
-                        print(f"Warning: Failed to update EnvironmentVersionManager lineage: {exc}")
+                                p = Path(yaml_arg).resolve()
+                                if "generated_envs" in p.parts:
+                                    idx = p.parts.index("generated_envs")
+                                    if len(p.parts) > idx + 2 and p.parts[idx + 2].startswith("v"):
+                                        e_name = p.parts[idx + 1]
+                                        v_str = p.parts[idx + 2][1:]
+                                        if v_str.isdigit():
+                                            v_num = int(v_str)
+                                            vm = EnvironmentVersionManager(e_name)
+                                            vm.record_evaluation_metrics(
+                                                version=v_num,
+                                                metrics=plain_metrics if isinstance(plain_metrics, dict) else {},
+                                                eval_output_dir=output_dir,
+                                            )
+                                            print(
+                                                f"[policy_runner] 📜 Auto-updated lineage ledger for {e_name} v{v_num}"
+                                                " with evaluation metrics."
+                                            )
+                        except Exception as exc:
+                            warnings.append("lineage_update_failed")
+                            print(f"Warning: Failed to update EnvironmentVersionManager lineage: {exc}")
                 except Exception as exc:
+                    warnings.append("telemetry_recording_failed")
                     print(f"Warning: Failed to record PROV-O telemetry: {exc}")
 
             report_path = build_report(output_dir)
+            if on_evaluation_completed is not None:
+                assert os.path.isfile(report_path), "Evaluation report is missing; cannot emit completion"
+                on_evaluation_completed({
+                    "output_dir": str(output_dir),
+                    "report_path": str(report_path),
+                    "metrics": plain_metrics,
+                    "num_steps": num_steps,
+                    "num_episodes": num_episodes,
+                    "warnings": warnings,
+                })
             if args_cli.serve_evaluation_report:
                 serve_until_ctrl_c(report_path.parent, args_cli.evaluation_report_port, report_path.name)
 

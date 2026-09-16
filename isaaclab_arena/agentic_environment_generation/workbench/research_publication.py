@@ -699,14 +699,17 @@ class PublicationAttempts:
         return None if row is None else json.loads(row[0])
 
     def _save(self, db, state, kind):
+        from .research_source import source_kind
+
         state = self._public(state)
         db.execute(
             "INSERT INTO publication_states VALUES (?,1,?) ON CONFLICT(effect_id) DO UPDATE SET body=excluded.body",
             (state["effect_id"], canonical_json(state)),
         )
         intent = self._intent(state["effect_id"])
-        source = self.registry.get_reservation(intent["reservation_id"])["source"]["job_id"]
-        self.journal._event(db, self.journal.get_job(source), kind)
+        source = self.registry.get_reservation(intent["reservation_id"])["source"]
+        if source_kind(source) == "accepted_candidate":
+            self.journal._event(db, self.journal.get_job(source["job_id"]), kind)
         return state
 
     def get_state(self, effect_id):

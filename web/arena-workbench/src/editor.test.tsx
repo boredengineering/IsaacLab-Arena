@@ -1,13 +1,419 @@
+import { createHash, webcrypto } from 'node:crypto';
+import { flushSync } from 'react-dom';
+import type { DraftController } from './draft-controller';
+import { AuthoredInspector } from './authored-inspector';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { EditorView as CodeMirrorView } from '@codemirror/view';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
-import { createMemoryHistory } from '@tanstack/react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { EditorView, type EditorViewProps } from './editor';
+import { RuntimeProvider } from './runtime';
+import { ThemeProvider } from './theme';
+import { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } from '@tanstack/react-router';
 import { App } from './app';
 import { ApiClient } from './api';
 import { PROVIDERS } from './model-settings-contracts';
+
 const response = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status });
 beforeEach(() => sessionStorage.clear());
+
+const noPort = () => null;
+const positionSource = '# untouched\nenv_name: reviewed_table\nembodiment: {id: robot, registry_name: franka}\nbackground:\n  id: desk\n  registry_name: table\n  params:\n    initial_pose:\n      position_xyz: [0.5, 0, 0] # meters\n      rotation_xyzw: [0, 0, 0, 1]\nobjects: []\nrelations: []\ntask: {composition: atomic, subtasks: [{kind: NoTask, params: {}}]}\n';
+const positionCandidate = positionSource.replace('[0.5, 0, 0]', '[1.25, 0, 0]');
+const positionHash = (text: string) => createHash('sha256').update(text).digest('hex');
+function positionProjection(text: string) {
+  const entries = [
+    {id: 'robot', registry_name: 'franka', role: 'embodiment', params: {}},
+    {id: 'desk', registry_name: 'table', role: 'background', params: {initial_pose: {position_xyz: [text === positionCandidate ? 1.25 : 0.5, 0, 0], rotation_xyzw: [0, 0, 0, 1]}}},
+  ];
+  const assets = entries.map(({role, ...properties}) => ({...properties, role, properties}));
+  return {...validation, source_hash: positionHash(text), assets, relations: [], reified_relations: [], tasks: [{kind: 'NoTask', params: {}}], graph: {nodes: [], edges: []}};
+}
+function positionServer() {
+  const base = editorServer();
+  const releases: ((r: Response) => void)[] = [];
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({...await (await base(url, init)).json(), documents: [{id: 'fixture', name: 'Fixture', source: 'tests/review.yaml'}, {id: 'other', name: 'Other', source: 'tests/other.yaml'}]});
+    if (url.includes('/editor/documents/')) return response({document_id: 'frozen-position', source: 'tests/review.yaml', yaml_text: positionSource, source_hash: positionHash(positionSource), validation: positionProjection(positionSource)});
+    if (url.endsWith('/editor/validate')) return new Promise<Response>(resolve => releases.push(resolve));
+    return base(url, init);
+  });
+  return {fetcher, releases};
+}
+function retainedChange(node: HTMLElement) {
+  const key = Object.keys(node).find(key => key.startsWith('__reactProps$'))!;
+  return (node as unknown as Record<string, {onChange: (event: {target: {value: string}}) => void}>)[key].onChange;
+}
+it.each(['Apply generated YAML', 'Discard stored backup'].flatMap(action =>
+  ['navigation', 'navigation ABA', 'session', 'client', 'input ABA', 'current'].map(boundary => ({action, boundary}))))('rechecks $action authority after confirmation changes $boundary', async ({action, boundary}) => {
+  const discard = action === 'Discard stored backup';
+  const key = 'arena.editor.draft.v1';
+  if (discard) sessionStorage.setItem(key, '{unreviewed backup');
+  const job = {id: 'generated-confirm', workspace_id: 'default', kind: 'generate', status: 'succeeded', stage: 'complete', created_at: 0, updated_at: 0, created_by_session_id: 's', error: null,
+    inputs: {operation: 'new'}, result: {yaml_text: positionCandidate, validation: positionProjection(positionCandidate)}};
+  if (!discard) sessionStorage.setItem('arena:editor:generate:v1', JSON.stringify({payload: {...job.inputs, idempotency_key: 'retained'}, job}));
+  const base = positionServer();
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (!discard && url.endsWith('/workspaces/default')) return response({id: 'default', name: 'Arena', event_cursor: 0, jobs: [job]});
+    if (url.endsWith('/jobs/generated-confirm')) return response(job);
+    return base.fetcher(url, init);
+  });
+  const view = mountPersistentEditor(fetcher);
+  await screen.findByRole('option', {name: 'Fixture'});
+  const controller = view.cache.getQueryData<DraftController>(['editor-draft'])!;
+  if (discard) {
+    fireEvent.change(screen.getByLabelText('Describe the environment and task'), {target: {value: 'keep unbound prompt'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Review stored backup'}));
+  } else await waitFor(() => expect(controller.getSnapshot().draft).toBe(positionSource));
+  const button = await screen.findByRole('button', {name: action});
+  let afterConfirmation = controller.getSnapshot(), bytes = sessionStorage.getItem(key);
+  const confirm = vi.spyOn(window, 'confirm').mockImplementation(() => {
+    if (boundary.startsWith('navigation')) {
+      flushSync(() => view.setProps({active: false}));
+      if (boundary.endsWith('ABA')) flushSync(() => view.setProps({active: true}));
+    }
+    if (boundary === 'session') view.api.session = {...view.api.session!};
+    if (boundary === 'client') flushSync(() => view.setApi(new ApiClient(fetcher as typeof fetch)));
+    if (boundary === 'input ABA') {
+      const change = retainedChange(screen.getByLabelText('Describe the environment and task'));
+      const original = controller.getSnapshot().prompt;
+      change({target: {value: 'intervening prompt'}}); change({target: {value: original}});
+    }
+    afterConfirmation = controller.getSnapshot(); bytes = sessionStorage.getItem(key);
+    return true;
+  });
+  fireEvent.click(button);
+  expect(confirm).toHaveBeenCalledTimes(1);
+  if (boundary === 'current') expect(controller.getSnapshot().revision).toBeGreaterThan(afterConfirmation.revision);
+  else {
+    expect(controller.getSnapshot().revision).toBe(afterConfirmation.revision);
+    expect(controller.getSnapshot().documentId).toBe(afterConfirmation.documentId);
+    expect(controller.getSnapshot().draft).toBe(afterConfirmation.draft);
+    expect(controller.getSnapshot().recovery).toBe(afterConfirmation.recovery);
+    expect(sessionStorage.getItem(key)).toBe(bytes);
+  }
+});
+
+it.each(['catalogue before', 'catalogue confirmation', 'navigation confirmation', 'session confirmation', 'client confirmation', 'current'])('fences legacy selection before and after confirmation: %s', async boundary => {
+  const {fetcher} = positionServer();
+  const view = mountPersistentEditor(fetcher);
+  const cm = () => CodeMirrorView.findFromDOM(screen.getByRole('textbox', {name: 'YAML editor'}))!;
+  await waitFor(() => expect(cm().state.doc.toString()).toBe(positionSource));
+  act(() => cm().dispatch({changes: {from: 0, to: cm().state.doc.length, insert: positionCandidate}}));
+  const select = retainedChange(screen.getByLabelText('Document'));
+  const controller = view.cache.getQueryData<DraftController>(['editor-draft'])!;
+  const query = view.cache.getQueryCache().find({queryKey: ['editor'], exact: false})!;
+  const invalidate = () => {void view.cache.invalidateQueries({queryKey: query.queryKey, refetchType: 'none'});};
+  const confirm = vi.spyOn(window, 'confirm').mockImplementation(() => {
+    if (boundary === 'catalogue confirmation') invalidate();
+    if (boundary === 'navigation confirmation') flushSync(() => view.setProps({active: false}));
+    if (boundary === 'session confirmation') view.api.session = {...view.api.session!};
+    if (boundary === 'client confirmation') flushSync(() => view.setApi(new ApiClient(fetcher as typeof fetch)));
+    return true;
+  });
+  act(() => {if (boundary === 'catalogue before') invalidate(); select({target: {value: 'other'}});});
+  expect(confirm).toHaveBeenCalledTimes(boundary === 'catalogue before' ? 0 : 1);
+  if (boundary === 'current') await waitFor(() => expect(controller.getSnapshot().loadedDocumentId).toBe('other'));
+  else {
+    expect(controller.getSnapshot().documentId).toBe('fixture');
+    expect(controller.getSnapshot().draft).toBe(positionCandidate);
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/documents/other'))).toHaveLength(0);
+  }
+});
+it('keeps automatic opt-out usable while current validation is pending and blocks fresh manual renders', async () => {
+  const base = positionServer();
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...await (await base.fetcher(url, init)).json(), capabilities: { snapshots: true } });
+    return base.fetcher(url, init);
+  });
+  mountPersistentEditor(fetcher, { layout: 'v7' });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Render snapshots' })).toBeEnabled());
+  const consent = screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' });
+  fireEvent.click(consent);
+  expect(consent).toBeChecked();
+  fireEvent.click(screen.getByRole('button', { name: 'Validate schema' }));
+  await waitFor(() => expect(base.releases).toHaveLength(1));
+  fireEvent.click(consent);
+  expect(consent).not.toBeChecked();
+  expect(screen.getByRole('button', { name: 'Render snapshots' })).toBeDisabled();
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/snapshots'))).toHaveLength(0);
+});
+it.each(['Scene camera', 'Image resolution', 'Camera for desk', 'Preview mode', 'draft'])(
+  'retires snapshot authority through the existing synchronous Editor %s epoch (same-turn ABA)', async label => {
+    const base = positionServer();
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/editor') return response({ ...await (await base.fetcher(url, init)).json(), capabilities: { snapshots: true } });
+      return base.fetcher(url, init);
+    });
+    mountPersistentEditor(fetcher, { layout: 'v7' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Render snapshots' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse generation' }));
+    const button = screen.getByRole('button', { name: 'Render snapshots' });
+    const props = Object.keys(button).find(key => key.startsWith('__reactProps$'))!;
+    const click = (button as unknown as Record<string, { onClick: () => void }>)[props].onClick;
+    fetcher.mockClear();
+    if (label === 'draft') {
+      const cm = CodeMirrorView.findFromDOM(screen.getByRole('textbox', { name: 'YAML editor' }))!;
+      act(() => {
+        cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: positionSource + '# B' } });
+        cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: positionSource } });
+        click();
+      });
+    } else {
+      const node = screen.getByLabelText(label) as HTMLSelectElement;
+      const original = node.value;
+      const other = Array.from(node.options).find(option => option.value && option.value !== original)!;
+      const change = retainedChange(node);
+      act(() => { change({ target: { value: other.value } }); change({ target: { value: original } }); click(); });
+    }
+    await act(async () => {});
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/session/activity') || url.endsWith('/editor/snapshots'))).toHaveLength(0);
+  },
+);
+it.each(['Document', 'Scene camera', 'Image resolution', 'Camera for desk', 'Preview mode'])('retires Editor authority synchronously before %s commits, including A→B→A', async label => {
+  const {fetcher} = positionServer();
+  const inspector = vi.fn((_props: Parameters<NonNullable<EditorViewProps['renderInspector']>>[0]) => null);
+  mountPersistentEditor(fetcher, {layout: 'v7', renderInspector: inspector});
+  await waitFor(() => expect(inspector.mock.calls.at(-1)?.[0].validation?.valid).toBe(true));
+  // Capture a committed control after the load effect's no-op checking update.
+  fireEvent.click(screen.getByRole('button', {name: 'Collapse generation'}));
+  const old = inspector.mock.calls.at(-1)![0].editing!;
+  expect(old.isCurrent()).toBe(true);
+  const node = screen.getByLabelText(label) as HTMLSelectElement;
+  const original = node.value;
+  const other = Array.from(node.options).find(option => option.value && option.value !== original)!;
+  const change = retainedChange(node);
+  act(() => {
+    change({target: {value: other.value}});
+    change({target: {value: original}});
+    expect(old.isCurrent()).toBe(false);
+    expect(old.onApply(positionCandidate)).toBe(false);
+  });
+  expect(CodeMirrorView.findFromDOM(screen.getByRole('textbox', {name: 'YAML editor'}))!.state.doc.toString()).toBe(positionSource);
+});
+it.each(['Restore draft', 'Apply generated YAML'])('retires position authority before %s replaces source bytes', async action => {
+  const base = positionServer();
+  const next = positionSource + '# replacement\n';
+  if (action === 'Restore draft') sessionStorage.setItem('arena.editor.draft.v1', JSON.stringify({version: 1, documentId: 'fixture', viewId: 'frozen-position', sourceHash: positionHash(positionSource), draft: next, prompt: ''}));
+  const generatedJob = {
+    id: 'generated-position', workspace_id: 'default', kind: 'generate', status: 'succeeded', stage: 'complete',
+    created_at: 0, updated_at: 0, created_by_session_id: 's', error: null,
+    inputs: {operation: 'refine', document_id: 'frozen-position', input_hash: positionHash(positionSource), base_yaml: positionSource},
+    result: {yaml_text: next, validation: positionProjection(next)},
+  };
+  if (action === 'Apply generated YAML') sessionStorage.setItem('arena:editor:generate:v1', JSON.stringify({payload: {...generatedJob.inputs, idempotency_key: 'retained'}, job: generatedJob}));
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (action === 'Apply generated YAML' && url.endsWith('/workspaces/default')) return response({id: 'default', name: 'Arena', event_cursor: 0, jobs: [generatedJob]});
+    if (url.endsWith('/jobs/generated-position')) return response(generatedJob);
+    return base.fetcher(url, init);
+  });
+  const inspector = vi.fn((_props: Parameters<NonNullable<EditorViewProps['renderInspector']>>[0]) => null);
+  mountPersistentEditor(fetcher, {layout: 'v7', renderInspector: inspector});
+  const button = await screen.findByRole('button', {name: action});
+  await waitFor(() => expect(inspector.mock.calls.at(-1)?.[0].validation?.valid).toBe(true));
+  fireEvent.click(screen.getByRole('button', {name: 'Collapse inspector'}));
+  const old = inspector.mock.calls.at(-1)![0].editing!;
+  expect(old.isCurrent()).toBe(true);
+  const key = Object.keys(button).find(key => key.startsWith('__reactProps$'))!;
+  const replace = (button as unknown as Record<string, {onClick: () => void}>)[key].onClick;
+  act(() => { replace(); expect(old.isCurrent()).toBe(false); expect(old.onApply(positionCandidate)).toBe(false); });
+  expect(CodeMirrorView.findFromDOM(screen.getByRole('textbox', {name: 'YAML editor'}))!.state.doc.toString()).toBe(next);
+});
+it.each(['same-turn draft ABA', 'same-turn validation', 'same-turn options ABA', 'same-turn document', 'session before render', 'active ABA', 'options ABA', 'unmount', 'backup replacement'] as const)('retires captured Editor apply callbacks after %s', async gate => {
+  const {fetcher} = positionServer();
+  const inspector = vi.fn((_props: Parameters<NonNullable<EditorViewProps['renderInspector']>>[0]) => null);
+  const props = {layout: 'v7' as const, renderInspector: inspector};
+  const view = mountPersistentEditor(fetcher, props);
+  await waitFor(() => expect(inspector.mock.calls.at(-1)?.[0].validation?.valid).toBe(true));
+  // Capture a committed control after the load effect's no-op checking update.
+  fireEvent.click(screen.getByRole('button', {name: 'Collapse generation'}));
+  const old = inspector.mock.calls.at(-1)![0].editing!;
+  expect(old.isCurrent()).toBe(true);
+  const cm = CodeMirrorView.findFromDOM(screen.getByRole('textbox', {name: 'YAML editor'}))!;
+  let applied: boolean | undefined;
+  if (gate === 'same-turn draft ABA') act(() => {
+    cm.dispatch({changes: {from: 0, to: cm.state.doc.length, insert: positionSource + '# B'}});
+    cm.dispatch({changes: {from: 0, to: cm.state.doc.length, insert: positionSource}});
+    applied = old.onApply(positionCandidate);
+  });
+  else if (gate === 'same-turn validation') act(() => {
+    fireEvent.click(screen.getByRole('button', {name: 'Validate schema'}));
+    applied = old.onApply(positionCandidate);
+  });
+  else if (gate === 'same-turn options ABA') act(() => {
+    fireEvent.change(screen.getByLabelText('Scene camera'), {target: {value: 'top'}});
+    fireEvent.change(screen.getByLabelText('Scene camera'), {target: {value: 'isometric'}});
+    applied = old.onApply(positionCandidate);
+  });
+  else if (gate === 'same-turn document') act(() => {
+    fireEvent.change(screen.getByLabelText('Document'), {target: {value: 'other'}});
+    applied = old.onApply(positionCandidate);
+  });
+  else {
+    if (gate === 'session before render') view.api.session = {...view.api.session!};
+    if (gate === 'active ABA') {view.setProps({...props, active: false}); view.setProps(props);}
+    if (gate === 'options ABA') {
+      fireEvent.change(screen.getByLabelText('Scene camera'), {target: {value: 'top'}});
+      fireEvent.change(screen.getByLabelText('Scene camera'), {target: {value: 'isometric'}});
+    }
+    if (gate === 'unmount') view.unmount();
+    if (gate === 'backup replacement') sessionStorage.setItem('arena.editor.draft.v1', JSON.stringify({version: 1, documentId: 'fixture', viewId: 'frozen-position', sourceHash: positionHash(positionSource), draft: 'sibling', prompt: ''}));
+    act(() => {applied = old.onApply(positionCandidate);});
+  }
+  expect(applied).toBe(false);
+  if (gate !== 'unmount') expect(cm.state.doc.toString()).toBe(positionSource);
+});
+it('wires V7 root proposal into the persistent raw draft only after exact review, then freshly validates the applied bytes', async () => {
+  vi.stubGlobal('crypto', webcrypto);
+  const {fetcher, releases} = positionServer();
+  const inspector = vi.fn((props: Parameters<NonNullable<EditorViewProps['renderInspector']>>[0]) => <AuthoredInspector {...props} />);
+  const view = mountPersistentEditor(fetcher, {layout: 'v7', renderInspector: inspector});
+  await screen.findByRole('combobox', {name: 'Authored asset'});
+  const yaml = screen.getByRole('textbox', {name: 'YAML editor'}); const cm = CodeMirrorView.findFromDOM(yaml)!;
+  fireEvent.change(screen.getByRole('combobox', {name: 'Authored asset'}), {target: {value: 'desk'}});
+  fireEvent.change(screen.getByLabelText('Proposed coordinate (m)'), {target: {value: '1.25'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Validate position proposal'}));
+  await waitFor(() => expect(releases).toHaveLength(1));
+  expect(cm.state.doc.toString()).toBe(positionSource);
+  expect(inspector.mock.calls.at(-1)![0].validation?.source_hash).toBe(positionHash(positionSource));
+  await act(async () => releases[0](response(positionProjection(positionCandidate))));
+  expect(cm.state.doc.toString()).toBe(positionSource);
+  fireEvent.click(screen.getByRole('checkbox', {name: 'I reviewed this exact source diff'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Apply reviewed position'}));
+  expect(cm.state.doc.toString()).toBe(positionCandidate);
+  expect(inspector.mock.calls.at(-1)![0].validation).toBeNull();
+  await waitFor(() => expect(releases).toHaveLength(2));
+  const posts = fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/validate'));
+  expect(posts.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
+    {yaml_text: positionCandidate, document_id: 'frozen-position'}, {yaml_text: positionCandidate, document_id: 'frozen-position'},
+  ]);
+  await act(async () => releases[1](response(positionProjection(positionCandidate))));
+  await waitFor(() => expect(inspector.mock.calls.at(-1)![0].validation?.source_hash).toBe(positionHash(positionCandidate)));
+  expect(CodeMirrorView.findFromDOM(yaml)).toBe(cm);
+  expect(screen.getByRole('button', {name: 'Download current YAML'})).toBeEnabled();
+  expect(fetcher.mock.calls.filter(([url]) => /generate|snapshots|\/save$|\/jobs$/.test(url))).toHaveLength(0);
+  view.unmount();
+});
+
+it.each([false, true])('actual App preserves raw download bytes and existing automatic-preview consent=%s through reviewed Apply', async automatic => {
+  vi.stubGlobal('crypto', webcrypto);
+  const base = positionServer();
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({...await (await base.fetcher(url, init)).json(), capabilities: {snapshots: true}});
+    if (url.includes('/editor/previews/')) {
+      const hash = url.split('/editor/previews/')[1].split('?')[0];
+      return response(hash === validation.canonical_hash ? {status: 'hit', canonical_hash: hash, receipt: {
+        canonical_hash: hash, cache_key: 'old-review', options: {view: 'isometric', resolution: 1024, asset_views: {}},
+        input_hash: 'old-input', warnings: ['Old render diagnostic retained'], assets: [], scene: {artifact_id: 'old-scene', url: '/api/editor/artifacts/old-scene'},
+      }} : {status: 'miss', canonical_hash: hash, receipt: null});
+    }
+    return base.fetcher(url, init);
+  });
+  const view = mountEditor(fetcher, '/?layout=v7');
+  await screen.findByRole('combobox', {name: 'Authored asset'});
+  const yaml = screen.getByRole('textbox', {name: 'YAML editor'});
+  const cm = CodeMirrorView.findFromDOM(yaml)!;
+  fireEvent.change(screen.getByLabelText('Describe the environment and task'), {target: {value: 'Keep my prompt'}});
+  fireEvent.change(screen.getByLabelText('Preview mode'), {target: {value: 'scene'}});
+  await screen.findAllByText('Old render diagnostic retained');
+  const consent = screen.getByRole('checkbox', {name: 'Automatic previews (GPU jobs)'});
+  if (automatic) fireEvent.click(consent);
+  fireEvent.change(screen.getByLabelText('Authored asset'), {target: {value: 'desk'}});
+  fireEvent.change(screen.getByLabelText('Proposed coordinate (m)'), {target: {value: '1.25'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Validate position proposal'}));
+  await waitFor(() => expect(base.releases).toHaveLength(1));
+  const checked = {...positionProjection(positionCandidate), canonical_hash: 'b'.repeat(64)};
+  await act(async () => base.releases[0](response(checked)));
+  expect(screen.getByText(/Existing automatic-preview consent is unchanged/)).toHaveTextContent('after fresh validation');
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/snapshots'))).toHaveLength(0);
+  fireEvent.click(screen.getByRole('checkbox', {name: 'I reviewed this exact source diff'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Apply reviewed position'}));
+  expect(cm.state.doc.toString()).toBe(positionCandidate);
+  expect(screen.getByText('Stale · draft changed since this render')).toBeInTheDocument();
+  expect(screen.getAllByText('Old render diagnostic retained').length).toBeGreaterThan(0);
+  expect(consent).toHaveProperty('checked', automatic);
+  const blobs: Blob[] = [];
+  vi.spyOn(URL, 'createObjectURL').mockImplementation(blob => {blobs.push(blob as Blob); return 'blob:raw-draft';});
+  const clicked = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  fireEvent.click(screen.getByRole('button', {name: 'Download current YAML'}));
+  expect(blobs).toHaveLength(1);
+  const bytes = await new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader(); reader.onload = () => resolve(reader.result as ArrayBuffer); reader.onerror = reject; reader.readAsArrayBuffer(blobs[0]);
+  });
+  expect(Array.from(new Uint8Array(bytes))).toEqual(Array.from(new TextEncoder().encode(positionCandidate)));
+  expect(clicked.mock.instances[0]).toHaveProperty('download', 'arena-draft.yaml');
+  await waitFor(() => expect(base.releases).toHaveLength(2));
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/validate')).map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
+    {yaml_text: positionCandidate, document_id: 'frozen-position'}, {yaml_text: positionCandidate, document_id: 'frozen-position'},
+  ]);
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/snapshots'))).toHaveLength(0);
+  await act(async () => base.releases[1](response(checked)));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 1800)); });
+  const jobs = fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/snapshots'));
+  expect(jobs).toHaveLength(automatic ? 1 : 0);
+  if (automatic) expect(JSON.parse(String(jobs[0][1]?.body))).toMatchObject({yaml_text: positionCandidate, document_id: 'frozen-position'});
+  expect(screen.getByRole('textbox', {name: 'YAML editor'})).toBe(yaml);
+  expect(CodeMirrorView.findFromDOM(yaml)).toBe(cm);
+  expect(screen.getByLabelText('Describe the environment and task')).toHaveValue('Keep my prompt');
+  expect(fetcher.mock.calls.filter(([url]) => /generate|\/save$|\/jobs$/.test(url))).toHaveLength(0);
+  view.unmount();
+});
+function mountPersistentEditor(fetcher = editorServer(), initial: EditorViewProps = {}) {
+  const api = new ApiClient(fetcher as typeof fetch);
+  let runtimeApi = api;
+  let editorMounted = true;
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory() });
+  const tree = (props: EditorViewProps) => <RouterContextProvider router={router}><QueryClientProvider client={cache}><ThemeProvider><RuntimeProvider api={runtimeApi} makePort={noPort}>
+    {editorMounted && <EditorView {...props} />}
+  </RuntimeProvider></ThemeProvider></QueryClientProvider></RouterContextProvider>;
+  const view = render(tree(initial));
+  return { ...view, api, cache, setProps: (props: EditorViewProps) => view.rerender(tree(props)),
+    setEditorMounted: (mounted: boolean) => { editorMounted = mounted; view.rerender(tree(initial)); },
+    setApi: (client: ApiClient) => { runtimeApi = client; view.rerender(tree(initial)); } };
+}
+
+it('keeps one real YAML and snapshot surface across V7 collapse, expansion and legacy fallback', async () => {
+  const base = editorServer();
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { generation_modes: true } });
+    if (url.includes('/editor/previews/')) return response({ status: 'hit', canonical_hash: validation.canonical_hash, receipt: {
+      canonical_hash: validation.canonical_hash, cache_key: 'actual-catalogue', options: { view: 'isometric', resolution: 1024, asset_views: {} },
+      input_hash: 'hash', warnings: [], assets: [{ id: 'table', artifact_id: 'actual-table', url: '/api/editor/artifacts/actual-table' }], scene: null,
+    } });
+    return base(url, init);
+  });
+  const inspector = vi.fn(({ validation: value, onFocusSpecification }: Parameters<NonNullable<EditorViewProps['renderInspector']>>[0]) =>
+    <div><span>{value?.spec?.env_name as string}</span><button onClick={onFocusSpecification}>Focus specification</button></div>);
+  const view = mountPersistentEditor(fetcher, { layout: 'v7', renderInspector: inspector });
+  const image = await screen.findByRole('img', { name: 'table snapshot' });
+  const yaml = screen.getByRole('textbox', { name: 'YAML editor' });
+  const cm = CodeMirrorView.findFromDOM(yaml)!;
+  fireEvent.change(screen.getByLabelText('Describe the environment and task'), { target: { value: 'Retained prompt' } });
+  fireEvent.change(screen.getByLabelText('Retrieval policy'), { target: { value: 'require_service' } });
+  fireEvent.click(screen.getByLabelText('Refine current environment'));
+  fireEvent.click(screen.getByRole('button', { name: 'Collapse generation' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Collapse specification' }));
+  expect(yaml).not.toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Expand viewport' }));
+  expect(image).toBeVisible();
+  expect(screen.getByRole('img', { name: 'table snapshot' })).toBe(image);
+  fireEvent.click(screen.getByRole('button', { name: 'Restore panels' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Focus specification' }));
+  await waitFor(() => expect(yaml).toHaveFocus());
+  view.setProps({ layout: 'legacy', renderInspector: inspector });
+  expect(screen.getByRole('textbox', { name: 'YAML editor' })).toBe(yaml);
+  expect(CodeMirrorView.findFromDOM(yaml)).toBe(cm);
+  expect(screen.getByLabelText('Describe the environment and task')).toHaveValue('Retained prompt');
+  expect(screen.getByLabelText('Refine current environment')).toBeChecked();
+  fireEvent.click(screen.getByLabelText('New environment from prompt'));
+  expect(screen.getByLabelText('Retrieval policy')).toHaveValue('require_service');
+  view.setProps({ layout: 'v7', renderInspector: inspector });
+  expect(screen.getByRole('button', { name: 'Expand generation' })).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: 'table snapshot' })).toBe(image);
+  expect(inspector.mock.calls.at(-1)?.[0].validation).toEqual(validation);
+  expect(fetcher.mock.calls.filter(([url]) => /generate|snapshots|\/save$/.test(url))).toHaveLength(0);
+});
 const validation = {
   valid: true,
   source_hash: 'hash',
@@ -28,6 +434,534 @@ const validation = {
   reified_relations: [],
   tasks: [{ kind: 'Pick', description: 'Pick an object' }],
 };
+it('retires inactive authoring reads, validation, media and credential entry without losing controls', async () => {
+  const base = editorServer();
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { generation_modes: true, snapshots: true } });
+    if (url === '/api/model-settings') return response({ providers: PROVIDERS, configured: false, source: 'none', provider: null, model: null,
+      credential_ref: null, expires_at: null, session_keys_allowed: true });
+    if (url.includes('/editor/previews/')) return response({ status: 'miss', canonical_hash: validation.canonical_hash, receipt: null });
+    return base(url, init);
+  });
+  const view = mountPersistentEditor(fetcher, { layout: 'v7', active: false });
+  await waitFor(() => expect(view.api.session).not.toBeNull());
+  expect(fetcher.mock.calls.filter(([url]) => /\/editor(?:$|\/)|\/model-settings$/.test(url))).toHaveLength(0);
+  view.setProps({ layout: 'v7', active: true });
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const yaml = screen.getByRole('textbox', { name: 'YAML editor' });
+  const cm = CodeMirrorView.findFromDOM(yaml)!;
+  fireEvent.change(screen.getByLabelText('Describe the environment and task'), { target: { value: 'Keep prompt' } });
+  fireEvent.click(screen.getByLabelText('Refine current environment'));
+  fireEvent.change(screen.getByLabelText('Scene camera'), { target: { value: 'top' } });
+  fireEvent.change(screen.getByLabelText('Image resolution'), { target: { value: '512' } });
+  fireEvent.change(screen.getByLabelText('Camera for table'), { target: { value: 'front' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: /I consent/ }));
+  const password = screen.getByLabelText('API key');
+  fireEvent.change(password, { target: { value: 'dummy-inactive-secret' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' }));
+  act(() => cm.dispatch({ changes: { from: cm.state.doc.length, insert: '\n# retained inactive edit' } }));
+  view.setProps({ layout: 'v7', active: false });
+  expect(view.container.querySelector('#workspace')).toBeNull();
+  expect(yaml).not.toBeVisible();
+  expect(password).not.toBeInTheDocument();
+  expect(password).toHaveValue('');
+  expect(view.container.querySelector('img')).toBeNull();
+  expect(view.container.querySelector('[data-node="table"]')).toBeNull();
+  const reads = fetcher.mock.calls.filter(([url]) => /\/editor(?:$|\/)/.test(url)).length;
+  await act(async () => { await view.cache.invalidateQueries({ queryKey: ['preview-catalogue'] }); await new Promise(resolve => setTimeout(resolve, 1800)); });
+  expect(fetcher.mock.calls.filter(([url]) => /\/editor(?:$|\/)/.test(url))).toHaveLength(reads);
+  view.setProps({ layout: 'legacy', active: true });
+  expect(screen.getByRole('textbox', { name: 'YAML editor' })).toBe(yaml);
+  expect(screen.getByLabelText('Describe the environment and task')).toHaveValue('Keep prompt');
+  expect(screen.getByLabelText('Refine current environment')).toBeChecked();
+  expect(screen.getByLabelText('Scene camera')).toHaveValue('top');
+  expect(screen.getByLabelText('Image resolution')).toHaveValue('512');
+  expect(screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' })).not.toBeChecked();
+  expect(screen.getByLabelText('API key')).toHaveValue('');
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  expect(screen.getByLabelText('Camera for table')).toHaveValue('front');
+  expect(fetcher.mock.calls.filter(([url]) => /generate|snapshots|\/save$/.test(url))).toHaveLength(0);
+});
+
+it('retires inspector bindings and manual validation callbacks across inactive and A-to-B-to-A drafts', async () => {
+  const base = editorServer();
+  let release: ((value: Response) => void) | undefined;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/editor/validate')) return new Promise<Response>(resolve => { release = resolve; });
+    return base(url, init);
+  });
+  const inspector = vi.fn((props: Parameters<NonNullable<EditorViewProps['renderInspector']>>[0]) =>
+    <button onClick={props.onFocusSpecification}>Focus specification</button>);
+  const props = { layout: 'v7' as const, renderInspector: inspector };
+  const view = mountPersistentEditor(fetcher, props);
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const yaml = screen.getByRole('textbox', { name: 'YAML editor' });
+  const cm = CodeMirrorView.findFromDOM(yaml)!;
+  const original = cm.state.doc.toString();
+  const oldBinding = inspector.mock.calls.at(-1)![0];
+  act(() => cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: 'env_name: B' } }));
+  act(() => cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: original } }));
+  expect(inspector.mock.calls.at(-1)![0].bindingKey).not.toBe(oldBinding.bindingKey);
+  fireEvent.click(screen.getByRole('button', { name: 'Collapse specification' }));
+  act(() => oldBinding.onFocusSpecification());
+  expect(yaml).not.toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Expand specification' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Validate schema' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Validate schema' }));
+  await waitFor(() => expect(release).toBeDefined());
+  view.setProps({ ...props, active: false });
+  expect(inspector.mock.calls.at(-1)![0].validation).toBeNull();
+  view.setProps({ ...props, active: true });
+  await act(async () => { release!(response({ ...validation, valid: false, errors: ['obsolete validation'], summary: 'obsolete validation' })); });
+  expect(screen.queryByText('obsolete validation')).not.toBeInTheDocument();
+  expect(screen.getByText('Schema valid')).toBeInTheDocument();
+  expect(inspector.mock.calls.at(-1)![0].bindingKey).not.toBe(oldBinding.bindingKey);
+});
+
+it('withholds a reused-session projection immediately and revalidates the retained frozen source', async () => {
+  const base = editorServer();
+  let release: ((value: Response) => void) | undefined;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { snapshots: true } });
+    if (url.endsWith('/editor/validate')) return new Promise<Response>(resolve => { release = resolve; });
+    return base(url, init);
+  });
+  const inspector = vi.fn((_props: Parameters<NonNullable<EditorViewProps['renderInspector']>>[0]) => null);
+  const props = { layout: 'v7' as const, renderInspector: inspector };
+  const view = mountPersistentEditor(fetcher, props);
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const yaml = screen.getByRole('textbox', { name: 'YAML editor' });
+  const cm = CodeMirrorView.findFromDOM(yaml)!;
+  const before = inspector.mock.calls.at(-1)![0];
+  view.api.session = { ...view.api.session! };
+  view.setProps(props);
+  expect(inspector.mock.calls.at(-1)![0].validation).toBeNull();
+  expect(inspector.mock.calls.at(-1)![0].bindingKey).not.toBe(before.bindingKey);
+  expect(screen.getByRole('button', { name: 'Save revision' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Render snapshots' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: 'Inspect Table' })).not.toBeInTheDocument();
+  await waitFor(() => expect(release).toBeDefined());
+  expect(fetcher.mock.calls.filter(([url]) => url.includes('/editor/documents/'))).toHaveLength(1);
+  expect(JSON.parse(String(fetcher.mock.calls.find(([url]) => url.endsWith('/editor/validate'))![1]?.body)))
+    .toEqual({ yaml_text: 'env_name: real_document', document_id: 'frozen-fixture' });
+  await act(async () => release!(response(validation)));
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  expect(inspector.mock.calls.at(-1)![0].validation).toEqual(validation);
+  expect(CodeMirrorView.findFromDOM(yaml)).toBe(cm);
+  expect(fetcher.mock.calls.filter(([url]) => /generate|snapshots|\/save$/.test(url))).toHaveLength(0);
+});
+
+it.each(['before', 'after'] as const)('rejects retired validation success/error %s replacement rerender', async timing => {
+  const base = editorServer();
+  const releases: ((value: Response) => void)[] = [];
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/editor/validate')) return new Promise<Response>(resolve => { releases.push(resolve); });
+    return base(url, init);
+  });
+  const view = mountPersistentEditor(fetcher);
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  for (const status of [200, 503]) {
+    fireEvent.click(screen.getByRole('button', { name: 'Validate schema' }));
+    await waitFor(() => expect(releases.length).toBeGreaterThan(0));
+    const retained = view.cache.getQueryData<{ validation: unknown }>(['editor-draft'])!.validation;
+    view.api.session = { ...view.api.session! };
+    if (timing === 'after') view.setProps({});
+    await act(async () => releases.shift()!(response(status === 200
+      ? { ...validation, summary: 'retired success' } : { detail: 'retired error' }, status)));
+    expect(view.cache.getQueryData<{ validation: unknown }>(['editor-draft'])!.validation).toBe(retained);
+    expect(screen.queryByText('retired error')).not.toBeInTheDocument();
+    view.setProps({});
+    await waitFor(() => expect(releases.length).toBe(1));
+    await act(async () => releases.shift()!(response(validation)));
+    await screen.findByRole('button', { name: 'Inspect Table' });
+  }
+});
+
+it('rejects retained inspector focus and manual validate before replacement rerender', async () => {
+  const fetcher = editorServer();
+  const inspector = vi.fn((_props: Parameters<NonNullable<EditorViewProps['renderInspector']>>[0]) => null);
+  const view = mountPersistentEditor(fetcher, { layout: 'v7', renderInspector: inspector });
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const yaml = screen.getByRole('textbox', { name: 'YAML editor' });
+  const oldBinding = inspector.mock.calls.at(-1)![0];
+  fireEvent.click(screen.getByRole('button', { name: 'Collapse specification' }));
+  view.api.session = { ...view.api.session! };
+  act(() => oldBinding.onFocusSpecification());
+  expect(yaml).not.toBeVisible();
+  // A retained DOM handler must not dispatch against the replacement session either.
+  fireEvent.click(screen.getByRole('button', { name: 'Validate schema', hidden: true }));
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/validate'))).toHaveLength(0);
+});
+
+it.each([
+  ['before', 200], ['before', 503], ['after', 200], ['after', 503],
+] as const)('rejects a retired source load %s replacement rerender (HTTP %s)', async (timing, status) => {
+  const base = editorServer();
+  const releases: ((value: Response) => void)[] = [];
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/editor/documents/')) return new Promise<Response>(resolve => { releases.push(resolve); });
+    return base(url, init);
+  });
+  const view = mountPersistentEditor(fetcher);
+  await waitFor(() => expect(releases).toHaveLength(1));
+  view.api.session = { ...view.api.session! };
+  if (timing === 'after') view.setProps({});
+  await act(async () => releases.shift()!(status === 200
+    ? response({ ...(await (await base('/api/editor/documents/fixture')).json()), yaml_text: 'env_name: retired_source' })
+    : response({ detail: 'retired load error' }, status)));
+  expect(view.cache.getQueryData<{ draft: string }>(['editor-draft'])!.draft).toBe('');
+  expect(screen.queryByText('retired load error')).not.toBeInTheDocument();
+  view.setProps({});
+  await waitFor(() => expect(releases, JSON.stringify({ cached: view.cache.getQueryData(['editor-draft']),
+    generation: view.api.sessionGeneration, session: view.api.session?.session_id, calls: fetcher.mock.calls.map(([url]) => url),
+    status: view.container.querySelector('.document-bar')?.textContent })).toHaveLength(1));
+  expect(screen.getByRole('combobox', { name: 'Document' })).toBeDisabled();
+  await act(async () => releases.shift()!(await base('/api/editor/documents/fixture')));
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  expect(screen.getByRole('textbox', { name: 'YAML editor' })).toHaveTextContent('env_name: real_document');
+  expect(screen.getByRole('combobox', { name: 'Document' })).toBeEnabled();
+  expect(fetcher.mock.calls.filter(([url]) => url.includes('/editor/documents/'))).toHaveLength(2);
+});
+
+it('withholds validation when the ApiClient changes even with identical session ID and generation', async () => {
+  const base = editorServer();
+  let releaseOld: ((value: Response) => void) | undefined;
+  const oldFetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/editor/validate')) return new Promise<Response>(resolve => { releaseOld = resolve; });
+    return base(url, init);
+  });
+  const inspector = vi.fn((_props: Parameters<NonNullable<EditorViewProps['renderInspector']>>[0]) => null);
+  const view = mountPersistentEditor(oldFetcher, { layout: 'v7', renderInspector: inspector });
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const yaml = screen.getByRole('textbox', { name: 'YAML editor' });
+  const oldBinding = inspector.mock.calls.at(-1)![0];
+  fireEvent.click(screen.getByRole('button', { name: 'Validate schema' }));
+  await waitFor(() => expect(releaseOld).toBeDefined());
+  const releases: ((value: Response) => void)[] = [];
+  const replacementFetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/editor/validate')) return new Promise<Response>(resolve => { releases.push(resolve); });
+    return base(url, init);
+  });
+  const replacement = new ApiClient(replacementFetcher as typeof fetch);
+  await replacement.connect();
+  expect(replacement.sessionGeneration).toBe(view.api.sessionGeneration);
+  view.setApi(replacement);
+  expect(inspector.mock.calls.at(-1)![0].validation).toBeNull();
+  expect(inspector.mock.calls.at(-1)![0].bindingKey).not.toBe(oldBinding.bindingKey);
+  expect(screen.getByRole('button', { name: 'Save revision' })).toBeDisabled();
+  await act(async () => releaseOld!(response({ ...validation, summary: 'retired client result' })));
+  expect(JSON.stringify(view.cache.getQueryData(['editor-draft']))).not.toContain('retired client result');
+  await waitFor(() => expect(releases).toHaveLength(1));
+  expect(replacementFetcher.mock.calls.filter(([url]) => url.includes('/editor/documents/'))).toHaveLength(0);
+  expect(JSON.parse(String(replacementFetcher.mock.calls.find(([url]) => url.endsWith('/editor/validate'))![1]?.body)))
+    .toEqual({ yaml_text: 'env_name: real_document', document_id: 'frozen-fixture' });
+  await act(async () => releases.shift()!(response(validation)));
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  expect(screen.getByRole('textbox', { name: 'YAML editor' })).toBe(yaml);
+});
+
+it('preserves source and validation ownership through ordinary activity deadline extension', async () => {
+  const base = editorServer();
+  const loads: ((value: Response) => void)[] = [];
+  const validations: ((value: Response) => void)[] = [];
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/editor/documents/')) return new Promise<Response>(resolve => loads.push(resolve));
+    if (url.endsWith('/editor/validate')) return new Promise<Response>(resolve => validations.push(resolve));
+    if (url.endsWith('/session/activity')) return response({ session_id: 's', csrf_token: 'csrf', expires_at: 99999999999 });
+    return base(url, init);
+  });
+  const inspector = vi.fn((_props: Parameters<NonNullable<EditorViewProps['renderInspector']>>[0]) => null);
+  const props = { layout: 'v7' as const, renderInspector: inspector };
+  const view = mountPersistentEditor(fetcher, props);
+  await waitFor(() => expect(loads).toHaveLength(1));
+  const generation = view.api.sessionGeneration;
+  const originalSession = view.api.session;
+  await act(async () => { await view.api.activity(); });
+  expect(view.api.session).not.toBe(originalSession);
+  expect(view.api.sessionGeneration).toBe(generation);
+  view.setProps(props);
+  await act(async () => loads.shift()!(await base('/api/editor/documents/fixture')));
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const binding = inspector.mock.calls.at(-1)![0];
+  const retained = view.cache.getQueryData<{ validation: unknown }>(['editor-draft'])!.validation;
+  fireEvent.click(screen.getByRole('button', { name: 'Validate schema' }));
+  await waitFor(() => expect(validations).toHaveLength(1));
+  await act(async () => { await view.api.activity(); });
+  view.setProps({ ...props, layout: 'legacy' });
+  expect(inspector.mock.calls.at(-1)![0].bindingKey).toBe(binding.bindingKey);
+  expect(inspector.mock.calls.at(-1)![0].validation).toEqual(validation);
+  expect(view.cache.getQueryData<{ validation: unknown }>(['editor-draft'])!.validation).toBe(retained);
+  await act(async () => validations.shift()!(response({ ...validation, summary: 'current activity result' })));
+  await screen.findAllByText('current activity result');
+  view.setProps({ ...props, active: false });
+  expect(inspector.mock.calls.at(-1)![0].validation).toBeNull();
+  view.setProps(props);
+  expect(inspector.mock.calls.at(-1)![0].validation?.summary).toBe('current activity result');
+  expect(fetcher.mock.calls.filter(([url]) => url.includes('/editor/documents/'))).toHaveLength(1);
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/validate'))).toHaveLength(1);
+});
+
+it('retains cached controller validation on same-client remount but revalidates a replacement generation', async () => {
+  const fetcher = editorServer();
+  const inspector = vi.fn((_props: Parameters<NonNullable<EditorViewProps['renderInspector']>>[0]) => null);
+  const view = mountPersistentEditor(fetcher, { layout: 'legacy', renderInspector: inspector });
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const retained = view.cache.getQueryData<{ validation: unknown }>(['editor-draft'])!.validation;
+  fireEvent.change(screen.getByLabelText('Describe the environment and task'), { target: { value: 'cached prompt' } });
+  view.setEditorMounted(false);
+  view.setEditorMounted(true);
+  expect(inspector.mock.calls.at(-1)![0].validation).toEqual(validation);
+  expect(view.cache.getQueryData<{ validation: unknown }>(['editor-draft'])!.validation).toBe(retained);
+  expect(screen.getByLabelText('Describe the environment and task')).toHaveValue('cached prompt');
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/validate'))).toHaveLength(0);
+  view.setEditorMounted(false);
+  view.api.session = { ...view.api.session! };
+  view.setEditorMounted(true);
+  expect(inspector.mock.calls.at(-1)![0].validation).toBeNull();
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  expect(fetcher.mock.calls.filter(([url]) => url.includes('/editor/documents/'))).toHaveLength(1);
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/validate'))).toHaveLength(1);
+});
+
+it.each(['session', 'client'] as const)('retires automatic authority on same-ID %s replacement without retiring an accepted job or draft', async mode => {
+  const base = editorServer();
+  const job = { id: 'accepted-auto', kind: 'snapshots', workspace_id: 'default', status: 'running', stage: 'accepted render is observed',
+    inputs: {}, result: null, error: null, created_at: 0, updated_at: 0, created_by_session_id: 's' };
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { snapshots: true } });
+    if (url.endsWith('/editor/snapshots')) return response(job);
+    if (url.endsWith('/jobs/accepted-auto')) return response(job);
+    return base(url, init);
+  });
+  const view = mountPersistentEditor(fetcher, { layout: 'v7' });
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const yaml = screen.getByRole('textbox', { name: 'YAML editor' });
+  const cm = CodeMirrorView.findFromDOM(yaml)!;
+  act(() => cm.dispatch({ changes: { from: cm.state.doc.length, insert: '\n# retained through authority retirement' } }));
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  fireEvent.change(screen.getByLabelText('Describe the environment and task'), { target: { value: 'Retain this prompt' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' }));
+  fireEvent.change(screen.getByLabelText('Scene camera'), { target: { value: 'top' } });
+  await screen.findByText('accepted render is observed', {}, { timeout: 4000 });
+  await screen.findByText(/1 \/ 3 automatic jobs used this enable/);
+  const retained = sessionStorage.getItem('arena:editor:snapshots:v1');
+  const validationsBefore = fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/validate')).length;
+  if (mode === 'session') {
+    view.api.session = { ...view.api.session! };
+    view.setProps({ layout: 'legacy' });
+  } else {
+    const replacement = new ApiClient(fetcher as typeof fetch);
+    await replacement.connect();
+    expect(replacement.sessionGeneration).toBe(view.api.sessionGeneration);
+    // Keep this case about equal-generation client replacement, not a second
+    // session established by RuntimeProvider's connection effect.
+    vi.spyOn(replacement, 'connect').mockResolvedValue(replacement.session!);
+    view.setApi(replacement);
+  }
+  expect(screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' })).not.toBeChecked();
+  expect(screen.getByText(/0 \/ 3 automatic jobs used this enable/)).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'YAML editor' })).toBe(yaml);
+  expect(CodeMirrorView.findFromDOM(yaml)).toBe(cm);
+  expect(cm.state.doc.toString()).toContain('# retained through authority retirement');
+  expect(screen.getByLabelText('Describe the environment and task')).toHaveValue('Retain this prompt');
+  expect(sessionStorage.getItem('arena:editor:snapshots:v1')).toBe(retained);
+  expect(screen.getByText('accepted render is observed')).toBeInTheDocument();
+  const readsBefore = fetcher.mock.calls.filter(([url]) => url.endsWith('/jobs/accepted-auto')).length;
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh job status' }));
+  await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/jobs/accepted-auto')).length).toBeGreaterThan(readsBefore));
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/validate')).length).toBeGreaterThan(validationsBefore));
+  expect(JSON.parse(String(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/validate')).at(-1)![1]?.body)))
+    .toEqual({ yaml_text: cm.state.doc.toString(), document_id: 'frozen-fixture' });
+  expect(fetcher.mock.calls.filter(([url]) => url.includes('/editor/documents/'))).toHaveLength(1);
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/snapshots'))).toHaveLength(1);
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/cancel'))).toHaveLength(0);
+});
+
+it.each(['session', 'client'] as const)('requires fresh editor metadata after same-ID %s replacement and drops the old response', async mode => {
+  const base = editorServer();
+  const metadata = { ...(await (await base('/api/editor')).json()), capabilities: { snapshots: true, generation_modes: true } };
+  let delay = false;
+  const releases: ((value: Response) => void)[] = [];
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return delay
+      ? new Promise<Response>(resolve => { releases.push(resolve); }) : response(metadata);
+    return base(url, init);
+  });
+  const view = mountPersistentEditor(fetcher);
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const yaml = screen.getByRole('textbox', { name: 'YAML editor' });
+  const cm = CodeMirrorView.findFromDOM(yaml)!;
+  act(() => cm.dispatch({ changes: { from: cm.state.doc.length, insert: '\n# keep draft while metadata is unavailable' } }));
+  fireEvent.change(screen.getByLabelText('Describe the environment and task'), { target: { value: 'Keep metadata-independent prompt' } });
+  delay = true;
+  act(() => { void view.cache.invalidateQueries({ queryKey: ['editor'] }); });
+  await waitFor(() => expect(releases).toHaveLength(1));
+  if (mode === 'session') {
+    view.api.session = { ...view.api.session! };
+    view.setProps({});
+  } else {
+    const replacement = new ApiClient(fetcher as typeof fetch);
+    await replacement.connect();
+    expect(replacement.sessionGeneration).toBe(view.api.sessionGeneration);
+    // Keep this case about equal-generation client replacement, not a second
+    // session established by RuntimeProvider's connection effect.
+    vi.spyOn(replacement, 'connect').mockResolvedValue(replacement.session!);
+    view.setApi(replacement);
+  }
+  expect(screen.getByRole('combobox', { name: 'Document' })).toBeDisabled();
+  expect(screen.queryByLabelText('New environment from prompt')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Render snapshots' })).toBeDisabled();
+  expect(screen.getByRole('textbox', { name: 'YAML editor' })).toBe(yaml);
+  expect(cm.state.doc.toString()).toContain('# keep draft while metadata is unavailable');
+  await waitFor(() => expect(releases).toHaveLength(2));
+  await act(async () => releases[1](response({ ...metadata, capabilities: { snapshots: false, generation_modes: false },
+    limitations: ['Current owner catalogue'] })));
+  await screen.findByText('Current owner catalogue');
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Document' })).toBeEnabled());
+  await act(async () => releases[0](response({ ...metadata, limitations: ['Retired owner catalogue'] })));
+  expect(screen.queryByText('Retired owner catalogue')).not.toBeInTheDocument();
+  expect(JSON.stringify(view.cache.getQueriesData({ queryKey: ['editor'] }))).not.toContain('Retired owner catalogue');
+  expect(screen.queryByLabelText('New environment from prompt')).not.toBeInTheDocument();
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  expect(screen.getByRole('button', { name: 'Render snapshots' })).toBeDisabled();
+  expect(screen.getByLabelText('Describe the environment and task')).toHaveValue('Keep metadata-independent prompt');
+  expect(fetcher.mock.calls.filter(([url]) => url.includes('/editor/documents/'))).toHaveLength(1);
+  expect(JSON.parse(String(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/validate')).at(-1)![1]?.body)))
+    .toEqual({ yaml_text: cm.state.doc.toString(), document_id: 'frozen-fixture' });
+  expect(fetcher.mock.calls.filter(([url]) => /generate|snapshots|\/save$/.test(url))).toHaveLength(0);
+});
+
+it.each(['off', 'off-on', 'session-before-render', 'session', 'client', 'unmount'] as const)('does not POST snapshots when automatic authority is retired by %s during activity preflight', async mode => {
+  const base = editorServer();
+  let release: (() => void) | undefined;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { snapshots: true } });
+    if (url.endsWith('/session/activity')) await new Promise<void>(resolve => { release = resolve; });
+    return base(url, init);
+  });
+  const view = mountPersistentEditor(fetcher, { layout: 'v7' });
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const consent = screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' });
+  fireEvent.click(consent);
+  fireEvent.change(screen.getByLabelText('Scene camera'), { target: { value: 'top' } });
+  await waitFor(() => expect(release).toBeDefined(), { timeout: 4000 });
+  expect(screen.getByRole('button', { name: 'Submitting render…' })).toBeDisabled();
+  if (mode === 'off' || mode === 'off-on') {
+    fireEvent.click(consent);
+    expect(consent).not.toBeChecked();
+    if (mode === 'off-on') fireEvent.click(consent);
+  } else if (mode === 'session' || mode === 'session-before-render') {
+    view.api.session = { ...view.api.session! };
+    if (mode === 'session') view.setProps({});
+  } else if (mode === 'client') {
+    const replacement = new ApiClient(fetcher as typeof fetch);
+    await replacement.connect();
+    vi.spyOn(replacement, 'connect').mockResolvedValue(replacement.session!);
+    view.setApi(replacement);
+  } else view.setEditorMounted(false);
+  await act(async () => { release!(); });
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Submitting render…' })).not.toBeInTheDocument());
+  // Inspect actual transport, not the hook's result: a post-dispatch guard is too late.
+  expect(fetcher.mock.calls.filter(([url, init]) => url.endsWith('/editor/snapshots') && init?.method === 'POST')).toHaveLength(0);
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/cancel'))).toHaveLength(0);
+});
+
+it('observes a snapshot accepted after automatic opt-out without reusing dispatch consent', async () => {
+  const base = editorServer();
+  let release: (() => void) | undefined;
+  const job = { id: 'accepted-after-optout', kind: 'snapshots', workspace_id: 'default', status: 'running',
+    stage: 'Accepted render remains observed', inputs: {}, result: null };
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { snapshots: true } });
+    if (url.endsWith('/editor/snapshots')) {
+      await new Promise<void>(resolve => { release = resolve; });
+      return response(job);
+    }
+    if (url.endsWith('/jobs/accepted-after-optout')) return response(job);
+    return base(url, init);
+  });
+  mountPersistentEditor(fetcher, { layout: 'v7' });
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  const consent = screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' });
+  fireEvent.click(consent);
+  fireEvent.change(screen.getByLabelText('Scene camera'), { target: { value: 'top' } });
+  await waitFor(() => expect(release).toBeDefined(), { timeout: 4000 });
+  fireEvent.click(consent);
+  await act(async () => { release!(); });
+  await screen.findByText('Accepted render remains observed');
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith('/jobs/accepted-after-optout'))).toBe(true));
+  expect(consent).not.toBeChecked();
+  expect(JSON.parse(sessionStorage.getItem('arena:editor:snapshots:v1')!)).toMatchObject({ job: { id: job.id } });
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/snapshots'))).toHaveLength(1);
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/cancel'))).toHaveLength(0);
+});
+
+it('does not dispatch an automatic render after inactivity interrupts its activity preflight', async () => {
+  const base = editorServer();
+  let release: (() => void) | undefined;
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { snapshots: true } });
+    if (url.endsWith('/session/activity')) await new Promise<void>(resolve => { release = resolve; });
+    return base(url, init);
+  });
+  const view = mountPersistentEditor(fetcher, { layout: 'v7' });
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' }));
+  fireEvent.change(screen.getByLabelText('Scene camera'), { target: { value: 'top' } });
+  await waitFor(() => expect(release).toBeDefined(), { timeout: 4000 });
+  view.setProps({ layout: 'legacy', active: false });
+  view.setProps({ layout: 'v7', active: true });
+  await act(async () => { release!(); });
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/snapshots'))).toHaveLength(0);
+  expect(screen.getByRole('checkbox', { name: 'Automatic previews (GPU jobs)' })).not.toBeChecked();
+});
+
+it('observes accepted Refine while inactive and applies only the reviewed source-bound candidate on return', async () => {
+  const base = editorServer();
+  let release: (() => void) | undefined;
+  let payload: Record<string, unknown> = {};
+  const job = (status: 'queued' | 'succeeded') => ({ id: 'accepted-refine', kind: 'generate', workspace_id: 'default', status, stage: status,
+    inputs: { ...payload, input_hash: 'hash' }, result: status === 'succeeded'
+      ? { yaml_text: 'env_name: actual_refined_candidate', validation, warnings: [], publication: 'not_published', traces: [] } : null });
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { generation: true, generation_modes: true } });
+    if (url.endsWith('/editor/generate')) {
+      payload = JSON.parse(String(init?.body));
+      await new Promise<void>(resolve => { release = resolve; });
+      return response(job('queued'));
+    }
+    if (url.endsWith('/jobs/accepted-refine')) return response(job('succeeded'));
+    return base(url, init);
+  });
+  const view = mountPersistentEditor(fetcher, { layout: 'v7' });
+  await screen.findByRole('button', { name: 'Inspect Table' });
+  fireEvent.change(screen.getByLabelText('Retrieval policy'), { target: { value: 'require_service' } });
+  fireEvent.click(screen.getByLabelText('Refine current environment'));
+  fireEvent.change(screen.getByLabelText('Describe the environment and task'), { target: { value: 'Refine this exact source' } });
+  view.setProps({ layout: 'legacy' });
+  fireEvent.click(screen.getByRole('button', { name: 'Generate spec' }));
+  await waitFor(() => expect(release).toBeDefined());
+  view.setProps({ layout: 'v7', active: false });
+  const catalogueReads = fetcher.mock.calls.filter(([url]) => url.includes('/editor/previews/')).length;
+  await act(async () => { release!(); });
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith('/jobs/accepted-refine'))).toBe(true));
+  expect(JSON.parse(sessionStorage.getItem('arena:editor:generate:v1')!)).toMatchObject({ job: { id: 'accepted-refine' } });
+  expect(fetcher.mock.calls.filter(([url]) => url.includes('/editor/previews/'))).toHaveLength(catalogueReads);
+  view.setProps({ layout: 'v7' });
+  await screen.findByRole('button', { name: 'Apply generated YAML' });
+  expect(screen.getByRole('textbox', { name: 'YAML editor' })).toHaveTextContent('real_document');
+  expect(payload).toMatchObject({ operation: 'refine', retrieval_policy: 'allow_fallback', prompt: 'Refine this exact source',
+    base_yaml: 'env_name: real_document', document_id: 'frozen-fixture' });
+  fireEvent.click(screen.getByRole('button', { name: 'Apply generated YAML' }));
+  expect(screen.getByRole('textbox', { name: 'YAML editor' })).toHaveTextContent('actual_refined_candidate');
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith('/editor/validate'))).toBe(true));
+  const applied = JSON.parse(String(fetcher.mock.calls.find(([url]) => url.endsWith('/editor/validate'))![1]?.body));
+  expect(applied).toEqual({ yaml_text: 'env_name: actual_refined_candidate', document_id: 'frozen-fixture' });
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/generate'))).toHaveLength(1);
+  expect(fetcher.mock.calls.filter(([url]) => /snapshots|\/save$/.test(url))).toHaveLength(0);
+});
+
 export function editorServer() {
   return vi.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith('/health')) return response({ capabilities: { diagnostic: false } });
@@ -81,7 +1015,7 @@ it.each([undefined, false, true, 'true'])('passes only explicit publication exec
  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
   if (url === '/api/editor') return response({ ...(await (await base(url, init)).json()), capabilities: { research_versions: true, publication_execution: capability } });
   if (url.endsWith('/research/stores')) return response({ stores: [{ store_id: 'local', available: true }] });
-  if (url.includes('/versions?')) return response({ versions: [{ ...reservation, state: 'committed', source_job_id: reservation.source.job_id, manifest_digest: digest }], latest_version: 1, next_after_version: null });
+  if (url.includes('/versions?')) return response({ versions: [{ ...reservation, state: 'committed', source_job_id: reservation.source.job_id, manifest_digest: digest, open_source: {kind: 'research_version', id: `research-version:local:${res}:${digest}`} }], latest_version: 1, next_after_version: null });
   if (url.endsWith(`/versions/${res}`)) return response({ reservation, manifest: { digest, binding: reservation }, relative_directory: 'final/Example/v1', publication_intent_id: 'effect' });
   return base(url, init);
  });
@@ -114,11 +1048,12 @@ it('restores matching saved asset previews in a fresh tab without submitting a r
   const view = mountEditor(fetcher);
   expect(await screen.findByRole('img', { name: 'table snapshot' })).toHaveAttribute('src', '/api/editor/artifacts/table-image');
   fireEvent.change(screen.getByLabelText('Preview mode'), { target: { value: 'scene' } });
-  expect(screen.getByText('Matches current draft')).toBeInTheDocument();
+  expect(screen.getByText('Matches current canonical scene and camera options')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('link', { name: 'Neo4j query' }));
   await screen.findByRole('heading', { name: 'Neo4j query' });
   fireEvent.click(screen.getByRole('link', { name: 'Environment editor' }));
-  await screen.findByRole('img', { name: 'table snapshot' });
+  await screen.findByRole('img', { name: 'scene snapshot saved-render' });
+  expect(screen.getByLabelText('Preview mode')).toHaveValue('scene');
   view.unmount();
   mountEditor(fetcher);
   await screen.findByRole('img', { name: 'table snapshot' });
@@ -155,7 +1090,9 @@ it('restores explicitly historical previews without calling them current or subm
   fireEvent.click(screen.getByRole('link', { name: 'Neo4j query' }));
   await screen.findByRole('heading', { name: 'Neo4j query' });
   fireEvent.click(screen.getByRole('link', { name: 'Environment editor' }));
-  await screen.findByRole('img', { name: 'table snapshot' });
+  await screen.findByRole('img', { name: 'scene snapshot saved-history' });
+  expect(screen.getByLabelText('Preview mode')).toHaveValue('scene');
+  expect(screen.getByLabelText('Scene camera')).toHaveValue('top');
   view.unmount();
   sessionStorage.clear();
   mountEditor(fetcher);
@@ -221,7 +1158,12 @@ it('switches asset/scene previews and submits frozen camera options without edit
   fireEvent.click(screen.getByRole('button', { name: 'Render snapshots' }));
   await waitFor(() => expect(release).toBeDefined());
   fireEvent.change(screen.getByLabelText('Scene camera'), { target: { value: 'side' } });
-  act(() => release!());
+  await act(async () => release!());
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/snapshots'))).toHaveLength(0);
+  release = undefined;
+  fireEvent.click(await screen.findByRole('button', { name: 'Retry exact snapshot request' }));
+  await waitFor(() => expect(release).toBeDefined());
+  await act(async () => release!());
   await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith('/editor/snapshots'))).toBe(true));
   const request = fetcher.mock.calls.find(([url]) => url.endsWith('/editor/snapshots'))!;
   expect(JSON.parse(String(request[1]?.body))).toMatchObject({ yaml_text: 'env_name: real_document', document_id: 'frozen-fixture',
@@ -339,7 +1281,8 @@ it('recovers unsaved YAML after reload without silently changing the source cont
   act(() => cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: 'env_name: recovered_draft' } }));
   view.unmount();
   mountEditor(fetcher);
-  fireEvent.click(await screen.findByRole('button', { name: 'Restore draft' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Restore draft' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Restore draft' }));
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'YAML editor' })).toHaveTextContent('recovered_draft'));
   expect(fetcher.mock.calls.filter(([url]) => /generate|snapshots|\/save$/.test(url))).toHaveLength(0);
 });
@@ -381,7 +1324,10 @@ it.each(['Restore draft', 'Discard recovered draft'])(
     if (decision === 'Restore draft') {
       expect(screen.getByRole('textbox', { name: 'YAML editor' })).toHaveTextContent('pending_recovery');
       expect(screen.getByLabelText('Describe the environment and task')).toHaveValue('Keep this prompt too');
-      expect(sessionStorage.getItem('arena.editor.draft.v1')).toBe(backup);
+      // Explicit recovery acquires a fresh runtime draft identity; authored and
+      // frozen source fields stay exact, while v2 ownership metadata advances.
+      const {draftId: _id, revision: _revision, ...fields} = JSON.parse(backup!);
+      expect(JSON.parse(sessionStorage.getItem('arena.editor.draft.v1')!)).toMatchObject(fields);
     } else {
       expect(screen.getByRole('textbox', { name: 'YAML editor' })).toHaveTextContent('real_document');
       expect(sessionStorage.getItem('arena.editor.draft.v1')).toBeNull();
@@ -403,6 +1349,7 @@ it('blocks recovery into changed included-source context and preserves a downloa
     return responseValue;
   });
   mountEditor(changed);
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'YAML editor' })).toHaveTextContent('real_document'));
   expect(await screen.findByRole('button', { name: 'Restore draft' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Download recovered YAML' })).toBeEnabled();
   expect(screen.getByRole('textbox', { name: 'YAML editor' })).toHaveTextContent('real_document');
@@ -418,7 +1365,7 @@ it.each(['prompt', 'YAML', 'serialized record'])(
     act(() => cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: 'env_name: previous_backup' } }));
     const backup = sessionStorage.getItem('arena.editor.draft.v1');
     const yaml = field === 'prompt' ? cm.state.doc.toString()
-      : field === 'YAML' ? 'broken: [' + 'y'.repeat(262_145) : '\0'.repeat(100_001);
+      : field === 'YAML' ? 'broken: [' + 'y'.repeat(262_145) : '\0'.repeat(100_172);
     if (field === 'prompt') {
       fireEvent.change(screen.getByLabelText('Describe the environment and task'), {
         target: { value: 'p'.repeat(16_001) },

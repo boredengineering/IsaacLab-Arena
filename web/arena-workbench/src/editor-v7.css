@@ -1,0 +1,24 @@
+/* Production-only presentation. The editor and snapshot controllers never move. */
+.editor-workspace [hidden], .editor-workspace[hidden] { display: none !important; }
+.editor-v7 .editor-panel-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.editor-v7 .editor-grid { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.4fr) minmax(240px, .8fr); gap: 16px; align-items: start; }
+.editor-v7 .author-column { display: contents; }
+.editor-v7 .prompt-section { grid-column: 1 / -1; }
+.editor-v7 .yaml-section { grid-column: 1; }
+.editor-v7 .visual-column { grid-column: 2; min-width: 0; }
+.editor-v7 .authored-inspector-panel { grid-column: 3; min-width: 0; border: 1px solid var(--border, #c8d1cb); border-radius: 12px; padding: 16px; }
+.editor-v7 .yaml-section, .editor-v7 .visual-column > section { min-width: 0; border-radius: 12px; }
+.editor-v7 .code-editor { min-height: 420px; }
+.editor-v7 .scene-gallery { grid-template-columns: minmax(0, 1fr); }
+.editor-v7 .snapshot-image img { width: 100%; max-height: 65vh; object-fit: contain; }
+.editor-v7.viewport-expanded .visual-column { grid-column: 1 / -1; }
+.editor-v7 .authored-inspector-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 1250px) {
+  .editor-v7 .editor-grid { grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.3fr); }
+  .editor-v7 .authored-inspector-panel { grid-column: 1 / -1; }
+}
+@media (max-width: 800px) {
+  .editor-v7 .editor-grid { grid-template-columns: minmax(0, 1fr); }
+  .editor-v7 .yaml-section, .editor-v7 .visual-column, .editor-v7 .authored-inspector-panel { grid-column: 1; }
+  .editor-v7 .editor-panel-controls button { flex: 1 1 45%; }
+}

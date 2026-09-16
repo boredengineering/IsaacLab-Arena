@@ -44,12 +44,14 @@ export interface Validation {
 }
 export interface EditorIndex {
   default_document_id: string;
-  documents: { id: string; name: string; source: string }[];
-  capabilities: { generation: boolean; snapshots: boolean; neo4j: boolean; generation_modes?: boolean; research_versions?: boolean; publication_execution?: boolean };
+  documents: { id: string; name: string; source: string; kind?: 'discovered_file' | 'editor_revision'; revision_id?: string; source_hash?: string; canonical_hash?: string }[];
+  capabilities: { generation: boolean; snapshots: boolean; neo4j: boolean; build?: boolean; policy_evaluation?: boolean; generation_modes?: boolean; research_versions?: boolean; publication_execution?: boolean; manual_research_save?: boolean; research_version_open?: boolean };
   limitations: string[];
 }
 export interface EditorDocument {
   document_id: string;
+  source_origin?: { kind: 'discovered_file' | 'editor_revision' | 'research_version'; id: string };
+  research_identity?: import('./research-source').ResearchIdentity;
   source: string;
   yaml_text: string;
   source_hash: string;
@@ -94,6 +96,16 @@ export interface PreviewLookup {
   status: 'hit' | 'historical' | 'miss';
   canonical_hash: string;
   receipt: SnapshotResult | null;
+}
+export interface BuildResult {
+  schema_version: 1;
+  input_hash: string;
+  canonical_hash: string;
+  headless: true;
+  num_envs: 1;
+  num_steps: 20;
+  policy: 'zero_action';
+  completed: true;
 }
 export interface GeneratedResult {
   yaml_text: string;

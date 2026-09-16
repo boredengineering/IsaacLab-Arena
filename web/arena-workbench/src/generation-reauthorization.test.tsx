@@ -1,10 +1,14 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { EditorJobProgress, useEditorJob } from './editor-jobs';
 import { GenerationReauthorization } from './generation-reauthorization';
 import type { Job } from './contracts';
 import { workspaceKey } from './cache';
+import { ApiClient } from './api';
+import { useModelSettings } from './model-settings';
+import { PROVIDERS } from './model-settings-contracts';
+import { clientSessionScope } from './client-session-scope';
 
 const mocks = vi.hoisted(() => ({ runtime: {} as any }));
 vi.mock('./runtime', () => ({ useRuntime: () => mocks.runtime }));
@@ -21,7 +25,7 @@ function mount(job = blocked) {
   return render(<QueryClientProvider client={cache}><Harness /></QueryClientProvider>);
 }
 function settings(ref = 'a'.repeat(64), source = 'session') {
-  cache.setQueryData(['model-settings', 's'], { configured: true, source, credential_ref: ref, expires_at: 9999999999 });
+  cache.setQueryData(clientSessionScope(mocks.runtime.api, mocks.runtime.session).queryKey, { configured: true, source, credential_ref: ref, expires_at: 9999999999 });
 }
 beforeEach(() => {
   sessionStorage.clear();
@@ -88,7 +92,7 @@ it('leaves legacy generation callers unchanged', async () => {
 });
 it('fails closed for expired settings without posting a renewal', async () => {
   settings();
-  cache.setQueryData(['model-settings', 's'], (old: any) => ({ ...old, expires_at: 1 }));
+  cache.setQueryData(clientSessionScope(mocks.runtime.api, mocks.runtime.session).queryKey, (old: any) => ({ ...old, expires_at: 1 }));
   mount();
   expect(await screen.findByRole('button', { name: 'Reauthorize generation' })).toBeDisabled();
   expect(mocks.runtime.api.mutate).not.toHaveBeenCalled();
@@ -251,4 +255,332 @@ it('requires explicit confirmation and verifies the exact renewed job before ref
   expect(window.confirm).toHaveBeenCalledWith(expect.stringMatching(/same frozen prompt and profile.*uncertain/s));
   expect(mocks.runtime.api.mutate).toHaveBeenCalledWith('/editor/generations/job%2Factual/reauthorize', { idempotency_key: expect.any(String), credential_ref: 'a'.repeat(64) });
   expect(mocks.runtime.api.get).toHaveBeenLastCalledWith('/jobs/job%2Factual');
+});
+
+function authorityDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+}
+const authorityResponse = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
+const authorityMetadata = (ref = 'a'.repeat(64)) => ({ providers: PROVIDERS, configured: true, source: 'session',
+  provider: 'openai', model: 'dummy-model', credential_ref: ref, expires_at: 9999999999, session_keys_allowed: true });
+function MetadataOwner() { useModelSettings(); return null; }
+function mountAuthority(owners = ['editor'], handler?: (url: string, init: RequestInit) => Promise<Response>) {
+  cache.clear();
+  const session = { session_id: 's', csrf_token: 'dummy-authority-csrf', expires_at: 9999999999 };
+  const transport = vi.fn(async (url: string, init: RequestInit) => {
+    if (handler) return handler(url, init);
+    if (url === '/api/model-settings') return authorityResponse(authorityMetadata());
+    if (url === '/api/session/activity') return authorityResponse(session);
+    if (url === '/api/jobs/job%2Factual' || url === '/api/editor/generations/job%2Factual/reauthorize') return authorityResponse(blocked);
+    throw new Error('Unexpected authority fixture request');
+  });
+  const api = new ApiClient(transport as typeof fetch);
+  api.session = session;
+  const verified = vi.fn();
+  mocks.runtime = { api, session: api.session, refresh: vi.fn() };
+  const tree = (names: string[]) => <QueryClientProvider client={cache}><MetadataOwner />{names.map(name =>
+    <section key={name} aria-label={name}><GenerationReauthorization job={blocked} onVerified={() => verified(name)} /></section>
+  )}</QueryClientProvider>;
+  const view = render(tree(owners));
+  return { ...view, api, transport, verified, redraw: (names = owners) => view.rerender(tree(names)),
+    posts: () => transport.mock.calls.filter(([url, init]) => url.endsWith('/reauthorize') && init.method === 'POST') };
+}
+function retainedAuthority() {
+  const keys = Object.keys(sessionStorage).filter(key => key.startsWith('arena:reauthorization:'));
+  expect(keys).toHaveLength(1);
+  const raw = sessionStorage.getItem(keys[0])!;
+  return { key: keys[0], raw, payload: JSON.parse(raw) };
+}
+function authorityOwner(name = 'editor') { return within(screen.getByRole('region', { name })); }
+async function startAuthority(name = 'editor') {
+  const button = await authorityOwner(name).findByRole('button', { name: 'Reauthorize generation' });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+}
+function replaceAuthority(view: ReturnType<typeof mountAuthority>, mode: 'same-id' | 'client') {
+  const api = mode === 'client' ? new ApiClient(view.transport as typeof fetch) : view.api;
+  api.session = { session_id: 's', csrf_token: 'dummy-replaced-authority-csrf', expires_at: 9999999999 };
+  mocks.runtime = { ...mocks.runtime, api, session: api.session };
+  // Same-ID replacement must fence even before React gets an update.
+  if (mode === 'client') view.redraw();
+}
+async function rejectionProof(payload: { credential_ref?: string; idempotency_key: string }) {
+  const { createHash } = await import('node:crypto');
+  const fingerprint = createHash('sha256').update(JSON.stringify({ credential_ref: payload.credential_ref ?? null, idempotency_key: payload.idempotency_key })).digest('hex');
+  return { schema_version: 1, code: 'renewal_rejected', job_id: blocked.id, idempotency_key: payload.idempotency_key, fingerprint };
+}
+
+it('two mounted renewal owners share the frozen lost-ACK request instead of overwriting it', async () => {
+  const view = mountAuthority(['editor', 'detail'], async url => url === '/api/model-settings'
+    ? authorityResponse(authorityMetadata()) : Promise.reject(new Error('dummy-lost-ack')));
+  await startAuthority('editor');
+  await authorityOwner('editor').findByRole('alert');
+  const first = retainedAuthority();
+  const detail = authorityOwner('detail');
+  await waitFor(() => expect(detail.getByRole('button', { name: /Retry reauthorization/ })).toBeEnabled());
+  expect(view.posts()).toHaveLength(1); // Synchronization itself must never POST.
+  fireEvent.click(detail.getByRole('button', { name: /Retry reauthorization/ }));
+  await detail.findByRole('alert');
+  expect(view.posts()).toHaveLength(2);
+  expect(JSON.parse(String(view.posts()[1][1].body))).toEqual(first.payload);
+  expect(retainedAuthority().raw).toBe(first.raw);
+});
+
+it('ignores legacy session-ID-only metadata for a real client', async () => {
+  const fresh = authorityDeferred<Response>();
+  const view = mountAuthority(['editor'], async () => fresh.promise);
+  act(() => cache.setQueryData(['model-settings', 's'], authorityMetadata()));
+  expect(screen.getByRole('button', { name: 'Reauthorize generation' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Reauthorize generation' }));
+  expect(view.posts()).toHaveLength(0);
+  await act(async () => { fresh.resolve(authorityResponse(authorityMetadata())); });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Reauthorize generation' })).toBeEnabled());
+});
+
+it('preserves exact retained bytes during an explicit replay', async () => {
+  const payload = { credential_ref: 'a'.repeat(64), idempotency_key: 'retained-exact' };
+  const key = `arena:reauthorization:v1:${encodeURIComponent(blocked.id)}`;
+  const raw = JSON.stringify(payload, null, 2);
+  sessionStorage.setItem(key, raw);
+  const view = mountAuthority(['editor'], async url => url === '/api/model-settings'
+    ? authorityResponse(authorityMetadata('b'.repeat(64))) : Promise.reject(new Error('dummy-lost-ack')));
+  fireEvent.click(screen.getByRole('button', { name: 'Retry reauthorization' }));
+  await screen.findByRole('alert');
+  expect(view.posts()).toHaveLength(1);
+  expect(JSON.parse(String(view.posts()[0][1].body))).toEqual(payload);
+  expect(sessionStorage.getItem(key)).toBe(raw);
+});
+
+it('a peer replay retires earlier completion even when retained bytes are unchanged', async () => {
+  const late = authorityDeferred<Response>();
+  let posts = 0;
+  const view = mountAuthority(['editor', 'detail'], async url => {
+    if (url === '/api/model-settings') return authorityResponse(authorityMetadata());
+    if (url.endsWith('/reauthorize')) {
+      if (++posts === 1) return late.promise;
+      throw new Error('dummy-peer-lost-ack');
+    }
+    return authorityResponse(blocked);
+  });
+  await startAuthority('editor');
+  const first = retainedAuthority();
+  fireEvent.click(await authorityOwner('detail').findByRole('button', { name: 'Retry reauthorization' }));
+  await authorityOwner('detail').findByRole('alert');
+  await act(async () => { late.resolve(authorityResponse(blocked)); });
+  expect(view.posts()).toHaveLength(2);
+  expect(view.transport.mock.calls.filter(([url]) => url === '/api/jobs/job%2Factual')).toHaveLength(0);
+  expect(view.verified).not.toHaveBeenCalled();
+  expect(sessionStorage.getItem(first.key)).toBe(first.raw);
+});
+
+it('verified consumption synchronizes mounted owners without a new POST', async () => {
+  const view = mountAuthority(['editor', 'detail']);
+  await startAuthority('editor');
+  await waitFor(() => expect(view.verified).toHaveBeenCalledWith('editor'));
+  expect(authorityOwner('editor').getByRole('button', { name: 'Reauthorize generation' })).toBeEnabled();
+  expect(authorityOwner('detail').getByRole('button', { name: 'Reauthorize generation' })).toBeEnabled();
+  expect(Object.keys(sessionStorage).filter(key => key.startsWith('arena:reauthorization:'))).toHaveLength(0);
+  expect(view.posts()).toHaveLength(1);
+});
+
+it.each(['malformed', 'replacement', 'removed'] as const)('fails closed when retained storage is %s before a retry click', async mode => {
+  const view = mountAuthority(['editor'], async url => url === '/api/model-settings'
+    ? authorityResponse(authorityMetadata()) : Promise.reject(new Error('dummy-lost-ack')));
+  await startAuthority();
+  await screen.findByRole('alert');
+  const first = retainedAuthority();
+  const replacement = mode === 'malformed' ? '{broken' : JSON.stringify({ idempotency_key: 'replacement-G', credential_ref: 'b'.repeat(64) });
+  if (mode === 'removed') sessionStorage.removeItem(first.key);
+  else sessionStorage.setItem(first.key, replacement);
+  fireEvent.click(screen.getByRole('button', { name: 'Retry reauthorization' }));
+  await act(async () => {});
+  expect(view.posts()).toHaveLength(1);
+  expect(sessionStorage.getItem(first.key)).toBe(mode === 'removed' ? null : replacement);
+});
+
+it('does not overwrite storage changed while retry confirmation is open', async () => {
+  const view = mountAuthority(['editor'], async url => url === '/api/model-settings'
+    ? authorityResponse(authorityMetadata()) : Promise.reject(new Error('dummy-lost-ack')));
+  await startAuthority();
+  await screen.findByRole('alert');
+  const first = retainedAuthority();
+  vi.mocked(window.confirm).mockImplementationOnce(() => {
+    sessionStorage.setItem(first.key, '{broken');
+    return true;
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Retry reauthorization' }));
+  expect(view.posts()).toHaveLength(1);
+  expect(sessionStorage.getItem(first.key)).toBe('{broken');
+});
+
+it.each(['post', 'readback'] as const)('retired %s completion cannot remove a replacement retained request with two mounted owners', async phase => {
+  const late = authorityDeferred<Response>();
+  const view = mountAuthority(['editor', 'detail'], async url => {
+    if (url === '/api/model-settings') return authorityResponse(authorityMetadata());
+    if (phase === 'post' ? url.endsWith('/reauthorize') : url === '/api/jobs/job%2Factual') return late.promise;
+    return authorityResponse(blocked);
+  });
+  await startAuthority();
+  await waitFor(() => expect(view.transport.mock.calls.some(([url]) => url === (phase === 'post'
+    ? '/api/editor/generations/job%2Factual/reauthorize' : '/api/jobs/job%2Factual'))).toBe(true));
+  const first = retainedAuthority();
+  const replacement = JSON.stringify({ idempotency_key: 'replacement-G', credential_ref: 'b'.repeat(64) });
+  sessionStorage.setItem(first.key, replacement);
+  await act(async () => { late.resolve(authorityResponse(blocked)); });
+  expect(sessionStorage.getItem(first.key)).toBe(replacement);
+  expect(view.verified).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['same-id', 'post'], ['client', 'post'], ['same-id', 'readback'], ['client', 'readback'],
+] as const)('fences %s replacement during renewal %s', async (mode, phase) => {
+  const late = authorityDeferred<Response>();
+  const view = mountAuthority(['editor'], async url => {
+    if (url === '/api/model-settings') return authorityResponse(authorityMetadata());
+    if (phase === 'post' ? url.endsWith('/reauthorize') : url === '/api/jobs/job%2Factual') return late.promise;
+    return authorityResponse(blocked);
+  });
+  await startAuthority();
+  await waitFor(() => expect(view.transport.mock.calls.some(([url]) => url === (phase === 'post'
+    ? '/api/editor/generations/job%2Factual/reauthorize' : '/api/jobs/job%2Factual'))).toBe(true));
+  const first = retainedAuthority();
+  replaceAuthority(view, mode);
+  const reads = view.transport.mock.calls.filter(([url]) => url === '/api/jobs/job%2Factual').length;
+  await act(async () => { late.resolve(authorityResponse(blocked)); });
+  expect(view.transport.mock.calls.filter(([url]) => url === '/api/jobs/job%2Factual')).toHaveLength(reads);
+  expect(view.verified).not.toHaveBeenCalled();
+  expect(sessionStorage.getItem(first.key)).toBe(first.raw);
+});
+
+it('fences a same-ID replacement before React renders or the renewal POST starts', async () => {
+  const view = mountAuthority();
+  const button = await screen.findByRole('button', { name: 'Reauthorize generation' });
+  await waitFor(() => expect(button).toBeEnabled());
+  replaceAuthority(view, 'same-id');
+  fireEvent.click(button);
+  expect(view.posts()).toHaveLength(0);
+  expect(Object.keys(sessionStorage).filter(key => key.startsWith('arena:reauthorization:'))).toHaveLength(0);
+});
+
+it.each(['same-id', 'client'] as const)('withholds %s replacement metadata until its own GET finishes without implicit renewal', async mode => {
+  const fresh = authorityDeferred<Response>();
+  let reads = 0;
+  const view = mountAuthority(['editor'], async url => {
+    if (url === '/api/model-settings') return ++reads === 1 ? authorityResponse(authorityMetadata()) : fresh.promise;
+    throw new Error('No implicit authority request permitted');
+  });
+  const button = await screen.findByRole('button', { name: 'Reauthorize generation' });
+  await waitFor(() => expect(button).toBeEnabled());
+  replaceAuthority(view, mode);
+  view.redraw();
+  expect(screen.getByRole('button', { name: 'Reauthorize generation' })).toBeDisabled();
+  await waitFor(() => expect(reads).toBe(2));
+  await act(async () => { fresh.resolve(authorityResponse(authorityMetadata('b'.repeat(64)))); });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Reauthorize generation' })).toBeEnabled());
+  expect(view.posts()).toHaveLength(0);
+  expect(view.verified).not.toHaveBeenCalled();
+});
+
+it('ordinary activity preserves the mounted renewal scope and accepted readback', async () => {
+  const late = authorityDeferred<Response>();
+  const view = mountAuthority(['editor'], async url => {
+    if (url === '/api/model-settings') return authorityResponse(authorityMetadata());
+    if (url === '/api/session/activity') return authorityResponse({ session_id: 's', csrf_token: 'dummy-authority-csrf', expires_at: 9999999999 });
+    if (url.endsWith('/reauthorize')) return late.promise;
+    return authorityResponse(blocked);
+  });
+  await startAuthority();
+  const epoch = view.api.sessionGeneration;
+  await act(async () => { mocks.runtime = { ...mocks.runtime, session: await view.api.activity() }; });
+  view.redraw();
+  expect(view.api.sessionGeneration).toBe(epoch);
+  await act(async () => { late.resolve(authorityResponse(blocked)); });
+  expect(view.verified).toHaveBeenCalledWith('editor');
+  expect(view.posts()).toHaveLength(1);
+});
+
+it('two mounted owners adopt the exact corrected A-to-G retention without an implicit POST', async () => {
+  let ref = 'a'.repeat(64);
+  let first: { idempotency_key: string; credential_ref?: string } | undefined;
+  const view = mountAuthority(['editor', 'detail'], async (url, init) => {
+    if (url === '/api/model-settings') return authorityResponse(authorityMetadata(ref));
+    if (url.includes('/reauthorization-disposition?')) return authorityResponse(await rejectionProof(first!));
+    if (url.endsWith('/reauthorize')) {
+      first ??= JSON.parse(String(init.body));
+      throw new Error('dummy-lost-ack');
+    }
+    throw new Error('Unexpected correction fixture request');
+  });
+  await startAuthority('editor');
+  await authorityOwner('editor').findByRole('alert');
+  const original = retainedAuthority();
+  fireEvent.click(await authorityOwner('detail').findByRole('button', { name: 'Check renewal disposition' }));
+  const correction = await authorityOwner('detail').findByRole('button', { name: 'Use current credentials' });
+  ref = 'b'.repeat(64);
+  fireEvent.focus(window);
+  await waitFor(() => expect(cache.getQueryCache().getAll().some(q =>
+    q.queryKey[0] === 'model-settings' && (q.state.data as { credential_ref?: string })?.credential_ref === ref)).toBe(true));
+  fireEvent.click(correction);
+  const corrected = retainedAuthority();
+  expect(corrected.payload.idempotency_key).not.toBe(original.payload.idempotency_key);
+  expect(corrected.payload.credential_ref).toBe(ref);
+  expect(view.posts()).toHaveLength(1);
+  fireEvent.click(await authorityOwner('editor').findByRole('button', { name: 'Retry reauthorization' }));
+  await waitFor(() => expect(view.posts()).toHaveLength(2));
+  expect(JSON.parse(String(view.posts()[1][1].body))).toEqual(corrected.payload);
+  expect(sessionStorage.getItem(corrected.key)).toBe(corrected.raw);
+});
+
+it('blocks disposition reads after same-ID replacement before React renders', async () => {
+  const view = mountAuthority(['editor'], async url => url === '/api/model-settings'
+    ? authorityResponse(authorityMetadata()) : Promise.reject(new Error('dummy-lost-ack')));
+  await startAuthority();
+  await screen.findByRole('alert');
+  replaceAuthority(view, 'same-id');
+  fireEvent.click(screen.getByRole('button', { name: 'Check renewal disposition' }));
+  await act(async () => {});
+  expect(view.transport.mock.calls.filter(([url]) => url.includes('/reauthorization-disposition?'))).toHaveLength(0);
+});
+
+it.each(['same-id', 'client'] as const)('drops late disposition proof after %s replacement', async mode => {
+  const late = authorityDeferred<Response>();
+  const view = mountAuthority(['editor'], async url => {
+    if (url === '/api/model-settings') return authorityResponse(authorityMetadata());
+    if (url.includes('/reauthorization-disposition?')) return late.promise;
+    throw new Error('dummy-lost-ack');
+  });
+  await startAuthority();
+  await screen.findByRole('alert');
+  const first = retainedAuthority();
+  fireEvent.click(screen.getByRole('button', { name: 'Check renewal disposition' }));
+  await waitFor(() => expect(view.transport.mock.calls.some(([url]) => url.includes('/reauthorization-disposition?'))).toBe(true));
+  replaceAuthority(view, mode);
+  await act(async () => { late.resolve(authorityResponse(await rejectionProof(first.payload))); });
+  expect(screen.queryByRole('button', { name: 'Use current credentials' })).not.toBeInTheDocument();
+  expect(sessionStorage.getItem(first.key)).toBe(first.raw);
+  expect(view.posts()).toHaveLength(1);
+});
+
+it.each(['same-id', 'client', 'retention', 'confirmation'] as const)('does not correct with %s retired authority', async mode => {
+  const view = mountAuthority(['editor'], async (url, init) => {
+    if (url === '/api/model-settings') return authorityResponse(authorityMetadata());
+    if (url.endsWith('/reauthorize')) return authorityResponse({ detail: await rejectionProof(JSON.parse(String(init.body))) }, 409);
+    throw new Error('Unexpected correction fixture request');
+  });
+  await startAuthority();
+  const correction = await screen.findByRole('button', { name: 'Use current credentials' });
+  const first = retainedAuthority();
+  const replaced = JSON.stringify({ idempotency_key: 'replacement-G', credential_ref: 'b'.repeat(64) });
+  if (mode === 'same-id' || mode === 'client') replaceAuthority(view, mode);
+  if (mode === 'retention') sessionStorage.setItem(first.key, replaced);
+  if (mode === 'confirmation') vi.mocked(window.confirm).mockImplementationOnce(() => {
+    replaceAuthority(view, 'same-id');
+    return true;
+  });
+  fireEvent.click(correction);
+  await act(async () => {});
+  expect(sessionStorage.getItem(first.key)).toBe(mode === 'retention' ? replaced : first.raw);
+  expect(view.posts()).toHaveLength(1);
 });

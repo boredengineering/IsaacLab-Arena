@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ApiClient } from './api';
 import { ModelSettings, useModelSettings } from './model-settings';
 import type { ModelSettingsStatus } from './model-settings-contracts';
+import { clientSessionScope } from './client-session-scope';
 
 const runtime = vi.hoisted(() => ({ current: {} as { api: ApiClient; session: { session_id: string } | null } }));
 vi.mock('./runtime', () => ({ useRuntime: () => runtime.current }));
@@ -19,6 +20,22 @@ const configured: ModelSettingsStatus = { ...empty, configured: true, source: 's
   expires_at: 9999999999, credential_ref: 'public-ref-one' };
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 function Harness() { return <ModelSettings settings={useModelSettings()} />; }
+function delayed<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+}
+function enterDummyKey(marker = 'dummy-scope-boundary-marker') {
+  fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'scope-model' } });
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.change(screen.getByLabelText('API key'), { target: { value: marker } });
+}
+function replaceSettingsOwner(view: ReturnType<typeof setup>, mode: 'same-id' | 'client', redraw = true) {
+  const api = mode === 'client' ? new ApiClient(view.fetcher as typeof fetch) : view.api;
+  api.session = { session_id: 'one', csrf_token: 'dummy-replacement-csrf', expires_at: 9999999999 };
+  runtime.current = { api, session: api.session };
+  if (redraw) view.redraw();
+}
 function setup(handler?: (url: string, init: RequestInit) => Promise<Response>) {
   let status = empty;
   const fetcher = vi.fn(async (url: string, init: RequestInit) => {
@@ -189,11 +206,14 @@ it('sanitizes both successful metadata and GET failures before React Query retai
   const { cache } = setup(async () => fail ? response({ detail: 'dummy-get-secret' }, 500)
     : response({ ...empty, api_key: 'dummy-get-secret' }));
   await screen.findByText(/No provider configured/);
-  expect(cache.getQueryData(['model-settings', 'one'])).not.toHaveProperty('api_key');
+  const key = clientSessionScope(runtime.current.api, runtime.current.session).queryKey;
+  expect(cache.getQueryData(key)).toBeDefined();
+  expect(cache.getQueryData(key)).not.toHaveProperty('api_key');
   fail = true;
   fireEvent.click(screen.getByRole('button', { name: 'Refresh provider status' }));
   await screen.findByText(/Provider settings unavailable/);
-  expect(cache.getQueryState(['model-settings', 'one'])?.error?.message).not.toContain('dummy-get-secret');
+  expect(cache.getQueryState(key)?.error).toBeInstanceOf(Error);
+  expect(cache.getQueryState(key)?.error?.message).not.toContain('dummy-get-secret');
   expect(screen.getByLabelText('API key')).toBeDisabled();
 });
 
@@ -265,4 +285,102 @@ it('saves only after consent using direct CSRF mutation, clears immediately, cac
   expect(fetcher.mock.calls.every(([url]) => url === '/api/model-settings')).toBe(true);
   expect(screen.getByText(/shared by tabs/)).toBeInTheDocument();
   expect(screen.getByText(/already running.*may finish/i)).toBeInTheDocument();
+});
+
+// Scope regressions use the approved isolated focused runner.
+it.each(['same-id', 'client'] as const)('clears unsent credentials and consent on %s owner replacement', async mode => {
+  const view = setup();
+  await screen.findByText(/No provider configured/);
+  enterDummyKey();
+  replaceSettingsOwner(view, mode);
+  expect(screen.getByLabelText('API key')).toHaveValue('');
+  expect(screen.getByRole('checkbox')).not.toBeChecked();
+  expect(view.fetcher.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true);
+});
+
+it.each(['PUT', 'DELETE'] as const)('fences %s before React renders a same-ID replacement', async method => {
+  const view = setup(async () => response(configured));
+  await screen.findByText(/Temporary key active/);
+  enterDummyKey();
+  replaceSettingsOwner(view, 'same-id', false);
+  if (method === 'PUT') fireEvent.submit(screen.getByRole('button', { name: 'Save temporary key' }).closest('form')!);
+  else fireEvent.click(screen.getByRole('button', { name: 'Forget key' }));
+  await act(async () => {});
+  expect(view.fetcher.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true);
+  expect(screen.getByLabelText('API key')).toHaveValue('');
+});
+
+it.each(['same-id', 'client'] as const)('isolates late metadata from the %s replacement cache', async mode => {
+  const old = delayed<Response>();
+  const fresh = delayed<Response>();
+  let reads = 0;
+  const view = setup(async () => ++reads === 1 ? old.promise : fresh.promise);
+  await waitFor(() => expect(reads).toBe(1));
+  replaceSettingsOwner(view, mode);
+  await act(async () => { old.resolve(response({ ...configured, model: 'retired-metadata' })); });
+  expect(screen.queryByText(/Temporary key active.*retired-metadata/)).not.toBeInTheDocument();
+  expect(screen.getByLabelText('API key')).toBeDisabled();
+  await waitFor(() => expect(reads).toBe(2));
+  await act(async () => { fresh.resolve(response({ ...configured, model: 'fresh-metadata' })); });
+  await screen.findByText(/Temporary key active.*fresh-metadata/);
+  const currentQueries = view.cache.getQueryCache().getAll().filter(q => q.getObserversCount() > 0);
+  expect(currentQueries).toHaveLength(1);
+  expect(currentQueries[0].queryKey).not.toEqual(['model-settings', 'one']);
+  expect(JSON.stringify(currentQueries[0].queryKey)).not.toContain('dummy-replacement-csrf');
+  expect(view.cache.getMutationCache().getAll()).toHaveLength(0);
+});
+
+it.each(['PUT', 'DELETE'] as const)('does not start %s readback after a same-ID replacement without render', async method => {
+  const old = delayed<Response>();
+  const view = setup(async (_url, init) => init.method === method ? old.promise : response(configured));
+  await screen.findByText(/Temporary key active/);
+  if (method === 'PUT') { enterDummyKey(); fireEvent.click(screen.getByRole('button', { name: 'Save temporary key' })); }
+  else fireEvent.click(screen.getByRole('button', { name: 'Forget key' }));
+  await waitFor(() => expect(view.fetcher.mock.calls.filter(([, init]) => init.method === method)).toHaveLength(1));
+  const calls = view.fetcher.mock.calls.length;
+  replaceSettingsOwner(view, 'same-id', false);
+  await act(async () => { old.resolve(response(configured)); });
+  expect(view.fetcher).toHaveBeenCalledTimes(calls);
+});
+
+it.each([
+  ['same-id', 'write'], ['client', 'write'], ['same-id', 'readback'], ['client', 'readback'],
+] as const)('drops retired %s callbacks during %s without clearing new consent', async (mode, phase) => {
+  const old = delayed<Response>();
+  let written = false;
+  let heldReadback = false;
+  const view = setup(async (_url, init) => {
+    if (init.method === 'PUT') { written = true; return phase === 'write' ? old.promise : response(configured); }
+    if (phase === 'readback' && written && !heldReadback) { heldReadback = true; return old.promise; }
+    return response(empty);
+  });
+  await screen.findByText(/No provider configured/);
+  enterDummyKey();
+  fireEvent.click(screen.getByRole('button', { name: 'Save temporary key' }));
+  await waitFor(() => expect(phase === 'readback' ? heldReadback : written).toBe(true));
+  replaceSettingsOwner(view, mode);
+  await waitFor(() => expect(screen.getByLabelText('Model')).toBeEnabled());
+  await waitFor(() => expect(screen.getByLabelText('API key')).toBeEnabled());
+  enterDummyKey('dummy-new-owner-marker');
+  const calls = view.fetcher.mock.calls.length;
+  await act(async () => { old.resolve(response({ detail: 'dummy-retired-error' }, 500)); });
+  expect(view.fetcher).toHaveBeenCalledTimes(calls);
+  expect(screen.getByLabelText('API key')).toHaveValue('dummy-new-owner-marker');
+  expect(screen.getByRole('checkbox')).toBeChecked();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+it('preserves unsent credentials across ordinary activity and no-op redraws', async () => {
+  const view = setup(async url => url === '/api/session/activity'
+    ? response({ session_id: 'one', csrf_token: 'csrf', expires_at: 9999999999 }) : response(empty));
+  await screen.findByText(/No provider configured/);
+  enterDummyKey();
+  const generation = view.api.sessionGeneration;
+  await act(async () => { runtime.current = { api: view.api, session: await view.api.activity() }; });
+  view.redraw();
+  view.redraw();
+  expect(view.api.sessionGeneration).toBe(generation);
+  expect(screen.getByLabelText('API key')).toHaveValue('dummy-scope-boundary-marker');
+  expect(screen.getByRole('checkbox')).toBeChecked();
+  expect(view.fetcher.mock.calls.filter(([url]) => url === '/api/model-settings')).toHaveLength(1);
 });

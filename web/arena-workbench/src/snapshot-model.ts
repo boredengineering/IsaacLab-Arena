@@ -2,7 +2,10 @@ import type { Job } from './contracts';
 import type { SnapshotResult } from './editor-contracts';
 
 export interface SnapshotReceipt {
-  jobId: string;
+  /** Display/cache identity, never a journal route parameter. */
+  receiptId: string;
+  /** Real requesting journal job only; does not establish physical capture origin. */
+  requestJobId?: string;
   documentId?: string;
   canonicalHash: string | null;
   result: SnapshotResult;
@@ -49,7 +52,7 @@ export function snapshotHistory(jobs: Job[], canonicalHash: string | null, docum
     const identity = hash ?? job.id;
     if (seen.has(identity)) continue;
     seen.add(identity);
-    receipts.push({ jobId: job.id, documentId: source, canonicalHash: hash, result: job.result as unknown as SnapshotResult });
+    receipts.push({ receiptId: job.id, requestJobId: job.id, documentId: source, canonicalHash: hash, result: job.result as unknown as SnapshotResult });
   }
   return receipts.sort((a, b) => Number(b.canonicalHash === canonicalHash && !!canonicalHash)
     - Number(a.canonicalHash === canonicalHash && !!canonicalHash)).slice(0, 8);

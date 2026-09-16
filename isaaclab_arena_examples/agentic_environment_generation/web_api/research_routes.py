@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
+from isaaclab_arena.agentic_environment_generation.workbench.editor_revision_storage import RevisionBusy, RevisionUncertain
 from isaaclab_arena.agentic_environment_generation.workbench.research_registry import canonical_json, digest
 from isaaclab_arena.agentic_environment_generation.workbench.research_store import ResearchStore, SafeBusy
 
@@ -102,6 +103,120 @@ class PersistCandidate(BaseModel):
     publication_target: PublicationTarget | None = None
 
 
+class AcceptedCandidateSource(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["accepted_candidate"]
+    job_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    attempt_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    generation: int = Field(ge=1)
+
+
+class PersistTaggedCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+    family: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+    source: AcceptedCandidateSource
+    parent_revision_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{32}$")
+    publication_target: PublicationTarget | None = None
+
+    def legacy(self):
+        return PersistCandidate(idempotency_key=self.idempotency_key, family=self.family,
+            source_job_id=self.source.job_id, source_attempt_id=self.source.attempt_id,
+            source_generation=self.source.generation, parent_revision_id=self.parent_revision_id,
+            publication_target=self.publication_target)
+
+
+class EditorRevisionSource(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["editor_revision"]
+    editor_revision_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    source_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    canonical_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class PersistEditorRevision(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    idempotency_key: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+    family: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+    source: EditorRevisionSource
+    parent_revision_id: str | None = Field(pattern=r"^[a-f0-9]{32}$")
+    publication_target: PublicationTarget | None = None
+
+
+def persist_manual(request, store, body):
+    from isaaclab_arena.agentic_environment_generation.workbench.research_source import editor_revision_source
+    from .editor import protect_revision_bundle
+
+    approval = {"scope": "persist_editor_revision", "principal": "single_operator_workspace"}
+    selected = body.source.model_dump()
+    previous = store.registry.get_reservation_for_workflow(store.store_id, body.idempotency_key)
+    loader = lambda revision_id: request.app.state.documents.load_revision_bundle(
+        revision_id, protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle))
+    if previous is not None and store.registry.get_commit(previous["reservation_id"]) is not None:
+        source = previous["source"]
+        loader = None
+    else:
+        source = editor_revision_source(loader(body.source.editor_revision_id))
+    if any(source.get(key) != value for key, value in selected.items()):
+        raise ValueError("Research source conflict")
+    return store.persist_editor_revision(
+        body.family, body.idempotency_key, source=source, bundle_loader=loader,
+        approval=approval, parent_revision_id=body.parent_revision_id)
+
+
+def protected_version_source(request, store, reservation_id):
+    """Verify copied source bytes and screen all retained content under current policy."""
+    from isaaclab_arena.agentic_environment_generation.workbench.research_source import verify_source_artifacts, source_kind
+    from .editor import protect_revision_bundle, protect_yaml
+
+    reservation = store.get_reservation(reservation_id)
+    files = store.read_version(reservation_id)
+    source = verify_source_artifacts(reservation["source"], files,
+        protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle))
+    if source_kind(reservation["source"]) == "accepted_candidate":
+        protect_public(request, source)
+        protect_yaml(request, source["yaml_text"])
+    return source, files
+
+
+def research_open_source(store_id, commit):
+    return {"kind": "research_version", "id": "research-version:" + store_id + ":" +
+            commit["reservation"]["reservation_id"] + ":" + commit["manifest"]["digest"]}
+
+
+def open_research_version(request, descriptor):
+    import re
+    from isaaclab_arena.agentic_environment_generation.workbench.research_registry import checked_identifier
+    from .editor import protect_revision_bundle
+
+    parts = descriptor.split(":")
+    if len(parts) != 4 or parts[0] != "research-version" or not re.fullmatch(r"[a-f0-9]{64}", parts[3]):
+        raise HTTPException(422, "Invalid research version descriptor")
+    _, store_id, reservation_id, manifest_digest = parts
+    try:
+        checked_identifier(store_id)
+        checked_identifier(reservation_id)
+    except ValueError:
+        raise HTTPException(422, "Invalid research version descriptor") from None
+    try:
+        with selected_store(request, store_id) as store:
+            reservation = store.get_reservation(reservation_id)
+            commit = store.registry.get_commit(reservation_id)
+            if commit is None:
+                raise HTTPException(404, "Research version is not committed")
+            if commit["manifest"]["digest"] != manifest_digest:
+                raise ValueError("Research manifest conflict")
+            bundle, _ = protected_version_source(request, store, reservation_id)
+            identity = {key: reservation[key] for key in ("store_id", "reservation_id", "revision_id", "family", "version", "source")}
+            identity["manifest_digest"] = manifest_digest
+            protect_public(request, identity)
+            return request.app.state.documents.issue_research_view(
+                bundle, research_open_source(store_id, commit), identity,
+                protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle))
+    except (KeyError, ValueError, OSError):
+        raise HTTPException(409, "Research version unavailable") from None
+
+
 def selected_store(request, store_id):
     root = request.app.state.research_roots.get(store_id)
     if root is None:
@@ -119,13 +234,21 @@ async def persist(
     request: Request,
     response: Response,
     store_id: str,
-    body: PersistCandidate,
+    body: PersistCandidate | PersistTaggedCandidate | PersistEditorRevision,
     session=Depends(require_mutation),
 ):
-    """Persist an exact accepted candidate; this does not authorize graph publication."""
+    """Persist an exact source; this does not authorize graph publication."""
     protect_public(request, body.model_dump())
+    if isinstance(body, PersistTaggedCandidate):
+        body = body.legacy()
+    if isinstance(body, PersistEditorRevision) and body.publication_target is not None:
+        raise HTTPException(422, "Editor revision publication is unsupported")
     try:
         with selected_store(request, store_id) as store:
+            if isinstance(body, PersistEditorRevision):
+                result = persist_manual(request, store, body)
+                protect_public(request, result)
+                return result
             publication_request = None
             if body.publication_target is not None:
                 target = body.publication_target.model_dump()
@@ -162,6 +285,10 @@ async def persist(
         if result["publication_intent_id"] is not None:
             response.headers["X-Publication-Preparation"] = "prepared-not-published"
         return result
+    except RevisionBusy:
+        raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+    except RevisionUncertain:
+        raise HTTPException(503, "Revision data unavailable; retain the exact request") from None
     except (KeyError, ValueError, OSError):
         raise HTTPException(
             409,
@@ -186,6 +313,8 @@ async def versions(
             summaries = []
             for row in page:
                 reservation, commit = row["reservation"], row["commit"]
+                if commit is not None:
+                    protected_version_source(request, store, reservation["reservation_id"])
                 summaries.append({
                     **{
                         key: reservation[key]
@@ -197,7 +326,9 @@ async def versions(
                         )
                     },
                     "state": row["state"],
-                    "source_job_id": reservation["source"]["job_id"],
+                    "source": reservation["source"],
+                    **({"source_job_id": reservation["source"]["job_id"]} if "job_id" in reservation["source"] else {}),
+                    "open_source": research_open_source(store_id, commit) if commit else None,
                     "manifest_digest": commit["manifest"]["digest"] if commit else None,
                     "publication_intent_id": commit["publication_intent_id"] if commit else None,
                 })
@@ -226,7 +357,7 @@ async def version(
             commit = store.registry.get_commit(reservation_id)
             if commit is None:
                 raise HTTPException(404, "Research version is not committed")
-            store.read_version(reservation_id)
+            protected_version_source(request, store, reservation_id)
         protect_public(request, commit)
         return commit
     except (KeyError, ValueError, OSError):
@@ -290,7 +421,7 @@ async def artifact(
     """Download verified YAML/JSON as an attachment, never same-origin executable content."""
     try:
         with selected_store(request, store_id) as store:
-            files = store.read_version(reservation_id)
+            _, files = protected_version_source(request, store, reservation_id)
         if name not in files:
             raise HTTPException(404, "Research artifact not found")
         text = files[name].decode("utf-8")

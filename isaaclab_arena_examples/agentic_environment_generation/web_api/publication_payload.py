@@ -10,7 +10,6 @@ import hashlib
 import json
 
 from isaaclab_arena.agentic_environment_generation.workbench import research_graph_transport
-from isaaclab_arena.agentic_environment_generation.workbench.documents import Documents
 from isaaclab_arena.agentic_environment_generation.workbench.research_projection import (
     project_scene,
     validate_projection,
@@ -20,6 +19,7 @@ from isaaclab_arena.agentic_environment_generation.workbench.research_registry i
     checked_identifier,
     digest,
 )
+from isaaclab_arena.agentic_environment_generation.workbench.research_source import source_kind, verify_frozen_spec
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
 from .graph_access import checked_graph_config
@@ -60,28 +60,19 @@ def prepare_publication(store, authorization, effect_id):
     ):
         raise ValueError("Publication frozen profile ownership required")
     files = store.read_version(intent["reservation_id"])
-    for name in (
-        "environment.yaml",
-        "candidate.json",
-        "source.json",
-        "projection.json",
-    ):
+    source_artifacts = (
+        ("candidate.json",)
+        if source_kind(reservation["source"]) == "accepted_candidate"
+        else ("editor-snapshot.json", "editor-receipt.json", "export.yaml")
+    )
+    for name in ("environment.yaml", "source.json", "projection.json", *source_artifacts):
         if name not in files or commit["manifest"]["files"].get(name) != dict(
             size=len(files[name]), sha256=hashlib.sha256(files[name]).hexdigest()
         ):
             raise ValueError("Publication artifact manifest conflict")
-    candidate = json.loads(files["candidate.json"])
-    if (
-        canonical_json(json.loads(files["source.json"])) != canonical_json(reservation)
-        or digest(candidate) != reservation["source"]["receipt_sha256"]
-        or candidate["yaml_text"].encode() != files["environment.yaml"]
-        or candidate["validation"]["source_hash"] != hashlib.sha256(files["environment.yaml"]).hexdigest()
-    ):
+    if canonical_json(json.loads(files["source.json"])) != canonical_json(reservation):
         raise ValueError("Publication frozen source binding conflict")
-    validation = Documents(".").validate(files["environment.yaml"].decode())
-    if not validation["valid"]:
-        raise ValueError("Invalid frozen publication source")
-    spec = ArenaEnvGraphSpec.from_dict(validation["spec"])
+    spec = verify_frozen_spec(reservation["source"], files)
     projection = json.loads(files["projection.json"])
     validate_projection(projection, spec=spec)
     rebuilt = project_scene(

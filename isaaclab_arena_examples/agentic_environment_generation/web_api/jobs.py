@@ -10,6 +10,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from .public_records import protect_public_record
 from .security import require_mutation, require_session
 
 router = APIRouter(prefix="/api")
@@ -42,25 +43,29 @@ def lookup(request, job_id):
 
 @router.get("/jobs", dependencies=[Depends(require_session)])
 async def jobs(request: Request):
-    return request.app.state.journal.snapshot()
+    return protect_public_record(request, request.app.state.journal.snapshot())
 
 
 @router.get("/workspaces/default", dependencies=[Depends(require_session)])
 async def workspace(request: Request):
-    return {"id": "default", "name": "Arena workspace", **request.app.state.journal.snapshot()}
+    return protect_public_record(request, {"id": "default", "name": "Arena workspace", **request.app.state.journal.snapshot()})
 
 
 @router.get("/jobs/{job_id}", dependencies=[Depends(require_session)])
 async def job(request: Request, job_id: str):
-    return lookup(request, job_id)
+    return protect_public_record(request, lookup(request, job_id))
 
 
 @router.post("/jobs", status_code=202)
 async def submit(request: Request, body: Submission, session=Depends(require_mutation)):
     if not request.app.state.diagnostics:
         raise HTTPException(422, "Test-only diagnostic jobs are disabled")
+    protect_public_record(request, body.model_dump())
+    prior = request.app.state.journal.get_submission(body.workspace_id, body.idempotency_key)
+    if prior is not None:
+        protect_public_record(request, prior)
     try:
-        return request.app.state.journal.submit(
+        accepted = request.app.state.journal.submit(
             session["session_id"],
             body.workspace_id,
             body.kind,
@@ -68,8 +73,13 @@ async def submit(request: Request, body: Submission, session=Depends(require_mut
             body.inputs.model_dump(),
             max_pending=request.app.state.max_pending,
         )
-    except ValueError as error:
-        raise HTTPException(409, str(error)) from None
+    except ValueError:
+        raise HTTPException(409, "Job submission conflicts with stored inputs or queue capacity") from None
+    try:
+        return protect_public_record(request, accepted)
+    except Exception:
+        # Acceptance is durable even if its public representation cannot be returned.
+        raise HTTPException(503, "Job accepted; public job record unavailable. Retain the exact submission for lookup") from None
 
 
 @router.post("/jobs/resume-queue", dependencies=[Depends(require_mutation)])
@@ -82,6 +92,12 @@ async def resume_queue(request: Request):
 
 @router.post("/jobs/{job_id}/cancel", dependencies=[Depends(require_mutation)])
 async def cancel(request: Request, job_id: str):
+    """Keep cancellation independent of record visibility; never claim cleanup from intent.
+
+    Safe responses remain complete Jobs. If the resulting record is protected,
+    the explicit 503 reports public-status unavailability *after* handling the
+    cancellation, not rollback or terminal cancellation. Retrying is idempotent.
+    """
     current = lookup(request, job_id)
     if current["status"] == "blocked_authorization":
         journal = request.app.state.journal
@@ -90,9 +106,12 @@ async def cancel(request: Request, job_id: str):
             journal.cancel_attempt(
                 job_id, attempt["attempt_id"], attempt["generation"], expected_state="blocked_authorization"
             )
-        return journal.get_job(job_id)
+        current = journal.get_job(job_id)
     if current["status"] == "queued":
         current = request.app.state.journal.cancel_queued(job_id)
     if current["status"] == "running":
-        return request.app.state.supervisor.request_cancel(job_id)
-    return current
+        current = request.app.state.supervisor.request_cancel(job_id)
+    try:
+        return protect_public_record(request, current)
+    except Exception:
+        raise HTTPException(503, "Cancellation handled; public job record unavailable. Cancellation may still be pending; read the job again for status") from None

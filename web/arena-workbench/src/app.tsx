@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   QueryClient,
   QueryClientProvider,
@@ -14,15 +14,20 @@ import {
   createRoute,
   createRouter,
   useNavigate,
+  useRouterState,
   type RouterHistory,
 } from '@tanstack/react-router';
 import { ApiClient } from './api';
 import { workspaceKey } from './cache';
-import { isActive, type Job, type Workspace } from './contracts';
+import { isUnfinished, type Job, type Workspace } from './contracts';
 import { sharedPort, type ObservationPort } from './observation';
 import { RuntimeProvider, useRuntime } from './runtime';
 import { EditorView } from './editor';
-import { useEditorJob } from './editor-jobs';
+import { AuthoredInspector, type AuthoredInspectorProps } from './authored-inspector';
+import { OptionalWorkbenchChrome } from './optional-workbench-chrome';
+import { useJobCancellation } from './job-cancellation';
+import { BuildOutcome } from './build-environment';
+import { EvaluationOutcome } from './evaluate-policy';
 import { GenerationReauthorization, isBlockedGeneration } from './generation-reauthorization';
 import { useModelSettings } from './model-settings';
 import { Neo4jView } from './neo4j';
@@ -31,10 +36,12 @@ import { ThemeProvider, ThemeToggle } from './theme';
 import './styles.css';
 import './editor.css';
 import './theme.css';
+import './layout-host.css';
 
 interface WorkbenchSearch {
   filter: 'all' | 'active' | 'terminal';
   graphRenderer?: GraphRendererChoice;
+  layout?: 'legacy' | 'v7';
 }
 
 const connectionLabels = {
@@ -45,17 +52,57 @@ const connectionLabels = {
   expired: 'Session expired or revoked',
   disconnected: 'Disconnected',
 };
+const renderAuthoredInspector = (props: AuthoredInspectorProps) => <AuthoredInspector {...props} />;
 function Shell() {
   const runtime = useRuntime();
+  const { layout = 'legacy' } = rootRoute.useSearch();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: state => state.location.pathname });
+  const editorActive = pathname === '/' || pathname === '/workspaces/default';
+  const libraryActive = pathname === '/library';
+  const queryActive = pathname === '/neo4j';
+  const [visited, setVisited] = useState({ editor: editorActive || libraryActive, query: queryActive });
+  useEffect(() => {
+    setVisited(previous => previous.editor === (previous.editor || editorActive || libraryActive) && previous.query === (previous.query || queryActive)
+      ? previous : { editor: previous.editor || editorActive || libraryActive, query: previous.query || queryActive });
+  }, [editorActive, libraryActive, queryActive]);
+  const graphProps = useGraphRouteProps();
   const endSession = useMutation({ mutationFn: runtime.revoke, retry: false });
+  const presentation = useMemo(() => ({}), [layout]);
+  const [readyFor, setReadyFor] = useState<object | null>(null);
+  const [failedFor, setFailedFor] = useState<object | null>(null);
+  const chromeReady = layout === 'v7' && readyFor === presentation;
+  const chromeReadyCallback = useCallback(() => setReadyFor(presentation), [presentation]);
+  const chromeFailureCallback = useCallback(() => {
+    setReadyFor(previous => previous === presentation ? null : previous);
+    setFailedFor(presentation);
+  }, [presentation]);
+  const sessionControls = <div className="session-controls">
+    <button type="button" onClick={() => void navigate({ to: '.', search: (previous: WorkbenchSearch) => ({ ...previous, layout: layout === 'v7' ? 'legacy' : 'v7' }), replace: true })}>{layout === 'v7' ? 'Use legacy layout' : 'Try V7 layout'}</button>
+    <span className={`connection ${runtime.status}`} role="status"><i />{connectionLabels[runtime.status]}</span>
+    {runtime.session && <button className="quiet" disabled={endSession.isPending} onClick={() => endSession.mutate()}>End session</button>}
+  </div>;
+  const navigation = <nav aria-label="Workspace navigation">
+    {([
+      ['/workspaces/default', 'Environment editor', 'E'],
+      ['/library', 'Library', 'L'],
+      ['/neo4j', 'Neo4j query', 'Q'],
+      ['/developer/diagnostics', 'Jobs & diagnostics', 'J'],
+    ] as const).map(([to, label, marker]) => <Link key={to} to={to} title={label} className="nav-item"
+      search={(previous: WorkbenchSearch) => previous} activeProps={{ className: 'nav-item selected' }}>
+      <span className="workbench-nav-marker" aria-hidden="true">{marker}</span><span className="workbench-nav-label">{label}</span>
+    </Link>)}
+  </nav>;
   return (
-    <div className="app-shell">
+    <div className={`app-shell${chromeReady ? ' workbench-v7' : ''}`}>
       <a className="skip-link" href="#workspace">
         Skip to workspace
       </a>
-      <aside className="sidebar">
+      <OptionalWorkbenchChrome enabled={layout === 'v7'} navigation={chromeReady ? navigation : null} sessionControls={chromeReady ? sessionControls : null}
+        themeControl={chromeReady ? <ThemeToggle /> : null} onReady={chromeReadyCallback} onFailure={chromeFailureCallback} />
+      <aside className="sidebar" hidden={chromeReady} style={chromeReady ? { display: 'none' } : undefined}>
         <div className="sidebar-brand-tools">
-          <Link className="brand" to="/workspaces/default">
+          <Link className="brand" to="/workspaces/default" search={(previous: WorkbenchSearch) => previous}>
             <span className="brand-mark" aria-hidden="true">
               A
             </span>
@@ -73,12 +120,14 @@ function Shell() {
           >
             Environment editor
           </Link>
+          <Link className="nav-item" to="/library" search={(previous: WorkbenchSearch) => previous} activeProps={{ className: 'nav-item selected' }}>Library</Link>
           <Link className="nav-item" to="/neo4j" search={(previous: WorkbenchSearch) => previous} activeProps={{ className: 'nav-item selected' }}>
             Neo4j query
           </Link>
           <Link
             className="nav-item"
             to="/developer/diagnostics"
+            search={(previous: WorkbenchSearch) => previous}
             activeProps={{ className: 'nav-item selected' }}
           >
             Jobs & diagnostics
@@ -87,26 +136,13 @@ function Shell() {
         <ThemeToggle />
       </aside>
       <div className="main-shell">
-        <header className="topbar">
+        <header className="topbar" hidden={chromeReady} style={chromeReady ? { display: 'none' } : undefined}>
           <span className="breadcrumb">
             Local research / <strong>default</strong>
           </span>
-          <div className="session-controls">
-            <span className={`connection ${runtime.status}`} role="status">
-              <i />
-              {connectionLabels[runtime.status]}
-            </span>
-            {runtime.session && (
-              <button
-                className="quiet"
-                disabled={endSession.isPending}
-                onClick={() => endSession.mutate()}
-              >
-                End session
-              </button>
-            )}
-          </div>
+          {sessionControls}
         </header>
+        {layout === 'v7' && failedFor === presentation && <p role="alert" className="notice warning">V7 layout unavailable. Legacy controls remain usable; no work was submitted by this layout change.</p>}
         {(runtime.error || endSession.error) && (
           <div className="notice error" role="alert">
             <strong>Connection or request problem</strong>
@@ -133,6 +169,8 @@ function Shell() {
             </button>
           </div>
         )}
+        <div hidden={!editorActive && !libraryActive}>{(visited.editor || editorActive || libraryActive) && <EditorView {...graphProps} layout={chromeReady ? 'v7' : 'legacy'} active={editorActive} libraryActive={libraryActive} onLibraryOpened={() => void navigate({ to: '/workspaces/default', search: (previous: WorkbenchSearch) => previous })} renderInspector={renderAuthoredInspector} />}</div>
+        <div hidden={!queryActive}>{(visited.query || queryActive) && <Neo4jView {...graphProps} active={queryActive} />}</div>
         <Outlet />
         <footer className="footer">
           <span>Arena · Environment research workbench</span>
@@ -149,6 +187,14 @@ function DiagnosticControls({ jobs }: { jobs: Job[] }) {
   const [steps, setSteps] = useState(3);
   const [delay, setDelay] = useState(1);
   const [, rerender] = useState(0);
+  const resumeGeneration = runtime.api.sessionGeneration;
+  const resumeOwner = useMemo(() => ({ active: false, epoch: 0 }),
+    [runtime.api, resumeGeneration, runtime.session?.session_id, opted, runtime.health?.capabilities.diagnostic]);
+  useLayoutEffect(() => {
+    resumeOwner.active = true;
+    resumeOwner.epoch++;
+    return () => { resumeOwner.active = false; resumeOwner.epoch++; };
+  }, [resumeOwner]);
   const mutation = useMutation({
     retry: false,
     mutationFn: async () => {
@@ -159,22 +205,42 @@ function DiagnosticControls({ jobs }: { jobs: Job[] }) {
     },
     onSuccess: async (job) => {
       await runtime.refresh();
-      await navigate({ to: '/jobs/$jobId', params: { jobId: job.id } });
+      await navigate({ to: '/jobs/$jobId', params: { jobId: job.id }, search: (previous: WorkbenchSearch) => previous });
     },
     onSettled: () => rerender((n) => n + 1),
   });
   const resume = useMutation({
     retry: false,
-    mutationFn: async () => {
-      await runtime.api.activity();
-      return runtime.api.mutate('/jobs/resume-queue', {});
-    },
-    onSuccess: runtime.refresh,
+    mutationFn: (request: { current(): boolean; run(): Promise<boolean> }) => request.run(),
   });
   const available = runtime.health?.capabilities.diagnostic === true;
   const enabled =
     available && !!runtime.session && opted && !!runtime.pending && !mutation.isPending;
   const pending = runtime.pending?.current;
+  function resumeQueue() {
+    const api = runtime.api;
+    const sessionId = runtime.session?.session_id;
+    const epoch = resumeOwner.epoch;
+    const refresh = runtime.refresh;
+    const current = () => enabled && resumeOwner.active && resumeOwner.epoch === epoch
+      && !!sessionId && api.session?.session_id === sessionId && api.sessionGeneration === resumeGeneration;
+    if (!current() || !window.confirm('Resume the entire shared workload queue? This may start generation and GPU jobs, including jobs not shown in this snapshot.') || !current()) return;
+    resume.mutate({ current, run: async () => {
+      try {
+        if (!current()) return false;
+        await api.activity();
+        if (!current()) return false;
+        const result = await api.mutate<{ resumed: boolean }>('/jobs/resume-queue', {});
+        if (!current()) return false;
+        if (result?.resumed !== true) throw new Error('Queue resume acknowledgement unavailable; inspect the journal before retrying.');
+        await refresh();
+        return current();
+      } catch (error) {
+        if (current()) throw error;
+        return false;
+      }
+    } });
+  }
   return (
     <section className="panel diagnostic" aria-labelledby="diagnostic-heading">
       <div className="panel-heading">
@@ -274,18 +340,18 @@ function DiagnosticControls({ jobs }: { jobs: Job[] }) {
       )}
       {jobs.some((j) => j.status === 'queued') && (
         <div className="resume-row">
-          <p>After an API restart, queued work may require explicit resume.</p>
-          <button disabled={!enabled || resume.isPending} onClick={() => resume.mutate()}>
-            Resume queued tests
+          <p>This resumes the shared workload queue, not only diagnostic tests. Queued generation or GPU jobs may start, including jobs added since this snapshot.</p>
+          <button disabled={!enabled || resume.isPending} onClick={resumeQueue}>
+            Resume shared workload queue
           </button>
         </div>
       )}
-      {resume.error && (
+      {resume.error && resume.variables?.current() && (
         <p role="alert" className="error-text">
           {resume.error.message}
         </p>
       )}
-      {resume.isSuccess && (
+      {resume.isSuccess && resume.data === true && resume.variables?.current() && (
         <p role="status">Queue resume acknowledged. Observe each job for its outcome.</p>
       )}
     </section>
@@ -294,26 +360,19 @@ function DiagnosticControls({ jobs }: { jobs: Job[] }) {
 function StatusBadge({ job }: { job: Job }) {
   return <span className={`job-status ${job.status}`}>{job.status.replaceAll('_', ' ')}</span>;
 }
-function BlockedJobActions({ job }: { job: Job }) {
+function BlockedJobActions({ job, cancel }: { job: Job; cancel: ReturnType<typeof useJobCancellation>['cancel'] }) {
   useModelSettings(); // Reuse public, session-scoped settings observation on deep links.
   const runtime = useRuntime();
-  const { cancel } = useEditorJob('generate');
+
   return <>
     <GenerationReauthorization job={job} onVerified={runtime.refresh} />
-    <button className="danger" disabled={!runtime.session || cancel.isPending} onClick={() => cancel.mutate(job.id)}>Cancel generation</button>
+    <button className="danger" disabled={!runtime.session || cancel.isPending} onClick={() => cancel.mutate()}>Cancel generation</button>
     {cancel.error && <p role="alert">{cancel.error.message}</p>}
   </>;
 }
 function JobInspector({ job }: { job?: Job }) {
   const runtime = useRuntime();
-  const cancel = useMutation({
-    retry: false,
-    mutationFn: async () => {
-      await runtime.api.activity();
-      return runtime.api.mutate(`/jobs/${encodeURIComponent(job!.id)}/cancel`, {});
-    },
-    onSuccess: runtime.refresh,
-  });
+  const { cancel } = useJobCancellation(job?.id);
   if (!job)
     return (
       <section className="panel inspector empty">
@@ -352,7 +411,9 @@ function JobInspector({ job }: { job?: Job }) {
       <h3>Frozen inputs</h3>
       <pre>{JSON.stringify(job.inputs, null, 2)}</pre>
       <h3>Job outcome</h3>
-      {job.result ? (
+      <BuildOutcome job={job} />
+      <EvaluationOutcome job={job} />
+      {job.kind === 'evaluate' && job.result ? null : job.result ? (
         <pre data-testid="job-result">{JSON.stringify(job.result, null, 2)}</pre>
       ) : (
         <p className="muted">No completion result recorded.</p>
@@ -373,7 +434,7 @@ function JobInspector({ job }: { job?: Job }) {
           Cancellation requested. Waiting for worker cleanup acknowledgment; not yet cancelled.
         </p>
       )}
-      {isBlockedGeneration(job) && <BlockedJobActions key={job.id} job={job} />}
+      {isBlockedGeneration(job) && <BlockedJobActions key={job.id} job={job} cancel={cancel} />}
       {['queued', 'running'].includes(job.status) && (
         <button
           className="danger"
@@ -408,7 +469,7 @@ function WorkspaceView({ selectedJobId }: { selectedJobId?: string }) {
     (a, b) => String(b.created_at).localeCompare(String(a.created_at)) || a.id.localeCompare(b.id),
   );
   const visible = jobs.filter(
-    (j) => filter === 'all' || (filter === 'active' ? isActive(j) : !isActive(j)),
+    (j) => filter === 'all' || (filter === 'active' ? isUnfinished(j) : !isUnfinished(j)),
   );
   const selected = jobs.find((j) => j.id === selectedJobId);
   return (
@@ -426,7 +487,7 @@ function WorkspaceView({ selectedJobId }: { selectedJobId?: string }) {
       <div className="scope-note">
         <strong>Integration gate</strong>
         <span>Validate transport and job lifecycle before enabling research workloads.</span>
-        <span className="tag">No GPU work</span>
+        <span className="tag">Viewing does not start work</span>
       </div>
       <DiagnosticControls jobs={jobs} />
       <div className="work-grid">
@@ -443,12 +504,12 @@ function WorkspaceView({ selectedJobId }: { selectedJobId?: string }) {
                 onChange={(e) =>
                   void navigate({
                     to: '.',
-                    search: { filter: e.target.value as 'all' | 'active' | 'terminal' },
+                    search: (previous: WorkbenchSearch) => ({ ...previous, filter: e.target.value as 'all' | 'active' | 'terminal' }),
                   })
                 }
               >
                 <option value="all">All jobs</option>
-                <option value="active">Active</option>
+                <option value="active">Unfinished (including authorization waits)</option>
                 <option value="terminal">Terminal</option>
               </select>
             </label>
@@ -467,7 +528,7 @@ function WorkspaceView({ selectedJobId }: { selectedJobId?: string }) {
                 {visible.map((job) => (
                   <tr key={job.id} className={selectedJobId === job.id ? 'selected-row' : ''}>
                     <td>
-                      <Link to="/jobs/$jobId" params={{ jobId: job.id }} search={{ filter }}>
+                      <Link to="/jobs/$jobId" params={{ jobId: job.id }} search={(previous: WorkbenchSearch) => previous}>
                         <strong>{job.kind === 'diagnostic' ? 'Integration test' : job.kind}</strong>
                         <code>{job.id}</code>
                       </Link>
@@ -507,7 +568,7 @@ function WorkspaceView({ selectedJobId }: { selectedJobId?: string }) {
           <section className="panel inspector empty">
             <h2>Job not found</h2>
             <p>This ID is absent from the current workspace snapshot.</p>
-            <Link to="/developer/diagnostics">Return to journal</Link>
+            <Link to="/developer/diagnostics" search={(previous: WorkbenchSearch) => previous}>Return to journal</Link>
           </section>
         ) : (
           <JobInspector key={selectedJobId ?? 'empty'} job={selected} />
@@ -524,19 +585,20 @@ function useGraphRouteProps() {
     onGraphRendererChange: (renderer: GraphRendererChoice) => { void navigate({ to: '.', search: (previous: WorkbenchSearch) => ({ ...previous, graphRenderer: renderer }), replace: true }); },
   };
 }
-function EditorRoute() { return <EditorView {...useGraphRouteProps()} />; }
-function Neo4jRoute() { return <Neo4jView {...useGraphRouteProps()} />; }
+function EditorRoute() { return null; }
+function Neo4jRoute() { return null; }
 const rootRoute = createRootRoute({
   component: Shell,
   validateSearch: (search: Record<string, unknown>): WorkbenchSearch => ({
     filter:
       search.filter === 'active' || search.filter === 'terminal' ? search.filter : ('all' as const),
     ...(search.graphRenderer === undefined ? {} : { graphRenderer: parseGraphRenderer(search.graphRenderer) }),
+    ...(search.layout === undefined ? {} : { layout: search.layout === 'v7' ? 'v7' : 'legacy' }),
   }),
   notFoundComponent: () => (
     <main className="workspace">
       <h1>Route not found</h1>
-      <Link to="/workspaces/default">Open workspace</Link>
+      <Link to="/workspaces/default" search={(previous: WorkbenchSearch) => previous}>Open workspace</Link>
     </main>
   ),
 });
@@ -565,7 +627,9 @@ const neo4jRoute = createRoute({
   path: '/neo4j',
   component: Neo4jRoute,
 });
+const libraryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library', component: EditorRoute });
 const routeTree = rootRoute.addChildren([
+  libraryRoute,
   indexRoute,
   workspaceRoute,
   jobRoute,

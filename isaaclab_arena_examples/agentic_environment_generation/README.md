@@ -493,7 +493,71 @@ rollout. Use the output path reported by the runner and verify the resulting
 graph in Neo4j: publication failures can be non-fatal. A first run against an
 empty database has no prior experience to retrieve.
 
-## 7. Render and evaluate
+## 7. Build, render, and evaluate
+
+### Build the current environment
+
+The prototype's **Build environment** action reuses this README's CLI harness;
+it does not generate a replacement scene. After applying generated YAML or
+loading/editing a document:
+
+1. Validate the current draft, then select **Build environment**.
+2. The API freezes that draft and submits one job. Its fixed profile is headless,
+   one environment, and **20 zero-action simulation steps**, with no video.
+   This advances simulation; it is not a zero-step schema check.
+3. Follow progress, refresh status, or cancel through the existing job controls.
+   **Job details** shows the frozen inputs and matching completion result.
+4. A completed build means the harness completed those steps and its owned worker
+   was cleaned up. It does not establish manipulation-task success. Later draft
+   edits do not change the submitted job.
+
+Build requires a running Isaac Sim-capable Arena runtime and available GPU lease.
+It does not call generation, a remote policy server, or graph publication.
+The button is available only when the API advertises its Build adapter and the
+current draft is validated; adapter support alone is not GPU readiness.
+Focused API/harness-seam and frontend tests pass. A real GPU run of this new web
+adapter has not yet been performed.
+
+### Evaluate a policy from the workbench
+
+The production editor now includes **Evaluate policy**, backed by the existing
+`policy_runner.py` harness. Start the appropriate server using the
+[GR00T](../../docs/pages/example_workflows/agentic_env_gen/eval_with_gr00t.rst)
+or [OpenPI](../../docs/pages/example_workflows/agentic_env_gen/eval_with_openpi.rst)
+guide first; the workbench does not start or stop policy servers.
+
+1. Apply or load the environment YAML and validate it. This prototype supports
+   `droid_abs_joint_pos` with its DROID camera and separate-observation contract;
+   it rejects incompatible embodiments rather than remapping actions.
+2. Choose **GR00T DROID** (`127.0.0.1:5555`) or **OpenPI DROID**
+   (`127.0.0.1:8000`). The profile identifies the client configuration, not a
+   verified checkpoint running on that server.
+3. Optionally enter a language instruction; leave it empty to use the task
+   description. Select **Evaluate policy** to submit the frozen draft/profile.
+4. Follow the job's progress or cancellation controls. The fixed profile uses
+   one headless environment, enabled cameras and 1000 policy iterations, with
+   a 900-second worker deadline. Settling steps are additional; iterations are
+   not episodes. Video, variations and distributed execution are not exposed
+   by this prototype profile.
+5. Inspect the recorded episode count, measured metrics and warnings. A completed
+   job is not manipulation success. No completed episodes is reported as no
+   completed-episode evidence, with success unknown rather than a fabricated rate.
+6. Download the report (`index.html`), episode records
+   (`episode_results_rank0.jsonl`), and local telemetry (`eval_telemetry.ttl`)
+   when produced. Downloads check the recorded byte size and SHA-256; HTML is
+   downloaded as an attachment, not embedded in the API origin. HDF5/video
+   downloads are not served by this prototype.
+
+Web evaluation explicitly disables automatic Neo4j telemetry publication and
+legacy version-tree lineage writes. It leaves local evaluation outputs intact;
+the standalone CLI retains its existing defaults. Missing local telemetry is a
+warning, not proof of publication. Actual GPU/policy-server execution has not yet
+been verified for this web adapter. Focused tests and scoped independent review
+pass, including artifact screening, download reactivation and empty episode files.
+The test image lacks `rdflib`, so its mocked telemetry tests do not establish real
+Turtle serialization; local TTL remains separately unverified.
+
+### Snapshots
 
 Request snapshots explicitly to render the scene and individual assets. Use
 camera presets and 512/1024 resolution controls to inspect the result. Automatic
@@ -502,10 +566,9 @@ saved previews with unverified remote asset freshness are labelled historical.
 Robot thumbnails show the authored joint pose, not simulated initial joints.
 
 **Schema validity is not physical validity, and a rendered scene is not evidence
-of policy success.** Snapshots use one environment and zero action steps. Export
-the YAML and follow the separate [GR00T](../../docs/pages/example_workflows/agentic_env_gen/eval_with_gr00t.rst)
-or [OpenPI](../../docs/pages/example_workflows/agentic_env_gen/eval_with_openpi.rst)
-workflow for actual policy evaluation.
+of policy success.** Snapshots use one environment and zero action steps. Use
+**Evaluate policy** for the fixed prototype profiles above, or export the YAML
+and use the linked CLI guides for other supported evaluation options.
 
 The `/neo4j` page provides read-only queries against a separately configured
 Neo4j database. These persisted query results are distinct from the editor's

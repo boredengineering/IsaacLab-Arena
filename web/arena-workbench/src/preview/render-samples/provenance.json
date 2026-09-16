@@ -1,0 +1,62 @@
+{
+  "manifest_sha256": "94139b0c124bf923a57b7394492def8127f5b34c6f49757744b5f3bbce31321c",
+  "source": "Historical renderer verification run2/isometric; selected PNGs only",
+  "limits": "No immutable input YAML hash, source commit or durable job ID retained. No current-draft correspondence or physical success is claimed. Sideways standalone robot capture deliberately excluded.",
+  "frames": [
+    {
+      "id": "scene",
+      "kind": "scene",
+      "label": "Historical maple-table scene",
+      "camera": "isometric",
+      "width": 512,
+      "height": 512,
+      "file": "scene.png",
+      "sha256": "5175eb085aeb303de899a3b127ab780e05c5264f4d08bab7c9fbd301aa384999",
+      "sourceLabel": "Historical Isaac/Kit renderer capture; asset freshness and exact input bytes unverified. Not the selected draft; not ovrtx. Scene contains a visibly suspended mug; zero-step capture, not settled physics.",
+      "captureId": "renderer-verification/run2/isometric (historical capture, not a durable job receipt)",
+      "sourceFile": "pick_and_place_maple_table_default_preview_9946b5be_1789175433841_first.png",
+      "targetPrims": [
+        "/World/envs/env_0/Robot",
+        "/World/envs/env_0/bowl_ycb_robolab",
+        "/World/envs/env_0/maple_table_robolab/table",
+        "/World/envs/env_0/mug_ycb_robolab",
+        "/World/envs/env_0/rubiks_cube_hot3d_robolab"
+      ],
+      "bytes": 80586
+    },
+    {
+      "id": "maple_table_robolab_table",
+      "kind": "asset",
+      "label": "Maple table",
+      "camera": "isometric",
+      "width": 512,
+      "height": 512,
+      "file": "table.png",
+      "sha256": "a08b8cd388464b42449913e4b7d39063c412e2a46340459e8b3520b23cbc7a87",
+      "sourceLabel": "Historical Isaac/Kit renderer capture; asset freshness and exact input bytes unverified. Not the selected draft; not ovrtx. Viewport grid/axes are part of the original capture.",
+      "captureId": "renderer-verification/run2/isometric (historical capture, not a durable job receipt)",
+      "sourceFile": "ac49ea2edd5e2cccb263f2d2f08f43eb95e3fed99b40ed7f32e6b494daa368f6.png",
+      "targetPrims": [
+        "/World/table"
+      ],
+      "bytes": 96189
+    },
+    {
+      "id": "rubiks_cube_hot3d_robolab",
+      "kind": "asset",
+      "label": "Rubik’s cube",
+      "camera": "isometric",
+      "width": 512,
+      "height": 512,
+      "file": "cube.png",
+      "sha256": "c6271ce16e4e7329b69e32494dff8503d245827fe45d0f7027c8f1703f8e66b0",
+      "sourceLabel": "Historical Isaac/Kit renderer capture; asset freshness and exact input bytes unverified. Not the selected draft; not ovrtx. Viewport axes are part of the original capture.",
+      "captureId": "renderer-verification/run2/isometric (historical capture, not a durable job receipt)",
+      "sourceFile": "0b3c87885aa83945bfefdd6e660c74fe4c29e870b63d62a92a09e3b2018c18af.png",
+      "targetPrims": [
+        "/rubiks_cube"
+      ],
+      "bytes": 201644
+    }
+  ]
+}

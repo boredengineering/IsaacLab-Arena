@@ -34,7 +34,7 @@ it('prefers the exact canonical scene over a newer different scene', () => {
     renderJob('newer', 'other-scene', 'doc', 9),
     renderJob('unrelated', 'other-scene', 'another-doc', 10),
   ], 'current', 'doc');
-  expect(history.map((receipt) => receipt.jobId)).toEqual(['matching', 'newer']);
+  expect(history.map((receipt) => receipt.requestJobId)).toEqual(['matching', 'newer']);
   expect(snapshotMatches(history[0], 'current')).toBe(true);
   expect(snapshotMatches(history[1], 'current')).toBe(false);
 });
@@ -59,6 +59,6 @@ it('deduplicates repeated scenes, caps history, and keeps the matching scene bef
   jobs.push(renderJob('replacement', 'scene-0', 'doc', 0.5));
   const history = snapshotHistory(jobs, 'scene-0', 'doc');
   expect(history).toHaveLength(8);
-  expect(history[0].jobId).toBe('replacement');
+  expect(history[0].requestJobId).toBe('replacement');
   expect(new Set(history.map((receipt) => receipt.canonicalHash)).size).toBe(history.length);
 });

@@ -4,6 +4,11 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { ApiClient } from './api';
 import type { Job } from './contracts';
 import { ResearchVersions } from './research-versions';
+import type { ManualInput, ResearchOpen } from './research-source';
+const manualSource: ManualInput = {kind: 'editor_revision', editor_revision_id: '1'.repeat(32), source_hash: '2'.repeat(64), canonical_hash: '3'.repeat(64)};
+const fullManual = {...manualSource, schema_version: 1, bundle_codec: 'arena-editor-bundle/v1', bundle_sha256: '4'.repeat(64), receipt_sha256: '5'.repeat(64)};
+function manualCommit(body: Record<string, unknown>) { const old = saved(body); const reservation = {...old.reservation, source: fullManual}; return {...old, reservation, manifest: {...old.manifest, binding: reservation, files: {'environment.yaml': {size: 20, sha256: manualSource.source_hash}}}}; }
+
 import { PublicationPanel } from './publication-panel';
 import { StrictMode } from 'react';
 import backendIdentity from './publication-backend.fixture.json';
@@ -401,6 +406,211 @@ async function browsing(url: string) {
  return reply(commit);
 }
 async function selectStore() { open(); await screen.findByRole('option', { name: 'local' }); fireEvent.change(screen.getByLabelText('Research store'), { target: { value: 'local' } }); }
+it.each([false, undefined])('fails closed for explicit manual mode without write admission (%s)', async manualWriteAllowed => {
+ vi.spyOn(window, 'confirm').mockReturnValue(true);
+ const fixture = setup(browsing);
+ fixture.rerender(<QueryClientProvider client={fixture.cache}><ResearchVersions manualSource={manualSource} manualWriteAllowed={manualWriteAllowed} /></QueryClientProvider>);
+ await selectStore(); fireEvent.change(screen.getByLabelText('Research family'), {target: {value: 'Example'}});
+ fireEvent.change(screen.getByLabelText('Research save source'), {target: {value: 'manual'}});
+ fireEvent.change(screen.getByLabelText('Parent revision'), {target: {value: 'none'}});
+ const save = screen.getByRole('button', {name: 'Save numbered research version'});
+ expect(save).toBeDisabled();
+ const props = (save as unknown as Record<string, {onClick: () => void}>)[Object.keys(save).find(key => key.startsWith('__reactProps$'))!];
+ act(props.onClick);
+ expect(window.confirm).not.toHaveBeenCalled();
+ expect(fixture.fetcher.mock.calls.some(([, opts]) => opts?.method === 'POST')).toBe(false);
+ expect(sessionStorage.getItem('arena:research-version:pending:v1')).toBeNull();
+ fixture.unmount();
+ const pending = manualPending(); const raw = JSON.stringify(pending);
+ sessionStorage.setItem('arena:research-version:pending:v1', raw);
+ const second = setup(browsing); open();
+ expect(screen.getByRole('button', {name: 'Retry exact research save'})).toBeDisabled();
+ expect(second.fetcher.mock.calls.some(([, opts]) => opts?.method === 'POST')).toBe(false);
+ expect(sessionStorage.getItem('arena:research-version:pending:v1')).toBe(raw);
+});
+
+it('saves an explicitly selected durable manual source, verifies GET, and offers only explicit exact Open', async () => {
+ vi.spyOn(window, 'confirm').mockReturnValue(true);
+ let body: Record<string, unknown> | undefined;
+ const opened = vi.fn<(source: ResearchOpen) => void>();
+ const fixture = setup(async (url, opts) => {
+  if (opts?.method === 'POST') {body = JSON.parse(String(opts.body)); return reply(manualCommit(body!));}
+  if (url.endsWith(`/${res}`)) return reply(manualCommit(body ?? {family: 'Example', idempotency_key: 'old'}));
+  if (url.includes('/versions?')) return reply({versions: [{...row, source_job_id: undefined, source: fullManual, open_source: {kind: 'research_version', id: `research-version:local:${res}:${digest}`}}], latest_version: 3, next_after_version: null});
+  return browsing(url);
+ });
+ fixture.rerender(<QueryClientProvider client={fixture.cache}><ResearchVersions manualWriteAllowed={true} manualSource={manualSource} onResearchOpen={opened} /></QueryClientProvider>);
+ await selectStore();
+ fireEvent.change(screen.getByLabelText('Research family'), {target: {value: 'Example'}});
+ fireEvent.change(screen.getByLabelText('Research save source'), {target: {value: 'manual'}});
+ expect(screen.queryByLabelText('Prepare publication on save')).not.toBeInTheDocument();
+ expect(screen.getByRole('button', {name: 'Save numbered research version'})).toBeDisabled();
+ fireEvent.change(screen.getByLabelText('Parent revision'), {target: {value: 'none'}});
+ fireEvent.click(screen.getByRole('button', {name: 'Save numbered research version'}));
+ await screen.findByText('Research version saved and verified. Graph publication was not performed.');
+ expect(body).toEqual({idempotency_key: expect.any(String), family: 'Example', parent_revision_id: null, source: manualSource});
+ expect(sessionStorage.getItem('arena:research-version:pending:v1')).toBeNull();
+ expect(opened).not.toHaveBeenCalled();
+ fireEvent.click(await screen.findByRole('button', {name: 'Select version 3'}));
+ fireEvent.click(await screen.findByRole('button', {name: 'Open research version in editor'}));
+ expect(opened).toHaveBeenCalledWith(expect.objectContaining({kind: 'research_version', id: `research-version:local:${res}:${digest}`, source_hash: manualSource.source_hash, canonical_hash: manualSource.canonical_hash}), expect.any(Function));
+ expect(fixture.fetcher.mock.calls.some(([url]) => url.includes('/candidates/') || url.includes('/publication'))).toBe(false);
+});
+it.each(['source ABA', 'selection ABA', 'query ABA'])('retires a retained exact research Open callback on %s', async boundary => {
+ const opened = vi.fn();
+ const fixture = setup(async url => {
+  if (url.endsWith(`/${res}`)) return reply(manualCommit({family: 'Example', idempotency_key: 'old'}));
+  if (url.includes('/versions?')) return reply({versions: [{...row, source_job_id: undefined, source: fullManual, open_source: {kind: 'research_version', id: `research-version:local:${res}:${digest}`}}], latest_version: 3, next_after_version: null});
+  return browsing(url);
+ });
+ const tree = (bindingKey = 'A') => <QueryClientProvider client={fixture.cache}><ResearchVersions candidate={candidate} onResearchOpen={opened} bindingKey={bindingKey} /></QueryClientProvider>;
+ fixture.rerender(tree()); await selectStore();
+ fireEvent.click(await screen.findByRole('button', {name: 'Select version 3'}));
+ const button = await screen.findByRole('button', {name: 'Open research version in editor'});
+ const key = Object.keys(button).find(k => k.startsWith('__reactProps$'))!;
+ const callback = (button as unknown as Record<string, {onClick: () => void}>)[key].onClick;
+ if (boundary === 'source ABA') {fixture.rerender(tree('B')); fixture.rerender(tree('A'));}
+ else if (boundary === 'selection ABA') {fireEvent.change(screen.getByLabelText('Research family'), {target: {value: 'Other'}}); fireEvent.change(screen.getByLabelText('Research family'), {target: {value: 'Example'}});}
+ else {await act(async () => {await fixture.cache.invalidateQueries({queryKey: ['research-version']});});}
+ act(callback);
+ expect(opened).not.toHaveBeenCalled();
+});
+it('does not claim saved when research retry storage silently refuses cleanup', async () => {
+ vi.spyOn(window, 'confirm').mockReturnValue(true);
+ let body: Record<string, unknown> = {};
+ const fixture = setup(async (url, opts) => {if (opts?.method === 'POST') {body = JSON.parse(String(opts.body)); return reply(manualCommit(body));} if (url.endsWith(`/${res}`)) return reply(manualCommit(body)); return browsing(url);});
+ fixture.rerender(<QueryClientProvider client={fixture.cache}><ResearchVersions manualWriteAllowed={true} manualSource={manualSource} /></QueryClientProvider>);
+ await selectStore(); fireEvent.change(screen.getByLabelText('Research family'), {target: {value: 'Example'}});
+ fireEvent.change(screen.getByLabelText('Research save source'), {target: {value: 'manual'}});
+ fireEvent.change(screen.getByLabelText('Parent revision'), {target: {value: 'none'}});
+ vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {});
+ fireEvent.click(screen.getByRole('button', {name: 'Save numbered research version'}));
+ await screen.findByText(/Save unresolved/);
+ expect(sessionStorage.getItem('arena:research-version:pending:v1')).not.toBeNull();
+ expect(screen.queryByText('Research version saved and verified. Graph publication was not performed.')).not.toBeInTheDocument();
+});
+it('does not expose another ApiClient cached manual version details under equal session IDs and generations', async () => {
+ const fixture = setup(async url => {
+  if (url.endsWith(`/${res}`)) return reply(manualCommit({family: 'Example', idempotency_key: 'old'}));
+  return browsing(url);
+ });
+ await selectStore(); fireEvent.click(await screen.findByRole('button', {name: 'Select version 3'}));
+ // Equal generation/session on a different client is a new data owner.
+ const replacement = new ApiClient(vi.fn(async () => reply({stores: []})) as typeof fetch);
+ replacement.session = {...fixture.api.session!};
+ runtime.current = {...runtime.current, api: replacement, session: replacement.session};
+ fixture.redraw();
+ expect(screen.queryByRole('button', {name: 'Close research versions'})).not.toBeInTheDocument();
+ expect(screen.queryByLabelText('Research family')).not.toBeInTheDocument();
+});
+it.each(['POST', 'GET'])('retires a manual save completion after source change during %s and retains an explicit exact retry', async phase => {
+ vi.spyOn(window, 'confirm').mockReturnValue(true);
+ let release!: (response: Response) => void, body: Record<string, unknown> = {};
+ const fixture = setup(async (url, opts) => {
+  if (opts?.method === 'POST') {body = JSON.parse(String(opts.body)); return phase === 'POST' ? new Promise<Response>(resolve => {release = resolve;}) : reply(manualCommit(body));}
+  if (url.endsWith(`/${res}`)) return new Promise<Response>(resolve => {release = resolve;});
+  return browsing(url);
+ });
+ const tree = (bindingKey: string) => <QueryClientProvider client={fixture.cache}><ResearchVersions manualWriteAllowed={true} manualSource={manualSource} bindingKey={bindingKey} /></QueryClientProvider>;
+ fixture.rerender(tree('A')); await selectStore();
+ fireEvent.change(screen.getByLabelText('Research family'), {target: {value: 'Example'}});
+ fireEvent.change(screen.getByLabelText('Research save source'), {target: {value: 'manual'}});
+ fireEvent.change(screen.getByLabelText('Parent revision'), {target: {value: 'none'}});
+ fireEvent.click(screen.getByRole('button', {name: 'Save numbered research version'}));
+ await waitFor(() => expect(release).toBeTypeOf('function'));
+ const before = sessionStorage.getItem('arena:research-version:pending:v1');
+ fixture.rerender(tree('B')); fixture.rerender(tree('A'));
+ await act(async () => release(reply(manualCommit(body))));
+ expect(sessionStorage.getItem('arena:research-version:pending:v1')).toBe(before);
+ expect(screen.queryByText('Research version saved and verified. Graph publication was not performed.')).not.toBeInTheDocument();
+ if (phase === 'POST') expect(fixture.fetcher.mock.calls.filter(([url]) => url.endsWith(`/${res}`))).toHaveLength(0);
+ expect(screen.getByRole('button', {name: 'Retry exact research save'})).toBeEnabled();
+});
+it('labels a mixed candidate/manual list and opens a verified candidate root without inventing a canonical hash', async () => {
+ const opened = vi.fn();
+ const fixture = setup(async url => {
+  if (url.includes('/versions?')) return reply({versions: [
+   {...row, source: reference, open_source: {kind: 'research_version', id: `research-version:local:${res}:${digest}`}},
+   {...row, reservation_id: attempt, revision_id: id, version: 4, source_job_id: undefined, source: fullManual, open_source: {kind: 'research_version', id: `research-version:local:${attempt}:${digest}`}},
+  ], latest_version: 4, next_after_version: null});
+  if (url.endsWith(`/${res}`)) return reply({...commit, manifest: {...commit.manifest, files: {'environment.yaml': {size: 20, sha256: digest}}}});
+  return browsing(url);
+ });
+ fixture.rerender(<QueryClientProvider client={fixture.cache}><ResearchVersions candidate={candidate} onResearchOpen={opened} /></QueryClientProvider>);
+ await selectStore(); await screen.findByRole('button', {name: 'Select version 4'});
+ expect(screen.getByText(`Source job ${id}, attempt ${attempt}, generation 2`)).toBeInTheDocument();
+ expect(screen.getByText(`Editor revision ${manualSource.editor_revision_id}; source ${manualSource.source_hash}; canonical ${manualSource.canonical_hash}`)).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button', {name: 'Select version 3'}));
+ fireEvent.click(await screen.findByRole('button', {name: 'Open research version in editor'}));
+ expect(opened).toHaveBeenCalledWith(expect.objectContaining({source_hash: digest}), expect.any(Function));
+ expect(opened.mock.calls[0][0]).not.toHaveProperty('canonical_hash');
+});
+it.each(['missing descriptor', 'extra descriptor', 'manual publication', 'duplicate reservation'])('rejects malformed mixed list %s before selection', async malformed => {
+ const manualRow = {...row, source_job_id: undefined, source: fullManual, open_source: {kind: 'research_version', id: `research-version:local:${res}:${digest}`}};
+ const changed = malformed === 'missing descriptor' ? {...manualRow, open_source: undefined} : malformed === 'extra descriptor' ? {...manualRow, open_source: {...manualRow.open_source, guessed: true}} : malformed === 'manual publication' ? {...manualRow, publication_intent_id: 'unsupported'} : manualRow;
+ setup(async url => url.includes('/versions?') ? reply({versions: malformed === 'duplicate reservation' ? [changed, {...changed, version: 4}] : [changed], latest_version: 4, next_after_version: null}) : browsing(url));
+ await selectStore(); await screen.findByText(/Versions unavailable/);
+ expect(screen.queryByRole('button', {name: 'Select version 3'})).not.toBeInTheDocument();
+});
+it('retires an exact research Open synchronously during same-turn family ABA before React commits', async () => {
+ const opened = vi.fn();
+ const fixture = setup(async url => url.endsWith(`/${res}`) ? reply({...commit, manifest: {...commit.manifest, files: {'environment.yaml': {size: 20, sha256: digest}}}}) : browsing(url));
+ fixture.rerender(<QueryClientProvider client={fixture.cache}><ResearchVersions candidate={candidate} onResearchOpen={opened} /></QueryClientProvider>);
+ await selectStore(); fireEvent.click(await screen.findByRole('button', {name: 'Select version 3'}));
+ const getProps = (el: HTMLElement) => (el as unknown as Record<string, {onClick: () => void; onChange: (e: {target: {value: string}}) => void}>)[Object.keys(el).find(k => k.startsWith('__reactProps$'))!];
+ const open = getProps(await screen.findByRole('button', {name: 'Open research version in editor'})).onClick;
+ const change = getProps(screen.getByLabelText('Research family')).onChange;
+ act(() => {change({target: {value: 'Other'}}); change({target: {value: 'Example'}}); open();});
+ expect(opened).not.toHaveBeenCalled();
+});
+const manualPending = () => ({session: 'one', store: 'local', source: manualSource, body: {idempotency_key: 'manual-frozen', family: 'Example', parent_revision_id: null, source: manualSource}});
+it.each(['POST', 'GET'])('retains manual exact tuple when %s full bundle binding disagrees, then recovers unchanged in S2 without a candidate', async phase => {
+ vi.spyOn(window, 'confirm').mockReturnValue(true);
+ const frozen = manualPending(); sessionStorage.setItem('arena:research-version:pending:v1', JSON.stringify(frozen));
+ let bad = true;
+ const fixture = setup(async (url, opts) => {
+  if (opts?.method === 'POST' || url.endsWith(`/${res}`)) {
+   const c = manualCommit(frozen.body);
+   if (bad && (phase === 'POST' ? opts?.method === 'POST' : opts?.method === 'GET')) {
+    c.reservation.source = {...fullManual, bundle_sha256: '0'.repeat(64)};
+    if (phase === 'GET') c.manifest.binding = c.reservation;
+   }
+   return reply(c);
+  }
+  return browsing(url);
+ }, undefined);
+ const noCandidate = () => <QueryClientProvider client={fixture.cache}><ResearchVersions manualWriteAllowed={true} /></QueryClientProvider>;
+ fixture.rerender(noCandidate());
+ await selectStore();
+ expect(fixture.fetcher.mock.calls.some(([, o]) => o?.method === 'POST')).toBe(false);
+ fireEvent.click(screen.getByRole('button', {name: 'Retry exact research save'}));
+ await screen.findByText(/Save unresolved/);
+ expect(sessionStorage.getItem('arena:research-version:pending:v1')).toBe(JSON.stringify(frozen));
+ fixture.api.session = {...fixture.api.session!, session_id: 'two'}; runtime.current.session = fixture.api.session; fixture.rerender(noCandidate()); open();
+ fireEvent.click(await screen.findByRole('button', {name: 'Recover exact research save in this session'}));
+ expect(fixture.fetcher.mock.calls.filter(([, o]) => o?.method === 'POST')).toHaveLength(1);
+ bad = false;
+ fireEvent.click(screen.getByRole('button', {name: 'Retry exact research save'}));
+ await screen.findByText(/Research version saved and verified/);
+ expect(fixture.fetcher.mock.calls.filter(([, o]) => o?.method === 'POST').map(([, o]) => o!.body)).toEqual([JSON.stringify(frozen.body), JSON.stringify(frozen.body)]);
+ expect(sessionStorage.getItem('arena:research-version:pending:v1')).toBeNull();
+});
+it.each(['missing-parent', 'fake-job', 'full-source-input', 'publication', 'source-mismatch', 'bad-hash'])('preserves malformed manual pending bytes and makes no POST: %s', malformed => {
+ const pending = manualPending();
+ const body: Record<string, unknown> = {...pending.body};
+ if (malformed === 'missing-parent') delete body.parent_revision_id;
+ if (malformed === 'fake-job') body.source_job_id = id;
+ if (malformed === 'full-source-input') body.source = fullManual;
+ if (malformed === 'publication') body.publication_target = executionTarget;
+ if (malformed === 'source-mismatch') body.source = {...manualSource, editor_revision_id: id};
+ if (malformed === 'bad-hash') body.source = {...manualSource, canonical_hash: 'broken'};
+ const raw = JSON.stringify({...pending, body}); sessionStorage.setItem('arena:research-version:pending:v1', raw);
+ const fixture = setup(browsing); open();
+ expect(screen.getByText(/Retained request storage is unavailable or invalid/)).toBeInTheDocument();
+ expect(screen.queryByRole('button', {name: 'Retry exact research save'})).not.toBeInTheDocument();
+ expect(fixture.fetcher.mock.calls.some(([, o]) => o?.method === 'POST')).toBe(false);
+ expect(sessionStorage.getItem('arena:research-version:pending:v1')).toBe(raw);
+});
 it('browses bounded committed pages with explicit detail selection and safe attachment URLs', async () => {
  const view = setup(browsing); await selectStore();
  expect(await screen.findByText('Latest committed version: 3')).toBeInTheDocument();
@@ -533,7 +743,7 @@ it('recovers a lost save only after confirmation in S2, preserving parent and ex
  const view = setup(async (url, opts) => {
   if (opts?.method === 'POST') { posts++; body = JSON.parse(String(opts.body)); if (posts === 1) throw new Error('lost'); return reply(newCommit()); }
   if (url.endsWith(`/${'1'.repeat(32)}`)) return reply(newCommit());
-  if (url.includes('?') && posts === 2) return reply({ versions: [{ ...row, ...newCommit().reservation }], latest_version: 4, next_after_version: null });
+  if (url.includes('?') && posts === 2) return reply({ versions: [{ ...row, ...newCommit().reservation, open_source: {kind: 'research_version', id: `research-version:local:${'1'.repeat(32)}:${digest}`} }], latest_version: 4, next_after_version: null });
   if (url.endsWith(`/${res}`)) return reply(saved(Object.keys(body).length ? body : { family: 'Example', idempotency_key: 'old' }));
   return browsing(url);
  });
@@ -859,7 +1069,7 @@ it('publication selection pins metadata rather than silently adopting a replaced
  const view = setup(async url => url.endsWith('/publication-profiles') ? reply({ profiles: [{ ...target, available: true }] }) : browsing(url));
  await selectStore(); await enablePreparation();
  expect(screen.getByRole('button', { name: 'Save research version' })).toBeEnabled();
- act(() => view.cache.setQueryData(['research-publication-profiles', 'one', view.api.sessionGeneration], [{ ...target, revision: 'f'.repeat(64) }]));
+ act(() => view.cache.setQueriesData({queryKey: ['research-publication-profiles', 'one', view.api.sessionGeneration]}, [{ ...target, revision: 'f'.repeat(64) }]));
  await waitFor(() => expect(screen.getByRole('button', { name: 'Save research version' })).toBeDisabled());
  fireEvent.change(screen.getByLabelText('Publication profile'), { target: { value: 'archive' } });
  expect(screen.getByRole('button', { name: 'Save research version' })).toBeEnabled();

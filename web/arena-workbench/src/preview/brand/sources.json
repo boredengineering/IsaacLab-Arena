@@ -1,0 +1,51 @@
+{
+  "source": "https://cyberneticphysics.com/",
+  "stylesheet": "https://cyberneticphysics.com/_next/static/chunks/07uui9jhjx9cv.css",
+  "retrieved_utc": "2026-09-14T21:26:30.089242+00:00",
+  "fonts": [
+    {
+      "family": "Tomorrow",
+      "file": "Tomorrow-Regular-latin.woff2",
+      "source": "https://cyberneticphysics.com/_next/static/media/4c318756d77e9d32-s.p.1mfr-3f6io2fu.woff2",
+      "sha256": "688c7174a13b321d5a1c57547d3775d0732967ec3f87f7647e3dfaefef7ed8a6",
+      "bytes": 7736,
+      "license_source": "https://raw.githubusercontent.com/google/fonts/main/ofl/tomorrow/OFL.txt",
+      "license": "SIL Open Font License 1.1"
+    },
+    {
+      "family": "IBM Plex Sans",
+      "file": "IBMPlexSans-Regular-latin.woff2",
+      "source": "https://cyberneticphysics.com/_next/static/media/f2cfe3151537ae33-s.p.2ccnl8wncv_qb.woff2",
+      "sha256": "aedeae141b19622c5599ec884f075b9b58ec3036d069a02350da34e31d56d24b",
+      "bytes": 17604,
+      "license_source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsans/OFL.txt",
+      "license": "SIL Open Font License 1.1"
+    },
+    {
+      "family": "Kode Mono",
+      "file": "KodeMono-Variable-latin.woff2",
+      "source": "https://cyberneticphysics.com/_next/static/media/afa460fe2a0ba701-s.p.08q-ozh2e97qy.woff2",
+      "sha256": "a7d3eb15f70c9cc046c66e9f6b8810da7db83de78c2c32b1bea7c01373a980ab",
+      "bytes": 15800,
+      "license_source": "https://raw.githubusercontent.com/google/fonts/main/ofl/kodemono/OFL.txt",
+      "license": "SIL Open Font License 1.1"
+    }
+  ],
+  "observed_tokens": {
+    "page": "#000000",
+    "surface": "#0d0d0d",
+    "surface_strong": "#222222",
+    "ink": "#ffffff",
+    "muted": "#acacac",
+    "line": "#393939",
+    "accent": "#4f8d7d",
+    "teal": "#4e8d94",
+    "teal_dark": "#30666b"
+  },
+  "wordmark": {
+    "source": "https://cyberneticphysics.com/",
+    "viewBox": "0 0 130 26",
+    "path_count": 2,
+    "svg_sha256": "5512b01168b8a08f98ab711920cb62b906a116c3f4b59e7bc47d763d46ffdffa"
+  }
+}

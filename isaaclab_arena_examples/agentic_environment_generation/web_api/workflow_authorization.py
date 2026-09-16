@@ -10,8 +10,11 @@ from collections.abc import Callable
 from copy import deepcopy
 from urllib.parse import urlsplit
 
+from fastapi import HTTPException
+
 from . import generation, graph_access
 from .execution_grants import ExecutionGrants
+from .public_records import screen_public_record
 
 
 class WorkflowAuthorization:
@@ -30,7 +33,8 @@ class WorkflowAuthorization:
         self.managed_context_getter: Callable | None = None
         self._managed_contexts = {}
 
-    def capture(self, session, operation_id, *, credential_ref=None, retrieval=True, require_service=False):
+    def capture(self, session, operation_id, *, credential_ref=None, retrieval=True, require_service=False,
+                protect_public=None):
         owner = session["session_id"]
         config = self.model_settings.resolve(owner, credential_ref) if credential_ref else generation.configuration()
         if config is None:
@@ -60,19 +64,40 @@ class WorkflowAuthorization:
             source="session" if credential_ref else "server",
             credential_generation=credential_ref or secrets.token_hex(16),
         )
-        model = self.grants.issue(owner, operation_id, "model", profile, config, expiry)
+        model_profile = profile
+        retrieval_profile = None
+        managed = None
+        if graph is not None:
+            graph = graph_access.checked_graph_config(graph)
+            retrieval_profile = {key: graph[key] for key in ("uri", "user", "database")}
+            retrieval_profile["credential_generation"] = secrets.token_hex(16)
+            managed = None if self.managed_context_getter is None else self.managed_context_getter(graph)
+            if managed is not None:
+                from .managed_retrieval import context_digest
+
+                retrieval_profile["managed_context_sha256"] = context_digest(managed)
+        # Resolve and screen every public profile before issuing even the first grant.
+        # Private credentials never cross this public boundary.
+        public_profiles = {"model": model_profile, "retrieval": retrieval_profile}
+        try:
+            screen_public_record(public_profiles, self.model_settings.protect_public)
+        except HTTPException:
+            raise
+        except Exception:
+            # Screening faults are not immutable domain rejection evidence.
+            # Keep configuration/profile validation outside this narrow guard.
+            raise HTTPException(503, "Workflow public profile screening unavailable") from None
+        if protect_public is not None:
+            # Additional caller policy cannot replace the base guard or rewrite
+            # the already-screened profiles used for grants.
+            protect_public(deepcopy(public_profiles))
+        model = self.grants.issue(owner, operation_id, "model", model_profile, config, expiry)
         result = {"model": model, "retrieval": None}
         try:
             if graph is not None:
-                graph = graph_access.checked_graph_config(graph)
-                profile = {key: graph[key] for key in ("uri", "user", "database")}
-                profile["credential_generation"] = secrets.token_hex(16)
-                managed = None if self.managed_context_getter is None else self.managed_context_getter(graph)
-                if managed is not None:
-                    from .managed_retrieval import context_digest
-
-                    profile["managed_context_sha256"] = context_digest(managed)
-                result["retrieval"] = self.grants.issue(owner, operation_id, "retrieval_read", profile, graph, expiry)
+                result["retrieval"] = self.grants.issue(
+                    owner, operation_id, "retrieval_read", retrieval_profile, graph, expiry
+                )
                 self._managed_contexts = {
                     key: value for key, value in self._managed_contexts.items() if key in self.grants._records
                 }

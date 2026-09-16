@@ -16,10 +16,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from isaaclab_arena.agentic_environment_generation.workbench.document_yaml import parse_yaml
+from isaaclab_arena.agentic_environment_generation.workbench.editor_revision_storage import RevisionBusy, RevisionError, RevisionUncertain
 
 from . import catalogues, generation
 from .preview_options import RenderOptions, normalized_options
+from .public_records import protect_public_record as protect_editor_job, protect_yaml
 from .security import require_mutation, require_session
 
 router = APIRouter(prefix="/api/editor")
@@ -40,11 +41,16 @@ class Draft(BaseModel):
 
 class SaveDraft(Draft):
     expected_source_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
 
 class SnapshotDraft(Draft):
     idempotency_key: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
     options: RenderOptions = Field(default_factory=RenderOptions)
+
+
+class BuildDraft(Draft):
+    idempotency_key: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
 
 
 class GenerateDraft(BaseModel):
@@ -91,15 +97,28 @@ async def index(request: Request, session=Depends(require_session)):
         limitations.append("Generation is not configured; set a supported API key in the server environment.")
     if execution.snapshot_error:
         limitations.append(execution.snapshot_error)
+    try:
+        rows = documents.index(protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle))
+    except RevisionError:
+        raise HTTPException(422, "Invalid editor revision bundle") from None
+    except RevisionBusy:
+        raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+    except (RevisionUncertain, OSError):
+        raise HTTPException(503, "Revision data unavailable; retain the exact request") from None
     return {
         "default_document_id": documents.default_document_id,
-        "documents": documents.index(),
+        "documents": rows,
         "capabilities": {
             "generation": configured,
             "generation_modes": True,
+            "durable_editor_save": True,
             "research_versions": bool(request.app.state.research_roots),
+            "manual_research_save": bool(request.app.state.research_roots),
+            "research_version_open": bool(request.app.state.research_roots),
             "publication_execution": getattr(request.app.state, "publication_admitting", False) is True,
             "snapshots": execution.snapshots is not None,
+            "build": execution.build_available,
+            "policy_evaluation": execution.evaluation_available,
             "neo4j": getattr(request.app.state, "neo4j_available", False),
         },
         "limitations": limitations,
@@ -109,7 +128,17 @@ async def index(request: Request, session=Depends(require_session)):
 @router.get("/documents/{document_id}", dependencies=[Depends(require_session)])
 async def document(request: Request, document_id: str):
     try:
-        result = request.app.state.documents.load(document_id)
+        if document_id.startswith("research-version:"):
+            from .research_routes import open_research_version
+            result = open_research_version(request, document_id)
+        else:
+            result = request.app.state.documents.load(document_id, protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle))
+    except RevisionError:
+        raise HTTPException(422, "Invalid editor revision bundle") from None
+    except RevisionBusy:
+        raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+    except RevisionUncertain:
+        raise HTTPException(503, "Revision data unavailable; retain the exact request") from None
     except KeyError:
         raise HTTPException(404, "Document not found") from None
     except (ValueError, OSError):
@@ -127,6 +156,25 @@ async def validate(request: Request, body: Draft):
 @router.post("/save", dependencies=[Depends(require_mutation)])
 async def save(request: Request, body: SaveDraft):
     request.app.state.model_settings.protect_public(body.model_dump())
+    if body.idempotency_key is not None:
+        protect_yaml(request, body.yaml_text)
+        try:
+            # Exact committed replay must precede resolution of an expired view.
+            return request.app.state.documents.save(
+                body.yaml_text, body.document_id, body.expected_source_hash,
+                idempotency_key=body.idempotency_key,
+                protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle),
+            )
+        except RevisionBusy:
+            raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+        except KeyError:
+            raise HTTPException(404, "Document not found") from None
+        except RevisionError as error:
+            if str(error) == "Invalid environment specification":
+                raise HTTPException(422, "Invalid environment specification") from None
+            raise HTTPException(409, "Revision request conflicts with stored data or source") from None
+        except (RevisionUncertain, OSError):
+            raise HTTPException(503, "Revision save outcome is uncertain; check the exact saved request before retrying") from None
     checked_validation(request, body.yaml_text, body.document_id)
     # Revisions retain the complete frozen source set, even if this draft drops its include.
     includes = request.app.state.documents.frozen.get(body.document_id, {})
@@ -141,10 +189,35 @@ async def save(request: Request, body: SaveDraft):
         raise HTTPException(409 if "changed" in str(error) else 422, str(error)) from None
 
 
+@router.get("/save-requests/{idempotency_key}", dependencies=[Depends(require_session)])
+async def save_request(request: Request, idempotency_key: str):
+    """Read a workspace-global save disposition without resolving its former source view."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", idempotency_key) or request.query_params:
+        raise HTTPException(422, "Invalid save request lookup")
+    try:
+        return request.app.state.documents.save_request(
+            idempotency_key, protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle)
+        )
+    except RevisionBusy:
+        raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+    except KeyError:
+        raise HTTPException(404, "Save request not found") from None
+    except RevisionError:
+        raise HTTPException(409, "Revision request conflicts with stored data or source") from None
+    except (RevisionUncertain, OSError):
+        raise HTTPException(503, "Revision disposition unavailable; retain the exact request") from None
+
+
 @router.get("/revisions/{revision_id}/download", dependencies=[Depends(require_session)])
 async def download(request: Request, revision_id: str):
     try:
-        text = request.app.state.documents.download(revision_id)
+        text = request.app.state.documents.download(revision_id, protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle))
+    except RevisionError:
+        raise HTTPException(422, "Invalid editor revision bundle") from None
+    except RevisionBusy:
+        raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+    except (RevisionUncertain, OSError):
+        raise HTTPException(503, "Revision data unavailable; retain the exact request") from None
     except KeyError:
         raise HTTPException(404, "Revision not found") from None
     protect_yaml(request, text)
@@ -155,27 +228,29 @@ async def download(request: Request, revision_id: str):
     )
 
 
-def protect_yaml(request, text):
-    """Guard raw YAML and escape spellings before errors can quote source excerpts."""
-    request.app.state.model_settings.protect_public(text)
-
-    def decode(match):
-        value = int(match.group()[2:], 16)
-        return chr(value) if value <= 0x10FFFF else match.group()
-
-    # This is a conservative secret check, not a parser: malformed YAML must still
-    # receive the normal validation diagnostics when it contains no credential.
-    unfolded = re.sub(r"\\(?:\r\n|[\r\n])[ \t]*", "", text)
-    decoded = re.sub(r"\\(?:x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8})", decode, unfolded)
-    request.app.state.model_settings.protect_public(decoded)
-    try:
-        parsed = parse_yaml(text)
-    except (ValueError, yaml.YAMLError, TypeError):
-        return  # Documents.validate owns invalid-YAML diagnostics.
-    request.app.state.model_settings.protect_public(parsed)
+def protect_revision_bundle(request, bundle):
+    """Apply current secret protection to the complete retained bundle, including unused includes."""
+    request.app.state.model_settings.protect_public(bundle)
+    snapshot = bundle["snapshot"]
+    protect_yaml(request, snapshot["yaml_text"])
+    for text in snapshot["includes"].values():
+        protect_yaml(request, text)
+    protect_yaml(request, bundle["export_yaml"])
 
 
 def checked_validation(request, text, document_id):
+    documents = request.app.state.documents
+    if document_id in documents.views:
+        try:
+            documents.load(document_id, protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle))
+        except RevisionError:
+            raise HTTPException(422, "Invalid editor revision bundle") from None
+        except RevisionBusy:
+            raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+        except (RevisionUncertain, OSError):
+            raise HTTPException(503, "Revision data unavailable; retain the exact request") from None
+        except KeyError:
+            raise HTTPException(404, "Document not found") from None
     protect_yaml(request, text)
     validation = request.app.state.documents.validate(text, document_id)
     request.app.state.model_settings.protect_public(validation)
@@ -191,14 +266,21 @@ def frozen_draft(request, text, document_id):
 
 def submit_editor(request, session, kind, key, inputs):
     # Both fresh submissions and safe prior replays cross this durable/public boundary.
-    request.app.state.model_settings.protect_public({"idempotency_key": key, "inputs": inputs})
+    protect_editor_job(request, {"kind": kind, "idempotency_key": key, "inputs": inputs})
+    prior = request.app.state.journal.get_submission("default", key)
+    if prior is not None:
+        if prior["kind"] != kind or json.dumps(prior["inputs"], sort_keys=True) != json.dumps(inputs, sort_keys=True):
+            raise HTTPException(409, "Idempotency key already bound to different inputs")
+        protect_editor_job(request, prior)
     try:
         job = request.app.state.journal.submit(
             session["session_id"], "default", kind, key, inputs, max_pending=request.app.state.max_pending
         )
     except ValueError as error:
         raise HTTPException(409, str(error)) from None
-    request.app.state.supervisor.wake.set()
+    protect_editor_job(request, job)
+    if prior is None:
+        request.app.state.supervisor.wake.set()
     return job
 
 
@@ -216,6 +298,7 @@ async def generation_operation(request: Request, idempotency_key: str, request_s
     prior = request.app.state.journal.get_submission("default", idempotency_key)
     if prior is not None and (prior["kind"] != "generate" or prior["inputs"].get("request_sha256") != request_sha256):
         raise HTTPException(409, "Idempotency key already bound to different inputs")
+    protect_editor_job(request, prior)
     return {"job": prior}
 
 
@@ -228,18 +311,25 @@ async def generate(request: Request, body: GenerateDraft, session=Depends(requir
     if body.operation is not None and prior is not None and "request_sha256" in prior["inputs"]:
         if prior["kind"] != "generate" or prior["inputs"]["request_sha256"] != request_hash:
             raise HTTPException(409, "Idempotency key already bound to different inputs")
-        # Exact recovery returns the already-guarded durable record, not a new grant.
+        # Accepted bytes still require current policy; recovery never resolves a view or grants new work.
+        protect_editor_job(request, prior)
         return prior
-    request.app.state.model_settings.protect_public(body.model_dump())
+    protect_editor_job(request, body.model_dump())
     base = body.base_yaml
     document_id = body.document_id
     if body.document_id:
         try:
-            request.app.state.documents.path(body.document_id)
+            request.app.state.documents.resolve_view(body.document_id)
             if base is None:
-                document = request.app.state.documents.load(body.document_id)
+                document = request.app.state.documents.load(body.document_id, protect_snapshot=lambda bundle: protect_revision_bundle(request, bundle))
                 base = document["yaml_text"]
                 document_id = document["document_id"]
+        except RevisionError:
+            raise HTTPException(422, "Invalid editor revision bundle") from None
+        except RevisionBusy:
+            raise HTTPException(503, "Revision storage is busy; retry the exact request", headers={"Retry-After": "1"}) from None
+        except RevisionUncertain:
+            raise HTTPException(503, "Revision data unavailable; retain the exact request") from None
         except (KeyError, OSError, ValueError):
             raise HTTPException(404, "Document not found") from None
     validation = None
@@ -276,6 +366,7 @@ async def generate(request: Request, body: GenerateDraft, session=Depends(requir
                 credential_ref=body.credential_ref,
                 retrieval=body.operation == "new",
                 require_service=body.retrieval_policy == "require_service",
+                protect_public=lambda value: protect_editor_job(request, value),
             )
         except ValueError:
             raise HTTPException(503, "Workflow configuration unavailable") from None
@@ -303,6 +394,40 @@ async def generate(request: Request, body: GenerateDraft, session=Depends(requir
         "generate",
         body.idempotency_key,
         {**inputs, **credential},
+    )
+
+
+@router.post("/build", status_code=202)
+async def build(request: Request, body: BuildDraft, session=Depends(require_mutation)):
+    """Freeze a validated draft for the fixed CLI build adapter, never runtime overrides."""
+    protect_editor_job(request, body.model_dump())
+    request_hash = hashlib.sha256(
+        json.dumps(body.model_dump(), sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    prior = request.app.state.journal.get_submission("default", body.idempotency_key)
+    if prior is not None:
+        if prior["kind"] != "build" or prior["inputs"].get("request_sha256") != request_hash:
+            raise HTTPException(409, "Idempotency key already bound to different inputs")
+        return submit_editor(request, session, "build", body.idempotency_key, prior["inputs"])
+    if not request.app.state.editor_execution.build_available:
+        raise HTTPException(503, "Build adapter unavailable in this runtime")
+    text, validation = frozen_draft(request, body.yaml_text, body.document_id)
+    return submit_editor(
+        request,
+        session,
+        "build",
+        body.idempotency_key,
+        {
+            "yaml_text": text,
+            "document_id": body.document_id,
+            "input_hash": validation["source_hash"],
+            "canonical_hash": validation["canonical_hash"],
+            "request_sha256": request_hash,
+            "headless": True,
+            "num_envs": 1,
+            "num_steps": 20,
+            "policy": "zero_action",
+        },
     )
 
 

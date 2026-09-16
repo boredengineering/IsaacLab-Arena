@@ -60,6 +60,8 @@ export interface JobRequest {
 }
 export const isActive = (job: Job) =>
   ['queued', 'running', 'cancel_requested'].includes(job.status);
+/** Unfinished includes authorization waits, which are not executing work. */
+export const isUnfinished = (job: Job) => isActive(job) || job.status === 'blocked_authorization';
 export function isExecutionEvidence(value: unknown): value is ExecutionEvidence {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const e = value as ExecutionEvidence;

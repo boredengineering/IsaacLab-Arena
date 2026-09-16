@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
 import { createMemoryHistory } from '@tanstack/react-router';
@@ -53,6 +53,25 @@ it('offers blocked-job renewal and cancellation on a fresh deep link without edi
   fireEvent.click(screen.getByRole('button', { name: 'Cancel generation' }));
   await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith('/jobs/blocked/cancel'))).toBe(true));
   expect(sessionStorage.getItem('arena:editor:generate:v1')).toBeNull();
+});
+it('retires a job cancellation before dispatch when navigation overtakes activity preflight', async () => {
+  const base = server();
+  const job = { id: 'pending-cancel', workspace_id: 'default', kind: 'diagnostic', status: 'queued', stage: 'queued', inputs: { steps: 3, delay_seconds: 1 }, created_at: 0, updated_at: 0, result: null, error: null, created_by_session_id: 'session1' };
+  let release!: (value: Response) => void;
+  const activity = new Promise<Response>(resolve => { release = resolve; });
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/workspaces/default')) return response({ id: 'default', name: 'Arena', jobs: [job], event_cursor: 0 });
+    if (url.endsWith('/session/activity')) return activity;
+    if (url.endsWith('/jobs/pending-cancel/cancel')) return response(job);
+    return base(url, init);
+  });
+  mount(fetcher, '/jobs/pending-cancel');
+  fireEvent.click(await screen.findByRole('button', { name: 'Request cancellation' }));
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith('/session/activity'))).toBe(true));
+  fireEvent.click(screen.getByRole('link', { name: 'Neo4j query' }));
+  await screen.findByRole('heading', { name: 'Neo4j query' });
+  await act(async () => { release(response(session)); });
+  expect(fetcher.mock.calls.some(([url]) => url.endsWith('/jobs/pending-cancel/cancel'))).toBe(false);
 });
 it('toggles the sidebar theme and retains it across reload without submitting jobs', async () => {
   const fetcher = server();
@@ -117,6 +136,104 @@ it('requires server capability and explicit consent; ambiguous failures retain i
     expect(fetcher.mock.calls.filter(([url]) => url === '/api/jobs')).toHaveLength(2),
   );
   expect(fetcher.mock.calls.filter(([url]) => url === '/api/jobs')[1][1]?.body).toBe(body);
+});
+it('discloses shared-queue effects and requires separate resume confirmation', async () => {
+  const base = server(true);
+  const queued = { id: 'queued-render', workspace_id: 'default', kind: 'snapshots', status: 'queued', stage: 'queued', inputs: {}, created_at: 0, updated_at: 0, result: null, error: null, created_by_session_id: 'session1' };
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/workspaces/default')) return response({ id: 'default', name: 'Arena', jobs: [queued], event_cursor: 1 });
+    if (url.endsWith('/jobs/resume-queue')) return response({ resumed: true });
+    return base(url, init);
+  });
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  mount(fetcher);
+  fireEvent.click(await screen.findByRole('checkbox', { name: /enable diagnostic controls/i }));
+  const resume = screen.getByRole('button', { name: 'Resume shared workload queue' });
+  fireEvent.click(resume);
+  expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/generation.*GPU/s));
+  expect(fetcher.mock.calls.some(([url]) => url.endsWith('/jobs/resume-queue'))).toBe(false);
+  expect(screen.queryByText('No GPU work')).not.toBeInTheDocument();
+});
+it.each(['before click', 'inside confirmation', 'during preflight'] as const)('rejects shared queue resume after same-ID replacement %s and permits freshly rendered controls', async boundary => {
+  const base = server(true);
+  let api: ApiClient;
+  let release!: (value: Response) => void;
+  let delayActivity = boundary === 'during preflight';
+  const activity = new Promise<Response>(resolve => { release = resolve; });
+  const queued = { id: 'queued-render', workspace_id: 'default', kind: 'snapshots', status: 'queued', stage: 'queued', inputs: {}, created_at: 0, updated_at: 0, result: null, error: null, created_by_session_id: 'session1' };
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/workspaces/default')) return response({ id: 'default', name: 'Arena', jobs: [queued], event_cursor: 1 });
+    if (url.endsWith('/session/activity')) return delayActivity ? activity : response({ ...session, expires_at: 99999999999 });
+    if (url.endsWith('/jobs/resume-queue')) return response({ resumed: true });
+    return base(url, init);
+  });
+  api = new ApiClient(fetcher as typeof fetch);
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  render(<App api={api} cache={cache} history={createMemoryHistory({ initialEntries: ['/developer/diagnostics'] })} makePort={() => null} />);
+  fireEvent.click(await screen.findByRole('checkbox', { name: /enable diagnostic controls/i }));
+  const resume = screen.getByRole('button', { name: 'Resume shared workload queue' });
+  const confirm = vi.spyOn(window, 'confirm').mockImplementation(() => {
+    if (boundary === 'inside confirmation') api.session = { ...session };
+    return true;
+  });
+  const retentionKey = 'arena:editor:generate:v1';
+  sessionStorage.setItem(retentionKey, 'replacement owner bytes');
+  const write = vi.spyOn(Storage.prototype, 'setItem');
+  const remove = vi.spyOn(Storage.prototype, 'removeItem');
+  fetcher.mockClear();
+  act(() => {
+    if (boundary === 'before click') api.session = { ...session };
+    fireEvent.click(resume);
+  });
+  if (boundary === 'during preflight') {
+    await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith('/session/activity'))).toBe(true));
+    api.session = { ...session };
+    await act(async () => { release(response(session)); });
+  } else await act(async () => {});
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/session/activity'))).toHaveLength(boundary === 'during preflight' ? 1 : 0);
+  expect(fetcher.mock.calls.some(([url]) => url.endsWith('/jobs/resume-queue'))).toBe(false);
+  if (boundary === 'before click') expect(confirm).not.toHaveBeenCalled();
+  else expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/entire shared.*generation.*GPU.*not shown/s));
+  expect(write).not.toHaveBeenCalled();
+  expect(remove).not.toHaveBeenCalled();
+  expect(sessionStorage.getItem(retentionKey)).toBe('replacement owner bytes');
+
+  // Explicit local rendering adopts the replacement; ordinary activity must not retire it.
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Steps' }), { target: { value: '4' } });
+  confirm.mockReturnValue(true);
+  delayActivity = false;
+  const generation = api.sessionGeneration;
+  await act(async () => { await api.activity(); });
+  expect(api.sessionGeneration).toBe(generation);
+  fetcher.mockClear();
+  fireEvent.click(screen.getByRole('button', { name: 'Resume shared workload queue' }));
+  await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/jobs/resume-queue'))).toHaveLength(1));
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/session/activity'))).toHaveLength(1);
+  expect(sessionStorage.getItem(retentionKey)).toBe('replacement owner bytes');
+});
+it.each(['navigation', 'opt-out'])('retires confirmed queue resume during pending activity on %s', async boundary => {
+  const base = server(true);
+  const queued = { id: 'queued-render', workspace_id: 'default', kind: 'snapshots', status: 'queued', stage: 'queued', inputs: {}, created_at: 0, updated_at: 0, result: null, error: null, created_by_session_id: 'session1' };
+  let release!: (value: Response) => void;
+  const activity = new Promise<Response>(resolve => { release = resolve; });
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/workspaces/default')) return response({ id: 'default', name: 'Arena', jobs: [queued], event_cursor: 1 });
+    if (url.endsWith('/session/activity')) return activity;
+    if (url.endsWith('/jobs/resume-queue')) return response({ resumed: true });
+    return base(url, init);
+  });
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  mount(fetcher);
+  const consent = await screen.findByRole('checkbox', { name: /enable diagnostic controls/i });
+  fireEvent.click(consent);
+  fireEvent.click(screen.getByRole('button', { name: 'Resume shared workload queue' }));
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith('/session/activity'))).toBe(true));
+  if (boundary === 'navigation') {
+    fireEvent.click(screen.getByRole('link', { name: 'Neo4j query' }));
+    await screen.findByRole('heading', { name: 'Neo4j query' });
+  } else fireEvent.click(consent);
+  await act(async () => { release(response(session)); });
+  expect(fetcher.mock.calls.some(([url]) => url.endsWith('/jobs/resume-queue'))).toBe(false);
 });
 it('keeps a navigable disconnected shell when the API is down', async () => {
   const fetcher = vi.fn().mockRejectedValue(new TypeError('API offline'));

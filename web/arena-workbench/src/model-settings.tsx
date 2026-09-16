@@ -1,27 +1,39 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRuntime } from './runtime';
 import { ApiError } from './api';
 import { parseModelSettings, PROVIDERS, type Provider } from './model-settings-contracts';
+import { clientSessionScope } from './client-session-scope';
 
 /** Only public metadata belongs in React Query; secret writes bypass mutation caching. */
-export function useModelSettings() {
+export function useModelSettings(active = true) {
   const { api, session } = useRuntime();
+  const owner = clientSessionScope(api, session);
+  const live = useRef<string | null>(owner.id);
+  useLayoutEffect(() => {
+    live.current = owner.id;
+    return () => { live.current = null; };
+  }, [owner.id]);
   const status = useQuery({
-    queryKey: ['model-settings', session?.session_id],
+    queryKey: owner.queryKey,
     queryFn: async () => {
-      try { return parseModelSettings(await api.get<unknown>('/model-settings')); }
+      try {
+        if (live.current !== owner.id || !owner.current()) throw new Error();
+        const value = await api.get<unknown>('/model-settings');
+        if (live.current !== owner.id || !owner.current()) throw new Error();
+        return parseModelSettings(value);
+      }
       catch (error) { throw new ApiError('Provider settings unavailable', error instanceof ApiError ? error.status : 0); }
     },
-    enabled: !!session,
+    enabled: active && owner.current(),
     retry: false,
     refetchOnWindowFocus: false,
   });
   const [now, setNow] = useState(Date.now);
   const { refetch } = status;
   useEffect(() => {
-    if (!session) return;
-    const refresh = () => { setNow(Date.now()); void refetch(); };
+    if (!active || !session) return;
+    const refresh = () => { if (owner.current()) { setNow(Date.now()); void refetch(); } };
     const visible = () => { if (document.visibilityState === 'visible') refresh(); };
     const poll = setInterval(refresh, 30_000);
     window.addEventListener('focus', refresh);
@@ -31,23 +43,23 @@ export function useModelSettings() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', visible);
     };
-  }, [session?.session_id, refetch]);
+  }, [active, owner.id, refetch]);
   useEffect(() => {
     const expiry = status.data?.expires_at;
-    if (!expiry) return;
-    const timer = setTimeout(() => { setNow(Date.now()); void refetch(); },
+    if (!active || !expiry) return;
+    const timer = setTimeout(() => { if (owner.current()) { setNow(Date.now()); void refetch(); } },
       Math.min(Math.max(0, expiry * 1000 - Date.now()), 2_147_483_647));
     return () => clearTimeout(timer);
-  }, [status.data?.expires_at, refetch]);
+  }, [active, owner.id, status.data?.expires_at, refetch]);
   const expired = status.data?.source === 'session' && (status.data.expires_at ?? 0) * 1000 <= now;
   // Legacy adapters may not expose this endpoint. Once metadata exists, fail closed on stale/error state.
   const generationAvailable = status.data ? !!session && status.data.configured && !expired && !status.isError
     : status.error instanceof ApiError && status.error.status === 404 ? undefined : false;
-  return { api, session, status, expired, generationAvailable, credentialRef: status.data?.credential_ref };
+  return { api, session, owner, status, expired, generationAvailable, credentialRef: status.data?.credential_ref };
 }
 
 export function ModelSettings({ settings }: { settings: ReturnType<typeof useModelSettings> }) {
-  const { api, session, status, expired } = settings;
+  const { api, session, owner, status, expired } = settings;
   const password = useRef<HTMLInputElement>(null);
   const [provider, setProvider] = useState<Provider>('openai');
   const [model, setModel] = useState('');
@@ -56,17 +68,19 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const lifetime = useRef(0);
-  useEffect(() => {
+  const sending = useRef(false);
+  useLayoutEffect(() => {
     lifetime.current++;
+    sending.current = false;
     setPending(false);
     setFailed(false);
     return () => { lifetime.current++; };
-  }, [session?.session_id]);
+  }, [owner.id]);
   function clearEntry() {
     if (password.current) password.current.value = '';
     setConsent(false);
   }
-  useEffect(() => {
+  useLayoutEffect(() => {
     const input = password.current;
     clearEntry();
     window.addEventListener('pagehide', clearEntry);
@@ -75,22 +89,30 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
       if (input) input.value = '';
       window.removeEventListener('pagehide', clearEntry);
     };
-  }, [session?.session_id, status.data?.credential_ref, status.data?.session_keys_allowed, status.isError, expired]);
+  }, [owner.id, status.data?.credential_ref, status.data?.session_keys_allowed, status.isError, expired]);
   async function forget() {
     clearEntry();
-    if (!session || pending) return;
+    if (!owner.current() || sending.current) return;
     const operation = lifetime.current;
+    const generation = api.sessionGeneration;
+    const current = () => operation === lifetime.current && owner.current();
+    // A 401 may expire this very owner before settlement. Clear that form,
+    // but never touch a replacement owner or initiate a read under it.
+    const settle = () => current() || (operation === lifetime.current && api.session === null
+      && api.sessionGeneration === generation + 1);
+    sending.current = true;
     setPending(true);
     setFailed(false);
     try {
       await api.mutate('/model-settings', {}, 'DELETE');
-      if (operation !== lifetime.current) return;
+      if (!current()) return;
       const result = await status.refetch();
-      if (operation === lifetime.current && result.isError) setFailed(true);
+      if (current() && result.isError) setFailed(true);
     } catch {
-      if (operation === lifetime.current) setFailed(true);
+      if (settle()) setFailed(true);
     } finally {
-      if (operation === lifetime.current) {
+      if (settle()) {
+        sending.current = false;
         clearEntry();
         setPending(false);
       }
@@ -100,7 +122,7 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
     event.preventDefault();
     let api_key = password.current?.value ?? '';
     clearEntry();
-    if (!session || pending || !consent || status.isError || !status.data?.session_keys_allowed) return;
+    if (!owner.current() || sending.current || !consent || status.isError || !status.data?.session_keys_allowed) return;
     if ((ttlMinutes !== null && ![15, 30, 60, 120].includes(ttlMinutes))
       || !/^[\x21-\x7e]{1,256}$/.test(model) || !/^[\x21-\x7e]{16,4096}$/.test(api_key)
       || model.includes(api_key) || provider.includes(api_key)) {
@@ -110,17 +132,25 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
     setPending(true);
     setFailed(false);
     const operation = lifetime.current;
+    const generation = api.sessionGeneration;
+    const current = () => operation === lifetime.current && owner.current();
+    // A 401 may expire this very owner before settlement. Clear that form,
+    // but never touch a replacement owner or initiate a read under it.
+    const settle = () => current() || (operation === lifetime.current && api.session === null
+      && api.sessionGeneration === generation + 1);
+    sending.current = true;
     try {
       const request = api.mutate('/model-settings', { provider, model, api_key, ttl_minutes: ttlMinutes }, 'PUT');
       api_key = ''; // Drop our reference before awaiting; JS strings cannot be reliably zeroized.
       await request;
-      if (operation !== lifetime.current) return;
+      if (!current()) return;
       const result = await status.refetch();
-      if (operation === lifetime.current && result.isError) setFailed(true);
+      if (current() && result.isError) setFailed(true);
     } catch {
-      if (operation === lifetime.current) setFailed(true);
+      if (settle()) setFailed(true);
     } finally {
-      if (operation === lifetime.current) {
+      if (settle()) {
+        sending.current = false;
         setPending(false);
         clearEntry();
       }

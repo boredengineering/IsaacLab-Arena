@@ -12,6 +12,7 @@ publication-intent API is an extension point, not evidence of publication.
 """
 
 import hashlib
+import json
 import os
 from collections.abc import Callable
 from contextlib import suppress
@@ -21,7 +22,8 @@ from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSp
 from .documents import Documents
 from .research_artifacts import ArtifactArea, SafeBusy  # noqa: F401
 from .research_projection import project_scene, validate_projection
-from .research_registry import ResearchRegistry, canonical_json, checked_identifier, digest
+from .research_registry import ResearchRegistry, bounded_json, canonical_json, checked_identifier, digest
+from .research_source import editor_source_artifacts, source_kind, verify_editor_source, verify_source_artifacts
 
 
 def _verify_public_unchanged(value, before):
@@ -99,6 +101,46 @@ class ResearchStore:
                 publication_request,
             )
 
+    def persist_editor_revision(self, family, workflow_id, *, source, bundle_loader,
+                                approval, parent_revision_id, publication_request=None):
+        """Persist a verified editor source with explicit lineage and separate approval.
+
+        bundle_loader(revision_id) is a trusted adapter to Documents.load_revision_bundle;
+        fresh/incomplete retries require it. Exact committed replay ignores the loader
+        (None is permitted) and verifies the copied artifacts. The caller authenticates
+        approval; family and parent_revision_id are explicit, never inferred. Returns
+        the unchanged four-field commit contract. Publication requests are unsupported.
+        """
+        if publication_request is not None:
+            raise ValueError("Editor revision publication is unsupported")
+        binding = bounded_json({"family": family, "workflow_id": workflow_id, "source": source,
+                                "approval": approval, "parent_revision_id": parent_revision_id})
+        detached = json.loads(canonical_json(binding))
+        self.protect_public(detached)
+        _verify_public_unchanged(detached, canonical_json(binding))
+        source, approval = binding["source"], binding["approval"]
+        if source_kind(source) != "editor_revision":
+            raise ValueError("Editor revision source required")
+        with self.area.writer_lock():
+            previous = self.registry.get_reservation_for_workflow(self.store_id, workflow_id)
+            if previous is not None:
+                if any(previous[key] != value for key, value in binding.items()):
+                    raise ValueError("Research workflow or approval binding conflict")
+                committed = self.registry.get_commit(previous["reservation_id"])
+                if committed is not None:
+                    self.read_version(previous["reservation_id"])
+                    return committed
+            if not callable(bundle_loader):
+                raise ValueError("Verified editor bundle loader required")
+            bundle = verify_editor_source(source, bundle_loader(source["editor_revision_id"]),
+                                          protect_snapshot=self.protect_public)
+            reservation = self.registry.reserve_editor_revision(
+                self.store_id, family, workflow_id, source=source, bundle=bundle,
+                approval=approval, parent_revision_id=parent_revision_id)
+            files = editor_source_artifacts(source, bundle)
+            files["source.json"] = canonical_json(reservation).encode()
+            return self._persist_artifacts(reservation, files, source_bundle=bundle)
+
     def _persist_candidate(
         self,
         family,
@@ -142,7 +184,6 @@ class ResearchStore:
             parent_revision_id=parent_revision_id,
             publication_request=publication_request,
         )
-        resid = reservation["reservation_id"]
         files = {
             "environment.yaml": receipt["yaml_text"].encode(),
             "candidate.json": canonical_json(receipt).encode(),
@@ -194,6 +235,10 @@ class ResearchStore:
             }):
                 raise ValueError("Publication artifact descriptor conflict")
             self.registry._checked_intent(reservation, intent)
+        return self._persist_artifacts(reservation, files, intent=intent)
+
+    def _persist_artifacts(self, reservation, files, *, intent=None, source_bundle=None):
+        resid, family = reservation["reservation_id"], reservation["family"]
         manifest = self.area.expected_manifest(resid, files, reservation)
         previous = self.registry.get_commit(resid)
         if previous is not None:
@@ -208,14 +253,21 @@ class ResearchStore:
             self.area.stage(resid, files, reservation)
         relative = self.area.promote(resid, family, version, manifest)
         self.area.verify(relative, manifest)
-        return self.registry.record_commit(resid, manifest, relative, publication_intent=intent)
+        extra = {} if source_bundle is None else {"source_bundle": source_bundle}
+        return self.registry.record_commit(resid, manifest, relative, publication_intent=intent, **extra)
 
     def read_version(self, reservation_id):
         """Read all exact artifact bytes by committed reservation ID, verifying every file."""
         commit = self.registry.get_commit(reservation_id)
         if commit is None or commit["reservation"]["store_id"] != self.store_id:
             raise ValueError("Unknown committed research version")
-        return self.area.verify(commit["relative_directory"], commit["manifest"])
+        files = self.area.verify(commit["relative_directory"], commit["manifest"])
+        if source_kind(commit["reservation"]["source"]) == "editor_revision":
+            bundle = verify_source_artifacts(commit["reservation"]["source"], files,
+                                             protect_snapshot=self.protect_public)
+            self.registry._checked_manifest(commit["reservation"], commit["manifest"],
+                                            commit["relative_directory"], source_bundle=bundle)
+        return files
 
     def candidate_reference(self, job_id):
         """Read the exact eligible candidate reference without granting persistence."""

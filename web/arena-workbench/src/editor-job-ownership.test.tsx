@@ -5,6 +5,7 @@ import { EditorJobProgress, useEditorJob } from './editor-jobs';
 import { ApiClient } from './api';
 import type { Job } from './contracts';
 import { workspaceKey } from './cache';
+import { clientSessionScope } from './client-session-scope';
 const mocks = vi.hoisted(() => ({ runtime: {} as any }));
 vi.mock('./runtime', () => ({ useRuntime: () => mocks.runtime }));
 vi.mock('@tanstack/react-router', () => ({ Link: ({ children }: any) => <a>{children}</a> }));
@@ -12,7 +13,7 @@ const key = 'arena:editor:generate:v1';
 const blocked: Job = { id: 'blocked1', workspace_id: 'default', kind: 'generate', status: 'blocked_authorization', stage: 'blocked', inputs: { operation: 'new' }, created_at: 0, updated_at: 0, result: null, error: null, created_by_session_id: 's1' };
 let cache: QueryClient;
 let controller: ReturnType<typeof useEditorJob>;
-function Harness() { controller = useEditorJob('generate'); return <><output>{controller.busy ? 'busy' : 'idle'}</output><button onClick={() => controller.submit.mutate({ prompt: 'frozen' })}>Submit</button><button onClick={() => controller.cancel.mutate('blocked1')}>Cancel test</button><EditorJobProgress controller={controller} /></>; }
+function Harness({ kind = 'generate' }: { kind?: 'generate' | 'snapshots' }) { const current = useEditorJob(kind); controller = current; return <><output>{current.busy ? 'busy' : 'idle'}</output><button onClick={() => current.submit.mutate({ prompt: 'frozen' })}>Submit</button><button onClick={() => current.cancel.mutate('blocked1')}>Cancel test</button><EditorJobProgress controller={current} /></>; }
 function mount() { return render(<QueryClientProvider client={cache}><Harness /></QueryClientProvider>); }
 beforeEach(() => {
   sessionStorage.clear(); cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -21,7 +22,55 @@ beforeEach(() => {
   vi.spyOn(api, 'mutate').mockResolvedValue({ ...blocked, status: 'queued' });
   vi.spyOn(api, 'get').mockResolvedValue(blocked);
   mocks.runtime = { api, session: api.session, refresh: vi.fn(async () => {}) };
-  cache.setQueryData(['model-settings', 's1'], { configured: true, source: 'server' });
+  cache.setQueryData(clientSessionScope(api, api.session).queryKey, { configured: true, source: 'server' });
+});
+it.each([
+  ['generate', 'Submit'], ['snapshots', 'Submit'], ['generate', 'Cancel test'],
+] as const)('rejects retired rendered %s/%s controls before click and authorizes an explicit replacement render', async (kind, name) => {
+  const initial = { session_id: 's1', csrf_token: 'c', expires_at: 9999999999 };
+  const accepted = { ...blocked, kind, status: 'succeeded' };
+  const fetcher = vi.fn(async (url: string) => {
+    if (url.endsWith('/session/activity')) return new Response(JSON.stringify({ ...initial, expires_at: 99999999999 }));
+    if (url.endsWith(`/editor/${kind}`) || url.endsWith('/jobs/blocked1/cancel') || url.endsWith('/jobs/blocked1'))
+      return new Response(JSON.stringify(accepted));
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const api = new ApiClient(fetcher as typeof fetch);
+  api.session = initial;
+  mocks.runtime = { api, session: api.session, refresh: vi.fn(async () => {}) };
+  const tree = () => <QueryClientProvider client={cache}><Harness kind={kind} /></QueryClientProvider>;
+  const view = render(tree());
+  const rendered = screen.getByRole('button', { name });
+  const retentionKey = `arena:editor:${kind}:v1`;
+  // Replacement storage belongs to another owner; stale controls may not touch it.
+  sessionStorage.setItem(retentionKey, 'replacement owner bytes');
+  const write = vi.spyOn(Storage.prototype, 'setItem');
+  const remove = vi.spyOn(Storage.prototype, 'removeItem');
+  act(() => {
+    api.session = { ...initial }; // Same ID/CSRF, before any React rerender.
+    fireEvent.click(rendered);
+  });
+  await act(async () => {});
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(write).not.toHaveBeenCalled();
+  expect(remove).not.toHaveBeenCalled();
+  expect(sessionStorage.getItem(retentionKey)).toBe('replacement owner bytes');
+  expect(mocks.runtime.refresh).not.toHaveBeenCalled();
+
+  mocks.runtime = { ...mocks.runtime, session: api.session };
+  view.rerender(tree());
+  const generation = api.sessionGeneration;
+  // Ordinary activity replaces deadline metadata without retiring these controls.
+  await act(async () => { await api.activity(); });
+  expect(api.sessionGeneration).toBe(generation);
+  fetcher.mockClear();
+  fireEvent.click(screen.getByRole('button', { name }));
+  await waitFor(() => expect(mocks.runtime.refresh).toHaveBeenCalledOnce());
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/session/activity'))).toHaveLength(1);
+  const endpoint = name === 'Submit' ? `/editor/${kind}` : '/jobs/blocked1/cancel';
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith(endpoint))).toHaveLength(1);
+  if (name === 'Submit') expect(JSON.parse(sessionStorage.getItem(retentionKey)!)).toMatchObject({ job: accepted });
+  else expect(sessionStorage.getItem(retentionKey)).toBe('replacement owner bytes');
 });
 it.each(['Submit', 'Cancel test'])('does not dispatch %s across delayed activity/session replacement', async name => {
   let finish!: () => void;

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiClient, PendingJob } from './api';
 import type { Health, Session } from './contracts';
@@ -32,8 +32,12 @@ export function RuntimeProvider({
   children: ReactNode;
 }) {
   const cache = useQueryClient();
-  const observer = useRef<Observation | null>(null);
-  const mounted = useRef(false);
+  // Retained callbacks from an earlier client must not target a replacement owner.
+  const controls = useMemo(() => ({
+    connect: async () => {},
+    refresh: async () => {},
+    revoke: async () => {},
+  }), [api, cache, makePort]);
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const [error, setError] = useState('');
@@ -45,56 +49,100 @@ export function RuntimeProvider({
       return { pending: undefined, storageError: String(e) };
     }
   });
+  // Health can precede a session: bind it to the client/provider lifetime, not
+  // activity-updated session metadata. Use a primitive, never a hashed client object.
+  const healthOwner = useMemo(() => crypto.randomUUID(), [api, cache, makePort]);
   const health = useQuery({
-    queryKey: ['health'],
-    queryFn: () => api.get<Health>('/health'),
+    queryKey: ['health', healthOwner],
+    queryFn: async ({ signal }) => {
+      // Consuming the query signal retires pending reads with their observer.
+      // ApiClient owns its wire timeout; fence settlement even if transport finishes late.
+      signal.throwIfAborted();
+      try {
+        return await api.get<Health>('/health');
+      } finally {
+        signal.throwIfAborted();
+      }
+    },
     retry: false,
     staleTime: 30_000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  async function connect() {
-    observer.current?.stop();
-    setConnecting(true);
-    setStatus('connecting');
-    setError('');
-    try {
-      const next = await api.connect();
-      if (!mounted.current) return;
-      setSession(next);
-      const live = new Observation(api, cache, makePort);
-      observer.current = live;
-      live.subscribe(() => {
-        if (mounted.current && observer.current === live) {
-          setStatus(live.status);
-          setError(live.error);
-        }
-      });
-      await live.start();
-      void health.refetch();
-    } catch (e) {
-      if (mounted.current) {
-        setError(e instanceof Error ? e.message : 'API unavailable');
-        setStatus('disconnected');
-      }
-    } finally {
-      if (mounted.current) setConnecting(false);
-    }
-  }
   useEffect(() => {
-    mounted.current = true;
-    api.onExpired = () => {
-      observer.current?.revoke();
-      if (mounted.current) {
-        setSession(null);
-        setStatus('expired');
-      }
+    // Each effect setup owns an irreversible lifetime, including StrictMode replay.
+    let alive = true;
+    let observer: Observation | undefined;
+    type Attempt = { phase: 'session' | 'observation'; promise?: Promise<void> };
+    let attempt: Attempt | undefined;
+    const retire = () => {
+      attempt = undefined;
+      observer?.stop();
+      observer = undefined;
     };
+    function connect(): Promise<void> {
+      if (!alive) return Promise.resolve();
+      // Share session establishment, but allow explicit reconnect during a stuck snapshot.
+      if (attempt?.phase === 'session') return attempt.promise!;
+      retire();
+      const current: Attempt = { phase: 'session' };
+      attempt = current;
+      const isCurrent = () => alive && attempt === current;
+      setConnecting(true);
+      setSession(null);
+      setStatus('connecting');
+      setError('');
+      current.promise = (async () => {
+        try {
+          const next = await api.connect();
+          if (!isCurrent()) return;
+          current.phase = 'observation';
+          setSession(next);
+          const live = new Observation(api, cache, makePort);
+          observer = live;
+          live.subscribe(() => {
+            if (isCurrent() && observer === live) {
+              setStatus(live.status);
+              setError(live.error);
+            }
+          });
+          await live.start();
+          if (!isCurrent()) return;
+          void health.refetch();
+        } catch (e) {
+          if (isCurrent()) {
+            observer?.stop();
+            observer = undefined;
+            setError(e instanceof Error ? e.message : 'API unavailable');
+            setStatus('disconnected');
+          }
+        } finally {
+          if (isCurrent()) setConnecting(false);
+        }
+      })();
+      // A failed session attempt may be retried; a live observer retains its fence.
+      void current.promise.then(() => {
+        if (isCurrent() && current.phase === 'session') attempt = undefined;
+      });
+      return current.promise;
+    }
+    const expired = () => {
+      if (!alive) return;
+      observer?.revoke();
+      retire();
+      setSession(null);
+      setStatus('expired');
+      setConnecting(false);
+    };
+    api.onExpired = expired;
+    controls.connect = connect;
+    controls.refresh = async () => { if (alive) await observer?.refresh(); };
+    controls.revoke = async () => { if (alive) await api.revoke(); };
     void connect();
     const refocus = () => {
-      if (document.visibilityState === 'visible' && api.session) void observer.current?.refresh();
+      if (document.visibilityState === 'visible' && api.session) void observer?.refresh();
     };
-    const leaving = () => observer.current?.stop();
+    const leaving = () => { retire(); setConnecting(false); };
     const restored = (event: PageTransitionEvent) => {
       if (event.persisted) setStatus('disconnected');
     };
@@ -102,15 +150,14 @@ export function RuntimeProvider({
     window.addEventListener('pagehide', leaving);
     window.addEventListener('pageshow', restored);
     return () => {
-      mounted.current = false;
-      observer.current?.stop();
-      api.onExpired = () => {};
+      alive = false;
+      retire();
+      if (api.onExpired === expired) api.onExpired = () => {};
       document.removeEventListener('visibilitychange', refocus);
       window.removeEventListener('pagehide', leaving);
       window.removeEventListener('pageshow', restored);
     };
-    // The provider is mounted once per app, never per route. Dependencies are stable app inputs.
-  }, [api, cache, makePort]);
+  }, [api, cache, makePort, controls]);
   const value: Runtime = {
     api,
     session,
@@ -119,13 +166,9 @@ export function RuntimeProvider({
     status,
     connecting,
     error: storageError || error || (health.error ? health.error.message : ''),
-    connect,
-    refresh: async () => {
-      await observer.current?.refresh();
-    },
-    revoke: async () => {
-      await api.revoke();
-    },
+    connect: () => controls.connect(),
+    refresh: () => controls.refresh(),
+    revoke: () => controls.revoke(),
   };
   return <RuntimeContext.Provider value={value}>{children}</RuntimeContext.Provider>;
 }

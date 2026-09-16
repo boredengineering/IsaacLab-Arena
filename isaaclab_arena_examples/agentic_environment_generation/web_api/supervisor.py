@@ -47,9 +47,9 @@ class Supervisor:
                 job
                 for job in queued
                 if (job["kind"] == "diagnostic" and self.enabled)
-                or (job["kind"] in {"generate", "snapshots"} and self.editor_execution is not None)
+                or (job["kind"] in {"generate", "snapshots", "build", "evaluate"} and self.editor_execution is not None)
             ]
-            if not self.paused and executable:
+            if not self.paused and self.job_id is None and executable:
                 job = executable[0]
                 if job["kind"] == "diagnostic":
                     await self.execute(job)

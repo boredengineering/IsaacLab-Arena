@@ -18,14 +18,20 @@ it('does not request a full-size zoom image until the user opens it', () => {
   expect(screen.queryByAltText('Zoomed cube snapshot')).not.toBeInTheDocument();
 });
 
-it('explains unsupported robot thumbnails instead of reporting an unrendered asset', () => {
-  render(<AssetGrid assets={[{ id: 'robot', role: 'embodiment', properties: {} }]} stale={false} />);
-  expect(screen.getByText('Robot preview is included in the scene snapshot.')).toBeInTheDocument();
+it.each([undefined, null, { artifact_id: 'scene', url: '/api/editor/artifacts/scene' }])('never infers robot inclusion from absent isolated thumbnail (scene=%s)', scene => {
+  render(<AssetGrid assets={[{ id: 'robot', role: 'embodiment', properties: {} }]} stale={false}
+    receipt={scene === undefined ? undefined : { receiptId: 'partial', canonicalHash: 'hash', result: {
+      assets: [], scene, warnings: [], partial: true,
+      errors: [{ id: 'robot', stage: 'constructor', code: 'failed', message: 'Robot unavailable' }],
+    } }} />);
+  expect(screen.getByText('No isolated robot preview')).toBeInTheDocument();
+  expect(screen.getByText(scene ? 'Scene image available; robot inclusion is unverified.' : 'No scene image available; robot inclusion is unknown.')).toBeInTheDocument();
+  expect(screen.queryByText(/Robot preview is included|Scene preview only/)).not.toBeInTheDocument();
 });
 
 it('loads a thumbnail first with progress and keeps full precision metadata', () => {
   render(<AssetGrid assets={[{ id: 'cube', role: 'object', properties: {} }]} stale={false} receipt={{
-    jobId: 'cache', canonicalHash: 'hash', result: {
+    receiptId: 'cache', canonicalHash: 'hash', result: {
       warnings: [], scene: null, assets: [{ id: 'cube', artifact_id: 'full', url: '/api/editor/artifacts/full',
         dimensions_m: [1.123456789, 0.0000123, 2], variants: {
           thumbnail: { artifact_id: 'thumb', url: '/api/editor/artifacts/thumb', width: 256, height: 256 },
@@ -44,7 +50,7 @@ it('loads a thumbnail first with progress and keeps full precision metadata', ()
 
 it('surfaces structured partial failures and renderer timings beside valid images', () => {
   render(<AssetGrid assets={[{ id: 'cube', role: 'object', properties: {} }]} stale={false} receipt={{
-    jobId: 'partial', canonicalHash: 'hash', result: { assets: [], scene: null, warnings: [], partial: true,
+    receiptId: 'partial', canonicalHash: 'hash', result: { assets: [], scene: null, warnings: [], partial: true,
       errors: [{ id: 'cube', stage: 'framing', code: 'empty_bounds', message: 'No finite bounds' }],
       timings: { render_seconds: 1.23456 },
     },

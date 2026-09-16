@@ -18,6 +18,8 @@ export function sharedPort(): ObservationPort | null {
   return worker.port;
 }
 
+let nextObservationId = 0;
+
 /** Snapshot requests never mutate jobs. This coordinator outlives route navigation. */
 export class Observation {
   status: ConnectionStatus = 'connecting';
@@ -26,6 +28,8 @@ export class Observation {
   private port?: ObservationPort;
   private listeners = new Set<() => void>();
   private stopped = false;
+  private started?: Promise<void>;
+  private readonly wireKey = ['snapshot-wire', 'default', ++nextObservationId] as const;
   private timer?: ReturnType<typeof setTimeout>;
   private watchdog?: ReturnType<typeof setInterval>;
   private lastPulse = Date.now();
@@ -43,9 +47,18 @@ export class Observation {
     };
   }
   private notify() {
-    for (const listener of this.listeners) listener();
+    for (const listener of this.listeners) {
+      if (this.stopped) return;
+      listener();
+    }
   }
-  async start() {
+  start(): Promise<void> {
+    if (this.stopped) return Promise.resolve();
+    if (this.started) return this.started;
+    this.started = this.attach();
+    return this.started;
+  }
+  private async attach() {
     try {
       this.port = this.makePort() ?? undefined;
     } catch {
@@ -82,6 +95,11 @@ export class Observation {
     await this.refresh();
   }
   private degrade() {
+    if (this.stopped) return;
+    if (this.port) {
+      this.port.onmessage = null;
+      this.port.onmessageerror = null;
+    }
     this.port?.postMessage({ type: 'leave' });
     this.port?.close();
     this.port = undefined;
@@ -96,7 +114,8 @@ export class Observation {
     this.refreshing = (async () => {
       try {
         const raw = await this.cache.fetchQuery({
-          queryKey: ['snapshot-wire', 'default'],
+          // Never coalesce a replacement owner's GET with a retired in-flight request.
+          queryKey: this.wireKey,
           queryFn: () => this.api.get('/workspaces/default'),
           staleTime: 0,
           gcTime: 0,
@@ -147,9 +166,15 @@ export class Observation {
     this.stop();
   }
   stop() {
+    if (this.stopped) return;
     this.stopped = true;
+    this.listeners.clear();
     clearTimeout(this.timer);
     clearInterval(this.watchdog);
+    if (this.port) {
+      this.port.onmessage = null;
+      this.port.onmessageerror = null;
+    }
     this.port?.postMessage({ type: 'leave' });
     this.port?.close();
     this.port = undefined;

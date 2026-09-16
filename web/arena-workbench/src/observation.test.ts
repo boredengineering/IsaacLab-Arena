@@ -27,7 +27,104 @@ class Port {
     this.onmessage?.(new MessageEvent('message', { data }));
   }
 }
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+}
 afterEach(() => vi.useRealTimers());
+
+it.each(['snapshot', 'error'] as const)('does not share a retired observer pending %s with the replacement owner', async outcome => {
+  const oldWire = deferred<unknown>();
+  const oldGet = vi.fn(() => oldWire.promise);
+  const nextGet = vi.fn().mockResolvedValue(snapshot(2, 'succeeded'));
+  const cache = new QueryClient();
+  const old = new Observation({ get: oldGet, expire: vi.fn() } as unknown as ApiClient, cache, () => null);
+  const next = new Observation({ get: nextGet, expire: vi.fn() } as unknown as ApiClient, cache, () => null);
+  try {
+    const oldStarting = old.start();
+    old.stop();
+    const nextStarting = next.start();
+    if (outcome === 'snapshot') oldWire.resolve(snapshot(99));
+    else oldWire.reject(new Error('retired wire failure'));
+    await Promise.all([oldStarting, nextStarting]);
+    expect(nextGet).toHaveBeenCalledOnce();
+    expect(cache.getQueryData(workspaceKey)).toMatchObject({ event_cursor: 2 });
+    expect(cache.getQueryData(jobKey('j1'))).toMatchObject({ status: 'succeeded' });
+    expect(next.error).toBe('');
+    expect(next.status).toBe('degraded');
+  } finally { old.stop(); next.stop(); cache.clear(); }
+});
+
+it.each(['snapshot', 'error'] as const)('stopped pending %s cannot notify subscribers or restart fallback polling', async outcome => {
+  vi.useFakeTimers();
+  const wire = deferred<unknown>();
+  const get = vi.fn(() => wire.promise);
+  const cache = new QueryClient();
+  const observe = new Observation({ get, expire: vi.fn() } as unknown as ApiClient, cache, () => null);
+  const listener = vi.fn();
+  observe.subscribe(listener);
+  try {
+    const starting = observe.start();
+    observe.stop();
+    listener.mockClear();
+    if (outcome === 'snapshot') wire.resolve(snapshot(99));
+    else wire.reject(new Error('retired failure'));
+    await starting;
+    expect(listener).not.toHaveBeenCalled();
+    expect(cache.getQueryData(workspaceKey)).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(get).toHaveBeenCalledOnce();
+  } finally { observe.stop(); cache.clear(); }
+});
+
+it('starts at most one port while its initial snapshot is pending and never restarts after stop', async () => {
+  vi.useFakeTimers();
+  const wire = deferred<unknown>();
+  const get = vi.fn(() => wire.promise);
+  const ports: Port[] = [];
+  const cache = new QueryClient();
+  const makePort = vi.fn(() => { const port = new Port(); ports.push(port); return port; });
+  const observe = new Observation({ get, expire: vi.fn() } as unknown as ApiClient, cache, makePort);
+  try {
+    const first = observe.start();
+    const second = observe.start();
+    wire.resolve(snapshot(1, 'succeeded'));
+    await Promise.all([first, second]);
+    expect(makePort).toHaveBeenCalledOnce();
+    observe.stop();
+    await observe.start();
+    expect(makePort).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(get).toHaveBeenCalledOnce();
+  } finally { observe.stop(); cache.clear(); }
+});
+it('ignores a queued port error after stop and releases port handlers exactly once', async () => {
+  vi.useFakeTimers();
+  const port = new Port();
+  const close = vi.spyOn(port, 'close');
+  const get = vi.fn().mockResolvedValue(snapshot(1));
+  const cache = new QueryClient();
+  const observe = new Observation({ get, expire: vi.fn() } as unknown as ApiClient, cache, () => port);
+  const listener = vi.fn();
+  observe.subscribe(listener);
+  try {
+    await observe.start();
+    const queuedError = port.onmessageerror as unknown as (event: MessageEvent) => void;
+    observe.stop();
+    observe.stop();
+    listener.mockClear();
+    queuedError(new MessageEvent('messageerror'));
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(listener).not.toHaveBeenCalled();
+    expect(get).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    expect(port.onmessage).toBeNull();
+    expect(port.onmessageerror).toBeNull();
+  } finally { observe.stop(); cache.clear(); }
+});
+
 it('attaches before the snapshot request and reconciles buffered events into Query, including late terminal updates', async () => {
   let resolve!: (v: unknown) => void;
   const port = new Port();

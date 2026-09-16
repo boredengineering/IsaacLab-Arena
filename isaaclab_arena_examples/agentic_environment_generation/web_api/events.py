@@ -14,6 +14,7 @@ from fastapi.responses import StreamingResponse
 
 from isaaclab_arena.agentic_environment_generation.workbench.journal import ReplayGap
 
+from .public_records import protect_public_record
 from .security import cookie_token, require_session
 
 router = APIRouter(prefix="/api")
@@ -33,21 +34,42 @@ class LeasedEventResponse(StreamingResponse):
             self.state.active_streams -= 1
 
 
-async def event_stream(journal, sessions, token, cursor, *, heartbeat=15, poll_interval=0.25, max_lag=256):
-    """Replay durable pages and revalidate the browser session before every emission."""
+async def event_stream(journal, sessions, token, cursor, *, heartbeat=15, poll_interval=0.25, max_lag=256, protect=None):
+    """Replay pages; HTTP callers supply current-policy screening for every emission.
+
+    A protected/unscreenable event terminates with the existing resync signal,
+    without an ID or cursor advance. Headers are already sent: this is not an
+    HTTP error or a replacement durable event. A fresh snapshot may itself be
+    unavailable under current policy; clients must not infer missing progress.
+    """
     last_heartbeat = time.monotonic()
     while sessions.get(token) is not None:
         try:
             events = journal.events_after(cursor, max_lag=max_lag)
         except ReplayGap:
+            if sessions.get(token) is None:
+                return
             yield 'event: resync_required\ndata: {"detail":"Fetch a fresh workspace snapshot"}\n\n'
             return
         for event in events:
             if sessions.get(token) is None:
                 return
+            try:
+                if protect is not None:
+                    protect(event)
+            except Exception:
+                if sessions.get(token) is None:
+                    return
+                # Never serialize exception text, redact durable bytes, or skip an ID.
+                yield 'event: resync_required\ndata: {"detail":"Public event unavailable; fetch a fresh workspace snapshot"}\n\n'
+                return
+            if sessions.get(token) is None:
+                return
             cursor = event["id"]
             yield f"id: {cursor}\nevent: job\ndata: {json.dumps(event, separators=(',', ':'))}\n\n"
         if time.monotonic() - last_heartbeat >= heartbeat:
+            if sessions.get(token) is None:
+                return
             yield ": heartbeat\n\n"
             last_heartbeat = time.monotonic()
         await asyncio.sleep(poll_interval)
@@ -64,7 +86,10 @@ async def events(request: Request):
     state.active_streams += 1
     return LeasedEventResponse(
         state,
-        event_stream(state.journal, state.sessions, cookie_token(request), int(raw)),
+        event_stream(
+            state.journal, state.sessions, cookie_token(request), int(raw),
+            protect=lambda event: protect_public_record(request, event),
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

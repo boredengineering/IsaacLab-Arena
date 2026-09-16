@@ -12,6 +12,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from .public_records import protect_public_record
 from .security import require_mutation, require_session
 
 router = APIRouter(prefix="/api/editor/generations")
@@ -21,6 +22,37 @@ class Reauthorize(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     idempotency_key: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
     credential_ref: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+
+def screen_record(request, record):
+    """Keep public-policy failures outside domain rejection sealing."""
+    try:
+        protect_public_record(request, record)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            503,
+            "Workflow renewal public record unavailable; retain the exact request for disposition lookup",
+        ) from None
+
+
+def accepted_response(request, accepted, *, fresh=False):
+    """Withhold unsafe snapshots without changing their durable acceptance."""
+    try:
+        protect_public_record(request, accepted)
+    except HTTPException:
+        if not fresh:
+            raise
+    except Exception:
+        pass
+    else:
+        return accepted
+    raise HTTPException(
+        503,
+        "Workflow renewal accepted; public job record unavailable. "
+        "Retain the exact renewal request for disposition lookup",
+    ) from None
 
 
 @router.post("/{job_id}/reauthorize", status_code=202)
@@ -43,9 +75,17 @@ async def reauthorize(request: Request, job_id: str, body: Reauthorize, session=
             # A conflict with accepted work is not rejection proof and needs no credentials.
             raise HTTPException(409, "Workflow renewal conflicts with an accepted request") from None
         if replay is not None:
-            return replay
-        state.model_settings.protect_public(body.model_dump())
+            return accepted_response(request, replay)
+        try:
+            previous = state.journal.authorization_disposition(job_id, body.idempotency_key, fingerprint)
+        except ValueError:
+            raise HTTPException(409, "Workflow renewal disposition unavailable or conflicting") from None
+        if previous["code"] == "renewal_rejected":
+            screen_record(request, previous)
+            raise HTTPException(409, previous)
+        screen_record(request, body.model_dump())
         screened = True
+        screen_record(request, job)
         attempt = state.journal.renewable_attempt(job_id)
         metadata = state.workflow_authorization.capture_renewal(session, job, credential_ref=body.credential_ref)
         record = {
@@ -54,7 +94,7 @@ async def reauthorize(request: Request, job_id: str, body: Reauthorize, session=
             "approval": "single_operator_workspace",
             "blocked_attempt": attempt,
         }
-        state.model_settings.protect_public(record)
+        screen_record(request, record)
         accepted, fresh = state.journal.renew_authorization(
             job_id,
             body.idempotency_key,
@@ -63,21 +103,23 @@ async def reauthorize(request: Request, job_id: str, body: Reauthorize, session=
             record,
             max_pending=state.max_pending,
         )
-        state.supervisor.wake.set()
-        return accepted
+        if fresh:
+            state.supervisor.wake.set()
+        return accepted_response(request, accepted, fresh=fresh)
     except KeyError:
         raise HTTPException(404, "Generation not found") from None
     except ValueError:
         # Never seal raw request bytes after any early failure.
         if not screened:
-            state.model_settings.protect_public(body.model_dump())
+            screen_record(request, body.model_dump())
         try:
             outcome = state.journal.seal_authorization_rejection(job_id, body.idempotency_key, fingerprint)
         except (ValueError, sqlite3.Error):
             raise HTTPException(409, "Workflow renewal disposition unavailable or conflicting") from None
         if outcome.get("code") == "renewal_rejected":
+            screen_record(request, outcome)
             raise HTTPException(409, outcome) from None
-        return outcome
+        return accepted_response(request, outcome)
     except sqlite3.Error:
         raise HTTPException(
             409,
@@ -98,14 +140,17 @@ async def disposition(
     session=Depends(require_session),
 ):
     """Read bounded public disposition for one exact workspace binding."""
-    request.app.state.model_settings.protect_public({
-        "idempotency_key": idempotency_key,
-        "fingerprint": fingerprint,
-    })
     try:
         if request.app.state.journal.get_job(job_id)["workspace_id"] != "default":
             raise KeyError(job_id)
-        return request.app.state.journal.authorization_disposition(job_id, idempotency_key, fingerprint)
+        outcome = request.app.state.journal.authorization_disposition(job_id, idempotency_key, fingerprint)
+        if outcome["code"] == "renewal_accepted":
+            # Acceptance proof is withheld with its immutable snapshot, not
+            # reinterpreted as nonacceptance under the current privacy policy.
+            accepted = request.app.state.journal.get_authorization_replay(job_id, idempotency_key, fingerprint)
+            accepted_response(request, accepted)
+        screen_record(request, outcome)
+        return outcome
     except KeyError:
         raise HTTPException(404, "Generation not found") from None
     except (ValueError, sqlite3.Error):

@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import generation, graph_access
 from .provider_security import ENDPOINTS, PROVIDERS, checked_config, reject_secret
+from .public_records import screen_public_record
 from .security import require_mutation, require_session
 
 MAX_CREDENTIALS = 128
@@ -73,7 +74,16 @@ class ModelSettings:
 
     def save(self, session, body):
         self.purge()
-        self.protect_public({"model": body.model, "provider": body.provider})
+        # The candidate key is not active yet. Screen only its public projection
+        # against both policies before replacement can invalidate existing grants.
+        def protect_candidate(value):
+            self.protect_public(value)
+            try:
+                reject_secret(value, body.api_key)
+            except ValueError:
+                raise HTTPException(422, "Invalid request input") from None
+
+        screen_public_record({"model": body.model, "provider": body.provider}, protect_candidate)
         if session["session_id"] not in self._records and len(self._records) >= MAX_CREDENTIALS:
             raise HTTPException(409, "Temporary credential capacity reached; try again after expiry")
         self.forget(session["session_id"])
@@ -105,7 +115,7 @@ class ModelSettings:
         self.purge()
         record = self._records.get(session["session_id"])
         server = generation.configuration() if record is None else None
-        return {
+        public = {
             "providers": list(PROVIDERS),
             "configured": record is not None or server is not None,
             "source": "session" if record else "server" if server else "none",
@@ -116,6 +126,9 @@ class ModelSettings:
             "credential_ref": record["credential_ref"] if record else None,
             "session_keys_allowed": allowed,
         }
+        # Unsafe legacy/operator metadata is withheld, not rewritten. Expiry and
+        # Forget still remove authority normally; no historical key denylist.
+        return screen_public_record(public, self.protect_public)
 
     def credential_expiry(self, session_id, credential_ref):
         """Return the exact original reference deadline, never replacement metadata."""

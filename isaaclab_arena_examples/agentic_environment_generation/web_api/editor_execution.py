@@ -30,6 +30,12 @@ def make_snapshot_service(state_dir):
 class EditorExecution:
     """Share the durable job dispatcher without coupling diagnostics to model or GPU imports."""
 
+    evaluation_available = True
+    """Fixed evaluation adapter availability, not remote server or GPU readiness."""
+
+    build_available = True
+    """Fixed build protocol availability, not a GPU-readiness assertion."""
+
     def __init__(self, state_dir, documents):
         self.state_dir = Path(state_dir)
         self.documents = documents
@@ -46,6 +52,10 @@ class EditorExecution:
             self.snapshot_error = "Snapshot adapter unavailable in this runtime"
 
     async def execute(self, supervisor, job):
+        if job["kind"] in {"build", "evaluate"}:
+            from .build_execution import execute_build
+
+            return await execute_build(self, supervisor, job)
         journal = supervisor.journal
         job_id = job["id"]
         supervisor.job_id = job_id

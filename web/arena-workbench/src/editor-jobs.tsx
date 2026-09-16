@@ -5,6 +5,16 @@ import { useRuntime } from './runtime';
 import { isActive, isJob, type Job, type Workspace } from './contracts';
 import { workspaceKey } from './cache';
 import { GenerationReauthorization, isBlockedGeneration } from './generation-reauthorization';
+import { parseGraphRenderer } from './graph-host';
+
+// Router search reducers can receive unvalidated URL fields as well as route state.
+function jobLinkSearch(previous: Record<string, unknown>) {
+  return {
+    filter: previous.filter === 'active' || previous.filter === 'terminal' ? previous.filter : 'all',
+    ...(previous.graphRenderer === undefined ? {} : { graphRenderer: parseGraphRenderer(previous.graphRenderer) }),
+    ...(previous.layout === undefined ? {} : { layout: previous.layout === 'v7' ? 'v7' : 'legacy' }),
+  };
+}
 interface Retained {
   payload: Record<string, unknown>;
   job?: Job;
@@ -16,21 +26,22 @@ function guarded(current: () => boolean, run: () => Promise<Job | undefined>) {
   };
 }
 /** Retain ambiguous submissions and accepted IDs without credentials or automatic replay. */
-export function useEditorJob(kind: 'generate' | 'snapshots') {
+export function useEditorJob(kind: 'generate' | 'snapshots' | 'build' | 'evaluate') {
   const runtime = useRuntime();
+  // Authority belongs to the rendered controls, not a later click's API session.
+  const generation = runtime.api.sessionGeneration;
   const key = `arena:editor:${kind}:v1`;
   const scope = useRef(0);
   const operation = useRef(0);
   useLayoutEffect(() => {
     scope.current++;
     return () => { scope.current++; };
-  }, [runtime.api, runtime.session?.session_id, kind]);
+  }, [runtime.api, runtime.session?.session_id, generation, kind]);
   function ownership() {
     const api = runtime.api;
     const sessionId = runtime.session?.session_id;
-    const epoch = api.sessionGeneration;
     const token = scope.current;
-    return () => !!sessionId && scope.current === token && api.sessionGeneration === epoch
+    return () => !!sessionId && scope.current === token && api.sessionGeneration === generation
       && api.session?.session_id === sessionId;
   }
   const [discardError, setDiscardError] = useState<Error | null>(null);
@@ -69,7 +80,7 @@ export function useEditorJob(kind: 'generate' | 'snapshots') {
     retry: false,
     mutationFn: (run: () => Promise<Job | undefined>) => run(),
   });
-  function submission(inputs: Record<string, unknown>) {
+  function submission(inputs: Record<string, unknown>, canDispatch = () => true) {
     const ownsSession = ownership();
     const token = ++operation.current;
     const current = () => ownsSession() && operation.current === token;
@@ -78,14 +89,15 @@ export function useEditorJob(kind: 'generate' | 'snapshots') {
     const next = retained && !retained.job ? retained
       : { payload: structuredClone({ ...inputs, idempotency_key: crypto.randomUUID() }) };
     return guarded(current, async () => {
-      if (!current()) return;
+      if (!current() || !canDispatch()) return;
       sessionStorage.setItem(key, JSON.stringify(next));
       setRetained(next);
       await api.activity();
-      if (!current()) return;
+      if (!current() || !canDispatch()) return;
+      // Visibility can retire automatic dispatch, never an already accepted job.
       const accepted = await api.mutate<Job>(`/editor/${kind}`, next.payload);
       if (!current()) return;
-      if (!isJob(accepted))
+      if (!isJob(accepted) || kind === 'evaluate' && accepted.kind !== 'evaluate')
         throw new Error('Invalid job response; request retained for safe retry.');
       const saved = { ...next, job: accepted };
       sessionStorage.setItem(key, JSON.stringify(saved));
@@ -95,8 +107,9 @@ export function useEditorJob(kind: 'generate' | 'snapshots') {
     });
   }
   const submit = { ...submitMutation,
-    mutate: (inputs: Record<string, unknown>) => submitMutation.mutate(submission(inputs)),
-    mutateAsync: (inputs: Record<string, unknown>) => submitMutation.mutateAsync(submission(inputs)),
+    mutate: (inputs: Record<string, unknown>, canDispatch?: () => boolean) => { if (ownership()()) submitMutation.mutate(submission(inputs, canDispatch)); },
+    mutateAsync: (inputs: Record<string, unknown>, canDispatch?: () => boolean) => ownership()()
+      ? submitMutation.mutateAsync(submission(inputs, canDispatch)) : Promise.resolve(undefined),
   };
   const cancelMutation = useMutation({
     retry: false,
@@ -122,10 +135,12 @@ export function useEditorJob(kind: 'generate' | 'snapshots') {
     });
   }
   const cancel = { ...cancelMutation,
-    mutate: (jobId: string) => cancelMutation.mutate(cancellation(jobId)),
-    mutateAsync: (jobId: string) => cancelMutation.mutateAsync(cancellation(jobId)),
+    mutate: (jobId: string) => { if (ownership()()) cancelMutation.mutate(cancellation(jobId)); },
+    mutateAsync: (jobId: string) => ownership()()
+      ? cancelMutation.mutateAsync(cancellation(jobId)) : Promise.resolve(undefined),
   };
   return {
+    kind,
     job,
     blockingJobs: kind === 'generate' ? (workspace?.jobs.filter(isBlockedGeneration) ?? []) : [],
     submit,
@@ -165,7 +180,7 @@ export function EditorJobProgress({ controller }: { controller: ReturnType<typeo
           <button type="button" onClick={() => setReviewId(entry.id)}>Review blocked generation {entry.id}</button>
         </li>)}</ul>
         {review && <div key={review.id}>
-          <Link to="/jobs/$jobId" params={{ jobId: review.id }}>Job details</Link>
+          <Link to="/jobs/$jobId" params={{ jobId: review.id }} search={jobLinkSearch}>Job details</Link>
           <GenerationReauthorization job={review} onVerified={refresh} />
           <button className="danger" disabled={cancel.isPending} onClick={() => cancel.mutate(review.id)}>Cancel generation</button>
         </div>}
@@ -177,8 +192,9 @@ export function EditorJobProgress({ controller }: { controller: ReturnType<typeo
       )}
       {retained && !job && !submit.isPending && (
         <div className="notice warning">
-          <p>Submission unresolved. Retry sends the same frozen inputs, credential reference and request ID.
-            A replacement API key is never substituted automatically.</p>
+          <p>{controller.kind === 'generate'
+            ? 'Submission unresolved. Retry sends the same frozen inputs, credential reference and request ID. A replacement API key is never substituted automatically.'
+            : 'Submission unresolved. Retry sends the same frozen inputs and request ID.'}</p>
           <button type="button" onClick={() => {
             if (window.confirm('A job may already have been accepted. Check the job journal before starting another. Discard only this tab’s retry information?')) discard();
           }}>Discard unresolved request</button>
@@ -188,10 +204,10 @@ export function EditorJobProgress({ controller }: { controller: ReturnType<typeo
         <div className="editor-job" role="status">
           <div className="section-heading">
             <strong>
-              {job.kind === 'generate' ? 'Generation' : 'Snapshot render'} ·{' '}
+              {job.kind === 'generate' ? 'Generation' : job.kind === 'evaluate' ? 'Policy evaluation' : job.kind === 'build' ? 'Build environment' : job.kind === 'snapshots' ? 'Snapshot render' : job.kind} ·{' '}
               {job.status.replaceAll('_', ' ')}
             </strong>
-            <Link to="/jobs/$jobId" params={{ jobId: job.id }}>
+            <Link to="/jobs/$jobId" params={{ jobId: job.id }} search={jobLinkSearch}>
               Job details
             </Link>
           </div>
@@ -199,7 +215,7 @@ export function EditorJobProgress({ controller }: { controller: ReturnType<typeo
           {isBlockedGeneration(job) && <GenerationReauthorization key={`${job.id}`} job={job} onVerified={refresh} />}
           {isActive(job) && <progress aria-label={`${job.kind} progress`} />}
           {(['queued', 'running'].includes(job.status) || isBlockedGeneration(job)) && <button className="danger" disabled={cancel.isPending} onClick={() => cancel.mutate(job.id)}>
-            {cancel.isPending ? 'Requesting cancellation…' : job.kind === 'snapshots' ? 'Cancel snapshot render' : 'Cancel generation'}
+            {cancel.isPending ? 'Requesting cancellation…' : job.kind === 'evaluate' ? 'Cancel evaluation' : job.kind === 'snapshots' ? 'Cancel snapshot render' : job.kind === 'build' ? 'Cancel build' : job.kind === 'generate' ? 'Cancel generation' : 'Cancel job'}
           </button>}
           {job.status === 'cancel_requested' && <p>Cancellation requested; waiting for worker acknowledgment.</p>}
           {['cancelled', 'indeterminate', 'failed'].includes(job.status) && job.execution?.outcome === 'unknown' &&

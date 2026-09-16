@@ -27,6 +27,7 @@ from isaaclab_arena.agentic_environment_generation.workbench.sessions import Ses
 from .catalogues import router as catalogue_router
 from .editor import router as editor_router
 from .editor_execution import EditorExecution
+from .evaluate import router as evaluate_router
 from .events import router as event_router
 from .graph_queries import router as graph_router
 from .jobs import router as job_router
@@ -409,13 +410,24 @@ def create_app(
 
     @app.get("/api/health")
     async def health():
-        return {"status": "ok", "capabilities": {"diagnostic": diagnostics, "generation": False, "preview": False}}
+        return {
+            "status": "ok",
+            "capabilities": {
+                "diagnostic": diagnostics,
+                "generation": False,
+                "preview": False,
+                "durable_editor_save": True,
+                "build": app.state.editor_execution.build_available,
+                "policy_evaluation": app.state.editor_execution.evaluation_available,
+            },
+        }
 
     app.include_router(session_router)
     app.include_router(model_settings_router)
     app.include_router(job_router)
     app.include_router(event_router)
     app.include_router(editor_router)
+    app.include_router(evaluate_router)
     app.include_router(research_router)
     app.include_router(publication_router)
     app.include_router(catalogue_router)

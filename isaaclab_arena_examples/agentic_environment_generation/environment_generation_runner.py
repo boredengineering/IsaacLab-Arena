@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -743,7 +744,16 @@ def _resolved_graph_spec_yaml(args_cli: argparse.Namespace) -> Path:
     return path
 
 
-def main() -> int:
+def main(*, on_build_completed: Callable[[], None] | None = None) -> int:
+    """Run the CLI lifecycle with an optional trusted Python-only build hook.
+
+    Args:
+        on_build_completed: Called after the build rollout returns, before simulator
+            shutdown (which may terminate the process). Unused outside build mode.
+
+    Returns:
+        The exit code when the lifecycle returns normally.
+    """
     parser = get_isaaclab_arena_cli_parser()
     add_agentic_env_gen_runner_cli_args(parser)
     args_cli = parser.parse_args()
@@ -792,6 +802,8 @@ def main() -> int:
         check_transfer_readiness(spec_path, resolve_policy_ref(args_cli, args_cli.policy_config))
         with SimulationAppContext(args_cli):
             build_env_and_run_policy(spec_path, args_cli)
+            if on_build_completed is not None:
+                on_build_completed()
         return 0
 
     with SimulationAppContext(args_cli):

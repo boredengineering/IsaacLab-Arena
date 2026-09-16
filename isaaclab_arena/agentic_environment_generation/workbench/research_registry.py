@@ -13,8 +13,10 @@ initializes/restarts/closes the supplied Journal, grants publication, or runs a 
 JSON contract (canonical_json uses sorted keys, compact separators, ASCII escapes):
 * reservation: schema_version, registry_id, reservation_id, revision_id, workflow_id,
   version, request_digest, store_id, family, source, parent_revision_id, approval,
-  publication_request. source has job_id, attempt_id, generation, receipt_sha256,
-  request_sha256. Parent is an explicit committed revision in the same store/family.
+  publication_request. Legacy source retains exactly job_id, attempt_id, generation,
+  receipt_sha256, request_sha256, with no kind tag. Manual source uses the exact v1
+  editor_revision fields in research_source. Parent is explicit and committed in
+  the same store/family. Manual approval scope is persist_editor_revision.
 * commit: reservation, manifest, relative_directory, publication_intent_id (or null).
 * publication_request: effect_id, target_profile, optional options object. Profile
   is an identifier or 1–16 identifier-to-identifier entries, never a URL/credential.
@@ -285,11 +287,38 @@ class ResearchRegistry:
         ):
             raise ValueError("Explicit persistence approval required")
         publication_request = self._publication_request(publication_request)
+        return self._reserve_source(store_id, family, workflow_id,
+                                    lambda: self._candidate_source(job_id, attempt_id, generation),
+                                    approval, parent_revision_id, publication_request, job_id=job_id)
+
+    def reserve_editor_revision(self, store_id, family, workflow_id, *, source, bundle,
+                                approval, parent_revision_id, publication_request=None):
+        """Reserve an explicit manual family/parent using a verified portable source.
+
+        As with reserve_candidate, the trusted caller authenticates approval and
+        protects all public values first. This creates no job, attempt or job event.
+        """
+        from .research_source import verify_editor_source
+        if publication_request is not None:
+            raise ValueError("Editor revision publication is unsupported")
+        verify_editor_source(source, bundle)
+        for value in (store_id, family, workflow_id):
+            checked_identifier(value)
+        if (type(approval) is not dict or set(approval) != {"scope", "principal"}
+                or approval["scope"] != "persist_editor_revision" or type(approval["principal"]) is not str
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", approval["principal"])):
+            raise ValueError("Explicit persistence approval required")
+        source, approval = bounded_json(source), bounded_json(approval)
+        return self._reserve_source(store_id, family, workflow_id, lambda: source,
+                                    approval, parent_revision_id, None)
+
+    def _reserve_source(self, store_id, family, workflow_id, load_source, approval,
+                        parent_revision_id, publication_request, *, job_id=None):
         with self.journal._transaction() as db:
             self._identity(db)
             if not db.execute("SELECT 1 FROM research_stores WHERE store_id=?", (store_id,)).fetchone():
                 raise ValueError("Unknown research store")
-            source = self._candidate_source(job_id, attempt_id, generation)
+            source = load_source()
             request = {
                 "store_id": store_id,
                 "family": family,
@@ -353,7 +382,8 @@ class ResearchRegistry:
                     canonical_json(body),
                 ),
             )
-            self.journal._event(db, self.journal.get_job(job_id), "research_version_reserved")
+            if job_id is not None:
+                self.journal._event(db, self.journal.get_job(job_id), "research_version_reserved")
             return json.loads(canonical_json(body))
 
     def get_reservation_for_workflow(self, store_id, workflow_id):
@@ -440,7 +470,7 @@ class ResearchRegistry:
             ).fetchone()
             return None if row is None else json.loads(row["body"])
 
-    def _checked_manifest(self, reservation, manifest, relative_directory):
+    def _checked_manifest(self, reservation, manifest, relative_directory, *, source_bundle=None):
         manifest = bounded_json(manifest, max_bytes=65536, max_depth=17)
         if (
             set(manifest)
@@ -484,6 +514,16 @@ class ResearchRegistry:
         if total > 8 * 1024 * 1024:
             raise ValueError("Research file total exceeds bounds")
         source = reservation["source"]
+        from .research_source import editor_source_artifacts, source_kind
+        if source_kind(source) == "editor_revision":
+            originals = editor_source_artifacts(source, source_bundle)
+            originals["source.json"] = canonical_json(reservation).encode()
+            if set(files) != set(originals) or reservation["publication_request"] is not None:
+                raise ValueError("Invalid manual research manifest")
+            for name, content in originals.items():
+                if files[name] != {"size": len(content), "sha256": hashlib.sha256(content).hexdigest()}:
+                    raise ValueError("Research source file metadata conflict")
+            return manifest
         if self._candidate_source(source["job_id"], source["attempt_id"], source["generation"]) != source:
             raise ValueError("Research source binding conflict")
         receipt = self.journal.get_candidate_receipt(source["job_id"], source["attempt_id"], source["generation"])
@@ -501,11 +541,11 @@ class ResearchRegistry:
                 raise ValueError("Research source file metadata conflict")
         return manifest
 
-    def record_commit(self, reservation_id, manifest, relative_directory, *, publication_intent=None):
+    def record_commit(self, reservation_id, manifest, relative_directory, *, publication_intent=None, source_bundle=None):
         """Record verified artifact metadata; the facade MUST verify filesystem bytes first."""
         with self.journal._transaction() as db:
             reservation = self.get_reservation(reservation_id)
-            manifest = self._checked_manifest(reservation, manifest, relative_directory)
+            manifest = self._checked_manifest(reservation, manifest, relative_directory, source_bundle=source_bundle)
             intent = self._checked_intent(reservation, publication_intent)
             commit = {
                 "reservation": reservation,
@@ -526,11 +566,12 @@ class ResearchRegistry:
             )
             if intent is not None:
                 self._insert_publication_intent(db, reservation, publication_intent)
-            self.journal._event(
-                db,
-                self.journal.get_job(reservation["source"]["job_id"]),
-                "research_version_committed",
-            )
+            if "job_id" in reservation["source"]:
+                self.journal._event(
+                    db,
+                    self.journal.get_job(reservation["source"]["job_id"]),
+                    "research_version_committed",
+                )
             return json.loads(canonical_json(commit))
 
     @staticmethod

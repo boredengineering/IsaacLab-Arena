@@ -318,6 +318,15 @@ pre {
   color: #607064;
   font-size: 12px;
 }
+.editor-workspace .prompt-section > fieldset {
+  /* Native min-content sizing otherwise pushes the mobile root past its column. */
+  min-width: 0;
+}
+.editor-workspace .prompt-section > fieldset select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 38px;
+}
 .prompt-section textarea {
   background: #f2f5ef;
   border-color: #e3e8de;
@@ -879,6 +888,9 @@ summary {
   }
   .transport-note {
     margin-inline: 16px;
+  }
+  .editor-workspace .prompt-section > fieldset select {
+    min-height: 44px;
   }
   button {
     min-height: 44px;

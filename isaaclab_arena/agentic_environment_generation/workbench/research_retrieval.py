@@ -25,12 +25,11 @@ from itertools import islice
 
 from isaaclab_arena.agentic_environment_generation.graph_cleanup import close_graph_resources
 from isaaclab_arena.agentic_environment_generation.prior_receipt import SnapshotRejected, validate_prior
-from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
 from . import research_graph_transport as transport
-from .documents import Documents
 from .research_projection import bounded_neo4j_value, project_scene
 from .research_registry import checked_identifier, digest
+from .research_source import verify_frozen_spec
 
 # Independent bounded subqueries avoid multiplying policy/controller/graph links.
 _EVALUATION_QUERY = """// managed evaluation
@@ -279,20 +278,10 @@ class ManagedSelectionProvider:
         _check_deadline(deadline_monotonic)
         files = store.read_version(reservation_id)
         _check_deadline(deadline_monotonic)
-        candidate = json.loads(files["candidate.json"])
-        if (
-            json.loads(files["source.json"]) != reservation
-            or digest(candidate) != reservation["source"]["receipt_sha256"]
-            or candidate["yaml_text"].encode() != files["environment.yaml"]
-            or candidate["validation"]["source_hash"] != hashlib.sha256(files["environment.yaml"]).hexdigest()
-        ):
+        if json.loads(files["source.json"]) != reservation:
             raise ValueError("Immutable source conflict")
         _check_deadline(deadline_monotonic)
-        validation = Documents(".").validate(files["environment.yaml"].decode())
-        _check_deadline(deadline_monotonic)
-        if not validation["valid"]:
-            raise ValueError("Invalid immutable source")
-        spec = ArenaEnvGraphSpec.from_dict(validation["spec"])
+        spec = verify_frozen_spec(reservation["source"], files)
         _check_deadline(deadline_monotonic)
         projection = project_scene(
             spec,

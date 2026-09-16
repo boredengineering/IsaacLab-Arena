@@ -139,6 +139,8 @@ def record_eval_telemetry_to_prov(
     metrics: dict[str, Any],
     policy_name: str | None = None,
     task_success: bool | float | None = None,
+    *,
+    publish_to_graph: bool = True,
 ) -> Path:
     """Serialize evaluation metrics and execution context into a PROV-O Turtle graph.
 
@@ -148,6 +150,8 @@ def record_eval_telemetry_to_prov(
         metrics: Dictionary of metric summaries (latency, steps, success rate, etc.).
         policy_name: Optional identifier or checkpoint path for the evaluated policy.
         task_success: Optional explicit task success boolean or score (0.0 - 1.0).
+        publish_to_graph: Publish to Neo4j after writing local Turtle. Trusted callers
+            may disable publication without importing the graph synchronization module.
 
     Returns:
         Path to the written ``eval_telemetry.ttl`` file.
@@ -253,6 +257,9 @@ def record_eval_telemetry_to_prov(
     g.add((eval_uri, ARENA.metricsPayload, Literal(json.dumps(metrics), datatype=XSD.string)))
 
     g.serialize(destination=str(out_path), format="turtle")
+
+    if not publish_to_graph:
+        return out_path
 
     try:
         from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import sync_eval_telemetry_to_neo4j

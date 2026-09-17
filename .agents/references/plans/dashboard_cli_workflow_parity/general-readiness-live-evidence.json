@@ -1,0 +1,37 @@
+{
+  "scope": "General README readiness implementation and live API/UI metadata verification, not workload execution",
+  "workflow": "agentic_generation",
+  "source_sha256": {
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness.py": "99a809775798c702976838ee98d36737dc8bf1ae75c1dff6a2cce4ecfd61b46a",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness_worker.py": "fce520a275fffb9d9ff9a15e3cadd8df63ccb7dc2f14d9e71c68df072bdc3cdf",
+    "isaaclab_arena_examples/tests/test_workbench_readiness.py": "22e6425fb27d5f6efbbda13ff39811799d2dc6aca74e9e903a2279b8f842043c",
+    "web/arena-workbench/src/workflow-readiness.tsx": "a741e3b00d05f2d1c13b0ac5dc211e9bc735703704ecd33dd5a8dbb35dc8a4d7",
+    "web/arena-workbench/src/readiness-contract.ts": "a27cce4eb77726f60e35f7d05bd8b92b787c96d8e48f6f3febec65c490df273f",
+    "web/arena-workbench/src/workflow-readiness.test.tsx": "9ebb9893c4c45b236964c055dbc9466db9064d4edef44e7e54938e28bf596906",
+    "web/arena-workbench/src/readiness-contract.test.ts": "c5e2cba0857c40a00d014f397a97705c09a2ec5056df92e2d4239175d32d038c",
+    "web/arena-workbench/src/workflow-readiness.editor.test.tsx": "6406a619857fd20d9ba6970013871aa9ed244ae29d9b17ffb67cbd2008194ba6",
+    "web/arena-workbench/src/editor-library.integration.test.tsx": "77ad771a86f8b3ef6fbf613b30f3acc47c5429d6d1b180b103f53513212162ab",
+    "isaaclab_arena_examples/agentic_environment_generation/README.md": "9c7f8e66c3233ca438d1a2b15357f2b78e6781378cef4975567583ae7ec7467e"
+  },
+  "backend_tests": 156,
+  "frontend_tests": 339,
+  "build": "arena-f0-build-23adba244f2e",
+  "live": {
+    "origin": "http://127.0.0.1:3010",
+    "readiness_schema": 2,
+    "readiness_workflow": "agentic_generation",
+    "scenario_selector_present": false,
+    "api_owned": true,
+    "api_healthy": true,
+    "api_reloaded_with_start_paused": true,
+    "nonterminal_jobs": [],
+    "unchanged_job_status_counts": {
+      "succeeded": 23,
+      "cancelled": 3,
+      "failed": 2,
+      "indeterminate": 4
+    }
+  },
+  "effects": "Only Workbench API process reloaded; temporary keys cleared; no research container start/restart, model/database data reads or jobs",
+  "pending": "Host helper/proxy installation; explicit startup configuration and live research dependencies not ready"
+}

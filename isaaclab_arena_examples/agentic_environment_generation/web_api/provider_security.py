@@ -53,7 +53,12 @@ def checked_config(config, *, trusted_server=False):
         ),
         key,
     )
-    return {"api_key": key, "model": model, "base_url": endpoint}
+    result = {"api_key": key, "model": model, "base_url": endpoint}
+    if "inference_profile" in config:
+        from isaaclab_arena.agentic_environment_generation.inference_profiles import checked_inference_profile
+        result["inference_profile"] = checked_inference_profile(config["inference_profile"], model=model, base_url=endpoint)
+        reject_secret(result["inference_profile"], key)
+    return result
 
 
 @contextmanager

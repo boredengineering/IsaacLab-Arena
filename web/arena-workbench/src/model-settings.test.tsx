@@ -65,6 +65,98 @@ function setup(handler?: (url: string, init: RequestInit) => Promise<Response>) 
 beforeEach(() => { sessionStorage.clear(); localStorage.clear(); });
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
+const creatable = { ...documented, profile_catalogue_version: 'harness-model-profiles/v2', profile_creation: 'create-only/v1',
+  profiles: documented.profiles!.map(p => ({ ...p, origin: 'builtin', verification: 'not_checked',
+    request_policy: { ...p.request_policy, multimodal_output: 'json_object' } })) };
+it('adds then verifies a workspace profile without activating or saving a key until explicit selection and save', async () => {
+  let metadata: unknown = creatable;
+  let registered: Record<string, unknown> | undefined;
+  const view = setup(async (url, init) => {
+    if (url.endsWith('/model-settings/profiles/my-literal') && init.method === 'PUT') {
+      const body = JSON.parse(String(init.body));
+      registered = { ...body, id: 'my-literal', revision: 1, endpoint: providers[2].base_url,
+        origin: 'user_defined', support: 'unverified', verification: 'not_checked', documentation_urls: [] };
+      metadata = { ...creatable, profiles: [...creatable.profiles, registered] };
+      return response(registered);
+    }
+    if (url.endsWith('/model-settings') && init.method === 'PUT') {
+      const body = JSON.parse(String(init.body));
+      metadata = { ...metadata as object, ...configured, provider: body.provider, model: body.model,
+        effective_profile: { id: body.profile_id, support: 'unverified', verification: 'not_checked' } };
+    }
+    return response(metadata);
+  });
+  await screen.findByText(/No provider configured/);
+  fireEvent.click(screen.getByRole('button', { name: 'Add model profile' }));
+  fireEvent.change(screen.getByLabelText('New profile ID'), { target: { value: 'my-literal' } });
+  fireEvent.change(screen.getByLabelText('New profile provider'), { target: { value: 'openrouter' } });
+  fireEvent.change(screen.getByLabelText('New profile model literal'), { target: { value: 'claude-sonnet-latest' } });
+  fireEvent.change(screen.getByLabelText('Profile temperature'), { target: { value: 'omitted' } });
+  fireEvent.change(screen.getByLabelText('Profile token limit parameter'), { target: { value: 'max_completion_tokens' } });
+  fireEvent.change(screen.getByLabelText('Profile structured output'), { target: { value: 'json_object' } });
+  fireEvent.change(screen.getByLabelText('Profile multimodal output'), { target: { value: 'omitted' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save new profile' }));
+  await screen.findByText(/Profile saved and read back/);
+  expect(screen.getByLabelText('Model profile')).toHaveValue('custom');
+  expect(view.fetcher.mock.calls.filter(([, init]) => init.method === 'PUT')).toHaveLength(1);
+  expect(screen.getByText(/Profiles persist in this workspace/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Model profile'), { target: { value: 'my-literal' } });
+  expect(screen.getByLabelText('Model')).toHaveValue('claude-sonnet-latest');
+  expect(screen.getByText(/User-defined profile · unverified/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'dummy-explicit-profile-key' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save temporary key' }));
+  await screen.findByText(/Temporary key active/);
+  const puts = view.fetcher.mock.calls.filter(([, init]) => init.method === 'PUT');
+  expect(JSON.parse(String(puts[1][1].body))).toMatchObject({ profile_id: 'my-literal', model: 'claude-sonnet-latest' });
+  expect(JSON.stringify(view.cache.getQueryCache().getAll().map(q => q.state))).not.toContain('dummy-explicit-profile-key');
+  expect(sessionStorage.length).toBe(0); expect(localStorage.length).toBe(0);
+});
+function enterNewProfile() {
+  fireEvent.click(screen.getByRole('button', { name: 'Add model profile' }));
+  fireEvent.change(screen.getByLabelText('New profile ID'), { target: { value: 'my-literal' } });
+  fireEvent.change(screen.getByLabelText('New profile model literal'), { target: { value: 'literal-model' } });
+}
+it.each(['same-id', 'metadata-aba', 'form-aba', 'unmount'] as const)('fences retained profile registration across %s', async boundary => {
+  const view = setup(async () => response(creatable));
+  await screen.findByText(/No provider configured/);
+  enterNewProfile();
+  const form = screen.getByRole('form', { name: 'Add model profile form' });
+  const submit = reactHandler<(e: { preventDefault: () => void }) => Promise<void>>(form, 'onSubmit');
+  const change = reactHandler<(e: { target: { value: string } }) => void>(screen.getByLabelText('New profile model literal'), 'onChange');
+  if (boundary === 'same-id') replaceSettingsOwner(view, 'same-id', false);
+  if (boundary === 'metadata-aba') {
+    const key = clientSessionScope(view.api, view.api.session).queryKey;
+    await act(async () => { await view.cache.invalidateQueries({ queryKey: key }); });
+  }
+  if (boundary === 'form-aba') act(() => { change({ target: { value: 'other' } }); change({ target: { value: 'literal-model' } }); });
+  if (boundary === 'unmount') view.unmount();
+  await act(async () => { await submit({ preventDefault() {} }); });
+  expect(view.fetcher.mock.calls.filter(([, init]) => init.method === 'PUT')).toHaveLength(0);
+});
+it('does not perform profile readback or alter replacement input after same-ID session replacement during PUT', async () => {
+  const pending = delayed<Response>();
+  const view = setup(async (_url, init) => init.method === 'PUT' ? pending.promise : response(creatable));
+  await screen.findByText(/No provider configured/);
+  enterNewProfile();
+  fireEvent.click(screen.getByRole('button', { name: 'Save new profile' }));
+  await waitFor(() => expect(view.fetcher.mock.calls.filter(([, init]) => init.method === 'PUT')).toHaveLength(1));
+  replaceSettingsOwner(view, 'same-id');
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Add model profile' })).toBeEnabled());
+  enterDummyKey('dummy-replacement-kept');
+  const calls = view.fetcher.mock.calls.length;
+  await act(async () => { pending.resolve(response({ detail: 'synthetic-private-error' }, 500)); });
+  expect(view.fetcher).toHaveBeenCalledTimes(calls);
+  expect(screen.getByLabelText('API key')).toHaveValue('dummy-replacement-kept');
+  expect(screen.queryByText(/synthetic-private-error|unconfirmed/)).not.toBeInTheDocument();
+});
+
+it('does not enable profile creation when the backend only advertises legacy metadata', async () => {
+  setup(async () => response(documented));
+  await screen.findByText(/No provider configured/);
+  expect(screen.getByRole('button', { name: 'Add model profile' })).toBeDisabled();
+});
+
 it.each(['provider', 'model', 'expiration', 'consent', 'session', 'unmount', 'pagehide'])('clears an unsent password at the %s boundary', async (boundary) => {
   const view = setup();
   await screen.findByText(/No provider configured/);
@@ -406,7 +498,7 @@ it.each(documented.profiles!)('selects $model only on explicit preset choice and
   });
   await screen.findByText(/No provider configured/);
   const selector = screen.getByRole('combobox', { name: 'Model profile' });
-  expect(screen.getByRole('option', { name: profile.model, exact: true })).toHaveValue(profile.id);
+  expect(screen.getByRole('option', { name: profile.model })).toHaveValue(profile.id);
   expect(selector).toHaveValue('custom');
   expect(screen.getByLabelText('Model')).toHaveValue('');
   enterDummyKey();

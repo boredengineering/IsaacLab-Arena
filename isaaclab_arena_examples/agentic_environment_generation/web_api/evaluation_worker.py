@@ -36,6 +36,12 @@ def run_evaluation(inputs, output_root, *, on_completed):
         "language_instruction",
         *FIXED,
     }
+    if type(inputs) is dict and inputs.get("profile") == "gr00t-droid":
+        if "expected_server_info" not in inputs:
+            raise ValueError("policy_metadata_unavailable")
+        fields.add("expected_server_info")
+    if type(inputs) is dict and {"remote_host", "remote_port"} & inputs.keys():
+        fields.update(("remote_host", "remote_port"))
     if (
         type(inputs) is not dict
         or set(inputs) != fields
@@ -44,6 +50,12 @@ def run_evaluation(inputs, output_root, *, on_completed):
         raise ValueError("Invalid frozen evaluation inputs")
     if inputs["profile"] not in {p["id"] for p in PROFILES}:
         raise ValueError("Invalid evaluation profile")
+    host = inputs.get("remote_host", "127.0.0.1")
+    port = inputs.get("remote_port", 5555 if inputs["profile"] == "gr00t-droid" else 8000)
+    if host != "127.0.0.1" or type(port) is not int or not 1 <= port <= 65535:
+        raise ValueError("Invalid frozen evaluation endpoint")
+    if inputs["profile"] == "openpi-droid" and port != 8000:
+        raise ValueError("Invalid frozen evaluation endpoint")
     for key in ("input_hash", "canonical_hash", "request_sha256"):
         if type(inputs[key]) is not str or not re.fullmatch(r"[a-f0-9]{64}", inputs[key]):
             raise ValueError("Invalid evaluation hash")
@@ -63,6 +75,25 @@ def run_evaluation(inputs, output_root, *, on_completed):
     if type(spec) is not dict or "external_yaml" in spec or canonical_digest(spec) != inputs["canonical_hash"]:
         raise ValueError("Frozen evaluation scene mismatch")
     env_name = compatible_spec(spec)
+    verified_info = None
+    if inputs["profile"] == "gr00t-droid":
+        from isaaclab_arena.agentic_environment_generation.policy_contract import validate_server_info
+
+        from .policy_readiness import probe_gr00t
+        from .readiness import READINESS_CODES
+
+        try:
+            pinned = validate_server_info(inputs["expected_server_info"])
+        except ValueError:
+            raise ValueError("policy_metadata_unavailable") from None
+        proof = probe_gr00t({key: pinned[key] for key in ("checkpoint_sha256", "config_sha256")}, port=port)
+        for key in ("policy_protocol", "policy_model", "policy_transport"):
+            if proof[key]["status"] != "passed":
+                code = proof[key]["code"]
+                raise ValueError(code if code in READINESS_CODES else "policy_metadata_unavailable")
+        verified_info = validate_server_info(proof["server_info"])
+        if verified_info != pinned:
+            raise ValueError("policy_instance_mismatch")
     root = Path(output_root).absolute()
     path = root / "environment.yaml"
     with path.open("x", encoding="utf-8") as source:
@@ -80,7 +111,9 @@ def run_evaluation(inputs, output_root, *, on_completed):
         "--output_base_dir",
         str(root / "output"),
         "--remote_host",
-        "127.0.0.1",
+        host,
+        "--remote_port",
+        str(port),
     ]
     if inputs["profile"] == "gr00t-droid":
         argv += [
@@ -88,8 +121,6 @@ def run_evaluation(inputs, output_root, *, on_completed):
             "isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy",
             "--policy_config_yaml_path",
             "isaaclab_arena_gr00t/policy/config/droid_manip_gr00t_closedloop_config.yaml",
-            "--remote_port",
-            "5555",
         ]
     else:
         argv += [
@@ -99,8 +130,6 @@ def run_evaluation(inputs, output_root, *, on_completed):
             "pi05",
             "--openpi_embodiment_adapter",
             "droid",
-            "--remote_port",
-            "8000",
         ]
     if instruction is not None:
         argv += [f"--language_instruction={instruction}"]
@@ -118,9 +147,29 @@ def run_evaluation(inputs, output_root, *, on_completed):
         os.chdir(REPOSITORY_ROOT)  # GR00T's checked-in YAML includes repository-relative joint configs.
         sys.argv = argv
         runner = importlib.import_module("isaaclab_arena.evaluation.policy_runner")
-        outcome = runner.main(
-            on_evaluation_completed=completed, publish_to_graph=False, telemetry_env_name=env_name, update_lineage=False
-        )
+        original_factory = None
+        if verified_info is not None:
+            from dataclasses import replace
+
+            from isaaclab_arena.evaluation.policy_runner_cli import policy_cfg_from_cli
+
+            original_factory = runner.build_policy_from_cli
+
+            def verified_factory(policy_type, args_cli):
+                config = policy_cfg_from_cli(policy_type, args_cli)
+                return policy_type(replace(config, expected_server_info=dict(verified_info)))
+
+            runner.build_policy_from_cli = verified_factory
+        try:
+            outcome = runner.main(
+                on_evaluation_completed=completed,
+                publish_to_graph=False,
+                telemetry_env_name=env_name,
+                update_lineage=False,
+            )
+        finally:
+            if original_factory is not None:
+                runner.build_policy_from_cli = original_factory
         if outcome not in (None, 0) or not received:
             raise ValueError("Evaluation did not complete")
     finally:
@@ -154,7 +203,9 @@ def main():
                 raise ValueError("Invalid evaluation envelope")
             send({"stage": "evaluating_policy"})
             run_evaluation(
-                envelope["inputs"], envelope["output_root"], on_completed=lambda result: send({"result": result})
+                envelope["inputs"],
+                envelope["output_root"],
+                on_completed=lambda result: send({"result": result}),
             )
             return 0
         except Exception:

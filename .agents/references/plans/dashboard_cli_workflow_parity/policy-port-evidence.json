@@ -1,0 +1,499 @@
+{
+  "schema_version": 1,
+  "status": "finished_source_verified_not_deployed",
+  "scope": "Isolated synthetic protocol/OS/harness and frontend component units; no live policy, provider, database or GPU acceptance.",
+  "contract": {
+    "configuration": "ARENA_WORKBENCH_GR00T_PORT",
+    "format": "canonical ASCII decimal 1..65535",
+    "host": "127.0.0.1",
+    "legacy_gr00t_port": 5555,
+    "openpi_port": 8000,
+    "browser_endpoint_fields": false,
+    "admitted_workers_consult_endpoint_environment": false
+  },
+  "runs": [
+    {
+      "run": "arena-f0-backend-595bcab627ea",
+      "status": "failed",
+      "remaining_owned": [],
+      "proof_sha256": "30e4fde12225fc0cf7382016adfbfa2ec4c3d22ea3c07fede7e163e669181f57",
+      "tests": 89,
+      "counts": {
+        "passed": 73,
+        "failure": 16
+      },
+      "per_file": {
+        "isaaclab_arena_examples.tests.test_workbench_evaluate": 89
+      },
+      "forbidden": {
+        "network": 0,
+        "provider": 0,
+        "graph": 0,
+        "render": 0,
+        "workload": 0,
+        "subprocess": 0
+      },
+      "preimport": {
+        "schema_version": 2,
+        "status": "passed",
+        "egress_denied": true,
+        "errno": 101,
+        "uid": 1000,
+        "before_repository_imports": true,
+        "caps": "0000000000000000",
+        "no_new_privileges": true,
+        "readonly_source_root_deps": true,
+        "gpu_devices": []
+      }
+    },
+    {
+      "run": "arena-f0-backend-8e7cd40f5b9a",
+      "status": "passed",
+      "remaining_owned": [],
+      "proof_sha256": "305884b6b22335dd1ed2e687a5d38ec623806fa70be47eda1ed5ad3c20576a22",
+      "tests": 89,
+      "counts": {
+        "passed": 89
+      },
+      "per_file": {
+        "isaaclab_arena_examples.tests.test_workbench_evaluate": 89
+      },
+      "forbidden": {
+        "network": 0,
+        "provider": 0,
+        "graph": 0,
+        "render": 0,
+        "workload": 0,
+        "subprocess": 0
+      },
+      "preimport": {
+        "schema_version": 2,
+        "status": "passed",
+        "egress_denied": true,
+        "errno": 101,
+        "uid": 1000,
+        "before_repository_imports": true,
+        "caps": "0000000000000000",
+        "no_new_privileges": true,
+        "readonly_source_root_deps": true,
+        "gpu_devices": []
+      }
+    },
+    {
+      "run": "arena-f0-backend-e19860ec693f",
+      "status": "failed",
+      "remaining_owned": [],
+      "proof_sha256": "716a5acb826a9a07dcdb51e9311da86dd3929d76119f8306489432bcf02dfb75",
+      "tests": 36,
+      "counts": {
+        "passed": 14,
+        "failure": 22
+      },
+      "per_file": {
+        "isaaclab_arena_examples.tests.test_workbench_policy_readiness": 36
+      },
+      "forbidden": {
+        "network": 0,
+        "provider": 0,
+        "graph": 0,
+        "render": 0,
+        "workload": 0,
+        "subprocess": 0
+      },
+      "preimport": {
+        "schema_version": 2,
+        "status": "passed",
+        "egress_denied": true,
+        "errno": 101,
+        "uid": 1000,
+        "before_repository_imports": true,
+        "caps": "0000000000000000",
+        "no_new_privileges": true,
+        "readonly_source_root_deps": true,
+        "gpu_devices": []
+      }
+    },
+    {
+      "run": "arena-f0-backend-5ddef9c03085",
+      "status": "passed",
+      "remaining_owned": [],
+      "proof_sha256": "fb2ff91d07118db37c8a4cf647983933ff901fd24f18e984a065233e10a93022",
+      "tests": 42,
+      "counts": {
+        "passed": 42
+      },
+      "per_file": {
+        "isaaclab_arena_examples.tests.test_workbench_policy_readiness": 36,
+        "isaaclab_arena_examples.tests.test_workbench_policy_wire": 6
+      },
+      "forbidden": {
+        "network": 0,
+        "provider": 0,
+        "graph": 0,
+        "render": 0,
+        "workload": 0,
+        "subprocess": 0
+      },
+      "preimport": {
+        "schema_version": 2,
+        "status": "passed",
+        "egress_denied": true,
+        "errno": 101,
+        "uid": 1000,
+        "before_repository_imports": true,
+        "caps": "0000000000000000",
+        "no_new_privileges": true,
+        "readonly_source_root_deps": true,
+        "gpu_devices": []
+      }
+    },
+    {
+      "run": "arena-f0-backend-01be6b8aa7ae",
+      "status": "failed",
+      "remaining_owned": [],
+      "proof_sha256": "31653efc64dbbeb1b876bad47f60bd13205fc2c9b9c6bca54546dec8eacd0185",
+      "tests": 179,
+      "counts": {
+        "passed": 167,
+        "failure": 12
+      },
+      "per_file": {
+        "isaaclab_arena_examples.tests.test_workbench_readiness": 179
+      },
+      "forbidden": {
+        "network": 0,
+        "provider": 0,
+        "graph": 0,
+        "render": 0,
+        "workload": 0,
+        "subprocess": 0
+      },
+      "preimport": {
+        "schema_version": 2,
+        "status": "passed",
+        "egress_denied": true,
+        "errno": 101,
+        "uid": 1000,
+        "before_repository_imports": true,
+        "caps": "0000000000000000",
+        "no_new_privileges": true,
+        "readonly_source_root_deps": true,
+        "gpu_devices": []
+      }
+    },
+    {
+      "run": "arena-f0-backend-97fc6b4e35fe",
+      "status": "failed",
+      "remaining_owned": [],
+      "proof_sha256": "1f89670c26baef00f4cfce9054894d1a056c1ee11fdc873fb58f36c9559c0c06",
+      "tests": 179,
+      "counts": {
+        "passed": 176,
+        "failure": 3
+      },
+      "per_file": {
+        "isaaclab_arena_examples.tests.test_workbench_readiness": 179
+      },
+      "forbidden": {
+        "network": 0,
+        "provider": 0,
+        "graph": 0,
+        "render": 0,
+        "workload": 0,
+        "subprocess": 0
+      },
+      "preimport": {
+        "schema_version": 2,
+        "status": "passed",
+        "egress_denied": true,
+        "errno": 101,
+        "uid": 1000,
+        "before_repository_imports": true,
+        "caps": "0000000000000000",
+        "no_new_privileges": true,
+        "readonly_source_root_deps": true,
+        "gpu_devices": []
+      }
+    },
+    {
+      "run": "arena-f0-backend-a11cfd14b4aa",
+      "status": "passed",
+      "remaining_owned": [],
+      "proof_sha256": "713176d592466e2bf54a95ec536107ed03412017ea79e9b61d1f3618c00736d1",
+      "tests": 179,
+      "counts": {
+        "passed": 179
+      },
+      "per_file": {
+        "isaaclab_arena_examples.tests.test_workbench_readiness": 179
+      },
+      "forbidden": {
+        "network": 0,
+        "provider": 0,
+        "graph": 0,
+        "render": 0,
+        "workload": 0,
+        "subprocess": 0
+      },
+      "preimport": {
+        "schema_version": 2,
+        "status": "passed",
+        "egress_denied": true,
+        "errno": 101,
+        "uid": 1000,
+        "before_repository_imports": true,
+        "caps": "0000000000000000",
+        "no_new_privileges": true,
+        "readonly_source_root_deps": true,
+        "gpu_devices": []
+      }
+    },
+    {
+      "run": "arena-f0-backend-b6b972ee1e8b",
+      "status": "failed",
+      "remaining_owned": [],
+      "proof_sha256": "8b32baabd90cb014c0a2b53758a924c037c50471ce1b441c1a594c99cf760f4e",
+      "tests": 114,
+      "counts": {
+        "passed": 100,
+        "failure": 14
+      },
+      "per_file": {
+        "isaaclab_arena_examples.tests.test_workbench_evaluate": 114
+      },
+      "forbidden": {
+        "network": 0,
+        "provider": 0,
+        "graph": 0,
+        "render": 0,
+        "workload": 0,
+        "subprocess": 0
+      },
+      "preimport": {
+        "schema_version": 2,
+        "status": "passed",
+        "egress_denied": true,
+        "errno": 101,
+        "uid": 1000,
+        "before_repository_imports": true,
+        "caps": "0000000000000000",
+        "no_new_privileges": true,
+        "readonly_source_root_deps": true,
+        "gpu_devices": []
+      }
+    },
+    {
+      "run": "arena-f0-backend-ac4c43a7c9cf",
+      "status": "passed",
+      "remaining_owned": [],
+      "proof_sha256": "d73156d7c401a94bbaade901c46e8139c4c0dfd49648d78912d0ce2a00604aea",
+      "tests": 335,
+      "counts": {
+        "passed": 335
+      },
+      "per_file": {
+        "isaaclab_arena_examples.tests.test_workbench_evaluate": 114,
+        "isaaclab_arena_examples.tests.test_workbench_readiness": 179,
+        "isaaclab_arena_examples.tests.test_workbench_policy_readiness": 36,
+        "isaaclab_arena_examples.tests.test_workbench_policy_wire": 6
+      },
+      "forbidden": {
+        "network": 0,
+        "provider": 0,
+        "graph": 0,
+        "render": 0,
+        "workload": 0,
+        "subprocess": 0
+      },
+      "preimport": {
+        "schema_version": 2,
+        "status": "passed",
+        "egress_denied": true,
+        "errno": 101,
+        "uid": 1000,
+        "before_repository_imports": true,
+        "caps": "0000000000000000",
+        "no_new_privileges": true,
+        "readonly_source_root_deps": true,
+        "gpu_devices": []
+      }
+    },
+    {
+      "run": "arena-f0-backend-4e82a53c0946",
+      "status": "passed",
+      "remaining_owned": [],
+      "proof_sha256": "cf82428ae4a1623ccbe1d5e1d616f18fcb3d879a7d7777ff48b61beeba0c5c4f",
+      "tests": 342,
+      "counts": {
+        "passed": 342
+      },
+      "per_file": {
+        "isaaclab_arena_examples.tests.test_workbench_evaluate": 117,
+        "isaaclab_arena_examples.tests.test_workbench_readiness": 183,
+        "isaaclab_arena_examples.tests.test_workbench_policy_readiness": 36,
+        "isaaclab_arena_examples.tests.test_workbench_policy_wire": 6
+      },
+      "forbidden": {
+        "network": 0,
+        "provider": 0,
+        "graph": 0,
+        "render": 0,
+        "workload": 0,
+        "subprocess": 0
+      },
+      "preimport": {
+        "schema_version": 2,
+        "status": "passed",
+        "egress_denied": true,
+        "errno": 101,
+        "uid": 1000,
+        "before_repository_imports": true,
+        "caps": "0000000000000000",
+        "no_new_privileges": true,
+        "readonly_source_root_deps": true,
+        "gpu_devices": []
+      }
+    },
+    {
+      "run": "arena-functional-frontend-c0f098d59515",
+      "status": "failed",
+      "remaining_owned": [],
+      "proof_sha256": "61ed264cca3998369d4fafcb27ad0ccdd246947409c83b111118d1502f14f4f5",
+      "per_file": {
+        "src/workflow-readiness.test.tsx": 66,
+        "src/evaluate-policy.test.tsx": 81
+      },
+      "tests": 147,
+      "preimport": {
+        "egress_denied": true,
+        "before_repository_imports": true,
+        "dependency_entries": 11370,
+        "dependency_trust": "trusted mutable installed volume; confined links; not immutable provenance"
+      }
+    },
+    {
+      "run": "arena-functional-frontend-f31eac8a68aa",
+      "status": "passed",
+      "remaining_owned": [],
+      "proof_sha256": "7c8cb95b3e1254378389a80e48ddd6fc351aefd36be37e58c061557777a19744",
+      "per_file": {
+        "src/readiness-contract.test.ts": 97,
+        "src/workflow-readiness.editor.test.tsx": 4,
+        "src/workflow-readiness.test.tsx": 66,
+        "src/evaluate-policy.test.tsx": 81
+      },
+      "tests": 248,
+      "preimport": {
+        "egress_denied": true,
+        "before_repository_imports": true,
+        "dependency_entries": 11370,
+        "dependency_trust": "trusted mutable installed volume; confined links; not immutable provenance"
+      }
+    },
+    {
+      "run": "arena-functional-frontend-8ed71854464b",
+      "status": "passed",
+      "remaining_owned": [],
+      "proof_sha256": "b3b4027dca96824863e5fcb0ae01cb5422859f0553a05eb4fa53ecd64abf06a8",
+      "per_file": {
+        "src/readiness-contract.test.ts": 97,
+        "src/workflow-readiness.editor.test.tsx": 4,
+        "src/workflow-readiness.test.tsx": 66,
+        "src/evaluate-policy.test.tsx": 83
+      },
+      "tests": 250,
+      "preimport": {
+        "egress_denied": true,
+        "before_repository_imports": true,
+        "dependency_entries": 11370,
+        "dependency_trust": "trusted mutable installed volume; confined links; not immutable provenance"
+      }
+    },
+    {
+      "run": "arena-f0-typecheck-18675436acd4",
+      "status": "passed",
+      "remaining_owned": [],
+      "proof_sha256": "c5a8a8c657a72505eae695724b4f22b019d04ec1063e60d7b7516cd0801afbbb"
+    },
+    {
+      "run": "arena-f0-typecheck-ab70a0544d24",
+      "status": "passed",
+      "remaining_owned": [],
+      "proof_sha256": "012c52ca2200e6f3c3d745dc4841b83cf07bc8864af495fd6f80d2ea641ba85c"
+    },
+    {
+      "run": "arena-f0-build-4a8cdefbbd2e",
+      "status": "passed",
+      "remaining_owned": [],
+      "proof_sha256": "b566b4a9ba672cb1dde9ad85769abda8302ac940b557b8cb4cf66e3d6fa22594"
+    }
+  ],
+  "final_backend": "arena-f0-backend-4e82a53c0946",
+  "final_frontend": "arena-functional-frontend-8ed71854464b",
+  "final_typecheck": "arena-f0-typecheck-ab70a0544d24",
+  "build": "arena-f0-build-4a8cdefbbd2e",
+  "source_sha256": {
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/policy_endpoint.py": "bcdc20e8d377d1036fd0b397547c7f6500e04d3a2900d9f05e72ecd3aa5e59fa",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/evaluation_profiles.py": "775d64555121362bbb162e7a1328e5c3275fec4e200d7720ebd22a8db97f7eb9",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/evaluate.py": "441bb8582f8b63e2cc7489c49c54ec125fbeea06331b6b141c03e9c163d8d393",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/evaluation_worker.py": "02a70b5da443d58d5d00a26d2a176a2c714e8f06d8cce70d56095d1abd748494",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/policy_readiness.py": "5cacffe3fc6d447fe8deff8ce4e19571d656115d6cb0e370391ca6ba0d91bddf",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness.py": "c14127d5e8211269fa3cd3ffd3aa1239b0ae854ba2cac73252ce9a61a9de2a06",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness_worker.py": "b6d04b046fcd2dc98ab35e8fa4e3d3e537b012bf3572ad2ec34de3cf07a80ca4",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness_process.py": "ed74eb22b059fa205450ed85ea149729127b92f31f622288c3c5996af82236d6",
+    "isaaclab_arena_examples/tests/test_workbench_evaluate.py": "50772b7e628a27099d0cf27e6ed332feb66306271626ec570ebbfb800d475195",
+    "isaaclab_arena_examples/tests/test_workbench_readiness.py": "f921f11a36d895fccf70d5c58c6948538be2d52a7d3fab933dc3941ecb3658d3",
+    "isaaclab_arena_examples/tests/test_workbench_policy_readiness.py": "6b0dd5ba745125799934e8a27f589d37267d3f12f1abe5d8396fc32f9384156f",
+    "isaaclab_arena_examples/tests/test_workbench_policy_wire.py": "a5c5387070081dd16b66ea0b575d8e1465aefc2440c8f618274e98e1945b5559",
+    "web/arena-workbench/src/evaluate-policy.tsx": "1efc9a12bc4765db554e80aa1f6f61385e43a31cddff0dd88a5a3e4381d6bea6",
+    "web/arena-workbench/src/workflow-readiness.tsx": "65039fff1973221a351a3638633dcce2b307cfc40997ae7b4bfc4bc67ca73b5b",
+    "web/arena-workbench/src/evaluate-policy.test.tsx": "cbcbf26cb7a62782019f6cccf28cc00455b0802b1a48747b89424dfe92ddcf86",
+    "web/arena-workbench/src/workflow-readiness.test.tsx": "a64d41bcf9cbabd84e76461249187ae1309e29ccf85d07929b398afd6a757cbb",
+    "web/arena-workbench/src/workflow-readiness.editor.test.tsx": "6406a619857fd20d9ba6970013871aa9ed244ae29d9b17ffb67cbd2008194ba6",
+    "web/arena-workbench/src/readiness-contract.test.ts": "c5e2cba0857c40a00d014f397a97705c09a2ec5056df92e2d4239175d32d038c"
+  },
+  "source_matches_verified_staged_runs": {
+    "arena-f0-backend-4e82a53c0946": {
+      "isaaclab_arena_examples/agentic_environment_generation/web_api/policy_endpoint.py": "bcdc20e8d377d1036fd0b397547c7f6500e04d3a2900d9f05e72ecd3aa5e59fa",
+      "isaaclab_arena_examples/agentic_environment_generation/web_api/evaluation_profiles.py": "775d64555121362bbb162e7a1328e5c3275fec4e200d7720ebd22a8db97f7eb9",
+      "isaaclab_arena_examples/agentic_environment_generation/web_api/evaluate.py": "441bb8582f8b63e2cc7489c49c54ec125fbeea06331b6b141c03e9c163d8d393",
+      "isaaclab_arena_examples/agentic_environment_generation/web_api/evaluation_worker.py": "02a70b5da443d58d5d00a26d2a176a2c714e8f06d8cce70d56095d1abd748494",
+      "isaaclab_arena_examples/agentic_environment_generation/web_api/policy_readiness.py": "5cacffe3fc6d447fe8deff8ce4e19571d656115d6cb0e370391ca6ba0d91bddf",
+      "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness.py": "c14127d5e8211269fa3cd3ffd3aa1239b0ae854ba2cac73252ce9a61a9de2a06",
+      "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness_worker.py": "b6d04b046fcd2dc98ab35e8fa4e3d3e537b012bf3572ad2ec34de3cf07a80ca4",
+      "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness_process.py": "ed74eb22b059fa205450ed85ea149729127b92f31f622288c3c5996af82236d6",
+      "isaaclab_arena_examples/tests/test_workbench_evaluate.py": "50772b7e628a27099d0cf27e6ed332feb66306271626ec570ebbfb800d475195",
+      "isaaclab_arena_examples/tests/test_workbench_readiness.py": "f921f11a36d895fccf70d5c58c6948538be2d52a7d3fab933dc3941ecb3658d3",
+      "isaaclab_arena_examples/tests/test_workbench_policy_readiness.py": "6b0dd5ba745125799934e8a27f589d37267d3f12f1abe5d8396fc32f9384156f",
+      "isaaclab_arena_examples/tests/test_workbench_policy_wire.py": "a5c5387070081dd16b66ea0b575d8e1465aefc2440c8f618274e98e1945b5559"
+    },
+    "arena-functional-frontend-8ed71854464b": {
+      "web/arena-workbench/src/evaluate-policy.tsx": "1efc9a12bc4765db554e80aa1f6f61385e43a31cddff0dd88a5a3e4381d6bea6",
+      "web/arena-workbench/src/workflow-readiness.tsx": "65039fff1973221a351a3638633dcce2b307cfc40997ae7b4bfc4bc67ca73b5b",
+      "web/arena-workbench/src/evaluate-policy.test.tsx": "cbcbf26cb7a62782019f6cccf28cc00455b0802b1a48747b89424dfe92ddcf86",
+      "web/arena-workbench/src/workflow-readiness.test.tsx": "a64d41bcf9cbabd84e76461249187ae1309e29ccf85d07929b398afd6a757cbb",
+      "web/arena-workbench/src/workflow-readiness.editor.test.tsx": "6406a619857fd20d9ba6970013871aa9ed244ae29d9b17ffb67cbd2008194ba6",
+      "web/arena-workbench/src/readiness-contract.test.ts": "c5e2cba0857c40a00d014f397a97705c09a2ec5056df92e2d4239175d32d038c"
+    },
+    "arena-f0-typecheck-ab70a0544d24": {
+      "web/arena-workbench/src/evaluate-policy.tsx": "1efc9a12bc4765db554e80aa1f6f61385e43a31cddff0dd88a5a3e4381d6bea6",
+      "web/arena-workbench/src/workflow-readiness.tsx": "65039fff1973221a351a3638633dcce2b307cfc40997ae7b4bfc4bc67ca73b5b",
+      "web/arena-workbench/src/evaluate-policy.test.tsx": "cbcbf26cb7a62782019f6cccf28cc00455b0802b1a48747b89424dfe92ddcf86",
+      "web/arena-workbench/src/workflow-readiness.test.tsx": "a64d41bcf9cbabd84e76461249187ae1309e29ccf85d07929b398afd6a757cbb",
+      "web/arena-workbench/src/workflow-readiness.editor.test.tsx": "6406a619857fd20d9ba6970013871aa9ed244ae29d9b17ffb67cbd2008194ba6",
+      "web/arena-workbench/src/readiness-contract.test.ts": "c5e2cba0857c40a00d014f397a97705c09a2ec5056df92e2d4239175d32d038c"
+    },
+    "arena-f0-build-4a8cdefbbd2e": {
+      "web/arena-workbench/src/evaluate-policy.tsx": "1efc9a12bc4765db554e80aa1f6f61385e43a31cddff0dd88a5a3e4381d6bea6",
+      "web/arena-workbench/src/workflow-readiness.tsx": "65039fff1973221a351a3638633dcce2b307cfc40997ae7b4bfc4bc67ca73b5b"
+    }
+  },
+  "remaining_owned": [],
+  "notes": [
+    "All listed runs have authoritative empty remaining_owned.",
+    "readiness_process.py and test_workbench_policy_wire.py were verified unchanged, not edited by this owner.",
+    "Frontend dependency volume is trusted mutable installed input, not immutable provenance.",
+    "Build succeeded with existing large-chunk and external outDir warnings.",
+    "Prior catalogue RED/GREEN and historical discovery blockers remain preserved in the prior handoff/transcript."
+  ]
+}

@@ -20,6 +20,11 @@ from typing import Any, Literal
 
 from gr00t.policy.server_client import PolicyClient as Gr00tPolicyClient
 
+from isaaclab_arena.agentic_environment_generation.policy_contract import (
+    canonical_metadata_digest,
+    validate_droid_modalities,
+    validate_server_info,
+)
 from isaaclab_arena.assets.register import register_policy
 from isaaclab_arena.policy.action_scheduling import ActionChunkScheduler, ActionScheduler, SyncedBatchActionScheduler
 from isaaclab_arena.policy.policy_base import PolicyBase
@@ -33,6 +38,11 @@ from isaaclab_arena_gr00t.policy.gr00t_core import (
     extract_obs_numpy_from_torch,
     load_gr00t_joint_configs,
     resize_rgb_for_policy,
+)
+from isaaclab_arena_gr00t.policy.serving_metadata import (
+    VerifiedPolicyClient,
+    verify_native_connection,
+    verify_policy_identity,
 )
 from isaaclab_arena_gr00t.utils.io_utils import create_config_from_yaml, load_gr00t_modality_config_from_file, to_numpy
 
@@ -57,6 +67,15 @@ class Gr00tRemoteClosedloopPolicyCfg(Gr00tBasePolicyCfg):
 
     remote_api_token: str | None = None
     """Optional policy-server API token."""
+
+    expected_server_info: dict[str, Any] | None = None
+    """Exact worker-verified metadata pin; omitted legacy clients remain unverified."""
+
+    remote_timeout_ms: int = 15000
+    """Native inference deadline, independent of bounded metadata readiness."""
+
+    metadata_timeout_ms: int = 3000
+    """Verified-client metadata deadline (1–5000 ms)."""
 
     scheduler: Literal["chunk", "synced_batch"] = "chunk"
     """Action scheduler used to consume inference chunks."""
@@ -99,23 +118,51 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
         ) = load_gr00t_joint_configs(self.policy_config)
 
         # Connect before choosing default modalities: the server may run a different GR00T version.
-        client = Gr00tPolicyClient(
+        self._expected_server_info = (
+            validate_server_info(config.expected_server_info) if config.expected_server_info is not None else None
+        )
+        client_type = VerifiedPolicyClient if self._expected_server_info is not None else Gr00tPolicyClient
+        verified_kwargs = (
+            {
+                "expected_server_info": dict(self._expected_server_info),
+                "timeout_ms": config.remote_timeout_ms,
+                "metadata_timeout_ms": config.metadata_timeout_ms,
+            }
+            if self._expected_server_info is not None
+            else {}
+        )
+        client = client_type(
             host=config.remote_host,
             port=config.remote_port,
             api_token=config.remote_api_token,
             strict=False,
+            **verified_kwargs,
         )
         self._client: Gr00tPolicyClient | None = client
-        if not client.ping():
-            raise ConnectionError(f"Cannot reach GR00T policy server at {config.remote_host}:{config.remote_port}")
+        try:
+            if self._expected_server_info is not None:
+                if callable(getattr(client, "ensure_verified_connection", None)):
+                    client.ensure_verified_connection()
+                else:
+                    verify_native_connection(client, self._expected_server_info)
+            elif not client.ping():
+                raise ConnectionError(f"Cannot reach GR00T policy server at {config.remote_host}:{config.remote_port}")
 
-        if self.policy_config.modality_config_path:
-            self.modality_configs = load_gr00t_modality_config_from_file(
-                self.policy_config.modality_config_path,
-                self.policy_config.embodiment_tag,
-            )
-        else:
-            self.modality_configs = client.get_modality_config()
+            if self.policy_config.modality_config_path:
+                self.modality_configs = load_gr00t_modality_config_from_file(
+                    self.policy_config.modality_config_path,
+                    self.policy_config.embodiment_tag,
+                )
+            else:
+                cached = getattr(client, "_verified_modalities", None)
+                self.modality_configs = cached if cached is not None else client.get_modality_config()
+            if self._expected_server_info is not None:
+                modalities = validate_droid_modalities(self.modality_configs)
+                if canonical_metadata_digest(modalities) != self._expected_server_info["modalities_sha256"]:
+                    raise ValueError("Local policy modalities differ from verified server")
+        except BaseException:
+            self.close()
+            raise
 
         # Action / chunk shapes
         self.action_dim = compute_action_dim(self.task_mode, self.robot_action_joints_config)
@@ -179,6 +226,15 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
             for cam_idx, cam_frames in enumerate(rgb_list_np):
                 self._video_history[cam_idx].append(cam_frames)
 
+    def _verify_connection(self):
+        """Recheck private pin; never infer approval for legacy clients."""
+        if self._expected_server_info is not None:
+            assert self._client is not None, "GR00T remote policy has been closed"
+            if callable(getattr(self._client, "verify_identity", None)):
+                self._client.verify_identity()
+            else:
+                verify_policy_identity(self._client, self._expected_server_info)
+
     def get_action(self, env: gym.Env, observation: dict[str, Any]) -> torch.Tensor:
         assert self._chunking_state is not None, "GR00T remote policy has been closed"
 
@@ -188,10 +244,13 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
         def fetch_chunk() -> torch.Tensor:
             return self._get_action_chunk(observation, self.policy_config.pov_cam_name_sim)
 
-        return self._chunking_state.get_action(
+        action = self._chunking_state.get_action(
             fetch_chunk,
             hold_action=self._extract_hold_action(observation),
         )
+        # Covers buffered and asynchronous scheduler actions, not just fresh inference.
+        self._verify_connection()
+        return action
 
     def _extract_hold_action(self, observation: dict[str, Any]) -> torch.Tensor:
         """Build the action vector that waiting envs should hold: their current sim joint positions
@@ -313,6 +372,9 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
         client = self._client
         try:
             if client is not None:
+                if callable(getattr(client, "close", None)):
+                    client.close()
+                    return
                 socket = getattr(client, "socket", None)
                 context = getattr(client, "context", None)
                 try:

@@ -39,6 +39,7 @@ class WorkflowAuthorization:
         config = self.model_settings.resolve(owner, credential_ref) if credential_ref else generation.configuration()
         if config is None:
             raise ValueError("Generation is not configured")
+        config = generation.freeze_configuration(config)
         graph = graph_access.configuration() if retrieval else None
         if require_service and graph is None:
             raise ValueError("Required retrieval service is not configured")
@@ -60,6 +61,8 @@ class WorkflowAuthorization:
                 or parsed.fragment
             ):
                 raise ValueError("Invalid workflow endpoint")
+        if "inference_profile" in config:
+            profile["inference_profile"] = deepcopy(config["inference_profile"])
         profile.update(
             source="session" if credential_ref else "server",
             credential_generation=credential_ref or secrets.token_hex(16),
@@ -159,6 +162,7 @@ class WorkflowAuthorization:
             if model["profile"]["source"] == "session"
             else generation.configuration()
         )
+        current = generation.freeze_configuration(current)
         if current != config:
             raise ValueError("Workflow authorization unavailable")
         graph = metadata["retrieval"]

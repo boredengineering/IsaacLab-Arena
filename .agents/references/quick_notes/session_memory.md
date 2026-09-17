@@ -1,4 +1,30 @@
-# Session Memory: Active Inference & Robot Vision-Language-Action (VLA) Calibration
+# Session memory
+
+## Current checkpoint — 2026-09-17: implementation paused
+
+The user reported **“I refreshed the page and everything disappeared”** after the v7 Resume queue change. They requested preservation and consolidation, intend to commit themselves, and will reconsider the strategy. No new strategy has been agreed. Stop implementation and live effects; older approvals are historical, not permission to continue automatically.
+
+Read the [single current dashboard handoff](../plans/dashboard_cli_workflow_parity/research-stack-implementation-handoff.md) for the change map, last-known runtime/queue state, evidence links and remaining limitations. Use the [reference index](../README.md) to navigate; do not reconstruct current status by combining scattered owner reports.
+
+- Git checkpoint: `dev/0.3.0-prerelease`, HEAD `f9519bd3ef`; tracked modifications and untracked source/evidence await user review. No commit or staging was performed during this preservation pass.
+- Implemented during the session: general README-based readiness, existing-service host control/resource corrections, frozen user-defined model profiles, GR00T endpoint propagation, and finally a visible global Resume queue control. Earlier editor/Graph-RAG/policy work is retained, not replaced.
+- These source changes have isolated tests and some bounded live observations. **They do not establish a reliable refreshed dashboard or completed research workflow.** The disappearance has not been diagnosed; persisted-data loss has not been established either.
+- Last observed queued jobs: generation `2da78c386c234556b012c65c5d31a830`; Build `1e537acb672246edb9520f060c9fe7e2`. The agent tested Resume confirmation using Cancel and did not release either job. Current state after the user's refresh is unknown.
+- Last observed deployment: frontend on 3010; existing Neo4j on Bolt 7688/HTTP 7475; GR00T DROID on 5559. Host helper, Arena API session, model key and queue dispatch are separate lifecycles. API start-paused dispatch is not the journal pause flag.
+- Credentials: no approval was received to reuse the existing Neo4j account for the API. Do not copy credentials or assume the user's current generation-key state. Do not save secrets in these notes.
+- A2 physical placement remains unresolved; valid YAML/short Build is not physical correctness. Preserve the LPG/RDF-reification/provenance/DCRG research history without treating older theoretical or empirical claims as newly verified facts.
+- Commit does not capture private host installation/state, browser state, cached dependencies or ignored `.runs/` and `outputs/control-setup/` artifacts. Do not bulk-add those directories.
+
+Conversation recovery anchor: Hermes session `20260916_171442_92ddc8`. Important later units: `deleg_6f08e125` (model profiles), `deleg_33933044` (endpoint/helper), `deleg_0895c08e` (model reviews), `deleg_cc8108f6` (Resume control). Their scoped reports are historical evidence; the latest user failure/pause takes precedence.
+
+## Historical research notes — retained, not current operating instructions
+
+The material below predates this checkpoint and was not re-audited in this preservation pass. Ports, container assumptions, scenario-specific constants, statistical interpretations and “completed/proved” claims must be checked against their original evidence before reuse. They neither establish dashboard acceptance nor authorize experiments.
+
+### Earlier topic: Active Inference & Robot Vision-Language-Action (VLA) Calibration
+
+<details>
+<summary>Expand historical research notes — not revalidated at this checkpoint</summary>
 
 ## 1. DROID / Franka Geometric & Visual Standoff Constants
 * **Robot Base Origin**: `[-0.55, 0.0, 0.0]` (Franka mounted on DROID stand).
@@ -325,3 +351,5 @@
   * Smoke training: 10 iterations of privileged teacher (`logs/rsl_rl/g1_privileged_teacher/2026-09-09_01-47-46/`) completed in 16.66s (1010 steps/sec across 64 envs) reaching mean reward 5.65, finger enclosure 0.7315, and approach alignment 0.3979 with zero NaNs.
   * Neo4j LPG synchronized with `MetaLearningArchitecture` and decision `IMPLEMENT_RAPTOR_META_LEARNING_M5`.
   * Milestone M5 marked **COMPLETED**.
+
+</details>

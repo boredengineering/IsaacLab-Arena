@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   QueryClient,
   QueryClientProvider,
@@ -18,6 +18,8 @@ import {
   type RouterHistory,
 } from '@tanstack/react-router';
 import { ApiClient } from './api';
+import { ResearchServices } from './research-services';
+import { QueueResume } from './queue-resume';
 import { workspaceKey } from './cache';
 import { isUnfinished, type Job, type Workspace } from './contracts';
 import { sharedPort, type ObservationPort } from './observation';
@@ -143,6 +145,9 @@ function Shell() {
           </span>
           {sessionControls}
         </header>
+        <ResearchServices />
+        {/* Global visibility; navigation still retires uncompleted resume intent. */}
+        <QueueResume key={pathname} />
         {layout === 'v7' && failedFor === presentation && <p role="alert" className="notice warning">V7 layout unavailable. Legacy controls remain usable; no work was submitted by this layout change.</p>}
         {(runtime.error || endSession.error) && (
           <div className="notice error" role="alert">
@@ -181,21 +186,13 @@ function Shell() {
     </div>
   );
 }
-function DiagnosticControls({ jobs }: { jobs: Job[] }) {
+function DiagnosticControls() {
   const runtime = useRuntime();
   const navigate = useNavigate();
   const [opted, setOpted] = useState(false);
   const [steps, setSteps] = useState(3);
   const [delay, setDelay] = useState(1);
   const [, rerender] = useState(0);
-  const resumeGeneration = runtime.api.sessionGeneration;
-  const resumeOwner = useMemo(() => ({ active: false, epoch: 0 }),
-    [runtime.api, resumeGeneration, runtime.session?.session_id, opted, runtime.health?.capabilities.diagnostic]);
-  useLayoutEffect(() => {
-    resumeOwner.active = true;
-    resumeOwner.epoch++;
-    return () => { resumeOwner.active = false; resumeOwner.epoch++; };
-  }, [resumeOwner]);
   const mutation = useMutation({
     retry: false,
     mutationFn: async () => {
@@ -210,38 +207,10 @@ function DiagnosticControls({ jobs }: { jobs: Job[] }) {
     },
     onSettled: () => rerender((n) => n + 1),
   });
-  const resume = useMutation({
-    retry: false,
-    mutationFn: (request: { current(): boolean; run(): Promise<boolean> }) => request.run(),
-  });
   const available = runtime.health?.capabilities.diagnostic === true;
   const enabled =
     available && !!runtime.session && opted && !!runtime.pending && !mutation.isPending;
   const pending = runtime.pending?.current;
-  function resumeQueue() {
-    const api = runtime.api;
-    const sessionId = runtime.session?.session_id;
-    const epoch = resumeOwner.epoch;
-    const refresh = runtime.refresh;
-    const current = () => enabled && resumeOwner.active && resumeOwner.epoch === epoch
-      && !!sessionId && api.session?.session_id === sessionId && api.sessionGeneration === resumeGeneration;
-    if (!current() || !window.confirm('Resume the entire shared workload queue? This may start generation and GPU jobs, including jobs not shown in this snapshot.') || !current()) return;
-    resume.mutate({ current, run: async () => {
-      try {
-        if (!current()) return false;
-        await api.activity();
-        if (!current()) return false;
-        const result = await api.mutate<{ resumed: boolean }>('/jobs/resume-queue', {});
-        if (!current()) return false;
-        if (result?.resumed !== true) throw new Error('Queue resume acknowledgement unavailable; inspect the journal before retrying.');
-        await refresh();
-        return current();
-      } catch (error) {
-        if (current()) throw error;
-        return false;
-      }
-    } });
-  }
   return (
     <section className="panel diagnostic" aria-labelledby="diagnostic-heading">
       <div className="panel-heading">
@@ -338,22 +307,6 @@ function DiagnosticControls({ jobs }: { jobs: Job[] }) {
         <p role="alert" className="error-text">
           {mutation.error.message}
         </p>
-      )}
-      {jobs.some((j) => j.status === 'queued') && (
-        <div className="resume-row">
-          <p>This resumes the shared workload queue, not only diagnostic tests. Queued generation or GPU jobs may start, including jobs added since this snapshot.</p>
-          <button disabled={!enabled || resume.isPending} onClick={resumeQueue}>
-            Resume shared workload queue
-          </button>
-        </div>
-      )}
-      {resume.error && resume.variables?.current() && (
-        <p role="alert" className="error-text">
-          {resume.error.message}
-        </p>
-      )}
-      {resume.isSuccess && resume.data === true && resume.variables?.current() && (
-        <p role="status">Queue resume acknowledged. Observe each job for its outcome.</p>
       )}
     </section>
   );
@@ -490,7 +443,7 @@ function WorkspaceView({ selectedJobId }: { selectedJobId?: string }) {
         <span>Validate transport and job lifecycle before enabling research workloads.</span>
         <span className="tag">Viewing does not start work</span>
       </div>
-      <DiagnosticControls jobs={jobs} />
+      <DiagnosticControls />
       <div className="work-grid">
         <section className="panel jobs-panel" aria-labelledby="jobs-heading">
           <div className="panel-heading">

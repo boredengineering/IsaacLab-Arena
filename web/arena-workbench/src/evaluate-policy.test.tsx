@@ -33,7 +33,7 @@ function evaluationJob(status: Job['status'] = 'succeeded'): Job {
       profile: 'gr00t-droid', language_instruction: null, completed: true, publication: 'not_requested',
       metrics: { measured_reward: 0.25 }, episode_count: 0, success_count: null, artifacts: [], warnings: ['Server checkpoint was not verified.'] } };
 }
-function server(accepted = evaluationJob(), historical = false) {
+function server(accepted = evaluationJob(), historical = false, gr00tPort = 5555) {
   let job: Job | undefined = historical ? accepted : undefined;
   let activity: (() => Promise<Response>) | undefined;
   const fetcher = vi.fn(async (url: string, init?: RequestInit): Promise<Response> => {
@@ -46,7 +46,8 @@ function server(accepted = evaluationJob(), historical = false) {
     if (url.endsWith('/editor/documents/fixture')) return response({ document_id: 'frozen-document', source: 'fixture.yaml', yaml_text: yaml, source_hash: inputHash, validation });
     if (url.endsWith('/editor/validate')) return response(validation);
     if (url.includes('/editor/previews/')) return response({ status: 'miss', canonical_hash: canonicalHash, receipt: null });
-    if (url.endsWith('/editor/evaluation-profiles')) return response(catalogue);
+    if (url.endsWith('/editor/evaluation-profiles')) return response({ ...catalogue,
+      profiles: [{ ...catalogue.profiles[0], remote_port: gr00tPort }, catalogue.profiles[1]] });
     if (url.endsWith('/editor/evaluate')) { job = accepted; return response(job, 202); }
     if (url.endsWith('/jobs/evaluate-job/cancel')) { job = { ...job!, status: 'cancel_requested' }; return response(job); }
     if (url.endsWith('/jobs/evaluate-job')) return response(job ?? accepted);
@@ -245,8 +246,41 @@ it.each(['valid', 'wrong hash', 'wrong size', 'session replaced'] as const)('dow
   expect(document.querySelector('iframe')).toBeNull();
 });
 
-it('retires a frozen dispatch when the profile catalogue refetches and returns identical data during activity', async () => {
-  const fixture = server(); const view = mount(fixture.fetcher);
+it.each([1, 5555, 5559, 65535])('accepts bounded configured GR00T port %s without changing fixed OpenPI', port => {
+  const configured = structuredClone(catalogue); configured.profiles[0].remote_port = port;
+  expect(parseEvaluationProfiles(configured)).toEqual(configured.profiles);
+});
+
+it.each([null, true, false, 0, -1, 65536, 5559.5, '5559', {}, [], NaN, Infinity])('rejects noncanonical server port %s', port => {
+  expect(() => parseEvaluationProfiles({ ...catalogue, profiles: [{ ...catalogue.profiles[0], remote_port: port }, catalogue.profiles[1]] })).toThrow();
+});
+
+it.each(['localhost', '127.0.0.2', '::1', 'example.test', '127.0.0.1:5559'])('rejects changed server host %s', host => {
+  expect(() => parseEvaluationProfiles({ ...catalogue, profiles: [{ ...catalogue.profiles[0], remote_host: host }, catalogue.profiles[1]] })).toThrow();
+});
+
+it('keeps OpenPI fixed at 8000 even when GR00T is configured', () => {
+  expect(() => parseEvaluationProfiles({ ...catalogue,
+    profiles: [catalogue.profiles[0], { ...catalogue.profiles[1], remote_port: 5559 }] })).toThrow();
+});
+
+it('displays configured GR00T metadata but never sends a browser endpoint field', async () => {
+  const fixture = server(evaluationJob('queued'));
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => url.endsWith('/editor/evaluation-profiles')
+    ? response({ ...catalogue, profiles: [{ ...catalogue.profiles[0], remote_port: 5559 }, catalogue.profiles[1]] }) : fixture.fetcher(url, init));
+  mount(fetcher);
+  const button = await screen.findByRole('button', { name: 'Evaluate policy' });
+  await waitFor(() => expect(button).toBeEnabled());
+  expect(screen.getByRole('option', { name: 'GR00T DROID — 127.0.0.1:5559' })).toBeInTheDocument();
+  fireEvent.click(button);
+  await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/evaluate'))).toHaveLength(1));
+  const body = JSON.parse(fetcher.mock.calls.find(([url]) => url.endsWith('/editor/evaluate'))![1]!.body as string);
+  expect(body.profile).toBe('gr00t-droid');
+  expect(body).not.toHaveProperty('remote_host'); expect(body).not.toHaveProperty('remote_port');
+});
+
+it.each([5555, 5559])('retires a frozen dispatch when the profile catalogue at %s refetches identical data during activity', async port => {
+  const fixture = server(evaluationJob(), false, port); const view = mount(fixture.fetcher);
   const button = await screen.findByRole('button', { name: 'Evaluate policy' });
   await waitFor(() => expect(button).toBeEnabled());
   let release!: (value: Response) => void;
@@ -283,8 +317,8 @@ it.each(['missing capability', 'false capability', 'invalid draft', 'malformed p
   if (boundary.endsWith('capability')) expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/editor/evaluation-profiles'))).toHaveLength(0);
 });
 
-it.each(['navigation', 'session replacement', 'capability withdrawal'] as const)('retires evaluation during activity after %s', async boundary => {
-  const fixture = server(); const view = mount(fixture.fetcher);
+it.each(['navigation', 'session replacement', 'capability withdrawal'] as const)('retires configured-port evaluation during activity after %s', async boundary => {
+  const fixture = server(evaluationJob(), false, 5559); const view = mount(fixture.fetcher);
   const button = await screen.findByRole('button', { name: 'Evaluate policy' });
   await waitFor(() => expect(button).toBeEnabled());
   let release!: (value: Response) => void;

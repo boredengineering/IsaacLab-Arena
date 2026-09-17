@@ -1,0 +1,30 @@
+{
+  "scope": "Isolated backend integration, not live service or browser acceptance",
+  "run": "arena-f0-backend-dbd0c34c2b2d",
+  "tests": 362,
+  "unique_tests": 362,
+  "by_suite": {
+    "isaaclab_arena.tests.test_policy_contract": 26,
+    "isaaclab_arena_gr00t.tests.test_serving_metadata": 90,
+    "isaaclab_arena_gr00t.tests.test_gr00t_remote_closedloop_policy": 20,
+    "isaaclab_arena_examples.tests.test_workbench_readiness": 94,
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness": 16,
+    "isaaclab_arena_examples.tests.test_workbench_evaluate": 78,
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness": 22,
+    "isaaclab_arena_examples.tests.test_workbench_policy_wire": 6,
+    "isaaclab_arena_examples.tests.test_workbench_paused_start": 10
+  },
+  "source_files_matched": 434,
+  "cleanup_verified": true,
+  "remaining_owned": [],
+  "run_proof_sha256": "803a1aa603847cadf0f14c349ee9cd8d6a074bef9af4120bf52fcfbfd05216ef",
+  "junit_sha256": "064781cd8bdfdff3842bb1be683035fc93ae6b5f8803f40d7ee5ef2df62ed57f",
+  "source_manifest_sha256": "b70c461211b54b85bad72e04cbe433d42f20a771d1df71742054eba4fa0272c7",
+  "pending": [
+    "independent final review",
+    "frontend implementation and approved verification",
+    "existing writable-root container startup compatibility",
+    "loaded policy/runtime and live dependency acceptance",
+    "bounded policy-smoke contract if required"
+  ]
+}

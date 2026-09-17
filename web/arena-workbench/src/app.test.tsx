@@ -5,6 +5,8 @@ import { createMemoryHistory } from '@tanstack/react-router';
 import { App } from './app';
 import { ApiClient } from './api';
 import { PROVIDERS } from './model-settings-contracts';
+import { workspaceKey } from './cache';
+import type { Workspace } from './contracts';
 const session = { session_id: 'session1', csrf_token: 'csrf', expires_at: 9999999999 };
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
 function server(diagnostic = false) {
@@ -137,25 +139,54 @@ it('requires server capability and explicit consent; ambiguous failures retain i
   );
   expect(fetcher.mock.calls.filter(([url]) => url === '/api/jobs')[1][1]?.body).toBe(body);
 });
-it('discloses shared-queue effects and requires separate resume confirmation', async () => {
-  const base = server(true);
-  const queued = { id: 'queued-render', workspace_id: 'default', kind: 'snapshots', status: 'queued', stage: 'queued', inputs: {}, created_at: 0, updated_at: 0, result: null, error: null, created_by_session_id: 'session1' };
+it.each([
+  ['/?layout=v7', false],
+  ['/developer/diagnostics?layout=v7', false],
+  ['/jobs/queued-generate?layout=v7', false],
+  ['/?layout=v7', true],
+] as const)('exposes global Resume queue with diagnostics disabled on actual App %s (unavailable diagnostic retention: %s)', async (path, unavailableRetention) => {
+  if (unavailableRetention) sessionStorage.setItem('arena:default:pending-diagnostic:v1', 'unresolved invalid diagnostic storage');
+  const base = server(false);
+  const jobs = ['generate', 'build'].map(kind => ({ id: `queued-${kind}`, workspace_id: 'default', kind, status: 'queued', stage: 'queued', inputs: {}, created_at: 0, updated_at: 0, result: null, error: null, created_by_session_id: 'session1' }));
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
-    if (url.endsWith('/workspaces/default')) return response({ id: 'default', name: 'Arena', jobs: [queued], event_cursor: 1 });
+    if (url.endsWith('/workspaces/default')) return response({ id: 'default', name: 'Arena', jobs, event_cursor: 1 });
     if (url.endsWith('/jobs/resume-queue')) return response({ resumed: true });
+    if (url.endsWith('/jobs/queued-generate')) return response(jobs[0]);
     return base(url, init);
   });
   const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-  mount(fetcher);
-  fireEvent.click(await screen.findByRole('checkbox', { name: /enable diagnostic controls/i }));
-  const resume = screen.getByRole('button', { name: 'Resume shared workload queue' });
-  fireEvent.click(resume);
-  expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/generation.*GPU/s));
+  const view = mount(fetcher, path);
+  await waitFor(() => expect(document.querySelector('.app-shell')).toHaveClass('workbench-v7'));
+  const resume = await screen.findByRole('button', { name: 'Resume queue' });
+  expect(resume).toBeVisible();
+  expect(resume).toBeEnabled();
+  expect(screen.getAllByRole('button', { name: /^Resume queue$/ })).toHaveLength(1);
+  expect(screen.getByText(/Observed queued jobs: 2/)).toHaveTextContent(/generate: 1/);
+  expect(screen.getByText(/Observed queued jobs: 2/)).toHaveTextContent(/build: 1/);
+  expect(screen.getByText(/Queued jobs do not prove/)).toBeInTheDocument();
+  expect(screen.getByText(/entire shared workload queue.*including jobs not shown/i)).toBeInTheDocument();
   expect(fetcher.mock.calls.some(([url]) => url.endsWith('/jobs/resume-queue'))).toBe(false);
-  expect(screen.queryByText('No GPU work')).not.toBeInTheDocument();
+  fireEvent.click(resume);
+  expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/entire shared.*generation.*GPU.*not shown/s));
+  expect(fetcher.mock.calls.some(([url]) => url.endsWith('/jobs/resume-queue'))).toBe(false);
+  expect(fetcher.mock.calls.some(([url]) => url.endsWith('/session/activity'))).toBe(false);
+  confirm.mockReturnValue(true);
+  fireEvent.click(resume);
+  expect(await screen.findByText(/Queue resume acknowledged/)).toBeInTheDocument();
+  const posts = fetcher.mock.calls.filter(([url]) => url.endsWith('/jobs/resume-queue'));
+  expect(posts).toHaveLength(1);
+  expect(posts[0][1]).toMatchObject({ method: 'POST', credentials: 'same-origin', body: '{}', headers: { 'X-CSRF-Token': session.csrf_token } });
+  fireEvent.click(screen.getByRole('button', { name: 'Reconnect session' }));
+  await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/sessions'))).toHaveLength(2));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Resume queue' })).toBeEnabled());
+  view.unmount();
+  mount(fetcher, path);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Resume queue' })).toBeEnabled());
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/jobs/resume-queue'))).toHaveLength(1);
+  expect(fetcher.mock.calls.filter(([url, init]) => init?.method === 'POST' && (url === '/api/jobs' || url.endsWith('/cancel')))).toHaveLength(0);
 });
 it.each(['before click', 'inside confirmation', 'during preflight'] as const)('rejects shared queue resume after same-ID replacement %s and permits freshly rendered controls', async boundary => {
-  const base = server(true);
+  const base = server(false);
   let api: ApiClient;
   let release!: (value: Response) => void;
   let delayActivity = boundary === 'during preflight';
@@ -170,8 +201,7 @@ it.each(['before click', 'inside confirmation', 'during preflight'] as const)('r
   api = new ApiClient(fetcher as typeof fetch);
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   render(<App api={api} cache={cache} history={createMemoryHistory({ initialEntries: ['/developer/diagnostics'] })} makePort={() => null} />);
-  fireEvent.click(await screen.findByRole('checkbox', { name: /enable diagnostic controls/i }));
-  const resume = screen.getByRole('button', { name: 'Resume shared workload queue' });
+  const resume = await screen.findByRole('button', { name: 'Resume queue' });
   const confirm = vi.spyOn(window, 'confirm').mockImplementation(() => {
     if (boundary === 'inside confirmation') api.session = { ...session };
     return true;
@@ -199,20 +229,21 @@ it.each(['before click', 'inside confirmation', 'during preflight'] as const)('r
   expect(sessionStorage.getItem(retentionKey)).toBe('replacement owner bytes');
 
   // Explicit local rendering adopts the replacement; ordinary activity must not retire it.
-  fireEvent.change(screen.getByRole('spinbutton', { name: 'Steps' }), { target: { value: '4' } });
+  act(() => { cache.setQueryData<Workspace>(workspaceKey, previous => previous && ({ ...previous, event_cursor: 2 })); });
+  await waitFor(() => expect(screen.getByText('2', { selector: '.panel-foot code' })).toBeInTheDocument());
   confirm.mockReturnValue(true);
   delayActivity = false;
   const generation = api.sessionGeneration;
   await act(async () => { await api.activity(); });
   expect(api.sessionGeneration).toBe(generation);
   fetcher.mockClear();
-  fireEvent.click(screen.getByRole('button', { name: 'Resume shared workload queue' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Resume queue' }));
   await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/jobs/resume-queue'))).toHaveLength(1));
   expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/session/activity'))).toHaveLength(1);
   expect(sessionStorage.getItem(retentionKey)).toBe('replacement owner bytes');
 });
-it.each(['navigation', 'opt-out'])('retires confirmed queue resume during pending activity on %s', async boundary => {
-  const base = server(true);
+it.each(['navigation', 'unmount'])('retires confirmed queue resume during pending activity on %s', async boundary => {
+  const base = server(false);
   const queued = { id: 'queued-render', workspace_id: 'default', kind: 'snapshots', status: 'queued', stage: 'queued', inputs: {}, created_at: 0, updated_at: 0, result: null, error: null, created_by_session_id: 'session1' };
   let release!: (value: Response) => void;
   const activity = new Promise<Response>(resolve => { release = resolve; });
@@ -223,17 +254,47 @@ it.each(['navigation', 'opt-out'])('retires confirmed queue resume during pendin
     return base(url, init);
   });
   vi.spyOn(window, 'confirm').mockReturnValue(true);
-  mount(fetcher);
-  const consent = await screen.findByRole('checkbox', { name: /enable diagnostic controls/i });
-  fireEvent.click(consent);
-  fireEvent.click(screen.getByRole('button', { name: 'Resume shared workload queue' }));
+  const view = mount(fetcher);
+  fireEvent.click(await screen.findByRole('button', { name: 'Resume queue' }));
   await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.endsWith('/session/activity'))).toBe(true));
   if (boundary === 'navigation') {
     fireEvent.click(screen.getByRole('link', { name: 'Neo4j query' }));
     await screen.findByRole('heading', { name: 'Neo4j query' });
-  } else fireEvent.click(consent);
+  } else view.unmount();
   await act(async () => { release(response(session)); });
   expect(fetcher.mock.calls.some(([url]) => url.endsWith('/jobs/resume-queue'))).toBe(false);
+});
+it.each([
+  ['navigation', 'success'], ['navigation', 'failure'],
+  ['session', 'success'], ['session', 'failure'],
+  ['unmount', 'success'], ['unmount', 'failure'],
+] as const)('retires late queue POST %s / %s without refreshing or publishing to a replacement owner', async (boundary, outcome) => {
+  const base = server(false);
+  const queued = { id: 'queued-build', workspace_id: 'default', kind: 'build', status: 'queued', stage: 'queued', inputs: {}, created_at: 0, updated_at: 0, result: null, error: null, created_by_session_id: session.session_id };
+  let release!: (value: Response) => void;
+  const pending = new Promise<Response>(resolve => { release = resolve; });
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/workspaces/default')) return response({ id: 'default', name: 'Arena', jobs: [queued], event_cursor: 1 });
+    if (url.endsWith('/jobs/resume-queue')) return pending;
+    return base(url, init);
+  });
+  const api = new ApiClient(fetcher as typeof fetch);
+  const view = render(<App api={api} cache={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })} history={createMemoryHistory({ initialEntries: ['/developer/diagnostics?layout=v7'] })} makePort={() => null} />);
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  fireEvent.click(await screen.findByRole('button', { name: 'Resume queue' }));
+  await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/jobs/resume-queue'))).toHaveLength(1));
+  if (boundary === 'navigation') {
+    fireEvent.click(screen.getByRole('link', { name: 'Neo4j query' }));
+    await screen.findByRole('heading', { name: 'Neo4j query' });
+    fireEvent.click(screen.getByRole('link', { name: 'Jobs & diagnostics' }));
+    await screen.findByRole('heading', { name: 'Integration diagnostic' });
+  } else if (boundary === 'unmount') view.unmount();
+  else api.session = { ...session }; // Retire even before React observes the generation.
+  fetcher.mockClear();
+  await act(async () => { release(outcome === 'success' ? response({ resumed: true }) : response({ detail: 'synthetic-sensitive-response' }, 500)); });
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/workspaces/default'))).toHaveLength(0);
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/jobs/resume-queue'))).toHaveLength(0);
+  expect(screen.queryByText(/Queue resume acknowledged|Queue resume acknowledgement unavailable|synthetic-sensitive-response/)).not.toBeInTheDocument();
 });
 it('keeps a navigable disconnected shell when the API is down', async () => {
   const fetcher = vi.fn().mockRejectedValue(new TypeError('API offline'));

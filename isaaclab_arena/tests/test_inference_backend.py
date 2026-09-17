@@ -100,7 +100,67 @@ def _request() -> StructuredOutputRequest:
     )
 
 
+@pytest.mark.parametrize("text", ['{"count":1,"count":2}', '```json\n{"count":1}\n```', '{"count":"1"}', '{"count":1,"extra":true}'])
+def test_user_profile_run_json_preserves_raw_keys_and_validates_schema(stub_openai, text):
+    profile = {"id": "strict-user", "revision": 1, "provider": "openrouter", "model": "literal",
+        "endpoint": "https://openrouter.ai/api/v1", "origin": "user_defined", "support": "unverified",
+        "verification": "not_checked", "documentation_urls": [], "request_policy": {
+            "api": "chat_completions", "temperature_mode": "omitted", "token_limit_parameter": "max_tokens",
+            "structured_output": "omitted", "multimodal_output": "omitted", "store": None}}
+    stub_openai[1].base_url = profile["endpoint"]
+    backend = InferenceBackend(api_key="dummy-explicit-key", model="literal", base_url=profile["endpoint"],
+                               inference_profile=profile, max_retries=0, load_dotenv=False)
+    backend.client.chat.completions.create.return_value = chat_response(content=text)
+    request = StructuredOutputRequest(schema_name="Count", schema={"type": "object", "properties": {
+        "count": {"type": "integer"}}, "required": ["count"], "additionalProperties": False},
+        system="system", user="user", retry_label="strict")
+    with pytest.raises(RuntimeError):
+        backend.run_json(request)
+
+
 class TestAstraWireCompatibility:
+    @pytest.mark.parametrize("max_tokens", [4, 123])
+    @pytest.mark.parametrize("mode", ["json_schema", "json_object", "omitted"])
+    @pytest.mark.parametrize("temperature_mode,tokens,store,multimodal", [
+        ("omitted", "max_completion_tokens", None, "omitted"),
+        ("configured", "max_tokens", False, "json_object"),
+    ])
+    def test_explicit_profile_policy_reaches_all_sdk_calls_without_model_rewrite(
+        self, sdk_transport, mode, temperature_mode, tokens, store, multimodal, max_tokens
+    ):
+        from isaaclab_arena_examples.agentic_environment_generation.web_api.provider_security import bounded_client
+        profile = {
+            "id": "literal-claude", "revision": 1, "provider": "openrouter", "model": "claude-sonnet-latest",
+            "endpoint": "https://openrouter.ai/api/v1", "origin": "user_defined", "support": "unverified",
+            "verification": "not_checked", "documentation_urls": [],
+            "request_policy": {"api": "chat_completions", "temperature_mode": temperature_mode,
+                "token_limit_parameter": tokens, "store": store, "structured_output": mode,
+                "multimodal_output": multimodal},
+        }
+        config = {"api_key": "synthetic-unit-key-only", "base_url": profile["endpoint"],
+                  "model": profile["model"], "inference_profile": profile}
+        requests, _ = sdk_transport
+        with bounded_client(config):
+            backend = InferenceBackend(**config, temperature=0.7, max_tokens=max_tokens, max_retries=0, load_dotenv=False)
+            assert backend.model == config["model"]
+            backend.run_json(_request())
+            backend.multimodal_chat("unit JSON", {})
+        bodies = [json.loads(r.content) for r in requests]
+        assert len(bodies) == 3
+        for i, body in enumerate(bodies):
+            assert body["model"] == config["model"]
+            assert body[tokens] == (min(8, max_tokens) if i == 0 else max_tokens)
+            assert ("temperature" in body) == (temperature_mode == "configured")
+            if temperature_mode == "configured":
+                assert body["temperature"] == 0.7
+            assert ("store" in body) == (store is False)
+        assert ("response_format" in bodies[1]) == (mode != "omitted")
+        if mode != "omitted":
+            assert bodies[1]["response_format"]["type"] == mode
+        if mode != "json_schema":
+            assert json.dumps(_request().schema, sort_keys=True) in bodies[1]["messages"][0]["content"]
+        assert ("response_format" in bodies[2]) == (multimodal != "omitted")
+
     def test_request_policy_uses_shared_profile_authority(self, monkeypatch, sdk_transport):
         from isaaclab_arena.agentic_environment_generation import inference_profiles
         from isaaclab_arena_examples.agentic_environment_generation.web_api.provider_security import bounded_client

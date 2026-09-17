@@ -17,6 +17,42 @@ from isaaclab_arena_examples.tests.test_workbench_editor import ORIGIN, login
 KEY = "dummy-private-provider-marker-123456"
 BODY = {"provider": "openai", "model": "explicit-test-model", "api_key": KEY}
 
+PROFILE = {
+    "provider": "openrouter", "model": "literal/provider/model:preview",
+    "request_policy": {
+        "api": "chat_completions", "temperature_mode": "omitted",
+        "token_limit_parameter": "max_completion_tokens", "structured_output": "json_object",
+        "multimodal_output": "omitted", "store": None,
+    },
+}
+
+
+def test_create_profile_is_authenticated_immutable_persistent_and_not_activation(tmp_path):
+    app = create_app(tmp_path, start_paused=True)
+    route = "/api/model-settings/profiles/my-model"
+    with TestClient(app, base_url=ORIGIN) as client:
+        assert client.put(route, json=PROFILE).status_code == 401
+        headers = login(client)
+        assert client.put(route, json=PROFILE).status_code == 403
+        before = client.get("/api/model-settings").json()
+        response = client.put(route, headers=headers, json=PROFILE)
+        assert response.status_code == 200
+        profile = response.json()
+        assert profile == dict(PROFILE, id="my-model", revision=1, origin="user_defined",
+                               support="unverified", verification="not_checked",
+                               endpoint="https://openrouter.ai/api/v1", documentation_urls=[])
+        assert client.put(route, headers=headers, json=PROFILE).json() == profile
+        assert client.put(route, headers=headers, json=dict(PROFILE, model="different")).status_code == 409
+        after = client.get("/api/model-settings").json()
+        assert after["profile_creation"] == "create-only/v1"
+        assert profile in after["profiles"]
+        assert after["configured"] == before["configured"] is False
+        assert app.state.model_settings._records == {}
+        assert client.get("/api/jobs").json()["jobs"] == []
+    with TestClient(create_app(tmp_path, start_paused=True), base_url=ORIGIN) as client:
+        login(client)
+        assert profile in client.get("/api/model-settings").json()["profiles"]
+
 
 @pytest.fixture(autouse=True)
 def no_provider(monkeypatch):
@@ -32,13 +68,199 @@ def no_provider(monkeypatch):
     monkeypatch.setattr(generation, "generate", lambda *a, **k: pytest.fail("Unexpected provider invocation"))
 
 
+def test_selected_profile_freezes_policy_through_authorization_and_checked_config(tmp_path):
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.provider_security import checked_config
+    app = create_app(tmp_path, start_paused=True)
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        profile = client.put("/api/model-settings/profiles/my-model", headers=headers, json=PROFILE).json()
+        saved = client.put("/api/model-settings", headers=headers,
+                           json=dict(BODY, provider=PROFILE["provider"], model=PROFILE["model"], profile_id="my-model"))
+        assert saved.status_code == 200
+        metadata = saved.json()
+        assert metadata["effective_profile"]["id"] == "my-model"
+        assert metadata["effective_profile"]["support"] == "unverified"
+        owner = next(iter(app.state.model_settings._records))
+        session = app.state.sessions.get_by_id(owner)
+        config = app.state.model_settings.resolve(owner, metadata["credential_ref"])
+        assert config["inference_profile"] == profile
+        auth = app.state.workflow_authorization
+        grant = auth.capture(session, "synthetic-operation", credential_ref=metadata["credential_ref"], retrieval=False)
+        assert grant["model"]["profile"]["inference_profile"] == profile
+        private = auth.grants.resolve(owner, grant["model"]["grant_id"], "synthetic-operation", "model")
+        assert checked_config(private)["inference_profile"] == profile
+        config["inference_profile"]["request_policy"]["store"] = False
+        assert auth.grants.resolve(owner, grant["model"]["grant_id"], "synthetic-operation", "model") == private
+        auth.protect_public(profile)
+        # Real secrets and policy-shaped dictionaries at other paths remain private.
+        from isaaclab_arena_examples.agentic_environment_generation.web_api.execution_grants import ExecutionGrants
+        grants = ExecutionGrants(clock=lambda: 100)
+        with pytest.raises(ValueError):
+            grants.issue("o", "j", "model", {"other": {"token_limit_parameter": "max_tokens"}}, {}, 200)
+        with pytest.raises(ValueError):
+            grants.issue("o", "j", "model", {"model": "hidden-marker"}, {"other": {"request_policy": "hidden-marker"}}, 200)
+
+
+def test_builtin_server_policy_is_frozen_in_immutable_job(tmp_path, monkeypatch):
+    from isaaclab_arena.agentic_environment_generation.inference_profiles import frozen_builtin_profile, inference_profile_catalogue
+    config = {"api_key": KEY, "provider": "openai", "model": "gpt-6-astra", "base_url": "https://api.openai.com/v1", "trusted_server": True}
+    monkeypatch.setattr(generation, "configuration", lambda: copy.deepcopy(config))
+    app = create_app(tmp_path, start_paused=True)
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        body = {"operation": "new", "prompt": "Synthetic request, never dispatch", "idempotency_key": "freeze-builtin"}
+        response = client.post("/api/editor/generate", headers=headers, json=body)
+        assert response.status_code == 202
+        job = response.json()
+        expected = frozen_builtin_profile(inference_profile_catalogue()[1])
+        assert job["inputs"]["workflow_authorization"]["model"]["profile"]["inference_profile"] == expected
+        assert app.state.workflow_authorization.resolve(job)["config"]["inference_profile"] == expected
+        assert client.get('/api/jobs/' + job['id']).json() == job
+
+
+def test_worker_admits_frozen_policy_to_generation_boundary(monkeypatch):
+    import io
+    import sys
+    from types import SimpleNamespace
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import generation_worker
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.provider_security import checked_config
+    profile = dict(PROFILE, id="manual", revision=1, origin="user_defined", support="unverified",
+                   verification="not_checked", endpoint="https://openrouter.ai/api/v1", documentation_urls=[])
+    config = {"api_key": KEY, "model": PROFILE["model"], "base_url": profile["endpoint"], "inference_profile": profile}
+    envelope = {"inputs": {"operation": "refine", "execution_catalogue_sha256": "a" * 64}, "config": config, "graph_config": None}
+    monkeypatch.setattr(sys, "argv", ["worker", "--parent-pid", "123"])
+    monkeypatch.setattr(generation_worker.os, "getppid", lambda: 123)
+    monkeypatch.setattr(generation_worker.ctypes, "CDLL", lambda *a, **k: SimpleNamespace(prctl=lambda *a: 0))
+    observed = []
+    def synthetic_generate(inputs, emit, *, config, **kwargs):
+        observed.append(checked_config(config))
+        return {"synthetic_boundary": True}
+    monkeypatch.setattr(generation, "generate", synthetic_generate)
+    monkeypatch.setattr(sys, "stdin", SimpleNamespace(buffer=io.BytesIO(json.dumps(envelope).encode() + b"\n")))
+    output = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", output)
+    assert generation_worker.main() == 0
+    assert observed[0]["inference_profile"] == profile
+    assert json.loads(output.getvalue()) == {"result": {"synthetic_boundary": True}}
+
+
+@pytest.mark.parametrize("identity,change", [
+    ("a" * 65, {}), ("-bad", {}), ("openai-gpt-4.1", {}), ("custom", {}),
+    ("manual", {"api_key": KEY}), ("manual", {"endpoint": "https://elsewhere.invalid"}),
+    ("manual", {"model": "x" * 257}), ("manual", {"model": "literal\n"}),
+    ("manual", {"provider": "unknown"}), ("manual", {"revision": 1}),
+    ("manual", {"request_policy": dict(PROFILE["request_policy"], store=True)}),
+    ("manual", {"request_policy": dict(PROFILE["request_policy"], store=0)}),
+    ("manual", {"request_policy": dict(PROFILE["request_policy"], temperature=0.2)}),
+])
+def test_registration_rejects_invalid_exact_shape_before_persistence(tmp_path, identity, change):
+    app = create_app(tmp_path, start_paused=True)
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        response = client.put('/api/model-settings/profiles/' + identity, headers=headers, json=dict(PROFILE, **change))
+        assert response.status_code == 422
+        assert app.state.model_settings.profiles.catalogue() == []
+
+
+def test_registration_and_incoming_key_screen_whole_catalogue_before_writes(tmp_path):
+    app = create_app(tmp_path, start_paused=True)
+    marker = 'synthetic-persistent-model-marker'
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        assert client.put('/api/model-settings', headers=headers, json=BODY).status_code == 200
+        before = copy.deepcopy(app.state.model_settings._records)
+        for literal in (KEY, '"' + ''.join('\\x%02x' % ord(c) for c in KEY) + '"'):
+            rejected = client.put('/api/model-settings/profiles/protected', headers=headers, json=dict(PROFILE, model=literal))
+            assert rejected.status_code == 422
+            assert app.state.model_settings.profiles.catalogue() == []
+        assert client.put('/api/model-settings/profiles/public-marker', headers=headers, json=dict(PROFILE, model=marker)).status_code == 200
+        assert client.put('/api/model-settings', headers=headers, json=dict(BODY, api_key=marker)).status_code == 422
+        assert app.state.model_settings._records == before
+
+
+def test_profile_registration_rejects_duplicate_json_keys_before_insertion(tmp_path):
+    app = create_app(tmp_path, start_paused=True)
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client) | {"Content-Type": "application/json"}
+        raw = '{"model":"discarded",' + json.dumps(PROFILE)[1:]
+        response = client.put('/api/model-settings/profiles/duplicate', headers=headers, content=raw)
+        assert response.status_code == 422
+        assert app.state.model_settings.profiles.catalogue() == []
+
+
+def test_profile_capacity_is_bounded_without_blocking_identical_replay(tmp_path):
+    from isaaclab_arena.agentic_environment_generation.workbench.model_profile_store import ModelProfileConflict
+    app = create_app(tmp_path, start_paused=True)
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        first = client.put('/api/model-settings/profiles/first', headers=headers, json=PROFILE).json()
+        store = app.state.model_settings.profiles
+        for index in range(63):
+            store.create(dict(first, id='profile-' + str(index)), app.state.model_settings.protect_public)
+        assert len(store.catalogue()) == 64
+        assert store.create(first, app.state.model_settings.protect_public) == first
+        with pytest.raises(ModelProfileConflict):
+            store.create(dict(first, id='overflow'), app.state.model_settings.protect_public)
+        assert client.put('/api/model-settings/profiles/overflow', headers=headers, json=PROFILE).status_code == 409
+        assert client.put('/api/model-settings/profiles/first', headers=headers, json=PROFILE).status_code == 200
+
+
+def test_user_profile_does_not_inherit_documented_provider_readiness(monkeypatch):
+    import httpx
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.provider_readiness import probe_provider
+    monkeypatch.setattr(httpx, "Client", lambda *a, **k: pytest.fail("Unverified profile attempted metadata transport"))
+    profile = dict(PROFILE, provider="openai", model="gpt-4.1", id="custom-openai", revision=1,
+                   origin="user_defined", support="unverified", verification="not_checked",
+                   endpoint="https://api.openai.com/v1", documentation_urls=[])
+    config = {"api_key": KEY, "model": profile["model"], "base_url": profile["endpoint"],
+              "provider": "openai", "inference_profile": profile}
+    assert probe_provider(config) == "generation_provider_unsupported"
+
+
+def test_user_policy_is_immutable_in_job_and_renewal_cannot_substitute_policy(tmp_path):
+    from isaaclab_arena_examples.tests.test_workbench_reauthorization import block
+    app = create_app(tmp_path, start_paused=True)
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        original = client.put('/api/model-settings/profiles/original', headers=headers, json=PROFILE).json()
+        changed = dict(PROFILE, request_policy=dict(PROFILE["request_policy"], temperature_mode="configured"))
+        assert client.put('/api/model-settings/profiles/changed', headers=headers, json=changed).status_code == 200
+        settings = dict(BODY, provider=PROFILE["provider"], model=PROFILE["model"], profile_id="original")
+        saved = client.put('/api/model-settings', headers=headers, json=settings).json()
+        body = {"operation": "new", "prompt": "Synthetic profile freeze", "idempotency_key": "frozen-user-policy", "credential_ref": saved["credential_ref"]}
+        response = client.post('/api/editor/generate', headers=headers, json=body)
+        assert response.status_code == 202
+        job = response.json()
+        assert job["inputs"]["workflow_authorization"]["model"]["profile"]["inference_profile"] == original
+        assert app.state.workflow_authorization.resolve(job)["config"]["inference_profile"] == original
+        assert client.get('/api/jobs/' + job['id']).json() == job
+        block(app, job)
+        replacement = client.put('/api/model-settings', headers=headers, json=dict(settings, profile_id="changed")).json()
+        owner = job["created_by_session_id"]
+        session = app.state.sessions.get_by_id(owner)
+        with pytest.raises(ValueError, match="Renewal profile changed"):
+            app.state.workflow_authorization.capture_renewal(session, app.state.journal.get_job(job["id"]), credential_ref=replacement["credential_ref"])
+        assert app.state.journal.get_job(job["id"])["inputs"] == job["inputs"]
+
+
+def test_profile_store_itself_rejects_secret_shaped_or_builtin_records(tmp_path):
+    from isaaclab_arena.agentic_environment_generation.inference_profiles import frozen_builtin_profile, inference_profile_catalogue
+    app = create_app(tmp_path, start_paused=True)
+    with TestClient(app, base_url=ORIGIN):
+        store = app.state.model_settings.profiles
+        for record in ({"id": "bad", "api_key": KEY}, frozen_builtin_profile(inference_profile_catalogue()[0])):
+            with pytest.raises(ValueError):
+                store.create(record, lambda value: None)
+        assert store.catalogue() == []
+
+
 def test_documented_profile_catalogue_is_available_without_configuration(tmp_path):
     with TestClient(create_app(tmp_path, start_paused=True), base_url=ORIGIN) as client:
         login(client)
         response = client.get("/api/model-settings")
         assert response.status_code == 200
         public = response.json()
-        assert public["profile_catalogue_version"] == "harness-model-profiles/v1"
+        assert public["profile_catalogue_version"] == "harness-model-profiles/v2"
         assert public["effective_profile"] is None
         assert public["profiles"] == [
             {
@@ -48,10 +270,13 @@ def test_documented_profile_catalogue_is_available_without_configuration(tmp_pat
                 "model": model,
                 "endpoint": "https://api.openai.com/v1",
                 "support": "documented",
+                "origin": "builtin",
+                "verification": "not_checked",
                 "documentation_urls": urls,
                 "request_policy": {
                     "api": "chat_completions",
                     "structured_output": "json_schema",
+                    "multimodal_output": "json_object",
                     "temperature_mode": temperature,
                     "token_limit_parameter": tokens,
                     "store": store,
@@ -118,7 +343,7 @@ def test_effective_profile_preserves_actual_session_identity(tmp_path, provider,
         "token_limit_parameter",
         "temperature_mode",
         "max_completion_tokens",
-        "harness-model-profiles/v1",
+        "harness-model-profiles/v2",
         "openai-gpt-6-astra",
         "https://developers.openai.com/api/docs/models/gpt-4.1",
     ],

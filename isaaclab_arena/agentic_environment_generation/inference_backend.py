@@ -154,6 +154,7 @@ def completion_request_parameters(
     max_tokens: int,
     ping: bool = False,
     configured_base_url: str | None = None,
+    inference_profile: dict | None = None,
 ) -> dict[str, Any]:
     """Select chat parameters for an exact model and actual client endpoint.
 
@@ -166,13 +167,13 @@ def completion_request_parameters(
     reporting; it does not infer model families or provider identity from substrings.
     ``store=False`` opts out of completion storage, not provider abuse-log retention.
     """
-    profile = inference_profiles.resolve_inference_profile(
-        model, base_url if configured_base_url is None else configured_base_url, actual_base_url=base_url
-    )
+    profile = (inference_profiles.checked_inference_profile(inference_profile, model=model, base_url=base_url)
+               if inference_profile is not None else inference_profiles.resolve_inference_profile(
+                   model, base_url if configured_base_url is None else configured_base_url, actual_base_url=base_url))
     if profile is not None:
         policy = profile["request_policy"]
         omitted = policy["temperature_mode"] == "omitted"
-        ceiling = (min(8, max_tokens) if omitted else 8) if ping else max_tokens
+        ceiling = (min(8, max_tokens) if omitted or inference_profile is not None else 8) if ping else max_tokens
         parameters: dict[str, Any] = {policy["token_limit_parameter"]: ceiling}
         if not omitted:
             parameters["temperature"] = temperature
@@ -185,6 +186,8 @@ def completion_request_parameters(
 class InferenceBackend:
     """Shared LLM JSON-schema runner with retry and tolerant JSON parsing."""
 
+    _explicit_profile = None
+
     def __init__(
         self,
         api_key: str | None = None,
@@ -194,6 +197,7 @@ class InferenceBackend:
         max_tokens: int = 4096,
         max_retries: int = 3,
         load_dotenv: bool = True,
+        inference_profile: dict | None = None,
     ):
         """Configure an OpenAI-compatible structured-output client.
 
@@ -211,6 +215,10 @@ class InferenceBackend:
         assert (
             0 <= max_retries < MAX_RETRIES_LIMIT
         ), f"max_retries must be in [0, {MAX_RETRIES_LIMIT}), got {max_retries}"
+        self._explicit_profile = (inference_profiles.checked_inference_profile(
+            inference_profile, model=model, base_url=base_url) if inference_profile is not None else None)
+        if self._explicit_profile is not None and (model is None or base_url is None):
+            raise ValueError("Explicit inference profiles require literal model and endpoint")
         if load_dotenv:
             _load_dotenv_if_present()
         candidate_model = (
@@ -287,7 +295,9 @@ class InferenceBackend:
             or os.getenv("NV_MODEL")
             or default_model_id
         )
-        if is_openrouter and raw_model in ANTHROPIC_MODELS:
+        if self._explicit_profile is not None:
+            resolved_model = raw_model
+        elif is_openrouter and raw_model in ANTHROPIC_MODELS:
             resolved_model = ANTHROPIC_MODELS[raw_model]
         elif is_openrouter and raw_model.startswith("claude-") and not raw_model.startswith("anthropic/"):
             resolved_model = f"anthropic/{raw_model}"
@@ -301,7 +311,8 @@ class InferenceBackend:
         self._max_tokens = max_tokens
         self._max_retries = max_retries
         self._telemetry = InferenceTelemetryTracker()
-        _ping(client, resolved_model, max_tokens=max_tokens, configured_base_url=resolved_base_url)
+        _ping(client, resolved_model, max_tokens=max_tokens, configured_base_url=resolved_base_url,
+              inference_profile=self._explicit_profile, temperature=temperature if self._explicit_profile else 0)
 
     @property
     def model(self) -> str:
@@ -321,6 +332,9 @@ class InferenceBackend:
     @property
     def inference_profile(self):
         """Return a documented policy only for both declared and actual endpoints."""
+        if self._explicit_profile is not None:
+            return inference_profiles.checked_inference_profile(self._explicit_profile, model=self._model,
+                                                                base_url=str(self._client.base_url))
         return inference_profiles.resolve_inference_profile(
             self._model, self._configured_base_url, actual_base_url=str(self._client.base_url)
         )
@@ -338,6 +352,12 @@ class InferenceBackend:
             {"role": "system", "content": request.system},
             {"role": "user", "content": request.user},
         ]
+        mode = self._explicit_profile["request_policy"]["structured_output"] if self._explicit_profile else "json_schema"
+        output = {"response_format": {"type": "json_schema", "json_schema": {
+            "name": request.schema_name, "strict": True, "schema": request.schema}}}
+        if mode != "json_schema":
+            output = {"response_format": {"type": "json_object"}} if mode == "json_object" else {}
+            messages[0]["content"] += "\nReturn only a JSON object matching this schema (local validation; "                 "no provider-side schema enforcement is claimed):\n" + json.dumps(request.schema, sort_keys=True)
         last_exc: Exception | None = None
         for attempt in range(1 + self._max_retries):
             if attempt > 0:
@@ -351,20 +371,14 @@ class InferenceBackend:
                 resp = self._client.chat.completions.create(
                     model=self._model,
                     messages=messages,
-                    response_format={
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": request.schema_name,
-                            "strict": True,
-                            "schema": request.schema,
-                        },
-                    },
+                    **output,
                     **completion_request_parameters(
                         model=self._model,
                         base_url=str(self._client.base_url),
                         temperature=self._temperature,
                         max_tokens=self._max_tokens,
                         configured_base_url=self._configured_base_url,
+                        inference_profile=self._explicit_profile,
                     ),
                 )
                 duration_s = time.perf_counter() - start_time
@@ -373,13 +387,21 @@ class InferenceBackend:
                     f"Model {self._model!r} returned HTTP 200 with no choices "
                     "(content filter / guardrail / rate-limit response with empty body)."
                 )
-                text = choices[0].message.content if request.parse_json else _extract_response_text(choices[0].message)
+                strict_user = self._explicit_profile is not None and self._explicit_profile["origin"] == "user_defined"
+                text = choices[0].message.content if request.parse_json or strict_user else _extract_response_text(choices[0].message)
                 assert text, (
                     f"Model {self._model!r} returned an empty structured-outputs envelope. "
                     "Verify the endpoint/model supports response_format=json_schema."
                 )
 
-                parsed = request.parse_json(text) if request.parse_json else json.loads(text, strict=False)
+                if strict_user:
+                    from isaaclab_arena.agentic_environment_generation.spec_wire_adapter import SpecWireAdapter
+                    parsed = SpecWireAdapter.parse_json(text)
+                    _validate_structured_value(parsed, request.schema)
+                    if request.parse_json:
+                        parsed = request.parse_json(text)
+                else:
+                    parsed = request.parse_json(text) if request.parse_json else json.loads(text, strict=False)
 
                 # Record successful call telemetry
                 usage = getattr(resp, "usage", None)
@@ -451,13 +473,15 @@ class InferenceBackend:
         resp = self._client.chat.completions.create(
             model=self._model,
             messages=[{"role": "user", "content": content_payload}],
-            response_format={"type": "json_object"},
+            **({"response_format": {"type": "json_object"}} if not self._explicit_profile
+               or self._explicit_profile["request_policy"]["multimodal_output"] == "json_object" else {}),
             **completion_request_parameters(
                 model=self._model,
                 base_url=str(self._client.base_url),
                 temperature=self._temperature,
                 max_tokens=self._max_tokens,
                 configured_base_url=self._configured_base_url,
+                        inference_profile=self._explicit_profile,
             ),
         )
         choice = resp.choices[0] if resp.choices else None
@@ -472,6 +496,74 @@ class InferenceBackend:
         return text
 
 
+def _validate_structured_value(value, schema):
+    """Validate the harness-generated JSON Schema subset locally, without coercion.
+
+    Unknown semantic keywords fail closed. This is not a provider compatibility
+    assertion or a replacement for subsequent Arena domain validation.
+    """
+    import re
+    annotations = {"title", "description", "default", "examples", "$schema", "$defs", "deprecated", "readOnly"}
+    supported = {"$ref", "type", "anyOf", "oneOf", "allOf", "properties", "required", "additionalProperties",
+                 "items", "prefixItems", "minItems", "maxItems", "minLength", "maxLength", "pattern",
+                 "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "enum", "const"} | annotations
+
+    def visit(item, node, depth=0):
+        if depth > 128 or type(node) is not dict or set(node) - supported:
+            raise ValueError("Unsupported local structured-output schema")
+        if "$ref" in node:
+            ref = node["$ref"]
+            if type(ref) is not str or not ref.startswith("#/$defs/") or "/" in ref[8:]:
+                raise ValueError("Unsupported local schema reference")
+            visit(item, schema["$defs"][ref[8:]], depth + 1)
+        for union in ("anyOf", "oneOf", "allOf"):
+            if union in node:
+                matches = 0
+                for branch in node[union]:
+                    try:
+                        visit(item, branch, depth + 1)
+                        matches += 1
+                    except ValueError:
+                        pass
+                if (union == "anyOf" and not matches or union == "oneOf" and matches != 1
+                        or union == "allOf" and matches != len(node[union])):
+                    raise ValueError("Structured output does not match schema union")
+        kinds = {"object": (dict,), "array": (list,), "string": (str,), "integer": (int,),
+                 "number": (int, float), "boolean": (bool,), "null": (type(None),)}
+        kind = node.get("type")
+        if kind is not None and (kind not in kinds or type(item) not in kinds[kind]):
+            raise ValueError("Structured output schema type mismatch")
+        if "enum" in node and item not in node["enum"] or "const" in node and item != node["const"]:
+            raise ValueError("Structured output enum mismatch")
+        if type(item) is dict:
+            props = node.get("properties", {})
+            if set(node.get("required", [])) - set(item):
+                raise ValueError("Structured output missing fields")
+            for key, child in item.items():
+                child_schema = props.get(key, node.get("additionalProperties", True))
+                if child_schema is False:
+                    raise ValueError("Structured output unexpected field")
+                if child_schema is not True:
+                    visit(child, child_schema, depth + 1)
+        elif type(item) is list:
+            if not node.get("minItems", 0) <= len(item) <= node.get("maxItems", 100000):
+                raise ValueError("Structured output array bounds")
+            prefix = node.get("prefixItems", [])
+            for index, child in enumerate(item):
+                child_schema = prefix[index] if index < len(prefix) else node.get("items", {})
+                visit(child, child_schema, depth + 1)
+        elif type(item) is str:
+            if (not node.get("minLength", 0) <= len(item) <= node.get("maxLength", 1024 * 1024)
+                    or "pattern" in node and re.search(node["pattern"], item) is None):
+                raise ValueError("Structured output string bounds")
+        elif type(item) in (int, float):
+            if ("minimum" in node and item < node["minimum"] or "maximum" in node and item > node["maximum"]
+                    or "exclusiveMinimum" in node and item <= node["exclusiveMinimum"]
+                    or "exclusiveMaximum" in node and item >= node["exclusiveMaximum"]):
+                raise ValueError("Structured output numeric bounds")
+    visit(value, schema)
+
+
 def build_strict_schema(model_cls: type[BaseModel]) -> dict[str, Any]:
     """Return ``model_cls``'s JSON schema munged for OpenAI strict mode."""
     schema = copy.deepcopy(model_cls.model_json_schema())
@@ -479,7 +571,8 @@ def build_strict_schema(model_cls: type[BaseModel]) -> dict[str, Any]:
     return schema
 
 
-def _ping(client: OpenAI, model: str, *, max_tokens: int = 8, configured_base_url: str | None = None) -> str:
+def _ping(client: OpenAI, model: str, *, max_tokens: int = 8, configured_base_url: str | None = None,
+          inference_profile: dict | None = None, temperature: float = 0) -> str:
     """Smoke-test the endpoint + API key + model with a minimal request.
 
     Args:
@@ -499,10 +592,11 @@ def _ping(client: OpenAI, model: str, *, max_tokens: int = 8, configured_base_ur
         **completion_request_parameters(
             model=model,
             base_url=str(client.base_url),
-            temperature=0,
+            temperature=temperature,
             max_tokens=max_tokens,
             ping=True,
             configured_base_url=configured_base_url,
+            inference_profile=inference_profile,
         ),
     )
     choices = getattr(resp, "choices", None) or []

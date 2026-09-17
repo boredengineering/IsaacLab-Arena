@@ -6,7 +6,7 @@ import { useRuntime } from './runtime';
 import type { Job } from './contracts';
 
 type ProfileId = 'gr00t-droid' | 'openpi-droid';
-interface Profile { id: ProfileId; label: string; remote_host: '127.0.0.1'; remote_port: 5555 | 8000 }
+interface Profile { id: ProfileId; label: string; remote_host: '127.0.0.1'; remote_port: number }
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const isProfile = (value: unknown): value is ProfileId => value === 'gr00t-droid' || value === 'openpi-droid';
 const fixedProfile = (value: Record<string, unknown>) => value.headless === true && value.enable_cameras === true && value.num_envs === 1 && value.num_steps === 1000;
@@ -17,7 +17,8 @@ export function parseEvaluationProfiles(value: unknown): Profile[] {
   const profiles = r.profiles.map(value => {
     const p = record(value);
     if (!isProfile(p.id) || typeof p.label !== 'string' || !p.label.trim() || p.label.length > 200 || p.remote_host !== '127.0.0.1'
-      || p.remote_port !== (p.id === 'gr00t-droid' ? 5555 : 8000)) throw new Error('Evaluation profiles unavailable or invalid.');
+      || typeof p.remote_port !== 'number' || !Number.isInteger(p.remote_port) || p.remote_port < 1 || p.remote_port > 65535
+      || p.id === 'openpi-droid' && p.remote_port !== 8000) throw new Error('Evaluation profiles unavailable or invalid.');
     return { id: p.id, label: p.label, remote_host: p.remote_host, remote_port: p.remote_port } as Profile;
   });
   if (new Set(profiles.map(p => p.id)).size !== profiles.length) throw new Error('Evaluation profiles unavailable or invalid.');

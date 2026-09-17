@@ -1,0 +1,15 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers.
+# SPDX-License-Identifier: Apache-2.0
+# Explicit operator-only overlay for existing frontend Compose deployments.
+# Default cold bootstrap uses control.py with a pinned, already built image.
+services:
+  frontend:
+    group_add:
+      - "${CONTROL_GID:?set the approved host helper socket group}"
+    volumes:
+      - type: bind
+        source: ${WORKBENCH_CONTROL_IPC_HOST:?install the owner-controlled socket directory first}
+        target: /run/arena-control
+        read_only: true
+        bind:
+          create_host_path: false

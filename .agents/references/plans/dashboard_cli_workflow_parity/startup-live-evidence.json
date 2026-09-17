@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "scope": "Live already-running Start confirmation and exact GET completion; not cold-start or research-workflow acceptance",
+  "helper_sha256": "2396bb0ea61064ad24ec425f42a2cdca014928311ba11d17b839cf16210a17f7",
+  "profile_revision": "8f3e7cc771a1764b466d846d2a09e5dc630c4a4e00402ccec3f8b61209113f4c",
+  "request_id": "cb5b978da1984da39693cbc4c371f2d0",
+  "operation_status": "completed",
+  "operation_code": "services_started",
+  "before_services": [
+    {
+      "id": "595905ed4b610b929b5a4ab28491cbee41b697785765916fa7897de983a7e328",
+      "pid": 465317,
+      "started": "2026-09-16T17:41:26.598570548Z",
+      "status": "running"
+    },
+    {
+      "id": "f353115f103fdac70d0c8ba2bd1aa892f1b3fc4ec07ba1261c3a41da34df061d",
+      "pid": 1319371,
+      "started": "2026-09-17T05:47:54.873746517Z",
+      "status": "running"
+    },
+    {
+      "id": "2cc529d1b098e94b664203df6feb49b5df841800df46f15c92febb7bc080c999",
+      "pid": 1319648,
+      "started": "2026-09-17T05:47:54.990047322Z",
+      "status": "running"
+    }
+  ],
+  "after_services": [
+    {
+      "id": "595905ed4b610b929b5a4ab28491cbee41b697785765916fa7897de983a7e328",
+      "pid": 465317,
+      "started": "2026-09-16T17:41:26.598570548Z",
+      "status": "running"
+    },
+    {
+      "id": "f353115f103fdac70d0c8ba2bd1aa892f1b3fc4ec07ba1261c3a41da34df061d",
+      "pid": 1319371,
+      "started": "2026-09-17T05:47:54.873746517Z",
+      "status": "running"
+    },
+    {
+      "id": "2cc529d1b098e94b664203df6feb49b5df841800df46f15c92febb7bc080c999",
+      "pid": 1319648,
+      "started": "2026-09-17T05:47:54.990047322Z",
+      "status": "running"
+    }
+  ],
+  "before_api": {
+    "queue_paused": false,
+    "api_launcher_pid": 11139,
+    "api_launcher_start": "4190382"
+  },
+  "after_api": {
+    "queue_paused": false,
+    "api_launcher_pid": 11139,
+    "api_launcher_start": "4190382"
+  },
+  "no_process_restart": true,
+  "no_queue_mutation": true,
+  "inference_sent": false,
+  "graph_credentials_extracted": false
+}

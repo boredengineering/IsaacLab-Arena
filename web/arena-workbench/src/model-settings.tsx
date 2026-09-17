@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 're
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRuntime } from './runtime';
 import { ApiError } from './api';
-import { parseModelSettings, PROVIDERS, type Provider } from './model-settings-contracts';
+import { parseModelSettings, parseModelProfile, PROVIDERS, type Provider, type ModelProfile } from './model-settings-contracts';
 import { clientSessionScope } from './client-session-scope';
 
 /** Only public metadata belongs in React Query; secret writes bypass mutation caching. */
@@ -77,7 +77,7 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
   };
   const metadataCurrent = currentMetadata();
   const profiles = metadataCurrent ? status.data?.profiles : undefined;
-  const selectedProfile = profiles?.find(p => p.provider === provider && p.model === model);
+  const selectedProfile = profiles?.find(p => p.id === preset) ?? profiles?.find(p => p.origin !== 'user_defined' && p.provider === provider && p.model === model);
   const [ttlMinutes, setTtlMinutes] = useState<number | null>(30);
   const [consent, setConsent] = useState(false);
   const [pending, setPending] = useState(false);
@@ -171,7 +171,8 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
       && api.sessionGeneration === generation + 1);
     sending.current = true;
     try {
-      const request = api.mutate('/model-settings', { provider, model, api_key, ttl_minutes: ttlMinutes }, 'PUT');
+      const request = api.mutate('/model-settings', { provider, model, api_key, ttl_minutes: ttlMinutes,
+        ...(preset !== 'custom' && status.data.profile_catalogue_version === 'harness-model-profiles/v2' ? { profile_id: preset } : {}) }, 'PUT');
       api_key = ''; // Drop our reference before awaiting; JS strings cannot be reliably zeroized.
       await request;
       if (!current()) return;
@@ -212,6 +213,9 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
       <button type="button" disabled={!session || pending || status.isFetching} onClick={() => { clearEntry(); void status.refetch(); }}>Refresh provider status</button>
       {status.data?.source === 'session' && <button type="button" disabled={!session || pending} onClick={() => void forget()}>Forget key</button>}
     </div>
+    <AddModelProfile key={owner.id} settings={settings} disabled={pending || !metadataCurrent || status.data?.profile_creation !== 'create-only/v1'}
+      admitted={() => entryRevision === entryEpoch.current && currentMetadata() && !sending.current && status.data?.profile_creation === 'create-only/v1'}
+      retireEntry={clearEntry} />
     <form className="model-settings-form" onSubmit={save} autoComplete="off">
       <label>Model profile<select aria-label="Model profile" disabled={pending || !profiles?.length} value={preset}
         onChange={e => {
@@ -224,12 +228,12 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
           if (profile) { setProvider(profile.provider); setModel(profile.model); }
         }}>
         <option value="custom">Custom model (enter exact model ID)</option>
-        {profiles?.map(p => <option key={p.id} value={p.id}>{p.model}</option>)}
+        {profiles?.map(p => <option key={p.id} value={p.id}>{p.origin === 'user_defined' ? `${p.provider} · ${p.model} · ${p.id} · unverified` : p.model}</option>)}
       </select></label>
       {!profiles && <p className="hint">Profile presets unavailable · compatibility unverified. Custom model entry remains available when credential settings can be read.</p>}
       {selectedProfile ? <div className="hint" aria-label="Selected model compatibility">
-        <p>Documented adapter profile · not live verified. Applies on the next explicit save, not the active credential.</p>
-        <p>Chat Completions · structured output: json_schema · Temperature: {selectedProfile.request_policy.temperature_mode} ·
+        <p>{selectedProfile.origin === 'user_defined' ? 'User-defined profile · unverified' : 'Documented adapter profile · not live verified'}. Applies on the next explicit save, not the active credential.</p>
+        <p>Chat Completions · structured output: {selectedProfile.request_policy.structured_output} · Temperature: {selectedProfile.request_policy.temperature_mode} ·
           Token limit parameter: {selectedProfile.request_policy.token_limit_parameter}
           {selectedProfile.request_policy.token_limit_parameter === 'max_completion_tokens'
             ? ' (completion budget includes reasoning tokens, not only visible output).'
@@ -264,4 +268,93 @@ export function ModelSettings({ settings }: { settings: ReturnType<typeof useMod
     </form>
     {failed && <p className="notice error" role="alert">Could not update temporary provider settings. Re-enter the key to try again.</p>}
   </section>;
+}
+
+function AddModelProfile({ settings, disabled, admitted, retireEntry }: {
+  settings: ReturnType<typeof useModelSettings>; disabled: boolean; admitted: () => boolean; retireEntry: () => void;
+}) {
+  const { api, owner, status } = settings;
+  const [open, setOpen] = useState(false);
+  const [id, setId] = useState('');
+  const [provider, setProvider] = useState<Provider>('openai');
+  const [model, setModel] = useState('');
+  const [policy, setPolicy] = useState<ModelProfile['request_policy']>({ api: 'chat_completions', temperature_mode: 'configured',
+    token_limit_parameter: 'max_tokens', structured_output: 'json_schema', multimodal_output: 'json_object', store: null });
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const serial = useRef(0);
+  const [revision, setRevision] = useState(0);
+  const lifetime = useRef(0);
+  const sending = useRef(false);
+  const mounted = useRef(false);
+  useLayoutEffect(() => { mounted.current = true; lifetime.current++; return () => { mounted.current = false; lifetime.current++; }; }, []);
+  function change(action: () => void) {
+    if (!mounted.current || !owner.current() || sending.current) return;
+    setRevision(++serial.current); setNotice(''); action();
+  }
+  async function create(event: FormEvent) {
+    event.preventDefault();
+    if (!mounted.current || revision !== serial.current || !admitted() || sending.current) return;
+    const endpoint = PROVIDERS.find(p => p.id === provider)!.base_url;
+    let expected: ModelProfile;
+    try {
+      expected = parseModelProfile({ id, revision: 1, provider, model, endpoint, origin: 'user_defined',
+        support: 'unverified', verification: 'not_checked', documentation_urls: [], request_policy: policy });
+      if (id === 'custom' || status.data?.profiles?.some(p => p.id === id)) throw new Error();
+    } catch { setNotice('Invalid or existing profile identity. Choose a new bounded ID and literal model.'); return; }
+    const body = { provider, model, request_policy: expected.request_policy };
+    const operation = lifetime.current;
+    const current = () => operation === lifetime.current && owner.current();
+    sending.current = true; setBusy(true); setNotice(''); retireEntry();
+    try {
+      const saved = parseModelProfile(await api.mutate(`/model-settings/profiles/${encodeURIComponent(id)}`, body, 'PUT'));
+      if (!current()) return;
+      // Readback is authoritative; a successful PUT alone never enables selection.
+      const result = await status.refetch();
+      if (!current()) return;
+      const read = result.data?.profiles?.find(p => p.id === expected.id);
+      const equal = (a: ModelProfile, b: ModelProfile) => JSON.stringify(a) === JSON.stringify(b);
+      if (result.isError || !read || !equal(saved, expected) || !equal(read, expected)) throw new Error();
+      setOpen(false); setNotice('Profile saved and read back. Select it explicitly, then save a key separately.');
+    } catch {
+      if (current()) setNotice('Profile save or readback unconfirmed. Refresh the catalogue; retry the identical ID and policy, never replace an existing profile.');
+    } finally {
+      if (current()) { sending.current = false; setBusy(false); }
+    }
+  }
+  return <div className="model-profile-creation">
+    <p className="hint">Profiles persist in this workspace across API restarts and are shared by local sessions. Profiles contain no credentials.
+      Keys stay memory-only. Adding a profile does not contact a provider, verify compatibility, or activate it. Profiles cannot be edited or deleted here.</p>
+    <button type="button" disabled={disabled || busy} onClick={() => {
+      if (revision !== serial.current || !admitted()) return;
+      change(() => setOpen(true)); retireEntry();
+    }}>Add model profile</button>
+    {open && <form className="model-settings-form" aria-label="Add model profile form" onSubmit={create} autoComplete="off">
+      <fieldset disabled={disabled || busy} style={{ minWidth: 0 }}>
+        <legend>Unverified request policy · Chat Completions</legend>
+        <label>New profile ID<input aria-label="New profile ID" maxLength={64} value={id} onChange={e => change(() => setId(e.target.value))} /></label>
+        <label>New profile provider<select aria-label="New profile provider" value={provider} onChange={e => change(() => setProvider(e.target.value as Provider))}>
+          {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+        </select></label>
+        <label>New profile model literal<input aria-label="New profile model literal" maxLength={256} value={model} onChange={e => change(() => setModel(e.target.value))} /></label>
+        {([
+          ['temperature_mode', 'Profile temperature', ['configured', 'omitted']],
+          ['token_limit_parameter', 'Profile token limit parameter', ['max_tokens', 'max_completion_tokens']],
+          ['structured_output', 'Profile structured output', ['json_schema', 'json_object', 'omitted']],
+          ['multimodal_output', 'Profile multimodal output', ['json_object', 'omitted']],
+        ] as const).map(([field, label, options]) => <label key={field}>{label}<select aria-label={label} value={policy[field]}
+          onChange={e => change(() => setPolicy(p => ({ ...p, [field]: e.target.value })))}>
+          {options.map(option => <option key={option} value={option}>{option}</option>)}
+        </select></label>)}
+        <label>Profile store<select aria-label="Profile store" value={policy.store === false ? 'false' : 'omitted'}
+          onChange={e => change(() => setPolicy(p => ({ ...p, store: e.target.value === 'false' ? false : null })))}>
+          <option value="omitted">omitted (provider default)</option><option value="false">false</option>
+        </select></label>
+        <p className="hint">Configured temperature uses the workflow's numeric temperature. JSON object and omitted modes use explicit schema instructions and local validation, not provider-side schema enforcement. Store false is not a guarantee of zero provider retention.</p>
+        <button type="submit">Save new profile</button>
+        <button type="button" onClick={() => { if (revision === serial.current && owner.current()) change(() => setOpen(false)); }}>Cancel adding profile</button>
+      </fieldset>
+    </form>}
+    {notice && <p role="status">{notice}</p>}
+  </div>;
 }

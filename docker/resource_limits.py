@@ -13,6 +13,36 @@ from pathlib import Path
 GIB = 1024**3
 
 
+def existing_research_budget(capacity, available, retained):
+    """Budget existing Neo4j/GR00T while retaining caps and 4 GiB host headroom.
+
+    Args:
+        capacity: Fresh Docker daemon RAM capacity in bytes.
+        available: Fresh host MemAvailable in bytes, not container free memory.
+        retained: Actual positive arena/editor/frontend/helper memory caps.
+
+    Returns:
+        Explicit no-swap memory and PID limits for the two existing services.
+    """
+    if (
+        type(capacity) is not int
+        or type(available) is not int
+        or not 0 < available <= capacity
+        or type(retained) is not dict
+        or set(retained) != {"arena", "editor", "frontend", "helper"}
+        or any(type(value) is not int or value <= 0 for value in retained.values())
+    ):
+        raise ValueError("Invalid existing-stack resource observations")
+    required = 18 * GIB
+    reserve = 4 * GIB
+    if sum(retained.values()) + required + reserve > capacity or available < required + reserve:
+        raise ValueError("Insufficient host headroom for existing research services")
+    return {
+        "neo4j": {"memory": 2 * GIB, "memory_swap": 2 * GIB, "pids": 256},
+        "gr00t": {"memory": 16 * GIB, "memory_swap": 16 * GIB, "pids": 1024},
+    }
+
+
 def resource_environment(capacity=None):
     """Return decimal Compose/shell values reserving at least 25% daemon RAM."""
     if capacity is None:

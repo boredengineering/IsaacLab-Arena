@@ -266,7 +266,7 @@ def create_app(
                     journal, clock=clock, idle_seconds=idle_seconds, absolute_seconds=absolute_seconds
                 )
                 recovered_pause = journal.begin_run()
-                app.state.model_settings = ModelSettings(clock=clock)
+                app.state.model_settings = ModelSettings(clock=clock, journal=journal)
                 await cleanup.step("worker startup", lambda: recover_workers(journal))
                 supervisor = Supervisor(journal, enabled=diagnostics, paused=start_paused or recovered_pause)
                 cleanup.supervisor = supervisor

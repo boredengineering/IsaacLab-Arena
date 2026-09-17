@@ -63,7 +63,7 @@ def main():
         api_key = config.get("api_key")
         options = {}
         if modern:
-            if set(config) - {"api_key", "model", "base_url", "provider", "trusted_server"}:
+            if set(config) - {"api_key", "model", "base_url", "provider", "trusted_server", "inference_profile"}:
                 raise ValueError("Invalid private model configuration fields")
             digest = inputs.get("execution_catalogue_sha256")
             if type(digest) is not str or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):

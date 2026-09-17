@@ -27,9 +27,9 @@ from urllib.parse import urlsplit
 from workbench import api_command
 
 
-def inherited_api_command(state, socket_path, origin, diagnostics):
+def inherited_api_command(state, socket_path, origin, diagnostics, start_paused=False):
     """Track the Python API itself; this helper already inherited Isaac's shell environment."""
-    command = api_command(state, socket_path, origin, diagnostics)
+    command = api_command(state, socket_path, origin, diagnostics, start_paused=start_paused)
     command[0] = sys.executable
     return command
 
@@ -163,7 +163,7 @@ def health(socket_path, origin):
         connection.sock.connect(str(socket_path))
         connection.request("GET", "/api/health")
         response = connection.getresponse()
-        return response.status == 200 and json.loads(response.read())["status"] == "ok"
+        return response.status == 200 and json.loads(response.read(4096))["status"] == "ok"
     except (OSError, ValueError, KeyError, http.client.HTTPException):
         return False
     finally:
@@ -271,7 +271,9 @@ def serve(args):
                 if stopping:
                     return
                 child = subprocess.Popen(
-                    inherited_api_command(str(state), str(socket_path), args.origin, args.diagnostics),
+                    inherited_api_command(
+                        str(state), str(socket_path), args.origin, args.diagnostics, start_paused=args.start_paused
+                    ),
                     stdin=subprocess.DEVNULL,
                     stdout=log,
                     stderr=log,
@@ -296,14 +298,49 @@ def serve(args):
         # Backend owns serve-time socket cleanup; stale recovery is a separate explicit action.
 
 
+def ensure_paused(args):
+    """Start only an absent API under its existing lifecycle lock; never stop/recover."""
+    state, socket_path = Path(args.state_dir), Path(args.socket)
+    prepare(state, socket_path)
+    with control_lock(state):
+        owned, healthy = owned_process(state), health(socket_path, args.origin)
+        if owned and healthy:
+            return "healthy"
+        if owned or healthy:
+            raise RuntimeError("Existing API is unhealthy or unowned; explicit operator review required")
+        preflight(state, socket_path, None)
+        command = [
+            sys.executable,
+            str(Path(__file__).resolve()),
+            "serve",
+            "--state-dir",
+            str(state),
+            "--socket",
+            str(socket_path),
+            "--origin",
+            args.origin,
+            "--start-paused",
+        ]
+        subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True,
+        )
+        return "starting"
+
+
 def main():
     """Run one private lifecycle operation; never start a simulator or dependency."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["preflight", "serve", "status", "stop", "lock", "recover"])
+    parser.add_argument("action", choices=["preflight", "serve", "status", "stop", "lock", "recover", "ensure-paused"])
     parser.add_argument("--state-dir", required=True)
     parser.add_argument("--socket", required=True)
     parser.add_argument("--origin", required=True)
     parser.add_argument("--diagnostics", action="store_true")
+    parser.add_argument("--start-paused", action="store_true")
     parser.add_argument("--port", type=int)
     args = parser.parse_args()
     if os.getuid() == 0 or os.getgid() == 0:
@@ -323,6 +360,8 @@ def main():
         preflight(state, socket_path, args.port)
     elif args.action == "recover":
         print(json.dumps({"recovered": recover(state, socket_path)}))
+    elif args.action == "ensure-paused":
+        print(json.dumps({"api": ensure_paused(args)}))
     else:
         serve(args)
 

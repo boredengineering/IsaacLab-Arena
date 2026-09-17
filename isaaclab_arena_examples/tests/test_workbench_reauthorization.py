@@ -16,6 +16,15 @@ from isaaclab_arena_examples.tests.test_workbench_editor import ORIGIN, login
 from isaaclab_arena_examples.tests.test_workbench_workflow_authorization import BODY, GRAPH, MODEL
 
 
+@pytest.fixture(autouse=True)
+def metadata_only_renderer(monkeypatch):
+    """Authorization units do not construct renderer or simulator services."""
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import editor_execution
+    def unavailable(_state):
+        raise RuntimeError("Metadata-only authorization fixture has no renderer")
+    monkeypatch.setattr(editor_execution, "make_snapshot_service", unavailable)
+
+
 @pytest.fixture
 def configs(monkeypatch):
     model, graph = dict(MODEL), dict(GRAPH)

@@ -28,6 +28,31 @@ from-scratch generation has its own authorized retrieval path. Managed research
 retrieval integration is still under review, not proof of end-to-end P2 parity.
 Starting Neo4j does not automatically configure generation or publish drafts.
 
+### Current dashboard readiness
+
+**Workflow readiness** checks one general **generation → inspect → build** path
+(`agentic_generation`), not a scenario selection. It inspects the registered model
+settings, generation, validation and Build contracts, plus snapshot/preview/artifact
+contracts when the editor advertises its snapshot adapter. An explicit **Check
+dependencies** observes runtime package availability, graph retrieval and GPU
+headroom. It accepts an arbitrary prompt without a base specification, or validates
+the current frozen source without imposing a DROID embodiment.
+
+Provider-model metadata reads are **opt-in and off by default**; configured model
+settings alone remain `not_checked`. A metadata PASS is availability evidence, not
+inference, quota, structured-output or task-success evidence. Checks do not generate,
+render, advance simulation, publish, or call policy-server RPCs. Changing the source,
+prompt, session, settings or consent retires the result and requires another click.
+
+This is the combined graph-backed path: Neo4j/model access is not needed just to
+edit or Build. **Policy evaluation is separate**, with its existing Evaluate
+admission and fixed-profile restrictions; GR00T/OpenPI is not required for generation
+or Build. Readiness never grants operation authorization. The existing generation,
+inspection, Build and Evaluate controls retain their own validation and admission.
+Deploy the matching API/worker and frontend together: an older API returning a
+different version/workflow is rejected, never retried as a legacy scenario check.
+Legacy readiness API identifiers remain supported for explicit existing clients.
+
 ### Opt-in managed research preview
 
 **Admin CLI operating requirement:** initialization and backup are offline-only

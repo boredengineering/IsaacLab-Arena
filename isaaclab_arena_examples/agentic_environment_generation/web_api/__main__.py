@@ -36,6 +36,7 @@ def main():
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--socket", type=Path, required=True)
     parser.add_argument("--origin", default="http://127.0.0.1:3000")
+    parser.add_argument("--start-paused", action="store_true", help="Recover API without releasing queued jobs")
     parser.add_argument("--diagnostics", action="store_true", help="Enable test-only bounded diagnostic subprocesses")
     parser.add_argument(
         "--research-store",
@@ -53,6 +54,7 @@ def main():
                 args.state_dir,
                 origin=args.origin,
                 diagnostics=args.diagnostics,
+                start_paused=args.start_paused,
                 research_roots=research_roots,
                 _state_lease=lease,
             )

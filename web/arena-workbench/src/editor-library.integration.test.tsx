@@ -138,18 +138,30 @@ it('exports the verified durable revision from the mounted V7 App without openin
 });
 
 it('mounts advertised workflow readiness in the real App without replacing authoring state or dispatching work', async () => {
-  const ready = {schema_version: 1, checked_at: null, provider: {configured: false, source: 'none', verification: 'not_checked'}, graph: {configured: false, status: 'not_configured'}, dependencies: {openai: true, neo4j: true, isaacsim: true}, runtime: {build_adapter: true, evaluation_adapter: true, simulation: 'not_checked'}, policy_servers: [{profile: 'gr00t-droid', host: '127.0.0.1', port: 5555, status: 'not_checked'}, {profile: 'openpi-droid', host: '127.0.0.1', port: 8000, status: 'not_checked'}], workflow: {research_versions: false, publication: false, managed_retrieval: false, scenario_harness: 'cli_only', evaluation_scope: 'droid_fixed_profiles'}};
+  const ready = {schema_version: 2, workflow: 'agentic_generation', checked_at: null, policy: null, ready: false,
+    checks: [
+      {id: 'api_contract', status: 'passed', code: 'api_contract_available', required: true},
+      {id: 'runtime', status: 'not_checked', code: 'runtime_not_checked', required: true},
+      {id: 'generation_model', status: 'not_checked', code: 'generation_not_configured', required: true},
+      {id: 'graph', status: 'not_checked', code: 'graph_not_configured', required: true},
+      {id: 'policy_protocol', status: 'not_required', code: 'not_required', required: false},
+      {id: 'policy_model', status: 'not_required', code: 'not_required', required: false},
+      {id: 'policy_transport', status: 'not_required', code: 'not_required', required: false},
+      {id: 'gpu', status: 'not_checked', code: 'resource_unknown', required: true},
+    ]};
   const fixture = setup('/workspaces/default?layout=v7', url => {
     if (url === '/api/editor') return wire({default_document_id: 'fixture', documents: [file], capabilities: {workflow_readiness: true}, limitations: []});
-    if (url === '/api/editor/readiness') return wire(ready);
+    if (url === '/api/editor/readiness?version=2&workflow=agentic_generation') return wire(ready);
     if (url === '/api/editor/readiness/check') return wire({...ready, checked_at: 123});
   });
-  await screen.findByText('Graph-RAG: not configured');
+  await screen.findByText('graph_not_configured');
   await waitFor(() => expect(text()).toBe(source)); edit();
   fireEvent.click(screen.getByRole('button', {name: 'Check dependencies'}));
   await screen.findByText(/Last explicit check:/);
   expect(text()).toBe(edited);
   expect(fixture.fetcher.mock.calls.filter(([url]) => url === '/api/editor/readiness/check')).toHaveLength(1);
+  const checked = fixture.fetcher.mock.calls.find(([url]) => url === '/api/editor/readiness/check')!;
+  expect(JSON.parse(String(checked[1]?.body))).toMatchObject({schema_version: 2, workflow: 'agentic_generation', check_provider: false, yaml_text: edited});
   expect(fixture.fetcher.mock.calls.some(([url, init]) => init?.method === 'POST' && /\/editor\/(save|generate|snapshots|build|evaluate)$/.test(url))).toBe(false);
 });
 

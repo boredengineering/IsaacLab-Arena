@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -27,6 +28,7 @@ from gr00t.data.types import ModalityConfig
 
 from isaaclab_arena.assets.registries import PolicyRegistry
 from isaaclab_arena.policy import action_scheduling
+from isaaclab_arena_gr00t.embodiments.g1.g1_sim_wbc_data_config import unitree_g1_sim_wbc_config
 from isaaclab_arena_gr00t.policy import gr00t_remote_closedloop_policy as gr00t_policy
 from isaaclab_arena_gr00t.tests.utils.constants import TestConstants as Gr00tTestConstants
 
@@ -56,9 +58,17 @@ POLICY_GROUP_SIZES = {
 # ----------------------------- fixtures ------------------------------ #
 
 
+@pytest.fixture(autouse=True)
+def repository_configuration_root(monkeypatch):
+    """Resolve real YAML includes from this staged checkout, not the harness cwd."""
+    monkeypatch.chdir(Path(__file__).resolve().parents[2])
+
+
 @pytest.fixture
 def policy_config_yaml():
     """Return the g1 locomanip test config used for Arena-side obs/action translation."""
+    # Real static import keeps the YAML's dynamic module in the isolated source closure.
+    assert len(unitree_g1_sim_wbc_config["action"].delta_indices) == ACTION_HORIZON
     return (
         Gr00tTestConstants.test_data_dir + "/test_g1_locomanip_lerobot/test_g1_locomanip_gr00t_closedloop_config.yaml"
     )
@@ -304,6 +314,162 @@ def test_get_action_returns_correct_shape_for_each_scheduler(
     assert isinstance(action, torch.Tensor)
     assert action.shape == (NUM_ENVS, EXPECTED_ACTION_DIM)
     assert action.device.type == "cpu"
+
+
+@pytest.mark.parametrize("change", [None, "before", "during", "buffered", "connect"])
+def test_optional_verified_metadata_guards_connection_and_action_release(monkeypatch, change):
+    from isaaclab_arena.tests.test_policy_contract import droid_modalities
+    from isaaclab_arena_gr00t.tests.test_serving_metadata import CodecPeer
+
+    peer = CodecPeer()
+    expected = peer.info.copy()
+
+    class DroidClient(CodecPeer):
+        def call_endpoint(self, endpoint, data=None, requires_input=True):
+            if endpoint == "get_modality_config":
+                self.calls.append(endpoint)
+                return self.get_modality_config()
+            return super().call_endpoint(endpoint, data, requires_input)
+
+        def get_modality_config(self):
+            return {key: ModalityConfig(**value) for key, value in droid_modalities().items()}
+
+        def get_action(self, observation):
+            if change == "during":
+                self.info["instance_id"] = "f" * 32
+            return {
+                "joint_position": np.zeros((NUM_ENVS, 32, 7), dtype=np.float32),
+                "gripper_position": np.zeros((NUM_ENVS, 32, 1), dtype=np.float32),
+            }, {}
+
+        def close(self):
+            self.closed = True
+
+    client = DroidClient()
+    client.closed = False
+    if change == "connect":
+        client.info["instance_id"] = "f" * 32
+
+    def ctor(**kwargs):
+        assert kwargs["expected_server_info"] == expected
+        return client
+
+    monkeypatch.setattr(gr00t_policy, "VerifiedPolicyClient", ctor, raising=False)
+    cfg = gr00t_policy.Gr00tRemoteClosedloopPolicyCfg(
+        policy_config_yaml_path="isaaclab_arena_gr00t/policy/config/droid_manip_gr00t_closedloop_config.yaml",
+        policy_device="cpu",
+        num_envs=NUM_ENVS,
+        expected_server_info=expected,
+    )
+    if change == "connect":
+        with pytest.raises(ValueError):
+            gr00t_policy.Gr00tRemoteClosedloopPolicy(cfg)
+        assert client.closed
+        return
+    policy = gr00t_policy.Gr00tRemoteClosedloopPolicy(cfg)
+    policy.set_task_description("place the apple into the bowl")
+    observation = {
+        "camera_obs": {
+            key: torch.zeros((NUM_ENVS, 180, 320, 3), dtype=torch.uint8)
+            for key in ("external_camera_rgb", "wrist_camera_rgb")
+        },
+        "policy": {"robot_joint_pos": torch.zeros((NUM_ENVS, 13))},
+    }
+    try:
+        if change == "buffered":
+            assert policy.get_action(None, observation).shape == (NUM_ENVS, 8)
+        if change in ("before", "buffered"):
+            client.info["instance_id"] = "f" * 32
+        # Mutating the caller's config must not change the private pin.
+        expected["instance_id"] = "f" * 32
+        if change is None:
+            assert policy.get_action(None, observation).shape == (NUM_ENVS, 8)
+        else:
+            with pytest.raises(ValueError):
+                policy.get_action(None, observation)
+    finally:
+        policy.close()
+
+
+@pytest.mark.parametrize("drift", [None, "connect", "fresh", "buffered", "reconnect"])
+def test_verified_native_rpc_budget_and_reconnect_fail_closed(monkeypatch, drift):
+    from isaaclab_arena.tests.test_policy_contract import droid_modalities
+    from isaaclab_arena_gr00t.policy import serving_metadata as s
+    from isaaclab_arena_gr00t.tests.test_serving_metadata import CodecPeer, n16_client_init
+
+    peer = CodecPeer()
+    expected = peer.info.copy()
+    if drift == "connect":
+        peer.info["instance_id"] = "f" * 32
+    monkeypatch.setattr(s.PolicyClient, "__init__", n16_client_init)
+
+    def endpoint(self, name, data=None, requires_input=True):
+        if name == "verified_call":
+            assert requires_input is True
+            assert type(data) is dict
+            assert data["expected_server_info"] == peer.info
+            assert data["expected_server_info"] is not self._expected_server_info
+            assert data["endpoint"] == "get_action"
+            assert set(data["data"]) == {"observation", "options"}
+            peer.calls.append(name)
+            if drift == "fresh":
+                peer.info["instance_id"] = "f" * 32
+            return [
+                {
+                    "joint_position": np.zeros((NUM_ENVS, 32, 7), dtype=np.float32),
+                    "gripper_position": np.zeros((NUM_ENVS, 32, 1), dtype=np.float32),
+                },
+                {},
+            ]
+        if name == "get_modality_config":
+            peer.calls.append(name)
+            return {key: ModalityConfig(**value) for key, value in droid_modalities().items()}
+        return peer.call_endpoint(name, data, requires_input)
+
+    monkeypatch.setattr(s.PolicyClient, "call_endpoint", endpoint)
+    cfg = gr00t_policy.Gr00tRemoteClosedloopPolicyCfg(
+        policy_config_yaml_path="isaaclab_arena_gr00t/policy/config/droid_manip_gr00t_closedloop_config.yaml",
+        policy_device="cpu",
+        num_envs=NUM_ENVS,
+        expected_server_info=expected,
+    )
+    if drift == "connect":
+        with pytest.raises(ValueError):
+            gr00t_policy.Gr00tRemoteClosedloopPolicy(cfg)
+        return
+    policy = gr00t_policy.Gr00tRemoteClosedloopPolicy(cfg)
+    try:
+        assert cfg.remote_timeout_ms == 15000
+        assert cfg.metadata_timeout_ms == 3000
+        assert peer.calls == ["ping", "get_server_info", "get_modality_config", "codec_echo", "get_server_info"]
+        policy.set_task_description("place the apple into the bowl")
+        observation = {
+            "camera_obs": {
+                key: torch.zeros((NUM_ENVS, 180, 320, 3), dtype=torch.uint8)
+                for key in ("external_camera_rgb", "wrist_camera_rgb")
+            },
+            "policy": {"robot_joint_pos": torch.zeros((NUM_ENVS, 13))},
+        }
+        peer.calls.clear()
+        if drift == "fresh":
+            with pytest.raises(ValueError):
+                policy.get_action(None, observation)
+            return
+        assert policy.get_action(None, observation).shape == (NUM_ENVS, 8)
+        assert peer.calls == ["get_server_info", "verified_call", "get_server_info", "get_server_info"]
+        peer.calls.clear()
+        if drift in ("buffered", "reconnect"):
+            peer.info["instance_id"] = "f" * 32
+            if drift == "reconnect":
+                policy._client._init_socket()
+            with pytest.raises(ValueError):
+                policy.get_action(None, observation)
+            assert "verified_call" not in peer.calls and "get_action" not in peer.calls
+        else:
+            assert policy.get_action(None, observation).shape == (NUM_ENVS, 8)
+            assert peer.calls == ["get_server_info"]
+    finally:
+        policy.close()
 
 
 def test_synced_batch_holds_joint_position_for_env_after_partial_reset(

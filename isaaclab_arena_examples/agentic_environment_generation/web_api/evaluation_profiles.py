@@ -7,9 +7,46 @@
 
 FIXED = {"headless": True, "enable_cameras": True, "num_envs": 1, "num_steps": 1000}
 PROFILES = (
-    {"id": "gr00t-droid", "label": "GR00T DROID", "remote_host": "127.0.0.1", "remote_port": 5555},
-    {"id": "openpi-droid", "label": "OpenPI DROID", "remote_host": "127.0.0.1", "remote_port": 8000},
+    {
+        "id": "gr00t-droid",
+        "label": "GR00T DROID",
+        "remote_host": "127.0.0.1",
+        "remote_port": 5555,
+    },
+    {
+        "id": "openpi-droid",
+        "label": "OpenPI DROID",
+        "remote_host": "127.0.0.1",
+        "remote_port": 8000,
+    },
 )
+
+
+def configured_profiles():
+    """Project the trusted current endpoints without mutating legacy frozen defaults."""
+    from .policy_endpoint import configured_gr00t_port
+
+    port = configured_gr00t_port()
+    return [
+        {**row, "remote_port": port if row["id"] == "gr00t-droid" else row["remote_port"]}
+        for row in PROFILES
+    ]
+
+
+POLICY_CONTRACTS = {
+    "gr00t-droid": {
+        "schema_version": 1,
+        "protocol": "gr00t-zmq",
+        "checkpoint_id": "nvidia/GR00T-N1.6-DROID",
+        "verification": "pinned_model_and_codec_required",
+    },
+    "openpi-droid": {
+        "schema_version": 1,
+        "protocol": "openpi-websocket",
+        "checkpoint_id": None,
+        "verification": "openpi_verification_unsupported",
+    },
+}
 
 
 def compatible_spec(spec):

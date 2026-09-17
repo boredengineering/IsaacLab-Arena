@@ -1,8 +1,36 @@
-# IsaacLab-Arena Agent Reference Library Master Index
+# Agent references — start here
 
-- **Last Updated**: 2026-09-09
-- **Status**: CANONICAL REFERENCE
-- **Purpose**: Definitive navigation guide and architecture map for all documentation, design plans, and technical references under `.agents/references/`.
+- **Updated**: 2026-09-17
+- **Current dashboard status**: paused by the user after disappearance on refresh; not accepted as reliably delivered.
+- **Purpose**: navigation and document ownership, not proof of runtime success or authorization to execute an old plan.
+
+## Current reading order
+
+1. **[Dashboard checkpoint](plans/dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)** — the single current handoff: latest failure, implemented changes, last-known queue/runtime state, evidence limits and commit boundary.
+2. **[Session memory](quick_notes/session_memory.md)** — current user decision and conversation recovery anchor. Earlier research notes remain below its historical boundary.
+3. **[Historical implementation log](plans/dashboard_cli_workflow_parity/implementation-progress.md)** — detailed chronology only. Do not combine its contradictory “current” checkpoints into a new acceptance claim.
+
+The user will review/commit and reconsider the strategy. Do not restart implementation, services or queued work from older authorization language. No new strategy is introduced by this consolidation.
+
+## Document roles
+
+| Material | Role | How to use it |
+| --- | --- | --- |
+| Current checkpoint above | Current status owner | Read first; update rather than create another competing handoff |
+| Session memory | Session decision record | Preserve the pause and recovery context, not another full progress log |
+| [Dashboard design](plans/dashboard_cli_workflow_parity.md) | Retained design / scope history | Not an instruction to continue implementation |
+| [Endpoint contracts](plans/dashboard_cli_workflow_parity/endpoint-contract-plan.md) | Retained API/action design | Source inventory and live acceptance are different |
+| [Research-stack design](plans/dashboard_cli_workflow_parity/research-stack-readiness.md) | Retained lifecycle/readiness design | Distinguish helper pairing, API sessions, credentials and queue dispatch |
+| [Model-profile contract](plans/dashboard_cli_workflow_parity/model-profile-contract.md) | Implemented interface contract | Does not certify provider compatibility |
+| Evidence JSON and `*-owner-status.md` in the dashboard folder | Scope-specific historical records | Use the checkpoint's evidence map; do not sum overlapping totals or infer current deployment |
+| `agentic_env_generation/`, `docs/`, other `plans/` and `quick_notes/` | Research history and domain references | Check original dates, source and experiments; unrelated claims were not re-audited here |
+
+The operational baseline is the repository's [agentic generation README](../../isaaclab_arena_examples/agentic_environment_generation/README.md). A commit does not reproduce private host installation/state or ignored runtime/test artifacts. Preserve history, but keep current status in one place.
+
+<details>
+<summary>Older reference-library overview (2026-09-09; historical, not revalidated)</summary>
+
+The index, architecture labels, example commands and milestone claims below are preserved as historical context. Their “active,” “canonical,” “completed” and “proved” wording is not a current verification result or instruction to run workloads. Absolute file links refer to the original environment.
 
 ---
 
@@ -151,3 +179,5 @@ docker exec -it -w /workspaces/isaaclab_arena -e OMNICLIENT_HUB_MODE=disabled is
   --max_iterations 250 \
   --headless
 ```
+
+</details>

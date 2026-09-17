@@ -1,6 +1,16 @@
 # Research stack readiness and approved-service startup
 
-Status: PROPOSED — plan review only. The user requested a dashboard plan update and then explicitly asked to review what changes and why before implementation. This document does not authorize protected Docker changes, pairing, service startup, server replacement, credentials provisioning, model downloads, inference, simulation or graph writes.
+**PAUSED — 2026-09-17.** Preserve this design record; do not continue implementation or live operations from its earlier approvals. The latest user report is a disappearing dashboard after refresh. The [consolidated handoff](research-stack-implementation-handoff.md) is the current status; statements below are historical scope/decisions, not complete live acceptance.
+
+Status: IMPLEMENTATION AND EXISTING-SERVICE LAUNCH AUTHORIZED. The user renewed implementation with priority on the existing Neo4j/GR00T launch path; implementation-added incompatibilities are corrections in that pipeline, not new prerequisites to defer. [Frozen implementation interfaces](research-stack-contracts.md) retain the existing helper/API authority split. Review and bounded launch of the existing cached services, configuration/resource corrections and matching dashboard integration are in scope. No container replacement, image/model download, generation, inference, simulation, queue release or graph publication is implied. No implementation checkpoint alone proves deployment or full-stack acceptance.
+
+### Current delivery correction
+
+Use the actual existing deployment rather than default-port assumptions: `neo4j-arena` publishes Bolt on host port **7688** (HTTP 7475), and the reviewed non-root/offline `gr00t-server` command serves DROID on **5559**. The installed observation profile's 7687/5555 values and API's hardcoded GR00T port are integration defects. Correct the private connection profile, use one validated server-side policy endpoint through readiness and frozen evaluation inputs, and preserve historical/default 5555 behavior explicitly. Do not redirect to unrelated running Neo4j services.
+
+Before first start, apply and read back bounded RAM/swap/PID limits to these exact existing stopped IDs and check the owned stack's aggregate against daemon memory plus current headroom. Preserve original database volumes, cache and transport overlay. Complete the host-inaccessible mount-root check using fresh bounded metadata, not broader permissions or observation-only pins promoted to startup authority. Then start the saved services and check the actual worker connections. Service state, protocol/codec/model identity and executed research acceptance remain separate evidence.
+
+Parallel implementation owns the requested create-only nonsecret model catalogue and its actual SDK policy propagation. It is not a dependency of existing-service startup. Credentials remain session-memory-only and no compatibility test runs automatically.
 
 This is the C17/X01 service-prerequisite extension of [the canonical dashboard plan](../dashboard_cli_workflow_parity.md), not a replacement research architecture. Keep the accepted V7 layout, prompt-first creation, LPG/reification Graph-RAG, existing jobs/receipts, and separate build/evaluate/repair workflows.
 
@@ -49,6 +59,8 @@ One reviewed profile per supported workflow binds:
 - A reviewed startup-only/offline-capable entrypoint contract. `docker start` executes the saved entrypoint; it does not inherently prevent downloads or queued work.
 
 Missing/ambiguous containers, incompatible mounts, unapproved entrypoints or absent cached weights block startup with an operator action. Never substitute an empty Neo4j, a different policy or the whole simulation Compose stack. The current Compose policy endpoint is not automatically the dashboard's policy endpoint.
+
+Implementation clarification: existing services do not require replacement read-only-root containers. The private profile explicitly selects `operator-reviewed-existing-v1` (or the separate strict `image-baked-v1` option); there is no HTTP-selected mode or implicit downgrade. Existing-service review retains actual boolean rootfs state, exact saved commands/mounts/resources and the same privileged/socket/installation-authority exclusions. A bounded source-evidence list pins mapped host-backed startup files by SHA-256, device and inode and is rechecked before starts and fixed API execs. The mandatory real API chain is `docker/workbench/runtime.py`, `docker/workbench/workbench.py`, and **`docker/resource_limits.py`**. Listed-byte checks do not attest writable container layers, all transitive imports or an atomic check-to-execution boundary; trusted container administrators and mount writers remain explicit assumptions. See `docker/workbench/CONTROL.md` for the exact operator-only schema and limits. This corrects the implementation-added blanket immutable-root restriction, not the original workflow or workload-authorization boundary.
 
 ## 3. What preflight validates
 
@@ -144,7 +156,7 @@ Use a short-lived one-time host-generated pairing token, entered into an uncontr
 
 Only the control socket directory is mounted read-only into the frontend; profile, pairing token and state are not mounted. Proxy strips spoofable forwarding headers, disables caching and preserves Host/Origin. Profile revision and exact container IDs are rechecked before each effect. Require a separate review for any remote/multiuser deployment.
 
-Protected scope proposed for later approval: launcher/runtime/helper/proxy/Compose changes under `docker/workbench/`. Initial deployment also needs a frontend-only rebuild/recreation for its proxy configuration and new socket mount, preserving the public port. This is different from replacing research containers. The GR00T identity wrapper may require its own separately reviewed server rollout. No policy image rebuild or submodule change is implicitly approved.
+Scoped launcher/runtime/helper/proxy/Compose code changes under `docker/workbench/` are now implementation-authorized. Initial deployment still needs a frontend-only rebuild/recreation for its proxy configuration and new socket mount, preserving the public port. This is different from replacing research containers. The GR00T identity wrapper may require its own separately reviewed server rollout. No live policy image rebuild, service replacement or submodule change is implicitly approved.
 
 Graph credentials remain operator-provisioned private configuration and existing worker grants, not helper profile JSON or browser startup payloads. Explicitly plan their propagation to the API/worker; starting a database cannot fix absent credentials. If reconfiguration requires an API restart, show the credential-clearing and queued-work implications and require a separate confirmation.
 

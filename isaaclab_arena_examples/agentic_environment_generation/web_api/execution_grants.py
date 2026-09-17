@@ -88,24 +88,33 @@ def _private_strings(credentials):
 
         checked_graph_config(credentials)
         metadata.update({"uri", "user", "database"})
+    if "inference_profile" in credentials:
+        from isaaclab_arena.agentic_environment_generation.inference_profiles import checked_inference_profile
+        checked_inference_profile(credentials["inference_profile"], model=credentials.get("model"),
+                                  base_url=credentials.get("base_url"))
+        metadata.add("inference_profile")
     for key, value in credentials.items():
         if key not in metadata:
             yield from walk(value)
 
 
-def _nonsecret_profile(value):
+def _nonsecret_profile(value, path=()):
     if type(value) is dict:
         for key, child in value.items():
+            if path == () and key == "inference_profile":
+                from isaaclab_arena.agentic_environment_generation.inference_profiles import checked_inference_profile
+                checked_inference_profile(child, model=value.get("model"), base_url=value.get("base_url"))
+                continue
             normalized = key.lower().replace("_", "").replace("-", "")
             if any(
                 word in normalized
                 for word in ("secret", "password", "token", "apikey", "authorization", "cookie", "privatekey")
             ):
                 raise ValueError("Invalid execution grant input")
-            _nonsecret_profile(child)
+            _nonsecret_profile(child, path + ("child",))
     elif type(value) is list:
         for child in value:
-            _nonsecret_profile(child)
+            _nonsecret_profile(child, path + ("child",))
 
 
 class ExecutionGrants:

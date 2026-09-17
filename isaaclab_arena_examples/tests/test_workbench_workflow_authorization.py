@@ -27,6 +27,15 @@ GRAPH = {
 BODY = {"operation": "new", "prompt": "Move cube", "idempotency_key": "workflow-one"}
 
 
+@pytest.fixture(autouse=True)
+def metadata_only_renderer(monkeypatch):
+    """Authorization units do not construct renderer or simulator services."""
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import editor_execution
+    def unavailable(_state):
+        raise RuntimeError("Metadata-only authorization fixture has no renderer")
+    monkeypatch.setattr(editor_execution, "make_snapshot_service", unavailable)
+
+
 @pytest.fixture
 def configs(monkeypatch):
     model, graph = dict(MODEL), dict(GRAPH)
@@ -135,18 +144,31 @@ def test_maintenance_purges_server_grants_at_session_deadline(tmp_path, configs)
         assert app.state.sessions.get_by_id(job["created_by_session_id"]) is None
 
 
-def test_explicit_replay_does_not_read_current_configuration(tmp_path, configs, monkeypatch):
+def test_explicit_replay_scans_current_policy_without_resolving_or_issuing_grants(tmp_path, configs, monkeypatch):
     app = create_app(tmp_path, start_paused=True)
     with TestClient(app, base_url=ORIGIN) as client:
         headers = login(client)
         job = client.post("/api/editor/generate", headers=headers, json=BODY).json()
-        monkeypatch.setattr(
-            generation, "configuration", lambda: (_ for _ in ()).throw(ValueError("Replay read config"))
-        )
-        monkeypatch.setattr(
-            graph_access, "configuration", lambda: (_ for _ in ()).throw(ValueError("Replay read config"))
-        )
+        # Current-secret screening remains mandatory even on accepted replay.
+        # Missing current configuration cannot replace the retained authorization.
+        monkeypatch.setattr(generation, "configuration", lambda: None)
+        monkeypatch.setattr(graph_access, "configuration", lambda: None)
+        auth = app.state.workflow_authorization
+        def forbidden(*args, **kwargs):
+            pytest.fail("Replay resolved credentials or issued authority")
+        monkeypatch.setattr(auth, "capture", forbidden)
+        monkeypatch.setattr(auth, "resolve", forbidden)
+        monkeypatch.setattr(auth.grants, "issue", forbidden)
+        monkeypatch.setattr(auth.grants, "resolve", forbidden)
+        monkeypatch.setattr(app.state.model_settings, "resolve", forbidden)
+        scanned = []
+        protect = app.state.model_settings.protect_public
+        def screen(value):
+            scanned.append(True)
+            return protect(value)
+        monkeypatch.setattr(app.state.model_settings, "protect_public", screen)
         assert client.post("/api/editor/generate", headers=headers, json=BODY).json() == job
+        assert scanned
         assert (
             client.post("/api/editor/generate", headers=headers, json={**BODY, "prompt": "changed"}).status_code == 409
         )

@@ -50,6 +50,25 @@ def configuration():
     return None
 
 
+def freeze_configuration(config):
+    """Detach effective documented policy before granting or comparing authority."""
+    from copy import deepcopy
+    from isaaclab_arena.agentic_environment_generation.inference_profiles import (
+        checked_inference_profile, frozen_builtin_profile, resolve_inference_profile,
+    )
+    if config is None:
+        return None
+    result = deepcopy(config)
+    if "inference_profile" in result:
+        result["inference_profile"] = checked_inference_profile(result["inference_profile"],
+            model=result.get("model"), base_url=result.get("base_url"))
+    else:
+        profile = resolve_inference_profile(result.get("model"), result.get("base_url"))
+        if profile is not None:
+            result["inference_profile"] = frozen_builtin_profile(profile)
+    return result
+
+
 def generate(inputs, emit, *, agent_factory=None, config=None, graph_config=None, managed_context=None):
     """Run a fresh bounded agent and return only schema-validated output and allowlisted stages."""
     config = configuration() if config is None else config

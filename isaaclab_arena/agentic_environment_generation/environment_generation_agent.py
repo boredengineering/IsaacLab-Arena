@@ -89,6 +89,7 @@ class EnvironmentGenerationAgent:
         max_tokens: int = 4096,
         max_retries: int = 3,
         load_dotenv: bool = True,
+        inference_profile: dict | None = None,
     ):
         """Configure the OpenAI-compatible client and validate the model.
 
@@ -116,6 +117,7 @@ class EnvironmentGenerationAgent:
             max_tokens=max_tokens,
             max_retries=max_retries,
             load_dotenv=load_dotenv,
+            inference_profile=inference_profile,
         )
         self.inference_backend = inference_backend
         self.spec_inference = SpecInference(inference_backend)

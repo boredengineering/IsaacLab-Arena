@@ -21,6 +21,23 @@ GIB = 1024**3
 
 
 class ResourceLimitsTest(unittest.TestCase):
+    def test_existing_research_budget_preserves_host_headroom(self):
+        helper = self.helper()
+        self.assertTrue(hasattr(helper, "existing_research_budget"), "existing-stack budget is missing")
+        retained = {"arena": 58886307840, "editor": 8 * GIB, "frontend": 4 * GIB, "helper": GIB // 4}
+        result = helper.existing_research_budget(98143846400, 60 * GIB, retained)
+        self.assertEqual(result["neo4j"], {"memory": 2 * GIB, "memory_swap": 2 * GIB, "pids": 256})
+        self.assertEqual(result["gr00t"], {"memory": 16 * GIB, "memory_swap": 16 * GIB, "pids": 1024})
+        with self.assertRaises(ValueError):
+            helper.existing_research_budget(80 * GIB, 60 * GIB, retained)
+        with self.assertRaises(ValueError):
+            helper.existing_research_budget(98143846400, 22 * GIB - 1, retained)
+        for invalid in (True, 0, -1, "8589934592"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                helper.existing_research_budget(98143846400, 60 * GIB, {**retained, "editor": invalid})
+        with self.assertRaises(ValueError):
+            helper.existing_research_budget(98143846400, 60 * GIB, {"arena": 1})
+
     def helper(self):
         path = HERE / "resource_limits.py"
         self.assertTrue(path.exists(), "shared resource policy is missing")

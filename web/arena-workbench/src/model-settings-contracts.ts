@@ -46,22 +46,26 @@ export interface ModelSettingsStatus {
   credential_ref: string | null;
   session_keys_allowed: boolean;
   key_timer_disabled?: boolean;
-  profile_catalogue_version?: 'harness-model-profiles/v1';
+  profile_catalogue_version?: 'harness-model-profiles/v1' | 'harness-model-profiles/v2';
+  profile_creation?: 'create-only/v1';
   profiles?: ModelProfile[];
   effective_profile?: { id: string | null; support: 'documented' | 'unverified'; verification: 'not_checked' } | null;
   profile_metadata_invalid?: true;
 }
 
 export interface ModelProfile {
-  id: 'openai-gpt-4.1' | 'openai-gpt-6-astra';
+  id: string;
   revision: 1;
-  provider: 'openai';
+  provider: Provider;
   model: string;
   endpoint: string;
-  support: 'documented';
+  support: 'documented' | 'unverified';
+  origin?: 'builtin' | 'user_defined';
+  verification?: 'not_checked';
   documentation_urls: string[];
   request_policy: {
-    api: 'chat_completions'; structured_output: 'json_schema';
+    api: 'chat_completions'; structured_output: 'json_schema' | 'json_object' | 'omitted';
+    multimodal_output?: 'json_object' | 'omitted';
     temperature_mode: 'configured' | 'omitted';
     token_limit_parameter: 'max_tokens' | 'max_completion_tokens'; store: null | false;
   };
@@ -69,6 +73,7 @@ export interface ModelProfile {
 
 /** Versioned public labels, not model-name heuristics or client-side adapter policy. */
 function parseProfiles(v: Record<string, unknown>): Partial<ModelSettingsStatus> {
+  if (v.profile_catalogue_version === 'harness-model-profiles/v2') return parseProfilesV2(v);
   if (!['profile_catalogue_version', 'profiles', 'effective_profile'].some(key => key in v)) return {};
   const invalid = { profile_metadata_invalid: true } as const;
   const object = (value: unknown): value is Record<string, unknown> =>
@@ -82,7 +87,7 @@ function parseProfiles(v: Record<string, unknown>): Partial<ModelSettingsStatus>
   const profiles: ModelProfile[] = [];
   for (const item of v.profiles) {
     if (!object(item) || typeof item.id !== 'string' || !Object.hasOwn(identities, item.id)) return invalid;
-    const id = item.id as ModelProfile['id'];
+    const id = item.id as keyof typeof identities;
     const policy = item.request_policy;
     if (profiles.some(p => p.id === id) || item.model !== identities[id].model || item.provider !== 'openai'
       || item.revision !== 1 || item.endpoint !== PROVIDERS[0].base_url || item.support !== 'documented'
@@ -114,4 +119,56 @@ function parseProfiles(v: Record<string, unknown>): Partial<ModelSettingsStatus>
       id: (effective as Record<string, unknown>).id as string | null,
       support: (effective as Record<string, unknown>).support as 'documented' | 'unverified', verification: 'not_checked',
     } };
+}
+
+const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const exact = (v: Record<string, unknown>, fields: string[]) => Object.keys(v).length === fields.length && fields.every(k => Object.hasOwn(v, k));
+/** Strict v2 format. Legacy v1 intentionally remains a projecting decoder. */
+export function parseModelProfile(value: unknown): ModelProfile {
+  const fail = (): never => { throw new Error('Model profile unavailable'); };
+  if (!object(value) || !exact(value, ['id', 'revision', 'provider', 'model', 'endpoint', 'origin', 'support', 'verification', 'documentation_urls', 'request_policy'])
+    || typeof value.id !== 'string' || value.id === 'custom' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(value.id)
+    || typeof value.model !== 'string' || !/^[\x21-\x7e]{1,256}$/.test(value.model)
+    || value.revision !== 1 || value.verification !== 'not_checked'
+    || !PROVIDERS.some(p => p.id === value.provider && p.base_url === value.endpoint)) return fail();
+  const policy = value.request_policy;
+  if (!object(policy) || !exact(policy, ['api', 'temperature_mode', 'token_limit_parameter', 'structured_output', 'multimodal_output', 'store'])
+    || policy.api !== 'chat_completions' || !['configured', 'omitted'].includes(String(policy.temperature_mode))
+    || !['max_tokens', 'max_completion_tokens'].includes(String(policy.token_limit_parameter))
+    || !['json_schema', 'json_object', 'omitted'].includes(String(policy.structured_output))
+    || !['json_object', 'omitted'].includes(String(policy.multimodal_output))
+    || (policy.store !== null && policy.store !== false)
+    || Object.entries(policy).some(([k, v]) => k !== 'store' && typeof v !== 'string')) return fail();
+  const builtin = ['openai-gpt-4.1', 'openai-gpt-6-astra'].includes(value.id);
+  if (builtin) {
+    if (value.origin !== 'builtin' || value.support !== 'documented' || policy.multimodal_output !== 'json_object') return fail();
+    const legacy = parseProfiles({ profile_catalogue_version: 'harness-model-profiles/v1', profiles: [value], configured: false, effective_profile: null });
+    if (legacy.profile_metadata_invalid) return fail();
+  } else if (value.origin !== 'user_defined' || value.support !== 'unverified'
+    || !Array.isArray(value.documentation_urls) || value.documentation_urls.length !== 0) return fail();
+  return { id: value.id, revision: 1, provider: value.provider as Provider, model: value.model, endpoint: value.endpoint as string,
+    origin: value.origin as 'builtin' | 'user_defined', support: value.support as 'documented' | 'unverified', verification: 'not_checked',
+    documentation_urls: [...value.documentation_urls as string[]], request_policy: { api: 'chat_completions',
+      temperature_mode: policy.temperature_mode as 'configured' | 'omitted',
+      token_limit_parameter: policy.token_limit_parameter as 'max_tokens' | 'max_completion_tokens',
+      structured_output: policy.structured_output as 'json_schema' | 'json_object' | 'omitted',
+      multimodal_output: policy.multimodal_output as 'json_object' | 'omitted', store: policy.store } };
+}
+function parseProfilesV2(v: Record<string, unknown>): Partial<ModelSettingsStatus> {
+  const invalid = { profile_metadata_invalid: true } as const;
+  try {
+    if (!Array.isArray(v.profiles) || v.profiles.length > 66) return invalid;
+    const profiles = v.profiles.map(parseModelProfile);
+    if (new Set(profiles.map(p => p.id)).size !== profiles.length || profiles.filter(p => p.origin === 'user_defined').length > 64) return invalid;
+    const effective = v.effective_profile;
+    if (v.configured === false) { if (effective !== null) return invalid; }
+    else {
+      if (!object(effective) || !exact(effective, ['id', 'support', 'verification']) || effective.verification !== 'not_checked') return invalid;
+      if (effective.id === null) { if (effective.support !== 'unverified') return invalid; }
+      else if (!profiles.some(p => p.id === effective.id && p.model === v.model && p.provider === v.provider && p.support === effective.support)) return invalid;
+    }
+    return { profile_catalogue_version: 'harness-model-profiles/v2', profiles,
+      effective_profile: effective as ModelSettingsStatus['effective_profile'],
+      ...(v.profile_creation === 'create-only/v1' ? { profile_creation: 'create-only/v1' as const } : {}) };
+  } catch { return invalid; }
 }

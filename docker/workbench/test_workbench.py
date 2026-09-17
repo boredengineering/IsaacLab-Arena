@@ -101,6 +101,22 @@ class DiscoveryTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "stopped"):
                 tool.discover(args)
 
+    def test_normal_launcher_can_explicitly_forward_paused_start(self):
+        tool = load("workbench")
+        config = {
+            "api_user": "1000:1000",
+            "runtime_repo": "/repo",
+            "runtime": "a" * 64,
+            "state": "/eval/.wb/test/state",
+            "socket": "/eval/.wb/test/ipc/api.sock",
+            "origin": "http://127.0.0.1:3010",
+            "diagnostics": False,
+            "start_paused": True,
+        }
+        with patch.object(tool, "run", return_value="") as execute:
+            tool.runtime_call(config, "serve", detached=True)
+        self.assertIn("--start-paused", execute.call_args.args[0])
+
     def test_socket_paths_and_port_range_are_validated(self):
         tool = load("workbench")
         with self.assertRaisesRegex(RuntimeError, "port"):
@@ -111,6 +127,81 @@ class DiscoveryTests(unittest.TestCase):
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_api_only_start_preserves_healthy_api_and_spawns_only_paused_supervisor(
+        self,
+    ):
+        runtime = load("runtime")
+        self.assertTrue(hasattr(runtime, "ensure_paused"), "API-only admission is missing")
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            args = Namespace(
+                state_dir=str(state),
+                socket=str(state / "api.sock"),
+                origin="http://127.0.0.1:3010",
+                diagnostics=False,
+                start_paused=True,
+            )
+            with (
+                patch.object(runtime, "prepare"),
+                patch.object(runtime, "health", return_value=True),
+                patch.object(runtime, "owned_process", return_value={"pid": 1}),
+                patch.object(runtime.subprocess, "Popen") as spawn,
+            ):
+                self.assertEqual(runtime.ensure_paused(args), "healthy")
+                spawn.assert_not_called()
+            with (
+                patch.object(runtime, "prepare"),
+                patch.object(runtime, "health", return_value=False),
+                patch.object(runtime, "owned_process", return_value=None),
+                patch.object(runtime, "preflight") as preflight,
+                patch.object(runtime.subprocess, "Popen") as spawn,
+            ):
+                self.assertEqual(runtime.ensure_paused(args), "starting")
+                argv = spawn.call_args.args[0]
+                self.assertIn("--start-paused", argv)
+                self.assertIn("serve", argv)
+                self.assertNotIn("stop", argv)
+                preflight.assert_called_once()
+
+    def test_paused_start_reaches_api_child_and_cli_factory_without_queue_resume(self):
+        tool, runtime = load("workbench"), load("runtime")
+        self.assertIn(
+            "--start-paused",
+            tool.api_command(
+                "/state",
+                "/ipc/api.sock",
+                "http://127.0.0.1:3010",
+                False,
+                start_paused=True,
+            ),
+        )
+        self.assertIn(
+            "--start-paused",
+            runtime.inherited_api_command(
+                "/state",
+                "/ipc/api.sock",
+                "http://127.0.0.1:3010",
+                False,
+                start_paused=True,
+            ),
+        )
+        # Parse package CLI as source only: host tests never import Arena modules.
+        import ast
+
+        source = ROOT.parents[1] / "isaaclab_arena_examples/agentic_environment_generation/web_api/__main__.py"
+        tree = ast.parse(source.read_text())
+        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)]
+        self.assertTrue(
+            any(any(isinstance(a, ast.Constant) and a.value == "--start-paused" for a in c.args) for c in calls)
+        )
+        factory = next(c for c in calls if isinstance(c.func, ast.Name) and c.func.id == "create_app")
+        self.assertTrue(
+            any(
+                k.arg == "start_paused" and isinstance(k.value, ast.Attribute) and k.value.attr == "start_paused"
+                for k in factory.keywords
+            )
+        )
+
     def test_preflight_allows_time_wait_but_refuses_live_listener(self):
         runtime = load("runtime")
         with tempfile.TemporaryDirectory() as directory:
@@ -140,6 +231,20 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(
             command[1:], load("workbench").api_command("/state", "/ipc/api.sock", "http://127.0.0.1:3001", True)[1:]
         )
+
+    def test_health_read_is_bounded_even_for_an_unrelated_listener(self):
+        runtime = load("runtime")
+        from unittest.mock import MagicMock
+
+        connection = MagicMock()
+        connection.getresponse.return_value.status = 200
+        connection.getresponse.return_value.read.return_value = b'{"status":"ok"}'
+        with (
+            patch.object(runtime.http.client, "HTTPConnection", return_value=connection),
+            patch.object(runtime.socket, "socket"),
+        ):
+            self.assertTrue(runtime.health("/unused/api.sock", "http://127.0.0.1:3010"))
+        connection.getresponse.return_value.read.assert_called_once_with(4096)
 
     def test_health_probe_preserves_configured_origin_authority(self):
         runtime = load("runtime")
@@ -218,6 +323,60 @@ class RuntimeTests(unittest.TestCase):
 
 
 class ConfigurationTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("docker"), "Docker Compose CLI required")
+    def test_control_overlay_resolves_without_arena_or_docker_mount(self):
+        env = dict(
+            os.environ,
+            FRONTEND_UID="2001",
+            FRONTEND_GID="2002",
+            API_GID="1234",
+            CONTROL_GID="2003",
+            WORKBENCH_IPC_HOST="/host/api-ipc",
+            WORKBENCH_CONTROL_IPC_HOST="/host/operator/ipc",
+            FRONTEND_MEMORY_BYTES="4294967296",
+            COMPOSE_DISABLE_ENV_FILE="true",
+        )
+        command = [
+            "docker",
+            "compose",
+            "--env-file",
+            "/dev/null",
+            "-f",
+            str(ROOT / "compose.yaml"),
+            "-f",
+            str(ROOT / "compose.control.yaml"),
+            "config",
+            "--format",
+            "json",
+        ]
+        config = json.loads(subprocess.check_output(command, env=env, text=True))
+        self.assertEqual(set(config["services"]), {"frontend"})
+        service = config["services"]["frontend"]
+        mounts = {m["target"]: m for m in service["volumes"]}
+        self.assertEqual(set(mounts), {"/run/arena-api", "/run/arena-control"})
+        self.assertTrue(mounts["/run/arena-control"]["read_only"])
+        self.assertFalse(mounts["/run/arena-control"]["bind"]["create_host_path"])
+        self.assertEqual(set(service["group_add"]), {"1234", "2003"})
+
+    def test_control_proxy_keeps_same_origin_and_only_narrow_socket_mount(self):
+        for mode in ("dev", "prod"):
+            text = (ROOT / f"nginx.{mode}.conf").read_text()
+            self.assertIn(
+                "upstream arena_control { server unix:/run/arena-control/control.sock; }",
+                text,
+            )
+            self.assertIn("location ^~ /control/", text)
+            block = text.split("location ^~ /control/", 1)[1].split("}", 1)[0]
+            self.assertIn("proxy_set_header Host $http_host", block)
+            self.assertIn('proxy_set_header X-Forwarded-Host ""', block)
+            self.assertIn("proxy_cache off", block)
+            self.assertIn("access_log off", block)
+        text = (ROOT / "compose.control.yaml").read_text()
+        self.assertIn("/run/arena-control", text)
+        self.assertIn("create_host_path: false", text)
+        self.assertIn("read_only: true", text)
+        self.assertNotIn("docker.sock", text)
+
     def test_observation_and_stop_do_not_require_capacity_discovery(self):
         tool = load("workbench")
         config = dict(

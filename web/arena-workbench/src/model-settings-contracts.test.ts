@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { parseModelSettings, PROVIDERS } from './model-settings-contracts';
+import { parseModelSettings, parseModelProfile, PROVIDERS } from './model-settings-contracts';
 const status = { providers: PROVIDERS, configured: true, source: 'session', provider: 'openai',
   model: 'user-model', expires_at: 9999999999, credential_ref: 'public-ref', session_keys_allowed: true, key_timer_disabled: false };
 it('projects only the public contract into the query cache', () => {
@@ -44,6 +44,38 @@ const profileMetadata = {
   ],
   effective_profile: { id: null, support: 'unverified', verification: 'not_checked' },
 };
+
+const userProfile = { id: 'literal-profile', revision: 1, provider: 'openrouter', model: 'claude-sonnet-latest',
+  endpoint: PROVIDERS[2].base_url, origin: 'user_defined', support: 'unverified', verification: 'not_checked', documentation_urls: [],
+  request_policy: { api: 'chat_completions', temperature_mode: 'omitted', token_limit_parameter: 'max_completion_tokens',
+    structured_output: 'json_object', multimodal_output: 'omitted', store: null } };
+it('reserves the custom-entry UI identity rather than accepting an ambiguous catalogue row', () => {
+  expect(() => parseModelProfile({ ...userProfile, id: 'custom' })).toThrow();
+});
+it('decodes exact v2 user profiles without inventing support or losing literal identity', () => {
+  const v2 = { ...status, provider: userProfile.provider, model: userProfile.model,
+    profile_catalogue_version: 'harness-model-profiles/v2', profile_creation: 'create-only/v1', profiles: [userProfile],
+    effective_profile: { id: userProfile.id, support: 'unverified', verification: 'not_checked' } };
+  const parsed = parseModelSettings(v2);
+  expect(parsed.profiles).toEqual([userProfile]);
+  expect(parsed.profile_creation).toBe('create-only/v1');
+  expect(parsed.effective_profile).toEqual(v2.effective_profile);
+  for (const bad of [
+    { ...userProfile, support: 'documented' }, { ...userProfile, revision: true }, { ...userProfile, api_key: 'never-cache' },
+    { ...userProfile, id: 'openai-gpt-4.1' }, { ...userProfile, endpoint: 'https://elsewhere.invalid' },
+    { ...userProfile, request_policy: { ...userProfile.request_policy, store: true } },
+    { ...userProfile, request_policy: { ...userProfile.request_policy, temperature: 0.2 } },
+    { ...userProfile, request_policy: { ...userProfile.request_policy, multimodal_output: undefined } },
+  ]) {
+    const rejected = parseModelSettings({ ...v2, profiles: [bad] });
+    expect(rejected.profile_metadata_invalid).toBe(true);
+    expect(rejected.profile_creation).toBeUndefined();
+    expect(rejected.configured).toBe(true);
+    expect(rejected.profiles).toBeUndefined();
+  }
+  expect(parseModelSettings({ ...v2, profiles: [userProfile, userProfile] }).profile_metadata_invalid).toBe(true);
+  expect(parseModelSettings({ ...status, ...profileMetadata, profile_creation: 'create-only/v1' }).profile_creation).toBeUndefined();
+});
 
 it('projects documented profile metadata without retaining unexpected nested fields', () => {
   const input = structuredClone(profileMetadata);

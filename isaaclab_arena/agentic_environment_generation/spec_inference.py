@@ -31,7 +31,10 @@ class SpecInference:
     def __init__(self, inference_backend: InferenceBackend):
         self._inference_backend = inference_backend
         profile = inference_backend.inference_profile
-        self._wire_adapter = SpecWireAdapter() if profile is not None and profile["provider"] == "openai" else None
+        user_defined = profile is not None and profile.get("origin") == "user_defined"
+        wire = profile is not None and (profile["request_policy"]["structured_output"] == "json_schema")
+        self._wire_adapter = SpecWireAdapter() if wire else None
+        self._strict_domain_adapter = SpecWireAdapter() if user_defined and not wire else None
         self._schema = self._wire_adapter.schema if self._wire_adapter else build_strict_schema(ArenaEnvGraphSpec)
 
     def infer(
@@ -69,11 +72,13 @@ class SpecInference:
                     task_catalog,
                 ),
                 retry_label="generate_spec",
-                parse_json=self._wire_adapter.parse_json if self._wire_adapter else None,
+                parse_json=SpecWireAdapter.parse_json if self._wire_adapter or self._strict_domain_adapter else None,
             )
         )
         if self._wire_adapter:
             data = self._wire_adapter.decode(data)
+        elif self._strict_domain_adapter:
+            data = self._strict_domain_adapter.decode(self._strict_domain_adapter.encode(data))
         try:
             spec = ArenaEnvGraphSpec.model_validate(data)
         except ValidationError as exc:
@@ -131,11 +136,13 @@ class SpecInference:
                 system=self._request_system_prompt(),
                 user=repair_user_msg,
                 retry_label="repair_spec",
-                parse_json=self._wire_adapter.parse_json if self._wire_adapter else None,
+                parse_json=SpecWireAdapter.parse_json if self._wire_adapter or self._strict_domain_adapter else None,
             )
         )
         if self._wire_adapter:
             data = self._wire_adapter.decode(data)
+        elif self._strict_domain_adapter:
+            data = self._strict_domain_adapter.decode(self._strict_domain_adapter.encode(data))
         try:
             spec = ArenaEnvGraphSpec.model_validate(data)
         except ValidationError as exc:

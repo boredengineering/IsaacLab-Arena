@@ -17,8 +17,45 @@ FIXTURE = Path(__file__).resolve().parents[2] / "isaaclab_arena/tests/test_data/
 FIXED = {"headless": True, "enable_cameras": True, "num_envs": 1, "num_steps": 1000}
 
 
+def server_info():
+    """Synthetic admitted worker identity, not a live server assertion."""
+    return {
+        "schema_version": 1,
+        "instance_id": "c" * 32,
+        "checkpoint_id": "nvidia/GR00T-N1.6-DROID",
+        "checkpoint_sha256": "a" * 64,
+        "config_sha256": "b" * 64,
+        "embodiment": "OXE_DROID",
+        "serializer_sha256": "d" * 64,
+        "modalities_sha256": "e" * 64,
+    }
+
+
+def policy_proof():
+    return {
+        "policy_protocol": {"status": "passed", "code": "policy_protocol_available"},
+        "policy_model": {"status": "passed", "code": "policy_model_verified"},
+        "policy_transport": {"status": "passed", "code": "policy_transport_verified"},
+        "server_info": server_info(),
+        "evidence": None,
+    }
+
+
 @pytest.fixture(autouse=True)
 def no_renderer(monkeypatch):
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import readiness
+
+    async def synthetic_check(_envelope):
+        return {
+            "runtime": "runtime_available",
+            "graph": "not_required",
+            "policy": policy_proof(),
+        }
+
+    monkeypatch.setattr(readiness, "checked_worker", synthetic_check)
+    monkeypatch.setenv("ARENA_GR00T_CHECKPOINT_SHA256", "a" * 64)
+    monkeypatch.setenv("ARENA_GR00T_CONFIG_SHA256", "b" * 64)
+
     def unavailable(_):
         raise RuntimeError("Evaluation units have no renderer")
 
@@ -34,7 +71,152 @@ def login(client):
     return {"Origin": ORIGIN, "X-CSRF-Token": session["csrf_token"]}
 
 
-def test_fixed_profiles_route_freezes_and_replays_without_resolving_source(tmp_path, monkeypatch):
+def test_gr00t_evaluation_refuses_missing_operator_expectation_without_submission(tmp_path, monkeypatch):
+    monkeypatch.delenv("ARENA_GR00T_CHECKPOINT_SHA256", raising=False)
+    monkeypatch.delenv("ARENA_GR00T_CONFIG_SHA256", raising=False)
+    app = create_app(tmp_path, start_paused=True)
+    with TestClient(app, base_url=ORIGIN) as client:
+        headers = login(client)
+        before = client.get("/api/workspaces/default").json()
+        result = client.post(
+            "/api/editor/evaluate",
+            headers=headers,
+            json={
+                "yaml_text": droid_text(),
+                "idempotency_key": "missing-policy",
+                "profile": "gr00t-droid",
+            },
+        )
+        assert result.status_code == 503
+        assert result.json()["detail"] == "policy_expectation_missing"
+        assert client.get("/api/workspaces/default").json() == before
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "policy_model_mismatch",
+        "policy_transport_unverified",
+        "policy_instance_mismatch",
+    ],
+)
+def test_gr00t_admission_refuses_worker_contract_failures(tmp_path, monkeypatch, failure):
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import readiness
+
+    async def checked(envelope):
+        assert envelope["expectations"] == {
+            "checkpoint_sha256": "a" * 64,
+            "config_sha256": "b" * 64,
+        }
+        return {
+            "runtime": "runtime_available",
+            "graph": "not_required",
+            "policy": {
+                "policy_protocol": {
+                    "status": "passed",
+                    "code": "policy_protocol_available",
+                },
+                "policy_model": {
+                    "status": "mismatch" if failure != "policy_transport_unverified" else "passed",
+                    "code": failure if failure != "policy_transport_unverified" else "policy_model_verified",
+                },
+                "policy_transport": {
+                    "status": "not_checked",
+                    "code": "policy_transport_unverified",
+                },
+                "server_info": None,
+                "evidence": None,
+            },
+        }
+
+    monkeypatch.setattr(readiness, "checked_worker", checked)
+    with TestClient(create_app(tmp_path, start_paused=True), base_url=ORIGIN) as client:
+        headers = login(client)
+        before = client.get("/api/workspaces/default").json()
+        result = client.post(
+            "/api/editor/evaluate",
+            headers=headers,
+            json={
+                "yaml_text": droid_text(),
+                "idempotency_key": failure,
+                "profile": "gr00t-droid",
+            },
+        )
+        assert result.status_code == 503
+        assert result.json()["detail"] == failure
+        assert client.get("/api/workspaces/default").json() == before
+
+
+@pytest.mark.parametrize("value", ["", "0", "65536", "999999", "05559", "+5559", "-1", " 5559", "5559 ", "5559\n", "５５５９", "5559.0", "1e3"])
+def test_invalid_operator_port_fails_closed_before_admission(tmp_path, monkeypatch, value):
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import readiness, policy_endpoint
+
+    monkeypatch.setenv("ARENA_WORKBENCH_GR00T_PORT", value)
+    with pytest.raises(ValueError, match="Invalid GR00T port configuration"):
+        policy_endpoint.configured_gr00t_port()
+    monkeypatch.setattr(readiness, "checked_worker", lambda *_a: pytest.fail("Invalid port reached worker"))
+    with TestClient(create_app(tmp_path, start_paused=True), base_url=ORIGIN) as client:
+        headers = login(client)
+        before = client.get("/api/workspaces/default").json()
+        result = client.post("/api/editor/evaluate", headers=headers,
+                             json={"yaml_text": droid_text(), "profile": "gr00t-droid", "idempotency_key": "bad-port"})
+        assert result.status_code == 503
+        assert result.json()["detail"] == "configuration_changed"
+        assert client.get("/api/workspaces/default").json() == before
+
+
+@pytest.mark.parametrize("change", ["5560", "invalid"])
+def test_admission_retires_policy_proof_after_port_configuration_changes(tmp_path, monkeypatch, change):
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import readiness
+
+    monkeypatch.setenv("ARENA_WORKBENCH_GR00T_PORT", "5559")
+
+    async def checked(envelope):
+        assert envelope["gr00t_port"] == 5559
+        monkeypatch.setenv("ARENA_WORKBENCH_GR00T_PORT", change)
+        return {"runtime": "runtime_available", "graph": "not_required", "policy": policy_proof()}
+
+    monkeypatch.setattr(readiness, "checked_worker", checked)
+    with TestClient(create_app(tmp_path, start_paused=True), base_url=ORIGIN) as client:
+        headers = login(client)
+        before = client.get("/api/workspaces/default").json()
+        result = client.post("/api/editor/evaluate", headers=headers,
+                             json={"yaml_text": droid_text(), "profile": "gr00t-droid", "idempotency_key": "changed-port"})
+        assert result.status_code == 503
+        assert result.json()["detail"] == "configuration_changed"
+        assert client.get("/api/workspaces/default").json() == before
+
+
+@pytest.mark.parametrize("endpoint", [
+    {"remote_host": "127.0.0.1"}, {"remote_port": 5559},
+    {"remote_host": "example.test", "remote_port": 5559},
+    *({"remote_host": "127.0.0.1", "remote_port": value} for value in (None, True, 0, -1, 65536, 5559.0, "5559")),
+])
+def test_worker_rejects_malformed_frozen_endpoint_before_read_or_write(tmp_path, monkeypatch, endpoint):
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import evaluation_worker, policy_readiness
+
+    monkeypatch.setattr(policy_readiness, "probe_gr00t", lambda *_a, **_k: pytest.fail("Invalid endpoint reached policy"))
+    inputs = {**FIXED, "yaml_text": "unparsed", "document_id": None, "input_hash": "a" * 64,
+              "canonical_hash": "b" * 64, "request_sha256": "c" * 64, "profile": "gr00t-droid",
+              "language_instruction": None, "expected_server_info": server_info(), **endpoint}
+    with pytest.raises(ValueError, match="Invalid frozen evaluation"):
+        evaluation_worker.run_evaluation(inputs, tmp_path, on_completed=lambda _: pytest.fail("No evaluation"))
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("port", [None, "5559", "1", "65535"])
+def test_fixed_profiles_route_freezes_and_replays_without_resolving_source(tmp_path, monkeypatch, port):
+    if port is None:
+        monkeypatch.delenv("ARENA_WORKBENCH_GR00T_PORT", raising=False)
+    else:
+        monkeypatch.setenv("ARENA_WORKBENCH_GR00T_PORT", port)
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import readiness
+
+    async def checked(envelope):
+        assert envelope["gr00t_port"] == (5555 if port is None else int(port))
+        return {"runtime": "runtime_available", "graph": "not_required", "policy": policy_proof()}
+
+    monkeypatch.setattr(readiness, "checked_worker", checked)
     app = create_app(tmp_path, start_paused=True)
     with TestClient(app, base_url=ORIGIN) as client:
         assert client.get("/api/editor/evaluation-profiles").status_code == 401
@@ -43,15 +225,43 @@ def test_fixed_profiles_route_freezes_and_replays_without_resolving_source(tmp_p
         assert catalogue.status_code == 200, catalogue.text
         assert catalogue.json() == {
             "profiles": [
-                {"id": "gr00t-droid", "label": "GR00T DROID", "remote_host": "127.0.0.1", "remote_port": 5555},
-                {"id": "openpi-droid", "label": "OpenPI DROID", "remote_host": "127.0.0.1", "remote_port": 8000},
+                {
+                    "id": "gr00t-droid",
+                    "label": "GR00T DROID",
+                    "remote_host": "127.0.0.1",
+                    "remote_port": 5555 if port is None else int(port),
+                },
+                {
+                    "id": "openpi-droid",
+                    "label": "OpenPI DROID",
+                    "remote_host": "127.0.0.1",
+                    "remote_port": 8000,
+                },
             ],
             **FIXED,
             "publication": "not_requested",
+            "policy_contracts": {
+                "gr00t-droid": {
+                    "schema_version": 1,
+                    "protocol": "gr00t-zmq",
+                    "checkpoint_id": "nvidia/GR00T-N1.6-DROID",
+                    "verification": "pinned_model_and_codec_required",
+                },
+                "openpi-droid": {
+                    "schema_version": 1,
+                    "protocol": "openpi-websocket",
+                    "checkpoint_id": None,
+                    "verification": "openpi_verification_unsupported",
+                },
+            },
         }
         for url in ("/api/editor", "/api/health"):
             assert client.get(url).json()["capabilities"]["policy_evaluation"] is True
-        body = {"yaml_text": droid_text(), "idempotency_key": "eval-first", "profile": "gr00t-droid"}
+        body = {
+            "yaml_text": droid_text(),
+            "idempotency_key": "eval-first",
+            "profile": "gr00t-droid",
+        }
         assert client.post("/api/editor/evaluate", json=body).status_code == 403
         response = client.post("/api/editor/evaluate", json=body, headers=headers)
         assert response.status_code == 202, response.text
@@ -60,15 +270,27 @@ def test_fixed_profiles_route_freezes_and_replays_without_resolving_source(tmp_p
         assert {key: job["inputs"][key] for key in FIXED} == FIXED
         assert job["inputs"]["language_instruction"] is None
         assert job["inputs"]["profile"] == "gr00t-droid"
+        assert job["inputs"]["remote_host"] == "127.0.0.1"
+        assert job["inputs"]["remote_port"] == (5555 if port is None else int(port))
         assert job["inputs"]["document_id"] is None
         assert "external_yaml:" not in job["inputs"]["yaml_text"]
         validation = client.post("/api/editor/validate", json={"yaml_text": droid_text()}, headers=headers).json()
         assert job["inputs"]["input_hash"] == validation["source_hash"]
         assert job["inputs"]["canonical_hash"] == validation["canonical_hash"]
-        monkeypatch.setattr(app.state.documents, "validate", lambda *a: pytest.fail("replay resolved source"))
+        monkeypatch.setattr(
+            app.state.documents,
+            "validate",
+            lambda *a: pytest.fail("replay resolved source"),
+        )
+        monkeypatch.setenv("ARENA_WORKBENCH_GR00T_PORT", "invalid-after-admission")
+        monkeypatch.setattr(readiness, "checked_worker", lambda *a: pytest.fail("replay rechecked policy"))
         assert client.post("/api/editor/evaluate", json=body, headers=headers).json() == job
         assert (
-            client.post("/api/editor/evaluate", json={**body, "profile": "openpi-droid"}, headers=headers).status_code
+            client.post(
+                "/api/editor/evaluate",
+                json={**body, "profile": "openpi-droid"},
+                headers=headers,
+            ).status_code
             == 409
         )
         assert client.get("/api/jobs/" + job["id"]).json() == job
@@ -76,20 +298,34 @@ def test_fixed_profiles_route_freezes_and_replays_without_resolving_source(tmp_p
 
 
 @pytest.mark.parametrize("profile", ["gr00t-droid", "openpi-droid"])
+@pytest.mark.parametrize("frozen_port", [None, 5559])
 @pytest.mark.parametrize("instruction", ["Pick up the cube", "--headless"])
 @pytest.mark.parametrize("no_episodes", [False, True])
 def test_worker_uses_local_only_harness_callback_and_actual_artifacts(
-    tmp_path, monkeypatch, profile, instruction, no_episodes
+    tmp_path, monkeypatch, profile, instruction, no_episodes, frozen_port
 ):
     """Simulated policy_runner boundary; artifact bytes/counts are actual local files."""
     import json
     import sys
     import yaml
+    from dataclasses import dataclass
     from types import SimpleNamespace
 
     from isaaclab_arena.agentic_environment_generation.workbench.documents import Documents
-    from isaaclab_arena_examples.agentic_environment_generation.web_api import evaluation_worker
+    from isaaclab_arena.evaluation import policy_runner_cli
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import evaluation_worker, policy_readiness
 
+    @dataclass
+    class NativeCfg:
+        expected_server_info: dict | None = None
+
+    def probe(expected, **kwargs):
+        assert kwargs["port"] == (5555 if frozen_port is None else frozen_port)
+        return policy_proof()
+
+    monkeypatch.setattr(policy_readiness, "probe_gr00t", probe)
+    monkeypatch.setenv("ARENA_WORKBENCH_GR00T_PORT", "invalid-after-admission")
+    monkeypatch.setattr(policy_runner_cli, "policy_cfg_from_cli", lambda *_: NativeCfg())
     validation = Documents(tmp_path / "documents").validate(droid_text())
     inputs = {
         **FIXED,
@@ -101,6 +337,10 @@ def test_worker_uses_local_only_harness_callback_and_actual_artifacts(
         "profile": profile,
         "language_instruction": instruction,
     }
+    if profile == "gr00t-droid":
+        inputs["expected_server_info"] = server_info()
+    if frozen_port is not None:
+        inputs.update(remote_host="127.0.0.1", remote_port=frozen_port if profile == "gr00t-droid" else 8000)
     root = tmp_path / "owned-job"
     root.mkdir()
     receipts = []
@@ -147,7 +387,10 @@ def test_worker_uses_local_only_harness_callback_and_actual_artifacts(
             )
         )
         if profile == "gr00t-droid":
-            assert value("--remote_port") == "5555"
+            bound = runner_module.build_policy_from_cli(lambda cfg: cfg, None)
+            assert bound.expected_server_info == server_info()
+            assert bound.expected_server_info is not inputs["expected_server_info"]
+            assert value("--remote_port") == str(5555 if frozen_port is None else frozen_port)
             assert (
                 value("--policy_type")
                 == "isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy"
@@ -177,7 +420,11 @@ def test_worker_uses_local_only_harness_callback_and_actual_artifacts(
         assert len(receipts) == 1  # receipt is flushed before simulated terminating shutdown
         raise SystemExit(0)
 
-    monkeypatch.setitem(sys.modules, "isaaclab_arena.evaluation.policy_runner", SimpleNamespace(main=runner_main))
+    def original_factory(*_):
+        return NativeCfg()
+
+    runner_module = SimpleNamespace(main=runner_main, build_policy_from_cli=original_factory)
+    monkeypatch.setitem(sys.modules, "isaaclab_arena.evaluation.policy_runner", runner_module)
     with pytest.raises(SystemExit) as exited:
         evaluation_worker.run_evaluation(inputs, root, on_completed=receipts.append)
     assert exited.value.code == 0 and sys.argv is argv_before
@@ -194,7 +441,62 @@ def test_worker_uses_local_only_harness_callback_and_actual_artifacts(
     for row in result["artifacts"]:
         data = (root / "artifacts" / row["name"]).read_bytes()
         assert data == artifacts[row["name"]]
-        assert row == {"name": row["name"], "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+        assert row == {
+            "name": row["name"],
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "size": len(data),
+        }
+
+
+@pytest.mark.parametrize(
+    "fault,code",
+    [
+        ("missing", "policy_metadata_unavailable"),
+        ("instance", "policy_instance_mismatch"),
+        ("transport", "policy_transport_unverified"),
+    ],
+)
+def test_worker_refuses_unpinned_or_changed_policy_before_writing_scene(tmp_path, monkeypatch, fault, code):
+    import yaml
+
+    from isaaclab_arena.agentic_environment_generation.workbench.documents import Documents
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import evaluation_worker, policy_readiness
+
+    validated = Documents(tmp_path / "documents").validate(droid_text())
+    inputs = {
+        **FIXED,
+        "yaml_text": yaml.safe_dump(validated["spec"]),
+        "document_id": None,
+        "input_hash": validated["source_hash"],
+        "canonical_hash": validated["canonical_hash"],
+        "request_sha256": "f" * 64,
+        "profile": "gr00t-droid",
+        "language_instruction": None,
+    }
+    if fault != "missing":
+        inputs["expected_server_info"] = server_info()
+
+    def probe(expectations, **_kwargs):
+        assert expectations == {
+            "checkpoint_sha256": "a" * 64,
+            "config_sha256": "b" * 64,
+        }
+        proof = policy_proof()
+        if fault == "instance":
+            proof["server_info"]["instance_id"] = "f" * 32
+        if fault == "transport":
+            proof["policy_transport"] = {
+                "status": "not_checked",
+                "code": "policy_transport_unverified",
+            }
+        return proof
+
+    monkeypatch.setattr(policy_readiness, "probe_gr00t", probe)
+    output = tmp_path / "owned"
+    output.mkdir()
+    with pytest.raises(ValueError, match=code):
+        evaluation_worker.run_evaluation(inputs, output, on_completed=lambda _: pytest.fail("Unexpected evaluation"))
+    assert list(output.iterdir()) == []
 
 
 def wait_job(client, job_id, statuses):
@@ -340,7 +642,11 @@ def test_dispatch_reaps_then_exposes_verified_authenticated_artifact(tmp_path, m
     with TestClient(app, base_url=ORIGIN) as client:
         events, lease = simulated_peer(monkeypatch, app, tmp_path)
         headers = login(client)
-        body = {"yaml_text": droid_text(), "profile": "openpi-droid", "idempotency_key": "execute"}
+        body = {
+            "yaml_text": droid_text(),
+            "profile": "openpi-droid",
+            "idempotency_key": "execute",
+        }
         response = client.post("/api/editor/evaluate", json=body, headers=headers)
         assert response.status_code == 202, response.text
         job = wait_job(client, response.json()["id"], {"succeeded", "failed"})
@@ -374,6 +680,9 @@ def test_dispatch_reaps_then_exposes_verified_authenticated_artifact(tmp_path, m
         {"profile": "other"},
         {"num_steps": 1},
         {"remote_host": "example.com"},
+        {"remote_host": "127.0.0.1"},
+        {"remote_port": 5559},
+        {"gr00t_port": 5559},
         {"output_base_dir": "/tmp/out"},
         {"language_instruction": " "},
         {"language_instruction": "é" * 2001},
@@ -384,7 +693,12 @@ def test_route_rejects_overrides_and_bad_instruction(tmp_path, change):
     app = create_app(tmp_path, start_paused=True)
     with TestClient(app, base_url=ORIGIN) as client:
         headers = login(client)
-        body = {"yaml_text": droid_text(), "profile": "gr00t-droid", "idempotency_key": "bad", **change}
+        body = {
+            "yaml_text": droid_text(),
+            "profile": "gr00t-droid",
+            "idempotency_key": "bad",
+            **change,
+        }
         assert client.post("/api/editor/evaluate", json=body, headers=headers).status_code == 422
         assert app.state.journal.snapshot()["jobs"] == []
 
@@ -410,7 +724,11 @@ def test_incompatible_source_is_rejected_before_dispatch(tmp_path, embodiment, p
         response = client.post(
             "/api/editor/evaluate",
             headers=login(client),
-            json={"yaml_text": yaml.safe_dump(spec), "profile": "openpi-droid", "idempotency_key": "incompatible"},
+            json={
+                "yaml_text": yaml.safe_dump(spec),
+                "profile": "openpi-droid",
+                "idempotency_key": "incompatible",
+            },
         )
         assert response.status_code == 422, response.text
         assert app.state.journal.snapshot()["jobs"] == []
@@ -489,13 +807,17 @@ def test_parent_rejects_invalid_result_identity_and_artifacts(tmp_path, monkeypa
             app,
             tmp_path,
             change=change,
-            frames=0 if fault == "zero_receipts" else 2 if fault == "two_receipts" else 1,
+            frames=(0 if fault == "zero_receipts" else 2 if fault == "two_receipts" else 1),
             exit_code=1 if fault == "nonzero_exit" else 0,
         )
         response = client.post(
             "/api/editor/evaluate",
             headers=login(client),
-            json={"yaml_text": droid_text(), "profile": "openpi-droid", "idempotency_key": "invalid-evidence"},
+            json={
+                "yaml_text": droid_text(),
+                "profile": "openpi-droid",
+                "idempotency_key": "invalid-evidence",
+            },
         )
         job = wait_job(client, response.json()["id"], {"failed", "succeeded"})
         assert job["status"] == "failed" and job["result"] is None, job
@@ -521,7 +843,9 @@ def test_zero_episode_run_completes_with_unknown_success_and_empty_artifact(tmp_
         (root / name).write_bytes(b"")
         result["artifacts"][1] = artifact_metadata(name, b"")
         result.update(
-            episode_count=0, success_count=None, metrics=None,
+            episode_count=0,
+            success_count=None,
+            metrics=None,
             warnings=["No completed-episode evidence was recorded"],
         )
 
@@ -529,8 +853,13 @@ def test_zero_episode_run_completes_with_unknown_success_and_empty_artifact(tmp_
     with TestClient(app, base_url=ORIGIN) as client:
         events, _ = simulated_peer(monkeypatch, app, tmp_path, change=no_episodes)
         response = client.post(
-            "/api/editor/evaluate", headers=login(client),
-            json={"yaml_text": droid_text(), "profile": "openpi-droid", "idempotency_key": "no-episodes"},
+            "/api/editor/evaluate",
+            headers=login(client),
+            json={
+                "yaml_text": droid_text(),
+                "profile": "openpi-droid",
+                "idempotency_key": "no-episodes",
+            },
         )
         assert response.status_code == 202
         job = wait_job(client, response.json()["id"], {"succeeded", "failed"})
@@ -552,7 +881,11 @@ def test_evaluation_timeout_reaps_worker_without_changing_build_bound(tmp_path, 
         response = client.post(
             "/api/editor/evaluate",
             headers=login(client),
-            json={"yaml_text": droid_text(), "profile": "openpi-droid", "idempotency_key": "timeout"},
+            json={
+                "yaml_text": droid_text(),
+                "profile": "openpi-droid",
+                "idempotency_key": "timeout",
+            },
         )
         job = wait_job(client, response.json()["id"], {"failed", "succeeded"})
         assert job["status"] == "failed" and job["result"] is None
@@ -567,7 +900,11 @@ def test_cancellation_signals_owned_group_and_hides_artifacts(tmp_path, monkeypa
         response = client.post(
             "/api/editor/evaluate",
             headers=headers,
-            json={"yaml_text": droid_text(), "profile": "openpi-droid", "idempotency_key": "cancel"},
+            json={
+                "yaml_text": droid_text(),
+                "profile": "openpi-droid",
+                "idempotency_key": "cancel",
+            },
         )
         job_id = response.json()["id"]
         import time
@@ -611,7 +948,11 @@ def test_actual_artifact_bytes_are_screened_under_current_public_policy(tmp_path
         response = client.post(
             "/api/editor/evaluate",
             headers=login(client),
-            json={"yaml_text": droid_text(), "profile": "openpi-droid", "idempotency_key": "public-screen"},
+            json={
+                "yaml_text": droid_text(),
+                "profile": "openpi-droid",
+                "idempotency_key": "public-screen",
+            },
         )
         job = wait_job(client, response.json()["id"], {"succeeded", "failed"})
         assert job["status"] == ("failed" if active else "succeeded")
@@ -679,7 +1020,12 @@ def test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download(tmp
             saved = client.put(
                 "/api/model-settings",
                 headers=headers,
-                json={"provider": "openai", "model": "offline-unit", "api_key": marker, "ttl_minutes": 15},
+                json={
+                    "provider": "openai",
+                    "model": "offline-unit",
+                    "api_key": marker,
+                    "ttl_minutes": 15,
+                },
             )
             assert saved.status_code == 200
             assert marker not in saved.text
@@ -692,7 +1038,11 @@ def test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download(tmp
         response = client.post(
             "/api/editor/evaluate",
             headers=headers,
-            json={"yaml_text": droid_text(), "profile": "openpi-droid", "idempotency_key": "escaped-screen"},
+            json={
+                "yaml_text": droid_text(),
+                "profile": "openpi-droid",
+                "idempotency_key": "escaped-screen",
+            },
         )
         assert response.status_code == 202
         job = wait_job(client, response.json()["id"], {"succeeded", "failed"})
@@ -702,7 +1052,11 @@ def test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download(tmp
         url = f"/api/editor/evaluations/{job['id']}/artifacts/{name}"
         if when == "after_acceptance":
             row = next(row for row in job["result"]["artifacts"] if row["name"] == name)
-            assert row == {"name": name, "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+            assert row == {
+                "name": name,
+                "size": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
             original = client.get(url)
             assert original.status_code == 200 and original.content == data
             activate()
@@ -723,7 +1077,11 @@ def test_unverified_evaluation_cleanup_retains_dispatch_slot_and_lease(tmp_path,
     with TestClient(app, base_url=ORIGIN) as client:
         events, _ = simulated_peer(monkeypatch, app, tmp_path, cleanup_error=True)
         headers = login(client)
-        body = {"yaml_text": droid_text(), "profile": "openpi-droid", "idempotency_key": "cleanup-fault"}
+        body = {
+            "yaml_text": droid_text(),
+            "profile": "openpi-droid",
+            "idempotency_key": "cleanup-fault",
+        }
         response = client.post("/api/editor/evaluate", headers=headers, json=body)
         job = wait_job(client, response.json()["id"], {"succeeded", "failed"})
         try:
@@ -732,7 +1090,9 @@ def test_unverified_evaluation_cleanup_retains_dispatch_slot_and_lease(tmp_path,
             assert app.state.editor_execution.build_lease_fd is not None
             assert app.state.journal.pending_workers()[0]["job_id"] == job["id"]
             later = client.post(
-                "/api/editor/evaluate", headers=headers, json={**body, "idempotency_key": "later"}
+                "/api/editor/evaluate",
+                headers=headers,
+                json={**body, "idempotency_key": "later"},
             ).json()
             client.post("/api/jobs/resume-queue", headers=headers)
             time.sleep(0.3)
@@ -826,7 +1186,11 @@ def test_worker_main_emits_only_bounded_completion_or_private_failure(tmp_path, 
             kwargs["on_evaluation_completed"](evidence)
         return None
 
-    monkeypatch.setitem(sys.modules, "isaaclab_arena.evaluation.policy_runner", SimpleNamespace(main=runner_main))
+    monkeypatch.setitem(
+        sys.modules,
+        "isaaclab_arena.evaluation.policy_runner",
+        SimpleNamespace(main=runner_main),
+    )
     monkeypatch.setattr(evaluation_worker, "private_channel", private_channel)
     monkeypatch.setattr(snapshot_process, "watch_parent", lambda fd: None)
     monkeypatch.setattr(sys, "argv", ["worker", "--owner-fd", "123"])

@@ -1,10 +1,14 @@
 # Dashboard / CLI workflow parity
 
-## Proposed prerequisite slice: research stack readiness and startup
+**PAUSED — 2026-09-17.** The user reported disappearance after refreshing v7, requested a preserved handoff, and will commit/reconsider the strategy themselves. This document is retained design history, not a current implementation mandate. Start with the [consolidated checkpoint](dashboard_cli_workflow_parity/research-stack-implementation-handoff.md). Earlier delivery/authorization statements below are superseded as current status; full parity and refresh reliability are not accepted.
+
+## Active prerequisite slice: research stack readiness and startup
+
+The readiness/startup implementation and isolated verification checkpoint is recorded in the [implementation handoff](dashboard_cli_workflow_parity/research-stack-implementation-handoff.md). Mounted controls, worker checks, policy transport, reviewed-existing-container helper, production tests/build and synthetic-service Chromium acceptance are present. Live installation/configuration and real stack acceptance remain separate; this is not full V7/CLI parity.
 
 The user requested an integrated validation/startup path for Arena/API, Neo4j and the correct GR00T policy, then explicitly requested a plan review before implementation. The [research-stack readiness appendix](dashboard_cli_workflow_parity/research-stack-readiness.md) defines the proposed C17/X01 extension: stronger worker-path/protocol/model checks, an API-independent V7 stack panel, and a paired host-side allowlisted startup helper. Existing readiness metadata/TCP checks are partial foundations, not correct-model or complete-workflow validation.
 
-This new scope is **planning-only pending review and protected-infrastructure approval**. It does not authorize Docker edits or service startup. Preserve all existing functionality and previous work. The proposal makes service preparation the next prerequisite to the full graph-backed workflow; it does not replace generation, geometry validation, repair/DCRG or their existing acceptance requirements. Initial deployment requires a separately approved frontend-only rollout, and loaded-policy identity may require an explicitly reviewed GR00T serving-wrapper rollout. No browser Docker socket, automatic queued-job release, database replacement or model download is proposed.
+The user has now approved **implementation of the reviewed scope**, including its targeted `docker/workbench/` code changes. [Frozen interfaces and ownership](dashboard_cli_workflow_parity/research-stack-contracts.md) govern parallel implementation. Preserve all existing functionality and previous work. Service preparation is the next prerequisite to the full graph-backed workflow; it does not replace generation, geometry validation, repair/DCRG or their existing acceptance requirements. Live provisioning/startup and deployment still require separate approval, including frontend-only rollout and any GR00T serving-wrapper rollout. No browser Docker socket, automatic queued-job release, database replacement or model download is authorized.
 
 ## Active delivery instruction: functional local prototype
 

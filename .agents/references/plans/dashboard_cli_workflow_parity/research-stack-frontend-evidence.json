@@ -1,0 +1,31 @@
+{
+  "scope": "Production frontend source regression and build; browser/live acceptance pending",
+  "regression_index": "web/arena-workbench/tests/e2e/functional-v7/.runs/research-stack-regression-227c84954c49/batches.json",
+  "regression_index_sha256": "6823f7bafd51530ebca8f1e6102940ece05f79a74f88abfb4f47931fd31ab584",
+  "test_files": 72,
+  "tests": 1859,
+  "excluded_preview_files": [
+    "src/preview/activity-preview.test.tsx",
+    "src/preview/asset-scene-visualizer.test.tsx",
+    "src/preview/coverage.test.tsx",
+    "src/preview/environment.test.tsx",
+    "src/preview/inspect-correct-workspace.test.tsx",
+    "src/preview/jobs-diagnostics.test.tsx",
+    "src/preview/library.test.tsx",
+    "src/preview/neo4j-query.test.tsx",
+    "src/preview/preview-app.test.tsx",
+    "src/preview/test-isolation.test.ts",
+    "src/preview/workflow-panels.test.tsx"
+  ],
+  "build_run": "arena-f0-build-22c37d43828c",
+  "build_proof_sha256": "4f0f02cdf12c1bd661b796eae55111f4e8a3f9da05c1ef8eb0e2eb84e160cf11",
+  "build_source_manifest_sha256": "195d3ed8394a322e3e9447c456ccd7999bb8f46287186e54fd4d84462ffb70c6",
+  "build_source_files_matched": 220,
+  "cleanup_verified": true,
+  "remaining_owned": [],
+  "limits": [
+    "trusted mutable installed frontend dependencies",
+    "synthetic API/control transports in component tests",
+    "browser review and existing-container startup correction still pending"
+  ]
+}

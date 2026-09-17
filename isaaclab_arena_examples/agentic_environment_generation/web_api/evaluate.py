@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import field_validator
 
 from .editor import BuildDraft, frozen_draft, protect_editor_job, submit_editor
-from .evaluation_profiles import FIXED, PROFILES, compatible_spec
+from .evaluation_profiles import FIXED, POLICY_CONTRACTS, compatible_spec, configured_profiles
 from .security import require_mutation, require_session
 
 router = APIRouter(prefix="/api/editor")
@@ -33,7 +33,12 @@ class EvaluateDraft(BuildDraft):
 
 @router.get("/evaluation-profiles", dependencies=[Depends(require_session)])
 async def profiles():
-    return {"profiles": list(PROFILES), **FIXED, "publication": "not_requested"}
+    return {
+        "profiles": configured_profiles(),
+        **FIXED,
+        "publication": "not_requested",
+        "policy_contracts": POLICY_CONTRACTS,
+    }
 
 
 @router.post("/evaluate", status_code=202)
@@ -54,8 +59,60 @@ async def evaluate(request: Request, body: EvaluateDraft, session=Depends(requir
         compatible_spec(validation["spec"])
     except ValueError:
         raise HTTPException(
-            422, "Evaluation requires droid_abs_joint_pos with DROID cameras and separate observations"
+            422,
+            "Evaluation requires droid_abs_joint_pos with DROID cameras and separate observations",
         ) from None
+    from .policy_endpoint import configured_gr00t_port
+
+    policy_inputs = {"remote_host": "127.0.0.1", "remote_port": 8000}
+    if body.profile == "gr00t-droid":
+        from .policy_readiness import expected_hashes
+        from .readiness import checked_worker
+
+        try:
+            policy_inputs["remote_port"] = configured_gr00t_port()
+        except ValueError:
+            raise HTTPException(503, "configuration_changed") from None
+        try:
+            expectations = expected_hashes()
+        except ValueError:
+            raise HTTPException(503, "policy_expectation_missing") from None
+        try:
+            receipt = await checked_worker({
+                "workflow": "a2_gr00t",
+                "prompt": "evaluation admission",
+                "graph_config": None,
+                "expectations": expectations,
+                "gr00t_port": policy_inputs["remote_port"],
+            })
+            if receipt["runtime"] != "runtime_available" or receipt["policy"] is None:
+                raise HTTPException(503, "runtime_unavailable")
+            proof = receipt["policy"]
+            for key in ("policy_protocol", "policy_model", "policy_transport"):
+                if proof[key]["status"] != "passed":
+                    from .readiness import READINESS_CODES
+
+                    code = proof[key]["code"]
+                    raise HTTPException(
+                        503,
+                        (code if code in READINESS_CODES else "policy_metadata_unavailable"),
+                    )
+            from isaaclab_arena.agentic_environment_generation.policy_contract import validate_server_info
+
+            info = validate_server_info(proof["server_info"], **expectations)
+            try:
+                current_port = configured_gr00t_port()
+            except ValueError:
+                raise HTTPException(503, "configuration_changed") from None
+            if expectations != expected_hashes() or policy_inputs["remote_port"] != current_port:
+                raise HTTPException(503, "configuration_changed")
+            policy_inputs["expected_server_info"] = info
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(503, "policy_metadata_unavailable") from None
+        # Dependency reads confer no stale-session submission authority.
+        session = require_mutation(request, require_session(request))
     return submit_editor(
         request,
         session,
@@ -69,6 +126,7 @@ async def evaluate(request: Request, body: EvaluateDraft, session=Depends(requir
             "request_sha256": request_hash,
             "profile": body.profile,
             "language_instruction": body.language_instruction,
+            **policy_inputs,
             **FIXED,
         },
     )
@@ -89,7 +147,12 @@ async def artifact(request: Request, job_id: str, name: str):
         if job["kind"] != "evaluate" or job["status"] != "succeeded" or job["result"] is None:
             raise ValueError("Evaluation has no accepted evidence")
         protect_editor_job(request, job)
-        files = verify_result(root, job["inputs"], job["result"], request.app.state.model_settings.protect_public)
+        files = verify_result(
+            root,
+            job["inputs"],
+            job["result"],
+            request.app.state.model_settings.protect_public,
+        )
         data = files[name]
     except (KeyError, ValueError, OSError, TypeError):
         raise HTTPException(404, "Evaluation artifact not found") from None

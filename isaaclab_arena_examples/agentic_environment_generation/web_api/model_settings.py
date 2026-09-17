@@ -6,6 +6,9 @@
 """Memory-only provider credentials; public metadata never includes key material."""
 
 import asyncio
+import json
+from copy import deepcopy
+import re
 import secrets
 import time
 from typing import Literal
@@ -14,15 +17,17 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from isaaclab_arena.agentic_environment_generation.inference_profiles import (
-    PROFILE_CATALOGUE_VERSION,
     inference_profile_catalogue,
     resolve_inference_profile,
+    frozen_builtin_profile,
+    checked_inference_profile,
 )
 
 from . import generation, graph_access
 from .provider_security import ENDPOINTS, PROVIDERS, checked_config, reject_secret
 from .public_records import screen_public_record
 from .security import require_mutation, require_session
+from isaaclab_arena.agentic_environment_generation.workbench.model_profile_store import ModelProfileStore, ModelProfileConflict
 
 MAX_CREDENTIALS = 128
 router = APIRouter(prefix="/api/model-settings")
@@ -34,6 +39,7 @@ class SettingsInput(BaseModel):
     model: str = Field(min_length=1, max_length=256)
     api_key: str = Field(min_length=16, max_length=4096, repr=False)
     ttl_minutes: int | None = Field(default=30, strict=True)
+    profile_id: str | None = Field(default=None, min_length=1, max_length=64)
 
     @model_validator(mode="after")
     def safe_metadata(self):
@@ -43,11 +49,35 @@ class SettingsInput(BaseModel):
         return self
 
 
+class RequestPolicyInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
+    api: Literal["chat_completions"]
+    temperature_mode: Literal["configured", "omitted"]
+    token_limit_parameter: Literal["max_tokens", "max_completion_tokens"]
+    structured_output: Literal["json_schema", "json_object", "omitted"]
+    multimodal_output: Literal["json_object", "omitted"]
+    store: bool | None
+
+    @model_validator(mode="after")
+    def no_storage_opt_in(self):
+        if self.store is not None and self.store is not False:
+            raise ValueError("Invalid request policy")
+        return self
+
+
+class ProfileInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
+    provider: Literal["openai", "gemini", "openrouter", "nvidia"]
+    model: str = Field(min_length=1, max_length=256, pattern=r"^[!-~]+$")
+    request_policy: RequestPolicyInput
+
+
 class ModelSettings:
     """Keep one temporary credential per session, never serialize the private records."""
 
-    def __init__(self, *, clock=time.time):
+    def __init__(self, *, clock=time.time, journal=None):
         self.clock = clock
+        self.profiles = ModelProfileStore(journal) if journal is not None else None
         self._records = {}
         self.on_invalidate = lambda owner: None
         self.protect_grants = lambda value: None
@@ -90,8 +120,26 @@ class ModelSettings:
             except ValueError:
                 raise HTTPException(422, "Invalid request input") from None
 
+        selected = None
+        if body.profile_id is not None:
+            catalogue = inference_profile_catalogue() + (self.profiles.catalogue() if self.profiles else [])
+            selected = next((p for p in catalogue if p["id"] == body.profile_id), None)
+            if selected is None:
+                raise HTTPException(422, "Unknown model profile")
+            if "origin" not in selected:
+                selected = frozen_builtin_profile(selected)
+            try:
+                selected = checked_inference_profile(selected, model=body.model, base_url=ENDPOINTS[body.provider])
+                if selected["provider"] != body.provider:
+                    raise ValueError("Profile provider mismatch")
+            except ValueError:
+                raise HTTPException(422, "Model profile does not match selection") from None
+        else:
+            builtin = resolve_inference_profile(body.model, ENDPOINTS[body.provider])
+            selected = frozen_builtin_profile(builtin) if builtin else None
         candidate = {
             "api_key": body.api_key,
+            "inference_profile": selected,
             "provider": body.provider,
             "model": body.model,
             "credential_ref": secrets.token_hex(32),
@@ -127,21 +175,22 @@ class ModelSettings:
         # Forget still remove authority normally; no historical key denylist.
         return screen_public_record(self._public_metadata(record, server, allowed), self.protect_public)
 
-    @staticmethod
-    def _public_metadata(record, server, allowed):
+    def _public_metadata(self, record, server, allowed):
         """Build detached metadata without mutating credentials or exposing endpoints."""
         config = record if record is not None else server
         profile = resolve_inference_profile(
             (config or {}).get("model"),
             ENDPOINTS.get(record["provider"]) if record is not None else (server or {}).get("base_url"),
         )
+        profile = (record or {}).get("inference_profile") or profile
         public = {
-            "profile_catalogue_version": PROFILE_CATALOGUE_VERSION,
-            "profiles": inference_profile_catalogue(),
+            "profile_catalogue_version": "harness-model-profiles/v2",
+            "profiles": [frozen_builtin_profile(p) for p in inference_profile_catalogue()] + (self.profiles.catalogue() if self.profiles else []),
+            "profile_creation": "create-only/v1" if self.profiles else None,
             "effective_profile": (
                 {
                     "id": profile["id"] if profile else None,
-                    "support": "documented" if profile else "unverified",
+                    "support": profile["support"] if profile else "unverified",
                     "verification": "not_checked",
                 }
                 if config is not None
@@ -172,7 +221,7 @@ class ModelSettings:
             raise ValueError("Temporary credential unavailable")
         return {key: record[key] for key in ("api_key", "provider", "model")} | {
             "base_url": ENDPOINTS[record["provider"]]
-        }
+        } | ({"inference_profile": deepcopy(record["inference_profile"])} if record["inference_profile"] else {})
 
 
 @router.get("")
@@ -186,6 +235,35 @@ async def save(request: Request, body: SettingsInput, session=Depends(require_mu
         raise HTTPException(403, "Temporary credentials require HTTPS or loopback HTTP")
     request.app.state.model_settings.save(session, body)
     return await status(request, session)
+
+
+@router.put("/profiles/{profile_id}")
+async def create_profile(request: Request, profile_id: str, body: ProfileInput, session=Depends(require_mutation)):
+    settings = request.app.state.model_settings
+    def unique(pairs):
+        value = {}
+        for key, child in pairs:
+            if key in value:
+                raise ValueError("Duplicate profile field")
+            value[key] = child
+        return value
+    try:
+        json.loads(await request.body(), object_pairs_hook=unique)
+    except (ValueError, RecursionError):
+        raise HTTPException(422, "Invalid model profile JSON") from None
+    if settings.profiles is None:
+        raise HTTPException(503, "Model profile creation unavailable")
+    if (not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", profile_id)
+            or profile_id == "custom" or profile_id in {p["id"] for p in inference_profile_catalogue()}):
+        raise HTTPException(422, "Invalid model profile identity")
+    profile = dict(body.model_dump(), id=profile_id, revision=1, origin="user_defined", support="unverified",
+                   verification="not_checked", endpoint=ENDPOINTS[body.provider], documentation_urls=[])
+    def protect(value):
+        screen_public_record(value, settings.protect_public)
+    try:
+        return settings.profiles.create(profile, protect)
+    except ModelProfileConflict:
+        raise HTTPException(409, "Model profile conflict or capacity reached") from None
 
 
 @router.delete("")

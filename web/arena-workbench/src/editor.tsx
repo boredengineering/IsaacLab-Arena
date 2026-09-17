@@ -559,6 +559,9 @@ export function EditorView({ graphRenderer = 'legacy', onGraphRendererChange = (
         </span>
       </div>
       {index.data?.capabilities.workflow_readiness === true && <WorkflowReadiness active={active}
+        draft={draft} prompt={prompt} documentId={document?.document_id}
+        sourceIdentity={`${owner}:${draftHandler.revision}`}
+        canCheck={() => ownsInput() && draftController.eligible(draftHandler) && loadedDocumentId === documentId && !loading && !recovery}
         providerRevision={`${modelSettings.status.data?.source ?? 'unknown'}:${modelSettings.credentialRef ?? ''}:${modelSettings.generationAvailable}`} />}
       {recovery && (
         <div className="notice warning" role="alert">

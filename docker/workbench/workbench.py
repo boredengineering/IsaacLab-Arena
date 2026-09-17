@@ -81,7 +81,7 @@ def resolve_identity(passwd, sim_gid, requested_user, requested_gid):
     return account[0], uid, gid
 
 
-def api_command(state, socket_path, origin, diagnostics):
+def api_command(state, socket_path, origin, diagnostics, start_paused=False):
     """Return the explicitly approved, UDS-only API entry point."""
     command = [
         "/isaac-sim/python.sh",
@@ -94,6 +94,8 @@ def api_command(state, socket_path, origin, diagnostics):
         "--origin",
         origin,
     ]
+    if start_paused:
+        command.append("--start-paused")
     if diagnostics:
         command.append("--diagnostics")
     return command
@@ -178,8 +180,11 @@ def discover(args):
         "ipc_host": str(PurePosixPath(eval_mounts[0]["Source"]) / relative / "ipc"),
         "state_host": str(PurePosixPath(eval_mounts[0]["Source"]) / relative / "state"),
         "diagnostics": args.diagnostics,
+        "start_paused": getattr(args, "start_paused", False),
         "dev": args.dev,
-        "api_command": api_command(f"{base}/state", socket_path, origin, args.diagnostics),
+        "api_command": api_command(
+            f"{base}/state", socket_path, origin, args.diagnostics, start_paused=getattr(args, "start_paused", False)
+        ),
     }
 
 
@@ -229,6 +234,8 @@ def runtime_call(config, action, detached=False):
         "--origin",
         config["origin"],
     ]
+    if config.get("start_paused", False):
+        argv.append("--start-paused")
     if config["diagnostics"]:
         argv.append("--diagnostics")
     if action == "preflight" and config["runtime_network"] == "host":
@@ -312,6 +319,7 @@ def main():
     parser.add_argument("--frontend-gid", type=int)
     parser.add_argument("--port", type=int, default=int(os.environ.get("WORKBENCH_HTTP_PORT", "3000")))
     parser.add_argument("--dev", action="store_true")
+    parser.add_argument("--start-paused", action="store_true", help="Keep recovered research jobs paused")
     parser.add_argument(
         "--diagnostics", action="store_true", help="Explicitly enable bounded test-only diagnostic jobs"
     )

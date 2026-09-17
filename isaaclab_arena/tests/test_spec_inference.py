@@ -67,6 +67,45 @@ def test_infer_sets_response_format_to_json_schema(spec_inference):
     assert kwargs["response_format"]["json_schema"]["schema"] is inference._schema
 
 
+@pytest.mark.parametrize("mode", ["json_schema", "json_object", "omitted"])
+def test_user_profile_uses_explicit_format_and_strict_raw_validation(spec_inference, mode):
+    from isaaclab_arena.agentic_environment_generation.spec_wire_adapter import SpecWireAdapter
+    legacy, client = spec_inference
+    backend = legacy._inference_backend
+    backend._model = "literal-model"
+    backend._client.base_url = backend._configured_base_url = "https://openrouter.ai/api/v1"
+    backend._max_retries = 0
+    backend._explicit_profile = {
+        "id": "manual", "revision": 1, "provider": "openrouter", "model": backend._model,
+        "endpoint": backend._configured_base_url, "origin": "user_defined", "support": "unverified",
+        "verification": "not_checked", "documentation_urls": [],
+        "request_policy": {"api": "chat_completions", "temperature_mode": "omitted",
+            "token_limit_parameter": "max_tokens", "store": None, "structured_output": mode,
+            "multimodal_output": "omitted"},
+    }
+    inference = SpecInference(backend)
+    assert (inference._wire_adapter is not None) == (mode == "json_schema")
+    domain = ArenaEnvGraphSpec.model_validate(minimal_spec_dict()).model_dump(mode="json")
+    data = SpecWireAdapter().encode(domain) if mode == "json_schema" else domain
+    client.chat.completions.create.return_value = chat_response(content=json.dumps(data))
+    spec, parsed = _infer(inference, client)
+    assert isinstance(spec, ArenaEnvGraphSpec)
+    assert parsed == domain
+    first = next(iter(data))
+    raw = '{' + json.dumps(first) + ':' + json.dumps(data[first]) + ',' + json.dumps(data)[1:]
+    client.chat.completions.create.return_value = chat_response(content=raw)
+    with pytest.raises(RuntimeError):
+        _infer(inference, client)
+    client.chat.completions.create.return_value = chat_response(content='```json\n' + json.dumps(data) + '\n```')
+    with pytest.raises(RuntimeError):
+        _infer(inference, client)
+    incomplete = dict(data)
+    incomplete.pop(first)
+    client.chat.completions.create.return_value = chat_response(content=json.dumps(incomplete))
+    with pytest.raises((RuntimeError, ValueError)):
+        _infer(inference, client)
+
+
 def test_infer_user_message_contains_catalog_and_prompt(spec_inference):
     inference, client = spec_inference
     client.chat.completions.create.return_value = chat_response(content=json.dumps(minimal_spec_dict()))

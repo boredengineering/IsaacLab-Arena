@@ -23,10 +23,13 @@ def selection(names):
 
 def core_only(names):
     """Exact core suites use image dependencies without API dependency acquisition."""
-    return selection(names) in (
+    from stage import WORKFLOW_BACKEND_TESTS
+
+    names = selection(names)
+    return names in (
         ["isaaclab_arena/tests/test_workbench_editor_revisions.py"],
         ["isaaclab_arena/tests/test_trajectory_assessment.py"],
-    )
+    ) or (bool(names) and set(names) <= set(WORKFLOW_BACKEND_TESTS))
 
 
 class CoreImportBoundary:

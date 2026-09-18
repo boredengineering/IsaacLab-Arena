@@ -410,3 +410,237 @@ def test_wire_schema_matches_installed_openai_reference_normalization():
     _ensure_strict_json_schema(expected, path=(), root=expected)
     assert wire == expected
     assert all(len(node) == 1 for _, node in schema_nodes(wire) if "$ref" in node)
+
+
+def generation_candidate_fixture(tmp_path, data, raw=None):
+    import yaml
+
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
+    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import GenerationArtifacts
+    from isaaclab_arena.agentic_environment_generation.workflow.attempts import AttemptFence, WorkerRegistration
+    from isaaclab_arena.tests.test_environment_workflow_service import contract
+
+    area = ArtifactArea.create(tmp_path / "artifacts", store_id="schema", registry_id="schema")
+    artifacts = GenerationArtifacts(area)
+    fence = AttemptFence(
+        run_id="run", intent_id="intent", attempt_id="attempt", generation=1, owner_id="owner", owner_epoch=1
+    )
+    worker = WorkerRegistration(
+        registration_id="worker", fence=fence, host="host", boot="boot", pid=1, pgid=1, sid=1, start_ticks=1
+    )
+    receipt = artifacts.write(
+        fence,
+        worker,
+        contract(),
+        raw if raw is not None else yaml.safe_dump(data).encode(),
+        data,
+        protect=lambda value: None,
+    )
+    return artifacts, receipt
+
+
+def test_generation_schema_receipt_binds_real_bytes_without_mutation(tmp_path):
+    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import digest, encoded
+    from isaaclab_arena.agentic_environment_generation.workflow.validation import validate_generation_candidate
+
+    data = minimal_spec_dict()
+    before = copy.deepcopy(data)
+    artifacts, generation = generation_candidate_fixture(tmp_path, data)
+    try:
+        files = artifacts.area.verify(generation.artifact_directory, json.loads(generation.manifest_json))
+        receipt = validate_generation_candidate(artifacts, generation, protect=lambda value: None)
+        assert receipt.disposition == "schema_validated"
+        assert receipt.fence == generation.fence
+        assert receipt.contract_digest == generation.contract_digest
+        assert receipt.candidate_yaml_sha256 == generation.candidate_yaml_sha256
+        assert receipt.candidate_json_sha256 == generation.candidate_json_sha256
+        assert receipt.provenance_sha256 == generation.provenance_sha256
+        normalized = ArenaEnvGraphSpec.from_dict(copy.deepcopy(data)).model_dump(mode="json")
+        assert receipt.normalized_spec_sha256 == digest(encoded(normalized))
+        assert receipt.validator_identity.endswith("ArenaEnvGraphSpec.from_dict")
+        assert receipt.physical_validity == receipt.task_validity == "not_established"
+        assert receipt.raw_yaml_digest_algorithm != receipt.normalized_spec_digest_algorithm
+        assert "runtime_identity" not in receipt.model_dump()
+        with pytest.raises(ValueError):
+            receipt.disposition = "accepted"
+        assert artifacts.area.verify(generation.artifact_directory, json.loads(generation.manifest_json)) == files
+        assert data == before
+    finally:
+        artifacts.area.close()
+
+
+@pytest.mark.parametrize(
+    "change", ["task", "asset", "pose", "target", "schema", "duplicate", "alias", "include", "tag"]
+)
+def test_generation_schema_static_failures_are_bounded_private(tmp_path, change):
+    import yaml
+
+    from isaaclab_arena.agentic_environment_generation.workflow.validation import validate_generation_candidate
+
+    data = minimal_spec_dict()
+    other = copy.deepcopy(data)
+    marker = "private-schema-marker"
+    expected = "invalid_schema"
+    if change == "task":
+        other["task"]["subtasks"][0]["params"]["episode_length_s"] = 123
+        expected = "yaml_json_mismatch"
+    elif change == "asset":
+        other["objects"][0]["registry_name"] = other["objects"][1]["registry_name"]
+        expected = "yaml_json_mismatch"
+    elif change == "pose":
+        other["objects"][0].setdefault("params", {})["initial_pose"] = {"position_xyz": [1, 2, 3]}
+        expected = "yaml_json_mismatch"
+    elif change == "target":
+        other["task"]["subtasks"][0]["params"]["pick_up_object"] = marker
+    elif change == "schema":
+        other[marker] = marker
+    elif change == "include":
+        other["embodiment"] = {"external_yaml": "/" + marker}
+        expected = "external_yaml_refused"
+    raw = yaml.safe_dump(other).encode()
+    if change == "duplicate":
+        raw += ("env_name: " + marker + "\n").encode()
+    elif change == "alias":
+        raw += ("extra: &a [" + marker + "]\nother: *a\n").encode()
+    elif change == "tag":
+        raw += ("extra: !include /" + marker + "\n").encode()
+    artifacts, generation = generation_candidate_fixture(tmp_path, data, raw)
+    try:
+        result = validate_generation_candidate(artifacts, generation, protect=lambda value: None)
+        assert result.disposition == "static_failure"
+        assert result.failure_code == expected
+        assert result.normalized_spec_sha256 is None
+        assert marker not in result.model_dump_json()
+        assert result.physical_validity == result.task_validity == "not_established"
+    finally:
+        artifacts.area.close()
+
+
+def test_generation_schema_real_expanded_banana(tmp_path):
+    from pathlib import Path
+
+    from isaaclab_arena.agentic_environment_generation.workflow.validation import validate_generation_candidate
+
+    source = Path(__file__).resolve().parents[2] / "isaaclab_arena_environments/robolab/tasks/banana_on_plate.yaml"
+    data = ArenaEnvGraphSpec.from_yaml(source).model_dump(mode="json")
+    artifacts, generation = generation_candidate_fixture(tmp_path, data)
+    try:
+        assert (
+            validate_generation_candidate(artifacts, generation, protect=lambda value: None).disposition
+            == "schema_validated"
+        )
+    finally:
+        artifacts.area.close()
+
+
+@pytest.mark.parametrize("filename", ["candidate.yaml", "candidate.json", "provenance.json"])
+def test_generation_schema_rejects_actual_file_tamper(tmp_path, filename):
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactError
+    from isaaclab_arena.agentic_environment_generation.workflow.validation import validate_generation_candidate
+
+    artifacts, generation = generation_candidate_fixture(tmp_path, minimal_spec_dict())
+    try:
+        path = tmp_path / "artifacts" / generation.artifact_directory / filename
+        path.write_bytes(path.read_bytes() + b" ")
+        with pytest.raises(ArtifactError):
+            validate_generation_candidate(artifacts, generation, protect=lambda value: None)
+    finally:
+        artifacts.area.close()
+
+
+def test_generation_schema_protection_rejection_and_mutation_raise(tmp_path):
+    from isaaclab_arena.agentic_environment_generation.workflow.validation import validate_generation_candidate
+
+    artifacts, generation = generation_candidate_fixture(tmp_path, minimal_spec_dict())
+
+    def denied(value):
+        raise PermissionError("denied")
+
+    def mutation(value):
+        value.clear()
+
+    try:
+        with pytest.raises(PermissionError):
+            validate_generation_candidate(artifacts, generation, protect=denied)
+        with pytest.raises(ValueError):
+            validate_generation_candidate(artifacts, generation, protect=mutation)
+    finally:
+        artifacts.area.close()
+
+
+@pytest.mark.parametrize("empty_representation", ["yaml", "json"])
+def test_generation_schema_intentionally_compares_canonical_semantics(tmp_path, empty_representation):
+    """Omitted and empty references mean no references, not identical source bytes."""
+    import yaml
+
+    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import digest, encoded
+    from isaaclab_arena.agentic_environment_generation.workflow.validation import validate_generation_candidate
+
+    data = minimal_spec_dict()
+    data.pop("object_references", None)
+    other = copy.deepcopy(data)
+    (other if empty_representation == "yaml" else data)["object_references"] = []
+    raw = yaml.safe_dump(other).encode()
+    assert data != other
+    yaml_spec = ArenaEnvGraphSpec.from_dict(copy.deepcopy(other))
+    json_spec = ArenaEnvGraphSpec.from_dict(copy.deepcopy(data))
+    # The conversion consumer iterates graph_spec.object_references or [].
+    assert yaml_spec.object_references is json_spec.object_references is None
+    assert yaml_spec.model_dump(mode="json") == json_spec.model_dump(mode="json")
+    artifacts, generation = generation_candidate_fixture(tmp_path, data, raw)
+    try:
+        files = artifacts.verified_bytes(generation, protect=lambda value: None)
+        result = validate_generation_candidate(artifacts, generation, protect=lambda value: None)
+        assert result.disposition == "schema_validated"
+        assert result.candidate_yaml_sha256 == generation.candidate_yaml_sha256 == digest(raw)
+        assert result.candidate_json_sha256 == generation.candidate_json_sha256 == digest(files["candidate.json"])
+        assert result.provenance_sha256 == generation.provenance_sha256
+        assert result.manifest_sha256 == generation.manifest_sha256
+        assert result.normalized_spec_sha256 == digest(encoded(json_spec.model_dump(mode="json")))
+        assert files["candidate.yaml"] == raw
+        assert json.loads(files["candidate.json"]) == data
+    finally:
+        artifacts.area.close()
+
+
+@pytest.mark.parametrize("bad_name", [1, ["_"], {"_": 1}], ids=["int", "list", "dict"])
+def test_actual_asset_spec_malformed_registry_is_validation_error(bad_name):
+    from pydantic import ValidationError
+
+    from isaaclab_arena.environment_spec.arena_env_graph_types import AssetSpec
+
+    with pytest.raises(ValidationError) as error:
+        AssetSpec.model_validate({"registry_name": copy.deepcopy(bad_name)})
+    assert any(item["loc"] == ("registry_name",) and item["type"] == "string_type" for item in error.value.errors())
+
+
+@pytest.mark.parametrize("representation", ["yaml", "json"])
+@pytest.mark.parametrize("asset_field", ["embodiment", "background", "objects"])
+@pytest.mark.parametrize("bad_name", [1, ["_"], {"_": 1}], ids=["int", "list", "dict"])
+def test_generation_schema_malformed_registry_has_static_private_diagnostic(
+    tmp_path, representation, asset_field, bad_name
+):
+    import yaml
+
+    from isaaclab_arena.agentic_environment_generation.workflow.validation import validate_generation_candidate
+
+    data = minimal_spec_dict()
+    other = copy.deepcopy(data)
+    malformed = other if representation == "yaml" else data
+    asset = malformed[asset_field][0] if asset_field == "objects" else malformed[asset_field]
+    asset.pop("id")
+    asset["registry_name"] = copy.deepcopy(bad_name)
+    asset["params"] = {"private-schema-marker": "never echo input"}
+    artifacts, generation = generation_candidate_fixture(tmp_path, data, yaml.safe_dump(other).encode())
+    try:
+        protected = []
+        result = validate_generation_candidate(artifacts, generation, protect=lambda value: protected.append(value))
+        assert result.disposition == "static_failure"
+        assert result.failure_code == "invalid_schema"
+        assert result.normalized_spec_sha256 is None
+        assert result.physical_validity == result.task_validity == "not_established"
+        assert "private-schema-marker" not in result.model_dump_json()
+        assert "never echo input" not in result.model_dump_json()
+        assert protected[-1] == result.model_dump(mode="json")
+    finally:
+        artifacts.area.close()

@@ -34,6 +34,16 @@ BACKEND_TESTS = (
     "isaaclab_arena/tests/test_workbench_editor_revisions.py",
     "isaaclab_arena_examples/tests/test_workbench_editor_revision_api.py",
 )
+WORKFLOW_BACKEND_TESTS = (
+    "isaaclab_arena/tests/test_environment_workflow_contracts.py",
+    "isaaclab_arena/tests/test_environment_workflow_readiness.py",
+    "isaaclab_arena/tests/test_environment_workflow_decisions.py",
+    "isaaclab_arena/tests/test_environment_workflow_store.py",
+    "isaaclab_arena/tests/test_environment_workflow_repairs.py",
+    "isaaclab_arena/tests/test_environment_workflow_evidence.py",
+    "isaaclab_arena/tests/test_environment_workflow_import_boundaries.py",
+    "isaaclab_arena/tests/test_environment_workflow_service.py",
+)
 EXPLICIT_BACKEND_TESTS = (
     "isaaclab_arena/tests/test_trajectory_assessment.py",
     "isaaclab_arena_examples/tests/test_workbench_readiness.py",
@@ -63,6 +73,7 @@ EXPLICIT_BACKEND_TESTS = (
     "isaaclab_arena_examples/tests/test_workbench_metadata_protection.py",
     "isaaclab_arena_examples/tests/test_workbench_renewal_public_protection.py",
     "isaaclab_arena_examples/tests/test_workbench_graph_queries.py",
+    *WORKFLOW_BACKEND_TESTS,
 )
 FRONTEND = Path("web/arena-workbench")
 HARNESS = FRONTEND / "tests/e2e/functional-v7"

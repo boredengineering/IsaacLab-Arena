@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 import uuid
+from itertools import combinations
 from pathlib import Path
 from unittest import mock
 
@@ -18,9 +19,107 @@ import backend_checks
 
 CORE = "isaaclab_arena/tests/test_workbench_editor_revisions.py"
 API = "isaaclab_arena_examples/tests/test_workbench_editor_revision_api.py"
+WORKFLOW = (
+    "isaaclab_arena/tests/test_environment_workflow_contracts.py",
+    "isaaclab_arena/tests/test_environment_workflow_readiness.py",
+    "isaaclab_arena/tests/test_environment_workflow_decisions.py",
+    "isaaclab_arena/tests/test_environment_workflow_store.py",
+    "isaaclab_arena/tests/test_environment_workflow_repairs.py",
+    "isaaclab_arena/tests/test_environment_workflow_evidence.py",
+    "isaaclab_arena/tests/test_environment_workflow_import_boundaries.py",
+    "isaaclab_arena/tests/test_environment_workflow_service.py",
+)
 
 
 class CoreRunnerTests(unittest.TestCase):
+    def test_workflow_nonempty_unique_subsets_are_explicit_core_only(self):
+        import stage
+
+        self.assertTrue(set(WORKFLOW) <= set(stage.EXPLICIT_BACKEND_TESTS))
+        self.assertEqual(backend_checks.selection([]), [CORE, API])
+        self.assertFalse(backend_checks.core_only([]))
+        for size in range(1, len(WORKFLOW) + 1):
+            for subset in combinations(WORKFLOW, size):
+                for names in (list(subset), list(reversed(subset))):
+                    with self.subTest(names=names):
+                        self.assertEqual(backend_checks.selection(names), names)
+                        self.assertTrue(backend_checks.core_only(names))
+
+    def test_workflow_admission_keeps_exact_path_and_duplicate_rejection(self):
+        import stage
+
+        for selected in WORKFLOW:
+            for names in (
+                [selected, selected],
+                [*WORKFLOW, selected],
+                [selected + "::test_x"],
+                [selected, "--live"],
+                [selected.replace(".py", "_unapproved.py")],
+                ["/" + selected],
+                ["./" + selected],
+                ["isaaclab_arena/tests/../tests/" + Path(selected).name],
+                ["isaaclab_arena/tests/test_environment_workflow_*.py"],
+            ):
+                with self.subTest(names=names):
+                    for check in (backend_checks.selection, backend_checks.core_only):
+                        with self.assertRaisesRegex(ValueError, "approved backend"):
+                            check(names)
+                    with mock.patch.object(stage, "ConfinedRoot") as source:
+                        with self.assertRaisesRegex(ValueError, "approved backend"):
+                            stage.stage("/unused", "/unused-destination", False, backend_tests=names)
+                        source.assert_not_called()
+
+    def test_workflow_admission_preserves_old_singletons_and_mixed_profiles(self):
+        import stage
+
+        self.assertTrue(set(WORKFLOW) <= set(stage.EXPLICIT_BACKEND_TESTS))
+        old = [name for name in (*stage.BACKEND_TESTS, *stage.EXPLICIT_BACKEND_TESTS) if name not in WORKFLOW]
+        old_core = {CORE, "isaaclab_arena/tests/test_trajectory_assessment.py"}
+        self.assertEqual(stage.BACKEND_TESTS, (CORE, API))
+        for name in old:
+            self.assertEqual(backend_checks.selection([name]), [name])
+            self.assertEqual(backend_checks.core_only([name]), name in old_core)
+            for workflow in WORKFLOW:
+                for names in ([name, workflow], [workflow, name], [*WORKFLOW, name]):
+                    self.assertEqual(backend_checks.selection(names), names)
+                    self.assertFalse(backend_checks.core_only(names))
+        for pair in combinations(old, 2):
+            for names in (list(pair), list(reversed(pair))):
+                self.assertEqual(backend_checks.selection(names), names)
+                self.assertFalse(backend_checks.core_only(names))
+
+    def test_workflow_staging_captures_only_selected_inert_test_closure(self):
+        import stage
+        from test_confined_io import StagingTests
+
+        self.assertTrue(set(WORKFLOW) <= set(stage.EXPLICIT_BACKEND_TESTS))
+        fixture = StagingTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.put(stage.BACKEND_FIXTURE, b"approved: fixture\n")
+        helper = "isaaclab_arena/workflow_helper.py"
+        fixture.put(helper, b"VALUE = 1\n")
+        unapproved = "isaaclab_arena/tests/test_environment_workflow_unapproved.py"
+        conftest = "isaaclab_arena/tests/conftest.py"
+        for name in (*WORKFLOW, unapproved, conftest):
+            fixture.put(name, b"from isaaclab_arena.workflow_helper import VALUE\n")
+        for index, names in enumerate(([], list(WORKFLOW), list(WORKFLOW[::2]))):
+            manifest = stage.stage(fixture.root, fixture.base / f"workflow-{index}", False, backend_tests=names)
+            self.assertEqual(set(manifest) & set(WORKFLOW), set(names))
+            self.assertEqual(helper in manifest, bool(names))
+            self.assertNotIn(unapproved, manifest)
+            self.assertNotIn(conftest, manifest)
+        with mock.patch.object(stage, "ConfinedRoot") as source:
+            with self.assertRaisesRegex(ValueError, "approved backend"):
+                stage.stage(fixture.root, fixture.destination, True, backend_tests=list(WORKFLOW))
+            source.assert_not_called()
+        leaf = fixture.root / WORKFLOW[0]
+        leaf.unlink()
+        leaf.symlink_to(fixture.root / helper)
+        with self.assertRaises((OSError, ValueError)):
+            stage.stage(fixture.root, fixture.destination, False, backend_tests=[WORKFLOW[0]])
+        self.assertFalse(fixture.destination.exists())
+
     def test_trajectory_assessment_is_explicit_core_only(self):
         selected = "isaaclab_arena/tests/test_trajectory_assessment.py"
         self.assertEqual(backend_checks.selection([selected]), [selected])
@@ -441,6 +540,24 @@ class RuntimeRunnerTests(unittest.TestCase):
         self.assertEqual(created[0][created[0].index("-i") - 1], self.image)
         self.assertFalse(any("/pydeps" in part for part in created[0]))
         self.assertEqual(readback.call_count, 2)
+
+    def test_workflow_batch_uses_existing_core_runtime_without_driver_acquisition(self):
+        import stage
+
+        self.assertTrue(set(WORKFLOW) <= set(stage.EXPLICIT_BACKEND_TESTS))
+        for names in (list(WORKFLOW), list(WORKFLOW[::2]), [WORKFLOW[-1]]):
+            with self.subTest(names=names):
+                proof, created, acquire, staging, readback = self.invoke(names, self.image, self.manifest)
+                acquire.assert_not_called()
+                self.assertEqual(proof["mode"], "core")
+                self.assertEqual(proof["tests"], names)
+                self.assertEqual(proof["dependency"]["packages_acquired"], [])
+                self.assertEqual(created[0][created[0].index("-i") - 1], self.image)
+                self.assertFalse(any("/pydeps" in part for part in created[0]))
+                self.assertEqual(proof["backend"]["test_exit"], 1)
+                self.assertEqual(proof["status"], "failed")
+                self.assertTrue(proof["staged_source_unchanged"])
+                self.assertEqual(readback.call_count, 2)
 
     def test_mismatched_donor_image_or_bytes_fails_before_pytest_creation(self):
         files = {name: value for name, value in self.provision["recipe"]["files"].items() if name.startswith("neo4j/")}

@@ -1,22 +1,24 @@
 # Agent references — start here
 
 - **Updated**: 2026-09-18
-- **Current status**: implementation paused after the user reported a missing terminal display. The narrow trajectory-tool fix has isolated verification; the full application-owned workflow and earlier dashboard refresh reliability remain unaccepted.
+- **Current focus**: SBOM planning. Workflow implementation is on hold for this work; its progress and remaining verification limits belong to the existing implementation handoff. No complete deployed workflow or dashboard reliability acceptance is implied.
 - **Purpose**: navigation and document ownership, not proof of runtime success or authorization to execute an old plan.
 
 ## Current reading order
 
-1. **[Dashboard checkpoint](plans/dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)** — the single current handoff: latest failure, implemented changes, last-known queue/runtime state, evidence limits and commit boundary.
-2. **[Session memory](quick_notes/session_memory.md)** — event-modeling/DDD study, actual CLI boundaries, proposed application-owned Neo4j orchestration and code consolidation, narrow trajectory-tool fix with evidence, and unresolved terminal interruption. Earlier research notes remain below its historical boundary.
-3. **[Historical implementation log](plans/dashboard_cli_workflow_parity/implementation-progress.md)** — detailed chronology only. Do not combine its contradictory “current” checkpoints into a new acceptance claim.
+1. **[SBOM creation plan 01](SBOM/sbom_creation_plan_01.md)** — current documentation-only task: source/profile/image coverage, tooling, collection boundaries, phases and acceptance gates. No scanner installation or SBOM generation is claimed.
+2. **[Dashboard checkpoint](plans/dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)** — the existing workflow implementation handoff: implemented changes, last-known queue/runtime state, evidence limits and commit boundary.
+3. **[Session memory](quick_notes/session_memory.md)** — event-modeling/DDD study, actual CLI boundaries, proposed application-owned Neo4j orchestration and code consolidation, narrow trajectory-tool fix with evidence, and unresolved terminal interruption. Earlier research notes remain below its historical boundary.
+4. **[Historical implementation log](plans/dashboard_cli_workflow_parity/implementation-progress.md)** — detailed chronology only. Do not combine its contradictory “current” checkpoints into a new acceptance claim.
 
-The user requested preservation. Proposed orchestration/storage consolidation is not implemented or blanket authorization to proceed. Do not restart implementation, services or queued work from older authorization language; no staging/commit is part of this checkpoint.
+The current request authorizes an SBOM plan, not scanner installation, scans, service startup or publication. Do not restart workflow implementation, services or queued work from older authorization language; no staging/commit is part of this task.
 
 ## Document roles
 
 | Material | Role | How to use it |
 | --- | --- | --- |
-| Current checkpoint above | Current status owner | Read first; update rather than create another competing handoff |
+| Workflow implementation handoff above | Workflow status owner | Update rather than create another competing implementation handoff |
+| [SBOM creation plan 01](SBOM/sbom_creation_plan_01.md) | SBOM scope and phased execution plan | Source inventories, installed images and deployment/research provenance are separate subjects; execution gates remain explicit |
 | Session memory | Session decision record | Preserve the pause and recovery context, not another full progress log |
 | [Dashboard design](plans/dashboard_cli_workflow_parity.md) | Retained design / scope history | Not an instruction to continue implementation |
 | [Endpoint contracts](plans/dashboard_cli_workflow_parity/endpoint-contract-plan.md) | Retained API/action design | Source inventory and live acceptance are different |

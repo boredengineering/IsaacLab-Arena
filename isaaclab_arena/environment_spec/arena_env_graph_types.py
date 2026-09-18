@@ -61,7 +61,7 @@ class AssetSpec(BaseModel):
             return {"id": clean_id, "registry_name": data, "params": {}}
         if isinstance(data, dict):
             reg_name = data.get("registry_name") or data.get("name") or data.get("asset_name")
-            if reg_name and not data.get("id"):
+            if isinstance(reg_name, str) and reg_name and not data.get("id"):
                 clean_id = reg_name.split("_")[0] if "_" in reg_name else reg_name
                 data["id"] = clean_id
             if reg_name and not data.get("registry_name"):

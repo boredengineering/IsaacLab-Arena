@@ -64,33 +64,16 @@ def checked_config(config, *, trusted_server=False):
 @contextmanager
 def bounded_client(config):
     """Install transport before the legacy agent's initialization ping, in its isolated worker only."""
-    from openai import DefaultHttpxClient, OpenAI
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import (
+        CallAllowance,
+        bounded_client as shared_bounded_client,
+    )
 
-    from isaaclab_arena.agentic_environment_generation import inference_backend
-
-    # Use the SDK's client class: some runtimes vendor HTTPX under a different module name.
-    with DefaultHttpxClient(follow_redirects=False, trust_env=False, timeout=45) as transport:
-        with OpenAI(
-            api_key=config["api_key"], base_url=config["base_url"], http_client=transport, timeout=45, max_retries=0
-        ) as client:
-            completion = client.chat.completions.create
-            calls = 0
-
-            def complete(*args, **kwargs):
-                nonlocal calls
-                calls += 1
-                if calls > 8:
-                    raise ValueError("Generation call budget exhausted")
-                kwargs["model"] = config["model"]
-                return completion(*args, **kwargs)
-
-            client.chat.completions.create = complete
-            original = inference_backend.OpenAI
-            inference_backend.OpenAI = lambda **kwargs: client
-            try:
-                yield client
-            finally:
-                inference_backend.OpenAI = original
+    # Legacy contexts retain eight calls, a 45s HTTP timeout and no new expiry.
+    with shared_bounded_client(
+        config, allowance=CallAllowance(max_calls=8, deadline=float("inf")), strict_model_binding=False
+    ) as client:
+        yield client
 
 
 def reject_secret(value, api_key):

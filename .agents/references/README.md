@@ -22,6 +22,9 @@ The user requested preservation. Proposed orchestration/storage consolidation is
 | [Endpoint contracts](plans/dashboard_cli_workflow_parity/endpoint-contract-plan.md) | Retained API/action design | Source inventory and live acceptance are different |
 | [Research-stack design](plans/dashboard_cli_workflow_parity/research-stack-readiness.md) | Retained lifecycle/readiness design | Distinguish helper pairing, API sessions, credentials and queue dispatch |
 | [Model-profile contract](plans/dashboard_cli_workflow_parity/model-profile-contract.md) | Implemented interface contract | Does not certify provider compatibility |
+| [Event Mapping Refactoring Plan 02](plans/event-mapping-refactoring_plan_02.md) | Successor design proposal; not implementation authorization | Application-owned CLI-first verification, evidence/repair contracts, Neo4j authority, staged migration and file-level action plan |
+| [Plan 02 review ledger](plans/event-mapping-refactoring_plan_02-review.md) | Bounded exploration/critique coverage and finding dispositions | Source-bound review evidence and unresolved verification obligations; not implementation status |
+| [Event Mapping Refactoring Plan 01](plans/event-mapping-refactoring_plan_01.md) | Historical proposal, superseded for design by plan 02 | Preserve discussion history; its implementation sketches are not a complete migration contract |
 | Evidence JSON and `*-owner-status.md` in the dashboard folder | Scope-specific historical records | Use the checkpoint's evidence map; do not sum overlapping totals or infer current deployment |
 | `agentic_env_generation/`, `docs/`, other `plans/` and `quick_notes/` | Research history and domain references | Check original dates, source and experiments; unrelated claims were not re-audited here |
 

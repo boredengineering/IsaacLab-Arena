@@ -35,6 +35,7 @@ BACKEND_TESTS = (
     "isaaclab_arena_examples/tests/test_workbench_editor_revision_api.py",
 )
 EXPLICIT_BACKEND_TESTS = (
+    "isaaclab_arena/tests/test_trajectory_assessment.py",
     "isaaclab_arena_examples/tests/test_workbench_readiness.py",
     "isaaclab_arena_examples/tests/test_workbench_paused_start.py",
     "isaaclab_arena_examples/tests/test_workbench_policy_readiness.py",

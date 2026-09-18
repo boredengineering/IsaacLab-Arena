@@ -21,6 +21,16 @@ API = "isaaclab_arena_examples/tests/test_workbench_editor_revision_api.py"
 
 
 class CoreRunnerTests(unittest.TestCase):
+    def test_trajectory_assessment_is_explicit_core_only(self):
+        selected = "isaaclab_arena/tests/test_trajectory_assessment.py"
+        self.assertEqual(backend_checks.selection([selected]), [selected])
+        self.assertTrue(backend_checks.core_only([selected]))
+        self.assertEqual(backend_checks.selection([]), [CORE, API])
+        self.assertFalse(backend_checks.core_only([selected, CORE]))
+        for names in ([selected, selected], [selected + "::test_x"], [selected, "--live"]):
+            with self.assertRaises(ValueError):
+                backend_checks.selection(names)
+
     def test_native_policy_data_is_an_explicit_inert_fixture_closure(self):
         import stage
 

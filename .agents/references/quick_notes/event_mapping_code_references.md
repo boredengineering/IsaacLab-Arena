@@ -1,0 +1,37 @@
+# Event Mapping Code reference
+
+We have heer a table with all the code references we have so far covered in the event mapping study. The study has demonstrated there are several changes that are needed in the codebase and there are several places we should consider.
+
+
+| Python Code Reference | Description |
+| :--- | :--- |
+| `isaaclab_arena/agentic_environment_generation/workbench/journal.py:61–114` (also ref `61-96`) | Implements the SQLite journal to retain immutable job inputs, transactional job/event transitions, and dispatch records, noted as a candidate for migration to a Neo4j database for the application-owned orchestrator.[cite: 1] |
+| `isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py` | The main CLI runner executing modes like environment generation (`resolve`), building environments (`build`), and evaluation-driven diagnosis (`auto_heal`).[cite: 1] |
+| `environment_generation_runner.py:660–736, 798–807` | Details the `build` mode behavior: loading specifications, checking transfer readiness, constructing simulations, running critics, executing zero-action steps, and optionally recording video.[cite: 1] |
+| `isaaclab_arena/agentic_environment_generation/environment_generation_agent.py:191–360` | Outlines the `resolve` generation path, including Graph-RAG prior retrieval, context inclusion, specification inference, RDF/SHACL validation, and a capped repair loop.[cite: 1] |
+| `isaaclab_arena/agentic_environment_generation/visual_critic.py:322–354` | References the `PhysXPreflightCritic`, which performs coordinate-based geometric heuristic checks on the specification rather than running a physics-settling simulation.[cite: 1] |
+| `isaaclab_arena_examples/agentic_environment_generation/dcrg_runner.py:179–265` | The entry point for the DCRG (bounded experimental refinement) loop, detailing how it evaluates baselines, reads exact recurrent feedback from Neo4j, and proposes allowed geometric changes.[cite: 1] |
+| `isaaclab_arena/agentic_environment_generation/dcrg/loop.py:253–316` | Manages DCRG controller bounding, evaluating proposals, accepting or rejecting candidates using measured results, and terminal outcomes like success or budget exhaustion.[cite: 1] |
+| `isaaclab_arena/agentic_environment_generation/dcrg/loop.py:151–239` | Details the DCRG implementation of immutable specification snapshots, persisted state, evaluation reuse, evidence receipts, and indeterminate-execution handling.[cite: 1] |
+| `isaaclab_arena/agentic_environment_generation/dcrg/loop.py:25–68, 420–443` | Specifies what the DCRG loop optimizes (task success rate and sustained lift) and restricts its allowed environmental changes strictly to target-object XY movement.[cite: 1] |
+| `environment_generation_runner.py:439–598, 794–796` | Outlines the `auto_heal` CLI path that consumes existing evaluation artifacts and telemetry to diagnose and remediate problems.[cite: 1] |
+| `environment_generation_agent.py:358–388` | Highlights a boundary flaw where the repair loop can exhaust its budget or apply a fallback and still emit `generation_completed` without verifying the fallback through a complete validation cycle.[cite: 1] |
+| `environment_generation_runner.py:301–349` | Shows that the CLI treats the return of a specification as sufficient to save a version and complete the `resolve` action, without actually requiring generation convergence.[cite: 1] |
+| `isaaclab_arena/agentic_environment_generation/eval_self_healing.py:74–124, 662–751` | The diagnostic code for `auto_heal` that reads evaluation telemetry/metrics, applies deterministic or LLM diagnostic rules, and calls spatial relaxation on the factor graph.[cite: 1] |
+| `isaaclab_arena_examples/tools/render_policy_trajectory.py:107–120` | Responsible for capturing camera observations and saving visual frames during policy execution.[cite: 1] |
+| `environment_generation_agent.py:280–281` & `environment_generation_runner.py:688–689` | Demonstrates that the main scene-critic calls (`evaluate_scene_spec`) are invoked via the generation and build callers without passing any rendered images.[cite: 1] |
+| `render_policy_trajectory.py:131–151` | Connects captured trajectory frames to a VLM via `multimodal_chat` and prints the output, assuming a specific failed-red-apple task, but delegates the next steps instead of autonomously repairing it.[cite: 1] |
+| `environment_generation_agent.py:430–503` | Shows `refine_spec` taking explicit feedback to invoke `repair_with_feedback`, followed by spatial grounding and bounded RDF/SHACL and geometry checks.[cite: 1] |
+| `environment_generation_agent.py:311–335` | Connects specification-based critique to repair by taking `visual_result.actionable_feedback` and passing it into `repair_with_feedback`.[cite: 1] |
+| `isaaclab_arena/agentic_environment_generation/inference_backend.py:447–496` | Implements `InferenceBackend.multimodal_chat`, which accepts image bytes or paths, encodes them into the provider request, and returns a response.[cite: 1] |
+| `isaaclab_arena/agentic_environment_generation/visual_critic.py:33–142` (specifically lines `96, 105`) | Implements `VisualSceneCritic`, accepting rendered images and invoking cloud/local VLM paths to produce a `VisualCriticResult` with anomalies and actionable feedback.[cite: 1] |
+| `isaaclab_arena/agentic_environment_generation/spatial_geometric_oracle.py:455–540` | The spatial oracle that constructs support, clearance, and reachability factors and invokes numerical relaxation.[cite: 1] |
+| `isaaclab_arena_examples/agentic_environment_generation/web_api/generation.py:173–193` | The dashboard generation adapter that explicitly returns a warning indicating that no simulation or policy evaluation was run.[cite: 1] |
+| `isaaclab_arena/tests/test_visual_and_graph_rag.py:62–111` | A visual critic test covering heuristic occlusion detection using authored coordinates, running without images or a backend.[cite: 1] |
+| `isaaclab_arena/tests/test_environment_generation_agent.py:120–178` | A generation repair test providing mocked invalid/repaired model responses to check SHACL repair sequences rather than testing rendered-scene corrections.[cite: 1] |
+| `isaaclab_arena/tests/test_inference_backend.py:186–227` | A multimodal transport test checking serialized request fields and image encoding, but not actual VLM physical judgment logic.[cite: 1] |
+| `isaaclab_arena/tests/test_dcrg_loop.py:73–84, 125–149` | A DCRG loop test using synthetic episode evidence to verify acceptance and rejection behaviors of the controller.[cite: 1] |
+| `isaaclab_arena_examples/tests/test_workbench_snapshots.py:315–352` | An opt-in GPU snapshot test verifying rendered artifacts, PNG dimensions, content variation, and freshness behavior.[cite: 1] |
+| `isaaclab_arena_examples/agentic_environment_generation/web_api/supervisor.py:42–63` | Contains the `Supervisor` implementation used to dispatch generation, snapshots, builds, and policy evaluations.[cite: 1] |
+| `isaaclab_arena_examples/agentic_environment_generation/web_api/editor_execution.py:57–102` | Demonstrates how the `EditorExecution` service delegates work to bounded workers.[cite: 1] |
+| `isaaclab_arena_examples/agentic_environment_generation/web_api/snapshot_worker.py:24–32` | Highlights misplaced application logic where the snapshot worker imports rendering helpers directly from the review GUI (`review_gui/simapp/`).[cite: 1] |

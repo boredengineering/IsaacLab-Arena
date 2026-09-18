@@ -599,6 +599,50 @@ The `/neo4j` page provides read-only queries against a separately configured
 Neo4j database. These persisted query results are distinct from the editor's
 authored graph. An unavailable database does not disable YAML editing.
 
+### Task-driven trajectory assessment CLI
+
+Inside the non-root simulation runtime, `isaaclab_arena_examples/tools/render_policy_trajectory.py`
+captures one supplied task's policy rollout and retains a structured visual assessment.
+It executes the configured policy and calls a model; it is not a readiness check.
+Supply `--env_graph_spec_yaml` and `--policy_config_yaml_path`, plus the matching
+`--policy_type`, `--remote_host` and `--remote_port` for the intended policy service.
+The existing legacy policy/port defaults are retained; they do not discover the running service.
+`--device` selects the simulator and environment-builder device. The Arena-side policy
+device follows it unless explicitly overridden with `--policy_device` (for example,
+`--device cuda:1 --policy_device cpu`). This does not select the remote policy server's device.
+
+Use `--model` and optionally `--base_url` to select the assessment model, or use the
+existing inference-backend configuration. Do not put credentials in command arguments.
+`--camera_names` selects camera observation keys; omission captures available cameras.
+`--num_steps` and `--frame_interval` bound the rollout and sampling, with a maximum
+of 64 selected images. Captures include the initial observation and sampled observations
+before termination, including the final budget step when it does not terminate.
+Isaac Lab can auto-reset before returning a terminal step's observations: those frames
+are omitted, and unavailable terminal imagery is recorded rather than presented as the
+end of the trajectory. This tool does not install a pre-reset recording hook.
+
+Each run needs a new `--out_dir`; omission creates a unique directory under
+`eval_output/trajectory_assessments/`. The directory retains `spec.yaml`, PNG frames,
+`capture.json` (actual step count and termination reason), and, on valid assessment,
+`assessment.json` (model identifier, specification/image digests, observations and feedback).
+Both receipts retain `policy_instruction`, the exact return from `policy.set_task_description`.
+The environment's instruction is passed first; policy-specific fallback remains in the policy
+when that instruction is null. The assessment prompt distinguishes this resolved instruction
+from the authored specification, which remains unchanged even if their descriptions differ.
+After capture completes, `capture.json` is written before policy/environment teardown.
+If either teardown fails, the run fails, the completed capture evidence remains, and no
+assessment model is called or `assessment.json` produced. Environment closure is still
+attempted after a policy-close failure; there is no automatic retry or resume API.
+The reusable implementations live in `isaaclab_arena/agentic_environment_generation/trajectory_capture.py`
+and `trajectory_assessment.py`; importing the CLI does not start simulation.
+
+Assessment status is `satisfactory`, `issues_detected`, or `inconclusive`. It is a VLM
+observation, not measured task success or physical certification (`task_success` remains
+unknown). No captured frames means an inconclusive receipt without a model call.
+Malformed model responses fail rather than becoming accepted assessments; captured
+evidence remains available. The tool does not automatically refine, publish to Neo4j,
+invoke DCRG, or certify a repaired environment.
+
 ## Stop and troubleshoot
 
 To stop only the workbench frontend and its owned API supervisor:

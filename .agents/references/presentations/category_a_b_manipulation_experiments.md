@@ -419,7 +419,7 @@ docker exec -it \
   -e OPENAI_API_KEY="$OPENAI_API_KEY" \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-  --mode generate \
+  -- mode resolve \
   --model "gpt-6-astra" \
   --prompt "Create an environment for a Franka robot on a maple table where the task is to pick up the red apple from the front right and place it into the wooden bowl on the front left. Position the maple table at [-0.25, 0.0, 0.0] and use droid_abs_joint_pos at [-0.55, 0.0, 0.0]." \
   --env_name droid_apple_to_wooden_bowl \
@@ -430,7 +430,7 @@ docker exec -it \
   -e GEMINI_API_KEY="$GEMINI_API_KEY" \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-  --mode generate \
+  -- mode resolve \
   --model "gemini-2.5-pro" \
   --prompt "Create an environment for a Franka robot on a maple table where the task is to pick up the red apple from the front right and place it into the wooden bowl on the front left. Position the maple table at [-0.25, 0.0, 0.0] and use droid_abs_joint_pos at [-0.55, 0.0, 0.0]." \
   --env_name droid_apple_to_wooden_bowl \
@@ -441,7 +441,7 @@ docker exec -it \
   -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-  --mode generate \
+  -- mode resolve \
   --model "anthropic/claude-sonnet-4.5" \
   --prompt "Create an environment for a Franka robot on a maple table where the task is to pick up the red apple from the front right and place it into the wooden bowl on the front left. Position the maple table at [-0.25, 0.0, 0.0] and use droid_abs_joint_pos at [-0.55, 0.0, 0.0]." \
   --env_name droid_apple_to_wooden_bowl \
@@ -574,12 +574,13 @@ RETURN p, environment_link;
 * **Prompt**: *"Grasp the yellow banana from the right side of the table and set it onto the white ceramic plate on the left."*
 
 #### 1. Environment Generation Command
+
 ```bash
 docker exec -it \
   -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-  --mode generate \
+  --mode resolve \
   --model "anthropic/claude-sonnet-4.5" \
   --prompt "Create an environment for a Franka robot on a maple table where the task is to grasp the yellow banana from the right side of the table and set it onto the white ceramic plate on the left. Use droid_abs_joint_pos at [-0.55, 0.0, 0.0] and maple_table_robolab at [-0.25, 0.0, 0.0]." \
   --env_name droid_banana_to_plate \
@@ -623,7 +624,7 @@ docker exec -it \
   -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-  --mode generate \
+  -- mode resolve \
   --model "anthropic/claude-sonnet-4.5" \
   --prompt "Create an environment for a Franka robot on a maple table where the task is to pick up the fresh lemon from the front right and carefully place it on the clay plate at the front left. Embodiment droid_abs_joint_pos at [-0.55, 0.0, 0.0]." \
   --env_name droid_lemon_to_clay_plate \
@@ -710,7 +711,7 @@ docker exec -it \
   -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-  --mode generate \
+  -- mode resolve \
   --model "anthropic/claude-sonnet-4.5" \
   --prompt "Create an environment for a Franka robot on a maple table where the task is to grasp the red bell pepper from the front right table sector and drop it into the blue bin on the front left." \
   --env_name droid_bell_pepper_to_blue_bin \
@@ -779,7 +780,7 @@ docker exec -it \
   -e OPENAI_API_KEY="$OPENAI_API_KEY" \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-  --mode generate \
+  -- mode resolve \
   --model "gpt-6-astra" \
   --prompt "Pick up the red tomato soup can from the front right of the maple table and deposit it into the blue sorting bin on the front left. Position maple_table_robolab at [-0.25, 0.0, 0.0] and droid_abs_joint_pos at [-0.55, 0.0, 0.0]." \
   --env_name droid_tomato_soup_to_blue_bin \
@@ -790,7 +791,7 @@ docker exec -it \
   -e GEMINI_API_KEY="$GEMINI_API_KEY" \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-  --mode generate \
+  -- mode resolve \
   --model "gemini-2.5-pro" \
   --prompt "Pick up the red tomato soup can from the front right of the maple table and deposit it into the blue sorting bin on the front left. Position maple_table_robolab at [-0.25, 0.0, 0.0] and droid_abs_joint_pos at [-0.55, 0.0, 0.0]." \
   --env_name droid_tomato_soup_to_blue_bin \
@@ -801,7 +802,7 @@ docker exec -it \
   -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-  --mode generate \
+  -- mode resolve \
   --model "anthropic/claude-sonnet-4.5" \
   --prompt "Pick up the red tomato soup can from the front right of the maple table and deposit it into the blue sorting bin on the front left. Position maple_table_robolab at [-0.25, 0.0, 0.0] and droid_abs_joint_pos at [-0.55, 0.0, 0.0]." \
   --env_name droid_tomato_soup_to_blue_bin \
@@ -1007,7 +1008,7 @@ docker exec -it \
   -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-  --mode generate \
+  -- mode resolve \
   --model "anthropic/claude-sonnet-4.5" \
   --prompt "Create an environment for a Franka robot on a packing table where the task is to pick up the Cheez-It cracker box from the packing table and place it into the brown cardboard box. Use droid_abs_joint_pos at [-0.55, 0.0, 0.0]." \
   --env_name droid_cracker_box_to_brown_box \
@@ -1051,7 +1052,7 @@ docker exec -it \
   -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-  --mode generate \
+  -- mode resolve \
   --model "anthropic/claude-sonnet-4.5" \
   --prompt "Create an environment for a Franka robot on a maple table where the task is to pick the blue Spam can from the right section and drop it into the grey bin on the left. Use droid_abs_joint_pos at [-0.55, 0.0, 0.0] and maple_table_robolab at [-0.25, 0.0, 0.0]." \
   --env_name droid_spam_can_to_grey_bin \
@@ -1210,7 +1211,7 @@ docker exec -it \
   -e OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-  --mode generate \
+  -- mode resolve \
   --model "anthropic/claude-sonnet-4.5" \
   --prompt "Create an environment for a Franka robot on a maple table where the task is to pick up the tuna can from the front right sector and set it onto the small plate on the front left." \
   --env_name droid_tuna_can_to_small_plate \

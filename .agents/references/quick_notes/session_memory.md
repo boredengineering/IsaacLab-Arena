@@ -1,6 +1,100 @@
 # Session memory
 
-## Current checkpoint — 2026-09-17: implementation paused
+## Current study and progress — 2026-09-18
+
+### Trajectory-tool follow-up — narrowly resumed
+
+The user subsequently authorized finishing `render_policy_trajectory.py` before returning to the hypothetical event-mapping study. This supersedes the implementation pause **only for that tool**; dashboard/orchestration work, terminal configuration, service restarts and queued workloads were not resumed.
+
+- Closed native parser registration and failure-exit gaps: simulator options are registered before required trajectory inputs; errors are printed before `SimulationApp.close(exit_code=1)` can terminate the process. Native `--help` exits 0. The installed SimulationApp's explicit `exit_code` parameter was inspected; this is not a claim about every simulator version.
+- Completed capture manifests are retained before policy/environment cleanup. Cleanup failures preserve capture evidence, propagate failure and prevent assessment-provider construction.
+- Both receipts retain the exact resolved `policy_instruction`, distinct from the authored task, and assessment receives both. Simulator device is forwarded; `--policy_device` defaults to it and supports an explicit override.
+- Final independent review `deleg_aa90a307` passed with no security concerns, logic errors or suggestions after the three blockers from `deleg_21d7a1fa` were fixed by `deleg_9476209e` and parent-verified. The narrow tool correction is complete; live GR00T-plus-VLM acceptance remains unperformed, not implied by that code-review verdict.
+- Parent final offline rerun: `web/arena-workbench/tests/e2e/functional-v7/.runs/arena-f0-backend-1ee01539491d` — 59 tests, zero failures/errors/skips; all forbidden-call counters zero and owned container cleanup verified. Scoped host pre-commit and `git diff --check` passed. This replaces the earlier 43-test result for the current trajectory source, not for unrelated harnesses.
+- Native final-source check: `outputs/trajectory-tool-native-check/final-run/native-check.json` binds source/image hashes and records **nine real 1280×720 RGB frames from three cameras over two zero-action steps**. A deliberately injected pre-provider failure preserved `capture.json`/PNGs and returned process exit 1. `final-native.log` retains diagnostics; no matching smoke process remained. Material/texture warnings remain, so this is capture/lifecycle evidence, not rendering-fidelity certification.
+- No live GR00T inference, VLM assessment, graph write, automatic repair, deployment or commit. The native check uses the existing maple-table test fixture and real ZeroActionPolicy, not the hypothetical banana task. Offline assessment responses remain explicitly synthetic. Ignored `.runs/` and `outputs/` evidence will not be preserved by a normal source commit.
+
+### Previous interruption and preservation boundary
+
+The user requested: **“please save the progress and the study we have performed into a session memory so we can remember.”** This is preservation only. Immediately beforehand they reported **“have you messed up the cli again ? I cannot see the terminal anymore.”** Application work was paused. Do not resume edits, run research workloads, restart services or release queued work from this record.
+
+The terminal-display issue is **unresolved**. A read-only probe observed Hermes running on `pts/2` and the tool command channel responding; this does not prove the user's display works. Desktop discovery exposed container processes but no host application windows; attempted capture did not yield a usable view. The pending question is whether the terminal panel/window disappeared or remains open with blank/corrupted text, and whether it is inside VS Code or a separate terminal. No terminal/Hermes configuration changes, process kills or service restarts were performed in that investigation. Do not assume either causation by the code change or absence of an effect.
+
+Current checkout observation: branch `dev/0.3.0-prerelease`, HEAD `0fb91a10aeb7` (the user's later commit, not an assistant commit). The presentation file `.agents/references/presentations/category_a_b_manipulation_experiments.md` was already modified before this task and remains user-owned. No staging/commits were performed. The [current handoff](../plans/dashboard_cli_workflow_parity/research-stack-implementation-handoff.md) owns overall status; this note retains the study and narrow change evidence. The older dashboard disappearance after refresh remains independently unresolved.
+
+### Purpose and method of the study
+
+The user wanted a **hypothetical, step-by-step terminal workflow followed by event modeling**, not execution of the example commands. They want the domain model and DDD documentation to drive GraphQL information design/API contracts, not another screen or a replacement backend. No banana-scene generation, simulation, VLM request, policy evaluation or graph operation was launched during this exercise.
+
+For each meaningful outcome, ask: what happened; to which identifiable object; who knows authoritatively; where is it retained; what should the user see/do? Also establish preconditions, permitted actions, recovery and lifetime. Commands request work; events record facts. Accepted submission is not completed generation. GraphQL mutations expose commands; queries expose retained read models. Resolvers/cache keys do not create ownership or persistence. TanStack Query is a cache, not durable workflow state; URL identity does not preserve an unsaved draft. These distinctions do not require event sourcing or microservices.
+
+### What the CLI paths actually do
+
+- `--mode resolve` is the valid mode, not `generate`. New generation retrieves Graph-RAG priors when available, infers a spec, grounds/reifies relations, runs bounded specification-level validation/repair, saves a version and attempts graph synchronization. Retrieval can be unavailable without aborting; process success does not prove graph publication or physical correctness.
+- The generation loop caps its iterations at `min(max_retries, 2)` and can return a fallback with `converged=False`. Its final fallback is not run through another complete validation pass. `generation_completed`/returned YAML means an output exists, not all requested criteria satisfied (`environment_generation_agent.py:248–388`; runner `resolve_env_spec`).
+- `--mode build` loads the captured spec, constructs the environment, performs a specification-based critic call, runs zero-action steps and optionally records. Recording alone does not feed images into the critic. It is not policy-task evaluation or DCRG.
+- The assistant initially proposed two Builds against the same candidate merely to add recording. That was an unnecessary split: record in the first Build when evidence is required. A subsequent Build is justified after refinement changes the candidate.
+- With only a visual observation/text feedback, the existing correction path is `resolve --base_spec <exact-version> --feedback <observation-and-constraints>`. It calls `refine_spec`; it does not perform New-generation prior retrieval. The new version must be reassessed. Illustrative v1/v2 paths in the discussion were hypothetical, not produced artifacts.
+- `--mode auto_heal` consumes matching evaluation telemetry/metrics/episode records and policy configuration, diagnoses and patches a new version. It conditionally uses geometric relaxation, but does not invoke DCRG, fresh generation-prior retrieval, automatic video interpretation or the next evaluation. Missing metrics default some rates to zero in the current legacy code; a Build-video directory is not valid policy-failure evidence.
+- `dcrg_runner.py` owns a separate bounded measured loop: baseline evaluation → graph feedback → allowed XY proposal → candidate validation → reevaluation → accept/reject. It preserves task/physics/Z/other configuration and currently allows only target XY within bounds. It is not a general repair for wrong embodiment, support/Z or arbitrary scene defects. Acceptance by its task/lift comparison is separate from its terminal success condition.
+
+### Main findings and proof boundaries
+
+The important gap is **application-owned transitions and outcome contracts**, not lack of every component. A wrong initial proposal is expected; silently stopping with an unverified candidate is different. Keep `CandidateProduced`, execution completion, assessment and acceptance distinct. Authored graph, realized placement, visual assessment and measured task success are different representations/evidence. A policy can fail in a valid scene; changing the scene to make that policy succeed may invalidate the research objective. Graph relations do not execute control flow.
+
+Pre-fix source audit at HEAD `0fb91a10ae`: 828 tracked first-party Python files parsed with no errors; seven static assertions passed. Main generation and Build called `evaluate_scene_spec(spec)` with no images; the VLM branches require `rendered_images`. Generation already fed critic feedback into repair, but it was specification-based critique in that path. The standalone `tools/render_policy_trajectory.py` captured frames, called `multimodal_chat`, printed and ended; its prompt assumed failed red-apple manipulation and a particular viewpoint. The dashboard adapter explicitly states that generation does not run simulation/policy evaluation. The static audit is saved at `/tmp/arena_visual_loop_audit.py` and `/tmp/arena_visual_loop_audit.json`; it records **pre-fix** source hashes and is not current runtime acceptance. `/tmp` and ignored archives are not durable Git evidence.
+
+Independent audit `deleg_44bceaf4` checked counterexamples and test scope. Visual-critic tests used authored coordinates without images; generation repair used synthetic responses; multimodal tests verified request serialization; DCRG controller tests used synthetic episodes; an opt-in real snapshot test validates PNGs/artifact inventory, not repair. These tests are useful but do not establish the full visual loop. `docs/pages/example_workflows/agentic_env_gen/dcrg.rst:180–209` documents a real DCRG baseline/candidate rejection and resume pilot; raw evidence is external and was not re-read here. Therefore **“no closed loop exists” is incorrect**; the narrower rendered-image → VLM → automatic repair → rerender acceptance claim was not established in the inspected code/evidence.
+
+The user clarified that external-agent coordination (Hermes/Claude Code/Antigravity reading stdout and choosing another command) **was never the intended architecture**. Such a caller can technically orchestrate the tools, but it is a gap-filling workaround, not the target. No retained end-to-end acceptance of the intended application-owned visual-repair workflow was found. This finding does not diagnose the dashboard refresh failure.
+
+### Proposed solution — discussed, not broadly implemented or approved for rollout
+
+- One application-owned durable coordinator, with explicit specialist strategies rather than one enormous loop or unrelated loops that reset their budgets. Freeze intent, acceptance criteria, preserved constraints, allowed changes, model/runtime profiles, total budget and effect policy.
+- Sequence: generate/load → validate → realize/capture → assess → accept, collect more evidence, request permitted repair, or stop with an explicit reason. Every revised candidate needs fresh relevant evidence. Inconclusive must not become pass. A VLM contributes observations/hypotheses, not unqualified physical truth or arbitrary execution authority.
+- Reuse the current generation/refiner, renderer, critic, policy runner and DCRG. DCRG remains a measured experiment with its own intervention contract; use it after scene prerequisites when policy-performance improvement is requested and allowed. No claim that VLM augmentation improves DCRG until measured.
+- The coordinator owns the overall outcome/phase, child jobs, decisions, budgets, cancellation and recovery. It must not occupy the existing serial Supervisor's worker slot while waiting for a child. Retained decisions/next-work intent and idempotency prevent duplicate model/simulator execution; unknown outcomes require reconciliation, not blind retry.
+- SQLite is **not required** by DDD/CQRS/orchestration. It was initially suggested because the existing Journal uses it. Following the user's challenge, the proposed target is Neo4j as workflow/provenance authority, with transactional claims/transitions, budget reservation, concurrency fencing and result receipts. Images/videos/YAML remain artifact files. Explicitly migrate/adapt relevant existing Journal responsibilities; do not keep two authoritative workflow histories. No SQLite→Neo4j migration has been implemented.
+- Keep operational candidates/assessments distinct from accepted reusable research priors. Retention/publication is not successful experience; retrieve exact attributed context/evidence. Do not claim native lossless RDF-star or causal proof from reification alone.
+- Consolidate **reusable implementation** under `isaaclab_arena/agentic_environment_generation/`. Existing engines and `dcrg/` stay. Proposed `workflow/`, `execution/`, `interfaces/` packages would separate decisions, workers and CLI/HTTP adapters. Examples become thin compatibility callers; GUI widgets and tests stay in appropriate interface/test locations. This target tree is a proposal, not a completed repository reorganization.
+- Concrete misplaced responsibilities: the example runner owns substantial application behavior; snapshot worker imports capture from `review_gui/simapp`; trajectory tool owned import-time simulator startup and a hardcoded prompt. Core must not depend on examples; importing contracts must not start simulation/provider calls. Both CLI and eventual GraphQL call the same application service.
+- First acceptance target: a single application submission observes a supported defect, retains assessment, produces a constrained repair, rerenders and reassesses without an external agent writing feedback/choosing the next command. Also prove forbidden-change rejection, inconclusive/exhausted stops and restart without duplicate completed work. This full workflow remains **unimplemented/unverified**.
+
+### Narrow fix explicitly authorized and implemented
+
+User: **“About the render_policy_trajectory.py ... It is not intended to be a scenario-specific prompt and output printing. It must be fixed.”** This authorized the targeted tool correction, not the full orchestration/storage/reorganization proposal.
+
+Changed/new production code:
+
+- `isaaclab_arena/agentic_environment_generation/trajectory_capture.py` — reusable bounded single-Arena-environment camera capture; selected or available camera keys, initial/sampled frames, actual steps/stop reason and image-count bound.
+- `isaaclab_arena/agentic_environment_generation/trajectory_assessment.py` — task/spec-driven prompt, supplied frame bytes, strict bounded JSON assessment (`satisfactory`, `issues_detected`, `inconclusive`), spec/image digests, model identity and retained `assessment.json`. Returned data supports application callers; stdout is only a summary. Empty capture retains inconclusive without constructing/calling a backend. Malformed responses do not become accepted receipts; an existing receipt is not overwritten. `task_success` remains unknown.
+- `isaaclab_arena_examples/tools/render_policy_trajectory.py` — import-safe parser and explicit simulator lifecycle; delegates to core helpers, configurable assessment model/endpoint/cameras, unique generic output default, new explicit run directory, retained `spec.yaml`, frames, `capture.json`, `assessment.json`. Legacy policy/port defaults remain compatibility defaults, not service discovery.
+- Example README has a task-driven trajectory-assessment section with effects, outputs, limitations and migration from the scenario-specific output path.
+- New `isaaclab_arena/tests/test_trajectory_assessment.py`; exact-file offline admission in `functional-v7/stage.py` and `backend_checks.py`, with `test_backend_checks.py` regression. Existing defaults and isolation guards preserved.
+
+Independent review `deleg_85bfe934` found two blockers; fixes by `deleg_07ced246` were parent-verified and re-reviewed by `deleg_e5f9e477` (passed, no focused security/logic findings):
+
+1. IsaacLab resets ended environments before returning step observations. Terminal/truncated returned images are now **omitted**, with `terminal_image_unavailable` and stop reason in capture, prompt and assessment; the last supplied image must not be called terminal. No pre-reset recorder hook was added.
+2. Successfully constructed policy/provider clients are now closed; nested cleanup preserves environment cleanup after policy-close errors, and main closes SimulationApp. Shared backend constructor-failure cleanup was not changed. SimulationApp still lives through model assessment; no native lifecycle acceptance was claimed.
+
+### Verification and retained evidence
+
+Strict RED→GREEN was exercised in the existing nonroot, network-none, read-only staged-source runner. All model/simulator seams in these tests are explicitly synthetic; no live pixels or completions were fabricated as research evidence.
+
+Evidence root: `web/arena-workbench/tests/e2e/functional-v7/.runs/` (ignored; not preserved by a normal commit).
+
+- Initial feature RED: `arena-f0-backend-41fec9040c6d`; prompt/retention GREEN: `arena-f0-backend-079507b1bbdf`.
+- Validation/import regressions: `arena-f0-backend-444305ac1057`, `arena-f0-backend-0c59bdadf684`; later initial wiring GREEN: `arena-f0-backend-9c8c9fff3069` (16 tests, historical subset).
+- Autoreset RED/GREEN: `arena-f0-backend-f25cf5df09a7` / `arena-f0-backend-9fee418f8900`.
+- Cleanup RED/GREEN: `arena-f0-backend-3a44d36f9ed4` / `arena-f0-backend-1c31df07dc1f`.
+- Final **parent rerun**: `arena-f0-backend-a8702b439854/run-proof.json` — **43 tests passed**, all forbidden network/provider/graph/render/workload/subprocess counters zero; cleanup verified, no owned resources remaining. Corresponding JUnit: `evidence/pytest.xml`.
+- Runner contract suite: `arena-core-units-596009bd0f94` — 96 tests passed, owned cleanup verified.
+- Scoped pre-commit passed on production helpers, CLI, trajectory tests and README; `git diff --check` passed. Whole touched-harness pre-commit exposed existing R501/R502/C901 findings; affected baseline function ASTs were verified unchanged. Unrelated formatter/license churn in harness files was reverted, retaining only intended admission changes. An isolated harness shutdown AttributeError was reported by the fix worker; it did not change pytest/proof success and was not fixed in this scope.
+- No live rollout, provider call, graph write, service restart, queue release, deployment, staging or commit. Full orchestration, physical scene acceptance, task success and the terminal-display problem remain unresolved.
+
+Recovery: Hermes session `20260916_171442_92ddc8`; audit/review units listed above. Source line references in earlier chat refer to the pre-fix script and may have shifted. Preserve current dirty work; do not bulk-add `.runs`, output/model/data directories or unrelated presentation changes.
+
+## Previous checkpoint — 2026-09-17 (historical dashboard context)
 
 The user reported **“I refreshed the page and everything disappeared”** after the v7 Resume queue change. They requested preservation and consolidation, intend to commit themselves, and will reconsider the strategy. No new strategy has been agreed. Stop implementation and live effects; older approvals are historical, not permission to continue automatically.
 

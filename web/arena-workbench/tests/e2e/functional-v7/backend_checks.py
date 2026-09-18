@@ -22,8 +22,11 @@ def selection(names):
 
 
 def core_only(names):
-    """Only the exact Documents test uses image dependencies without acquisition."""
-    return selection(names) == ["isaaclab_arena/tests/test_workbench_editor_revisions.py"]
+    """Exact core suites use image dependencies without API dependency acquisition."""
+    return selection(names) in (
+        ["isaaclab_arena/tests/test_workbench_editor_revisions.py"],
+        ["isaaclab_arena/tests/test_trajectory_assessment.py"],
+    )
 
 
 class CoreImportBoundary:

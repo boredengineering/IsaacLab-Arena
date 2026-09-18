@@ -1,20 +1,24 @@
 # Dashboard implementation checkpoint — paused
 
-Updated: 2026-09-17. This is the single current dashboard handoff, not a new strategy or an instruction to resume implementation.
+Updated: 2026-09-18. This is the single current handoff, not authorization to resume implementation. Detailed study and narrow-fix evidence are retained in the [existing session memory](../../quick_notes/session_memory.md#current-study-and-progress--2026-09-18).
 
 ## 1. User decision and latest failure
 
-The user reports: **“I refreshed the page and everything disappeared.”** They are concerned that successive plans and fixes have made the repository convoluted. They requested saved session progress and consolidated references, then intend to commit themselves and reconsider the strategy.
+Latest interruption: **“have you messed up the cli again ? I cannot see the terminal anymore.”** Code work stopped; the user then requested saving progress and the event-modeling study. Hermes was observed running with a responsive tool channel, but the host terminal display could not be inspected. Cause and whether the panel disappeared versus text became blank are unknown. No terminal/Hermes configuration change or service restart was performed. Preserve current edits; do not resume from older approvals.
 
-**Implementation is paused. Dashboard reliability is unresolved; full V7/CLI parity is not accepted.** Earlier “live delivery” and “fixed” reports describe bounded observations before this report, not reliable user delivery. It is not established whether the disappearance affects rendering, session state, unsaved drafts or persisted data. No data-loss diagnosis or recovery is claimed. No further application edits, service changes or workload release are part of this documentation checkpoint.
+The earlier **“I refreshed the page and everything disappeared”** dashboard report remains independently unresolved. The study established a missing application-owned visual-assessment/repair coordination path, not a proven cause of either display symptom.
+
+The user subsequently authorized finishing the narrow `render_policy_trajectory.py` correction before continuing the event-mapping study. The tool delegates to core task-driven capture/assessment helpers, preserves completed capture evidence across cleanup failures, retains the resolved policy instruction, forwards device selection, and preserves failure exit status through native shutdown. The parent reran **59 isolated tests** successfully. A final-source native smoke check retained nine real RGB frames over two zero-action steps and verified exit 1 for an injected pre-provider failure. No live GR00T/VLM inference, graph operation or full repair-loop acceptance occurred. See the session-memory follow-up for exact evidence and material/texture warnings. This narrow authorization does not resume dashboard implementation or shared services.
+
+**Broader implementation is paused. Dashboard reliability is unresolved; full V7/CLI parity is not accepted.** Earlier “live delivery” and “fixed” reports describe bounded observations before this report, not reliable user delivery. It is not established whether the disappearance affects rendering, session state, unsaved drafts or persisted data. No data-loss diagnosis or recovery is claimed. Only the narrowly authorized trajectory-tool follow-up above resumed; service changes and shared workload release remain outside this checkpoint.
 
 ## 2. Checkout and commit boundary
 
 - Checkout: `/workspaces/IsaacLab-Arena`, branch `dev/0.3.0-prerelease`.
-- HEAD at checkpoint: `f9519bd3ef` (`reviewing dashboard`, 2026-09-16).
+- HEAD observed 2026-09-18: `0fb91a10aeb7` (`preparing to fix the schema, dashboard major issues`, 2026-09-17). The older `f9519bd3ef` baseline is historical.
 - There are modified tracked files and untracked implementation/evidence files. No staging or commit was performed for this handoff; the user owns the commit decision.
 - A commit preserves selected source/docs, **not** the installed host helper, private profiles, SQLite journals, browser state, cached images/dependency volumes or ignored verification artifacts.
-- No new strategy has been selected. Old plan authorizations below do not override the pause.
+- Application-owned bounded orchestration, Neo4j workflow authority and consolidation of reusable tooling into the core package were proposed during the study. They are not implemented/rolled out or broadly authorized. The trajectory-tool fix was the only newly authorized implementation slice. The pre-existing modified presentation remains user-owned.
 
 ## 3. Intended workflow retained
 
@@ -22,7 +26,7 @@ The baseline remains the existing [agentic generation README](../../../../isaacl
 
 LPG/Neo4j, RDF/reification, provenance, measured outcomes and bounded DCRG corrections remain the research context. Do not equate declared relations with physically realized placement, or RDF reification with proven native RDF-star/lossless round-tripping. The A2 banana/plate placement failure remains unresolved: valid YAML and a short Build did not prove objects spawned on the table.
 
-## 4. What exists, and what was actually observed
+## 4. Earlier dashboard implementation and observations (2026-09-17)
 
 | Area | Source / bounded observation | Remaining limit |
 | --- | --- | --- |

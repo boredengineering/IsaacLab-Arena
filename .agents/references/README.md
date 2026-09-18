@@ -1,16 +1,16 @@
 # Agent references — start here
 
-- **Updated**: 2026-09-17
-- **Current dashboard status**: paused by the user after disappearance on refresh; not accepted as reliably delivered.
+- **Updated**: 2026-09-18
+- **Current status**: implementation paused after the user reported a missing terminal display. The narrow trajectory-tool fix has isolated verification; the full application-owned workflow and earlier dashboard refresh reliability remain unaccepted.
 - **Purpose**: navigation and document ownership, not proof of runtime success or authorization to execute an old plan.
 
 ## Current reading order
 
 1. **[Dashboard checkpoint](plans/dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)** — the single current handoff: latest failure, implemented changes, last-known queue/runtime state, evidence limits and commit boundary.
-2. **[Session memory](quick_notes/session_memory.md)** — current user decision and conversation recovery anchor. Earlier research notes remain below its historical boundary.
+2. **[Session memory](quick_notes/session_memory.md)** — event-modeling/DDD study, actual CLI boundaries, proposed application-owned Neo4j orchestration and code consolidation, narrow trajectory-tool fix with evidence, and unresolved terminal interruption. Earlier research notes remain below its historical boundary.
 3. **[Historical implementation log](plans/dashboard_cli_workflow_parity/implementation-progress.md)** — detailed chronology only. Do not combine its contradictory “current” checkpoints into a new acceptance claim.
 
-The user will review/commit and reconsider the strategy. Do not restart implementation, services or queued work from older authorization language. No new strategy is introduced by this consolidation.
+The user requested preservation. Proposed orchestration/storage consolidation is not implemented or blanket authorization to proceed. Do not restart implementation, services or queued work from older authorization language; no staging/commit is part of this checkpoint.
 
 ## Document roles
 

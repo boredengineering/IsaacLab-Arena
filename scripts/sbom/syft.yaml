@@ -1,0 +1,36 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+check-for-app-update: false
+parallelism: 2
+enrich: []
+format:
+  pretty: true
+package:
+  search-unindexed-archives: false
+  search-indexed-archives: false
+file:
+  content:
+    globs: []
+  metadata:
+    selection: owned-by-package
+    digests: [sha256]
+python:
+  search-remote-licenses: false
+  guess-unpinned-requirements: false
+javascript:
+  search-remote-licenses: false
+  include-dev-dependencies: true
+java:
+  use-network: false
+  use-maven-local-repository: false
+golang:
+  search-local-mod-cache-licenses: false
+  search-local-vendor-licenses: false
+  search-remote-licenses: false
+  use-packages-lib: false
+cache:
+  dir: ''
+  ttl: 0

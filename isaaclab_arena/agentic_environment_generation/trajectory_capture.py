@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 
-def capture_trajectory(env, policy, *, out_dir, num_steps, frame_interval, camera_names, save_frame):
+def capture_trajectory(env, policy, *, out_dir, num_steps, frame_interval, camera_names, save_frame, sample_state=None):
     """Capture reset and sampled observations, excluding post-autoreset end-step observations.
 
     Args:
@@ -20,6 +20,8 @@ def capture_trajectory(env, policy, *, out_dir, num_steps, frame_interval, camer
         frame_interval: Capture frequency in policy steps.
         camera_names: Explicit camera keys, or None to capture available camera observations.
         save_frame: Callable taking one camera observation and a destination PNG path.
+        sample_state: Optional trusted callback(env, step), invoked at reset and every
+            nonterminal post-step; owns bounded retention. Return value is ignored.
 
     Returns:
         Frame paths, actual executed steps, stop reason and terminal-image unavailability.
@@ -52,6 +54,8 @@ def capture_trajectory(env, policy, *, out_dir, num_steps, frame_interval, camer
             frames[label] = path
 
     capture(obs, 0)
+    if sample_state is not None:
+        sample_state(env, 0)
     stop_reason = "step_budget"
     for executed_steps in range(1, num_steps + 1):
         action = policy.get_action(env, obs)
@@ -60,6 +64,8 @@ def capture_trajectory(env, policy, *, out_dir, num_steps, frame_interval, camer
         if ended or limited:
             stop_reason = "terminated_and_truncated" if ended and limited else "terminated" if ended else "truncated"
             break
+        if sample_state is not None:
+            sample_state(env, executed_steps)
         if executed_steps % frame_interval == 0 or executed_steps == num_steps:
             capture(obs, executed_steps)
     return {

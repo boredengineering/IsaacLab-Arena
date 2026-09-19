@@ -11,6 +11,7 @@ Schema provisioning and initialize_scope are administrative, quiescent gates:
 finish them before starting cooperative readers/writers. Concurrent initialization
 is not an acceptance claim of this suite. No admission/unknown-outcome retries.
 """
+
 import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -54,6 +55,33 @@ def scoped(driver, workspace=None, deployment="disposable-tests"):
     assert s.verify_schema()
     s.initialize_scope()
     return s
+
+
+def test_result_read_model_conservative_pending_budget(driver):
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import (
+        canonical_json,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.read_model import (
+        workflow_result,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_scene_loop import scene_contract
+
+    store = scoped(driver)
+    contract = scene_contract()
+    run = store.admit("read-model", canonical_json(contract), canonical_json(contract), 1)
+    result = workflow_result(store, run.run_id, protect=lambda value: None)
+    assert result["schema_version"] == 1
+    assert result["budget"]["reserved"]["model_calls"] == 0
+    assert result["budget"]["remaining"]["model_calls"] == contract.budget.max_model_calls
+    assert result["budget"]["actual_consumption"] == "unknown"
+    assert result["publication"] == "not_requested"
+    assert result["experiment"] == "not_requested"
+    assert [c["criterion_id"] for c in result["criteria"]] == [c.criterion_id for c in contract.criteria]
+    assert all(c["verdict"] == "not_run" for c in result["criteria"])
+    assert result["evidence"] == []
+    assert result["recovery"] == "known_unreleased"
+    assert result["available_actions"] == ["cancel", "resume"]
+    assert store.get_run(run.run_id) == run
 
 
 def test_admit_readback_replay_conflict_capacity_scope_events(driver):
@@ -312,10 +340,32 @@ def test_owner_epoch_is_stable_and_dirty_owner_cannot_be_replaced(driver):
     assert replacement.begin_owner("owner-a") == 1
 
 
+def test_owner_handover_requires_retirement_record_not_only_clean_flag(driver):
+    s = scoped(driver)
+    assert s.begin_owner("owner-a") == 1
+    with driver.session(database=s.database) as session:
+        session.run(
+            "MATCH (c:ArenaWorkflowControl {deployment_id:$deployment_id, workspace_id:$workspace_id}) "
+            "SET c.owner_dirty=false",
+            **s.scope,
+        ).consume()
+    before = s.get_owner()
+    with pytest.raises(ValueError, match="retirement"):
+        s.begin_owner("owner-b")
+    assert s.get_owner() == before
+
+
 def reserved(s):
-    from isaaclab_arena.agentic_environment_generation.workflow.attempts import GenerationReservation
-    from isaaclab_arena.agentic_environment_generation.workflow.contracts import canonical_json
-    from isaaclab_arena.tests.test_environment_workflow_decisions import authority, generation_contract
+    from isaaclab_arena.agentic_environment_generation.workflow.attempts import (
+        GenerationReservation,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import (
+        canonical_json,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_decisions import (
+        authority,
+        generation_contract,
+    )
 
     contract = generation_contract()
     auth = authority(s, contract)
@@ -356,6 +406,57 @@ def test_reserve_exact_replay_and_transition_guards(driver):
         s.reserve_generation(run.run_id, 2, "second", auth, reservation, readiness=None)
 
 
+def test_exact_generation_recovery_lookup_is_bounded_and_scoped(driver):
+    s = scoped(driver)
+    s.clock = lambda: 100.0
+    assert s.get_generation_attempt("unknown") is None
+    run, intent, _, _, _ = reserved(s)
+    assert s.get_generation_attempt(run.run_id) is None
+    fence = s.claim_intent(intent, "owner", s.begin_owner("owner"))
+    assert s.get_generation_attempt(run.run_id) == s.get_attempt(fence)
+    assert scoped(driver).get_generation_attempt(run.run_id) is None
+    with pytest.raises(ValueError):
+        s.get_attempt(fence.model_copy(update={"owner_epoch": 2}))
+    with driver.session(database=s.database) as session:
+        session.run(
+            "MATCH (i:ArenaExecutionIntent {intent_id:$id})-[:HAS_ATTEMPT]->(a:ArenaExecutionAttempt) "
+            "CREATE (i)-[:HAS_ATTEMPT]->(duplicate:ArenaExecutionAttempt) SET duplicate=properties(a)",
+            id=intent,
+        ).consume()
+    with pytest.raises(ValueError, match="ambiguous"):
+        s.get_generation_attempt(run.run_id)
+
+
+@pytest.mark.parametrize("damage", ["missing_fence", "duplicate_intent", "foreign_attempt", "detached_run"])
+def test_recovery_rejects_inexact_retained_paths(driver, damage):
+    s = scoped(driver)
+    s.clock = lambda: 100.0
+    run, intent, _, _, _ = reserved(s)
+    fence = s.claim_intent(intent, "owner", s.begin_owner("owner"))
+    suffix = {
+        "missing_fence": "REMOVE a.fence_json",
+        "duplicate_intent": (
+            "CREATE (r)-[:HAS_INTENT]->(other:ArenaExecutionIntent) SET other=properties(i) "
+            "CREATE (other)-[:HAS_ATTEMPT]->(a)"
+        ),
+        "foreign_attempt": "SET a.workspace_id='foreign'",
+        "detached_run": "DELETE link",
+    }[damage]
+    with driver.session(database=s.database) as session:
+        session.run(
+            "MATCH (r:ArenaWorkflowRun)-[link:HAS_INTENT]->(i:ArenaExecutionIntent)"
+            "-[:HAS_ATTEMPT]->(a:ArenaExecutionAttempt) WHERE i.intent_id=$id " + suffix,
+            id=intent,
+        ).consume()
+    if damage == "detached_run":
+        assert s.get_generation_attempt(run.run_id) is None
+    else:
+        with pytest.raises(ValueError):
+            s.get_generation_attempt(run.run_id)
+    with pytest.raises(ValueError):
+        s.get_attempt(fence)
+
+
 def test_claim_is_stable_and_owner_fenced(driver):
     s = scoped(driver)
     assert hasattr(s, "claim_intent"), "claim missing"
@@ -373,7 +474,9 @@ def test_claim_is_stable_and_owner_fenced(driver):
 
 
 def registration(fence):
-    from isaaclab_arena.agentic_environment_generation.workflow.attempts import WorkerRegistration
+    from isaaclab_arena.agentic_environment_generation.workflow.attempts import (
+        WorkerRegistration,
+    )
 
     return WorkerRegistration(
         registration_id="reg-1",
@@ -385,6 +488,26 @@ def registration(fence):
         sid=100,
         start_ticks=1000,
     )
+
+
+def test_attempt_reads_committed_reservation_and_original_timing(driver):
+    s = scoped(driver)
+    s.clock = lambda: 100.0
+    run, intent, auth, reservation, contract = reserved(s)
+    fence = s.claim_intent(intent, "owner", s.begin_owner("owner"))
+    before = s.get_attempt(fence)
+    assert before.reservation == reservation
+    assert before.admitted_at == 100.0 and before.released_at is None
+    reg = registration(fence)
+    s.register_worker(fence, reg)
+    s.clock = lambda: 101.0
+    assert s.release_attempt(fence, reg.registration_id, auth, readiness=readiness(contract, auth))
+    released = s.get_attempt(fence)
+    assert released.reservation == reservation and released.admitted_at == 100.0
+    assert released.released_at == 101.0
+    s.clock = lambda: 300.0
+    assert not s.release_attempt(fence, reg.registration_id, auth, readiness=None)
+    assert s.get_attempt(fence) == released
 
 
 def test_registration_is_exact_and_fenced(driver):
@@ -507,9 +630,17 @@ def test_cancel_fences_release_without_cleanup_or_refund(driver):
     ],
 )
 def test_reservation_rejection_is_atomic(driver, change):
-    from isaaclab_arena.agentic_environment_generation.workflow.attempts import GenerationReservation
-    from isaaclab_arena.agentic_environment_generation.workflow.contracts import ExistingSource, canonical_json
-    from isaaclab_arena.tests.test_environment_workflow_decisions import authority, generation_contract
+    from isaaclab_arena.agentic_environment_generation.workflow.attempts import (
+        GenerationReservation,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import (
+        ExistingSource,
+        canonical_json,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_decisions import (
+        authority,
+        generation_contract,
+    )
 
     s = scoped(driver)
     s.clock = lambda: 100.0
@@ -564,9 +695,16 @@ def test_reservation_rejection_is_atomic(driver, change):
 
 
 def test_concurrent_reservations_validate_readiness_before_one_transition(driver):
-    from isaaclab_arena.agentic_environment_generation.workflow.attempts import GenerationReservation
-    from isaaclab_arena.agentic_environment_generation.workflow.contracts import canonical_json
-    from isaaclab_arena.tests.test_environment_workflow_decisions import authority, generation_contract
+    from isaaclab_arena.agentic_environment_generation.workflow.attempts import (
+        GenerationReservation,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import (
+        canonical_json,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_decisions import (
+        authority,
+        generation_contract,
+    )
 
     s = scoped(driver)
     s.clock = lambda: 100.0
@@ -639,7 +777,9 @@ def test_cancel_vs_release_has_one_ordered_effect_and_no_retry_authority(driver)
 
 
 def test_release_acknowledgement_loss_replay_returns_false(driver):
-    from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import OutcomeUnknown
+    from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import (
+        OutcomeUnknown,
+    )
 
     s = scoped(driver)
     s.clock = lambda: 100.0
@@ -677,9 +817,16 @@ def test_release_acknowledgement_loss_replay_returns_false(driver):
 
 
 def test_generation_result_requires_exact_cleanup(driver, tmp_path):
-    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
-    from isaaclab_arena.agentic_environment_generation.workflow import artifacts, results
-    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import (
+        ArtifactArea,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow import (
+        artifacts,
+        results,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.service import (
+        WorkflowService,
+    )
 
     s = scoped(driver)
     s.clock = lambda: 100.0
@@ -735,9 +882,15 @@ def test_generation_result_requires_exact_cleanup(driver, tmp_path):
 
 @pytest.mark.parametrize("damage", ["bytes", "missing", "symlink", "manifest", "deny", "owner"])
 def test_generation_adoption_rejects_artifact_damage_without_receipt(driver, tmp_path, damage):
-    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
-    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import GenerationArtifacts
-    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import (
+        ArtifactArea,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import (
+        GenerationArtifacts,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.service import (
+        WorkflowService,
+    )
 
     s = scoped(driver)
     s.clock = lambda: 100.0
@@ -791,10 +944,18 @@ def test_generation_adoption_rejects_artifact_damage_without_receipt(driver, tmp
 
 @pytest.mark.parametrize("cleanup_first", [False, True])
 def test_cancelled_late_generation_is_diagnostic_only(driver, tmp_path, cleanup_first):
-    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
-    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import GenerationArtifacts
-    from isaaclab_arena.agentic_environment_generation.workflow.results import CleanupEvidence
-    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import (
+        ArtifactArea,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import (
+        GenerationArtifacts,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.results import (
+        CleanupEvidence,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.service import (
+        WorkflowService,
+    )
 
     s = scoped(driver)
     s.clock = lambda: 100.0
@@ -844,7 +1005,9 @@ def test_cancelled_late_generation_is_diagnostic_only(driver, tmp_path, cleanup_
 
 
 def test_cleanup_before_release_fences_future_execution(driver):
-    from isaaclab_arena.agentic_environment_generation.workflow.results import CleanupEvidence
+    from isaaclab_arena.agentic_environment_generation.workflow.results import (
+        CleanupEvidence,
+    )
 
     s = scoped(driver)
     s.clock = lambda: 100.0
@@ -866,10 +1029,19 @@ def test_cleanup_before_release_fences_future_execution(driver):
 
 
 def test_receipt_retained_with_uncertain_cleanup_requires_reconciliation(driver, tmp_path):
-    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
-    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import GenerationArtifacts
-    from isaaclab_arena.agentic_environment_generation.workflow.results import CleanupEvidence, ReconciliationReason
-    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import (
+        ArtifactArea,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import (
+        GenerationArtifacts,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.results import (
+        CleanupEvidence,
+        ReconciliationReason,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.service import (
+        WorkflowService,
+    )
 
     store = scoped(driver)
     store.clock = lambda: 100.0
@@ -886,7 +1058,12 @@ def test_receipt_retained_with_uncertain_cleanup_requires_reconciliation(driver,
     with ArtifactArea.create(tmp_path / "area", store_id="test", registry_id="scope") as area:
         artifacts = GenerationArtifacts(area)
         receipt = artifacts.write(
-            fence, reg, contract, b"synthetic: true\n", {"synthetic": True}, protect=lambda value: None
+            fence,
+            reg,
+            contract,
+            b"synthetic: true\n",
+            {"synthetic": True},
+            protect=lambda value: None,
         )
         assert service.adopt_generation("local", fence, receipt, artifacts=artifacts, protect=lambda value: None)
         with pytest.raises(ValueError):
@@ -911,10 +1088,16 @@ def test_receipt_retained_with_uncertain_cleanup_requires_reconciliation(driver,
 @pytest.mark.parametrize("cancel_order", [None, "before_receipt", "after_receipt", "after_cleanup"])
 @pytest.mark.parametrize("cleanup_first", [False, True])
 def test_lost_released_attempt_reconciles_only_exact_output(driver, tmp_path, cancel_order, cleanup_first):
-    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import (
+        ArtifactArea,
+    )
     from isaaclab_arena.agentic_environment_generation.workflow import results
-    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import GenerationArtifacts
-    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import (
+        GenerationArtifacts,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.service import (
+        WorkflowService,
+    )
 
     s = scoped(driver)
     s.clock = lambda: 100.0
@@ -946,7 +1129,12 @@ def test_lost_released_attempt_reconciles_only_exact_output(driver, tmp_path, ca
         s.claim_intent(intent, "owner", fence.owner_epoch)
     with pytest.raises(ValueError):
         s.reserve_generation(
-            run.run_id, retained.version, "retry", auth, reservation, readiness=readiness(contract, auth)
+            run.run_id,
+            retained.version,
+            "retry",
+            auth,
+            reservation,
+            readiness=readiness(contract, auth),
         )
     with pytest.raises(ValueError):
         s.begin_owner("replacement")
@@ -976,7 +1164,12 @@ def test_lost_released_attempt_reconciles_only_exact_output(driver, tmp_path, ca
     with ArtifactArea.create(tmp_path / "area", store_id="test", registry_id="scope") as area:
         adapter = GenerationArtifacts(area)
         receipt = adapter.write(
-            fence, reg, contract, b"synthetic: true\n", {"synthetic": True}, protect=lambda value: None
+            fence,
+            reg,
+            contract,
+            b"synthetic: true\n",
+            {"synthetic": True},
+            protect=lambda value: None,
         )
         s.clock = lambda: 300.0
         assert service.adopt_generation("local", fence, receipt, artifacts=adapter, protect=lambda value: None)
@@ -1036,16 +1229,28 @@ def live_coordinator(driver, *, fault=None, completion=False):
     """Real store/gate/bridge; synthetic trusted lease, authority and worker (no processes)."""
     from types import SimpleNamespace
 
-    from isaaclab_arena.agentic_environment_generation.workflow.attempts import GenerationReservation
-    from isaaclab_arena.agentic_environment_generation.workflow.contracts import canonical_json
-    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import GenerationCoordinator, PreparedWorker
+    from isaaclab_arena.agentic_environment_generation.workflow.attempts import (
+        GenerationReservation,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import (
+        canonical_json,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import (
+        GenerationCoordinator,
+        PreparedWorker,
+    )
     from isaaclab_arena.agentic_environment_generation.workflow.readiness import (
         DependencyGate,
         DependencyResult,
         ReadinessClock,
     )
-    from isaaclab_arena.agentic_environment_generation.workflow.results import CleanupEvidence
-    from isaaclab_arena.tests.test_environment_workflow_decisions import authority, generation_contract
+    from isaaclab_arena.agentic_environment_generation.workflow.results import (
+        CleanupEvidence,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_decisions import (
+        authority,
+        generation_contract,
+    )
 
     store = scoped(driver)
 
@@ -1185,7 +1390,9 @@ def live_coordinator(driver, *, fault=None, completion=False):
         ),
         clock=clock,
     )
-    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+    from isaaclab_arena.agentic_environment_generation.workflow.service import (
+        WorkflowService,
+    )
 
     proxy, authority_port = StoreProxy(), Authority()
     options = {}
@@ -1217,10 +1424,22 @@ def live_coordinator(driver, *, fault=None, completion=False):
     return f
 
 
-@pytest.mark.parametrize("fault", ["release_expiry", "release_revocation", "release_rotation", "release_grant_change"])
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "release_expiry",
+        "release_revocation",
+        "release_rotation",
+        "release_grant_change",
+    ],
+)
 def test_committed_release_rechecks_private_authority_before_send(driver, fault):
-    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import DispatchIncomplete
-    from isaaclab_arena.agentic_environment_generation.workflow.results import ReconciliationReason
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import (
+        DispatchIncomplete,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.results import (
+        ReconciliationReason,
+    )
 
     f = live_coordinator(driver, fault=fault)
     with pytest.raises(DispatchIncomplete) as caught:
@@ -1241,9 +1460,15 @@ def test_committed_release_rechecks_private_authority_before_send(driver, fault)
 
 @pytest.fixture
 def completion_input(driver, tmp_path):
-    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
-    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import GenerationArtifacts
-    from isaaclab_arena.agentic_environment_generation.workflow.contracts import parse_contract
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import (
+        ArtifactArea,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import (
+        GenerationArtifacts,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import (
+        parse_contract,
+    )
 
     f = live_coordinator(driver, completion=True)
     handle = f.dispatch()
@@ -1260,10 +1485,306 @@ def completion_input(driver, tmp_path):
         yield f, handle, artifacts, receipt, tmp_path / "area"
 
 
+def test_retired_owner_read_survives_replacement_without_changing_authority(
+    completion_input,
+):
+    f, handle, artifacts, receipt, _ = completion_input
+    store, fence = f.store, handle.fence
+    lookup = getattr(store, "get_retired_owner", None)
+    assert callable(lookup), "read-only retained retirement lookup is missing"
+    assert lookup(fence.owner_id) is None
+    f.coordinator.complete("local", receipt, artifacts, protect=lambda value: None)
+    assert store.retire_owner(fence.owner_id, fence.owner_epoch)
+    retired = lookup(fence.owner_id)
+    assert retired.model_dump() == {
+        "owner_id": fence.owner_id,
+        "owner_epoch": fence.owner_epoch,
+        "dirty": False,
+    }
+    store.begin_owner("replacement")
+    owner, snapshot = store.get_owner(), store.snapshot()
+    assert lookup(fence.owner_id) == retired
+    assert lookup("replacement") is None
+    assert lookup("unknown") is None
+    assert store.get_owner() == owner and store.snapshot() == snapshot
+
+
+def test_clean_owner_handover_preserves_historical_reads_and_fences_mutations(
+    completion_input,
+):
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import (
+        parse_contract,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.results import (
+        ReconciliationReason,
+    )
+
+    f, handle, artifacts, receipt, _ = completion_input
+    s, fence = f.store, handle.fence
+    owner = s.get_owner()
+    assert owner.model_dump() == {
+        "owner_id": fence.owner_id,
+        "owner_epoch": 1,
+        "dirty": True,
+    }
+    with pytest.raises(ValueError, match="unresolved"):
+        s.retire_owner(fence.owner_id, 1)
+    assert s.get_owner() == owner
+    assert s.commit_generation_receipt(fence, artifacts.verify(receipt, protect=lambda _: None))
+    with pytest.raises(ValueError, match="unresolved"):
+        s.retire_owner(fence.owner_id, 1)
+    result = f.coordinator.complete("local", receipt, artifacts, protect=lambda _: None)
+    before = s.snapshot()
+    retained = s.get_attempt(fence)
+    assert result.attempt == retained and retained.status == "produced"
+    assert s.retire_owner(fence.owner_id, 1) is True
+    assert s.get_owner().model_dump() == {
+        "owner_id": fence.owner_id,
+        "owner_epoch": 1,
+        "dirty": False,
+    }
+    assert s.retire_owner(fence.owner_id, 1) is False
+    assert s.get_attempt(fence) == retained
+    with pytest.raises(ValueError, match="retired"):
+        s.begin_owner(fence.owner_id)
+    assert s.begin_owner("owner-b") == 2
+    assert s.begin_owner("owner-b") == 2
+    replacement = s.get_owner()
+    assert replacement.owner_id == "owner-b" and replacement.owner_epoch == 2 and replacement.dirty
+    assert s.get_attempt(fence) == s.get_generation_attempt(fence.run_id) == retained
+    assert s.snapshot() == before
+    next_run = s.admit("next-run", "{}", f.run.contract_json, 1)
+    next_intent = s.reserve_generation(
+        next_run.run_id,
+        1,
+        "next-decision",
+        f.auth,
+        f.reservation,
+        readiness=readiness(parse_contract(f.run.contract_json), f.auth),
+    )
+    next_fence = s.claim_intent(next_intent, "owner-b", 2)
+    s.register_worker(next_fence, registration(next_fence))
+    next_view, next_run = s.get_attempt(next_fence), s.get_run(next_run.run_id)
+    before = s.snapshot()
+    for mutation in (
+        lambda: s.claim_intent(fence.intent_id, fence.owner_id, 1),
+        lambda: s.register_worker(fence, retained.registration),
+        lambda: s.release_attempt(fence, retained.registration.registration_id, f.auth, readiness=None),
+        lambda: s.commit_generation_receipt(fence, receipt),
+        lambda: s.acknowledge_cleanup(fence, retained.cleanup),
+        lambda: s.mark_reconciliation_required(fence, ReconciliationReason.OWNER_OUTCOME_UNCERTAIN),
+    ):
+        with pytest.raises(ValueError, match="owner"):
+            mutation()
+        assert s.get_owner() == replacement and s.snapshot() == before
+    cancelled = s.request_cancel(fence.run_id, result.run.version)
+    assert cancelled.state == "cancelled"
+    historical = s.get_generation_attempt(fence.run_id)
+    assert historical.status == "cancelled" and historical.receipt == receipt
+    assert historical.cleanup == retained.cleanup and historical.reservation == retained.reservation
+    assert s.request_cancel(fence.run_id, result.run.version) == cancelled
+    assert s.get_owner() == replacement
+    assert s.get_attempt(next_fence) == next_view and s.get_run(next_run.run_id) == next_run
+    assert_receipt_storage(s, receipt, "diagnostic")
+
+
+@pytest.mark.parametrize(
+    "stage",
+    [
+        "reserved",
+        "claimed",
+        "prepared_unregistered",
+        "registered",
+        "released",
+        "cleaned_no_outcome",
+        "cancelled_no_cleanup",
+    ],
+)
+def test_retirement_never_treats_unresolved_or_missing_registration_as_no_process(driver, stage):
+    from isaaclab_arena.agentic_environment_generation.workflow.results import (
+        CleanupEvidence,
+    )
+
+    s = scoped(driver)
+    s.clock = lambda: 100.0
+    run, intent, auth, _, contract = reserved(s)
+    epoch = s.begin_owner("owner")
+    if stage != "reserved":
+        fence = s.claim_intent(intent, "owner", epoch)
+        reg = registration(fence)  # Synthetic prepared process even if registration was not committed.
+        if stage not in ("claimed", "prepared_unregistered"):
+            s.register_worker(fence, reg)
+            if stage in ("released", "cleaned_no_outcome"):
+                s.release_attempt(
+                    fence,
+                    reg.registration_id,
+                    auth,
+                    readiness=readiness(contract, auth),
+                )
+            if stage == "cleaned_no_outcome":
+                s.acknowledge_cleanup(
+                    fence,
+                    CleanupEvidence(
+                        registration=reg,
+                        evidence_ref="synthetic-stop",
+                        observation="owned_process_group_stopped",
+                        remote_effects="unknown",
+                    ),
+                )
+        if stage == "cancelled_no_cleanup":
+            assert s.request_cancel(run.run_id, s.get_run(run.run_id).version).state == "cancel_requested"
+    before, owner = s.snapshot(), s.get_owner()
+    with pytest.raises(ValueError, match="unresolved"):
+        s.retire_owner("owner", epoch)
+    with pytest.raises(ValueError, match="dirty"):
+        s.begin_owner("replacement")
+    assert s.snapshot() == before and s.get_owner() == owner
+
+
+def test_cancelled_clean_registration_can_retire_without_refund(driver):
+    f = live_coordinator(driver)
+    handle = f.dispatch()
+    f.coordinator.cancel("local")
+    s, fence = f.store, handle.fence
+    retained = s.get_attempt(fence)
+    assert retained.status == "cancelled" and retained.receipt is None and retained.cleanup
+    assert s.retire_owner(fence.owner_id, fence.owner_epoch)
+    assert s.get_owner().dirty is False
+    assert s.begin_owner("next") == 2
+    assert s.get_generation_attempt(fence.run_id) == retained
+    assert retained.reservation == f.reservation
+    assert retained.usage_disposition == "fully_reserved_consumption_deferred"
+
+
+def test_owner_absence_and_unavailable_readback_grant_no_retirement(driver):
+    from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import (
+        ScopeMissing,
+    )
+
+    s = scoped(driver)
+    assert s.get_owner() is None
+    with pytest.raises(ValueError, match="owner"):
+        s.retire_owner("unknown", 1)
+    assert s.get_owner() is None
+    uninitialized = Neo4jWorkflowStore(driver, database=s.database, **{**s.scope, "workspace_id": "uninitialized"})
+    with pytest.raises(ScopeMissing):
+        uninitialized.get_owner()
+
+    class Offline:
+        def session(self, **kwargs):
+            raise OSError("database unavailable")
+
+    offline = Neo4jWorkflowStore(Offline(), database=s.database, **s.scope)
+    with pytest.raises(OSError):
+        offline.get_owner()
+    assert s.begin_owner("empty-owner") == 1
+    for wrong in (True, 0, -1, 2, "1"):
+        with pytest.raises(ValueError):
+            s.retire_owner("empty-owner", wrong)
+    assert s.retire_owner("empty-owner", 1)
+    assert s.get_owner().dirty is False
+
+
+def test_retirement_commit_ack_loss_replays_exact_identity_even_after_later_epochs(
+    completion_input,
+):
+    from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import (
+        OutcomeUnknown,
+    )
+
+    f, handle, artifacts, receipt, _ = completion_input
+    f.coordinator.complete("local", receipt, artifacts, protect=lambda _: None)
+    s, fence = f.store, handle.fence
+
+    class Proxy:
+        def __init__(self, real):
+            self.real = real
+
+        def __getattr__(self, name):
+            return getattr(self.real, name)
+
+    class Transaction(Proxy):
+        def commit(self):
+            self.real.commit()
+            raise OSError("lost retirement acknowledgement after real commit")
+
+    class Session(Proxy):
+        def begin_transaction(self, **kwargs):
+            return Transaction(self.real.begin_transaction(**kwargs))
+
+    class Driver(Proxy):
+        def session(self, **kwargs):
+            return Session(self.real.session(**kwargs))
+
+    failing = Neo4jWorkflowStore(Driver(s.driver), database=s.database, **s.scope)
+    with pytest.raises(OutcomeUnknown):
+        failing.retire_owner(fence.owner_id, 1)
+    independent = Neo4jWorkflowStore(s.driver, database=s.database, **s.scope)
+    retired = independent.get_owner()
+    assert (retired.owner_id, retired.owner_epoch, retired.dirty) == (
+        fence.owner_id,
+        1,
+        False,
+    )
+    assert independent.retire_owner(fence.owner_id, 1) is False
+    for epoch, name in enumerate(("owner-b", "owner-c", "owner-d"), 2):
+        assert independent.begin_owner(name) == epoch
+        assert independent.begin_owner(name) == epoch
+        active = independent.get_owner()
+        assert independent.retire_owner(fence.owner_id, 1) is False
+        assert independent.get_owner() == active
+        with pytest.raises(ValueError):
+            independent.retire_owner(fence.owner_id, epoch)
+        with pytest.raises(ValueError, match="retired"):
+            independent.begin_owner(fence.owner_id)
+        assert independent.retire_owner(name, epoch)
+        assert independent.get_owner().dirty is False
+    assert independent.get_generation_attempt(fence.run_id).receipt == receipt
+
+
+@pytest.mark.parametrize("round_index", range(3))
+def test_retirement_races_have_one_commit_and_never_clear_replacement(driver, round_index):
+    s = scoped(driver)
+    assert s.begin_owner("owner-a") == 1
+    barrier = Barrier(6)
+
+    def retire(_):
+        barrier.wait(timeout=10)
+        return s.retire_owner("owner-a", 1)
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(retire, range(6)))
+    assert results.count(True) == 1 and results.count(False) == 5
+    assert s.get_owner().dirty is False
+    barrier = Barrier(6)
+
+    def begin_or_replay(index):
+        barrier.wait(timeout=10)
+        if index < 3:
+            return s.retire_owner("owner-a", 1)
+        try:
+            return s.begin_owner("owner-" + str(index))
+        except ValueError:
+            return None
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(begin_or_replay, range(6)))
+    assert results[:3] == [False] * 3
+    assert results[3:].count(2) == 1 and results[3:].count(None) == 2
+    owner = s.get_owner()
+    assert owner.dirty and owner.owner_epoch == 2
+    assert s.retire_owner("owner-a", 1) is False
+    assert s.get_owner() == owner
+
+
 @pytest.mark.parametrize("failure", ["bytes", "database", "cleanup", "acknowledgement"])
 def test_real_completion_failure_stops_locally_and_retains_obligations(completion_input, monkeypatch, failure):
-    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import CompletionIncomplete
-    from isaaclab_arena.agentic_environment_generation.workflow.results import ReconciliationReason
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import (
+        CompletionIncomplete,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.results import (
+        ReconciliationReason,
+    )
 
     f, handle, artifacts, receipt, root = completion_input
 
@@ -1368,8 +1889,12 @@ def test_real_completion_wrong_local_identity_has_zero_stops(completion_input, c
     assert f.store.get_attempt(handle.fence).receipt is None
 
 
-def test_real_completion_invalid_first_receipt_recovers_original_attempt(completion_input):
-    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import CompletionIncomplete
+def test_real_completion_invalid_first_receipt_recovers_original_attempt(
+    completion_input,
+):
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import (
+        CompletionIncomplete,
+    )
 
     f, handle, artifacts, receipt, _ = completion_input
     malformed = receipt.model_copy(update={"candidate_yaml_sha256": "b" * 64})
@@ -1389,10 +1914,18 @@ def test_real_completion_invalid_first_receipt_recovers_original_attempt(complet
 
 @pytest.mark.parametrize("committed", [False, True])
 def test_real_completion_verified_pin_survives_unknown_commit(completion_input, monkeypatch, tmp_path, committed):
-    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
-    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import GenerationArtifacts
-    from isaaclab_arena.agentic_environment_generation.workflow.contracts import parse_contract
-    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import CompletionIncomplete
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import (
+        ArtifactArea,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import (
+        GenerationArtifacts,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import (
+        parse_contract,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import (
+        CompletionIncomplete,
+    )
 
     f, handle, artifacts, receipt, _ = completion_input
     original = f.store.commit_generation_receipt
@@ -1431,7 +1964,9 @@ def test_real_completion_verified_pin_survives_unknown_commit(completion_input, 
     assert_receipt_storage(f.store, receipt, "produced")
 
 
-def test_expired_execution_still_allows_authenticated_completion_and_exact_retry(completion_input):
+def test_expired_execution_still_allows_authenticated_completion_and_exact_retry(
+    completion_input,
+):
     f, handle, artifacts, receipt, _ = completion_input
     f.now[0] = f.auth.expires_at + 1
     calls = f.calls.count("execute_auth")
@@ -1443,8 +1978,12 @@ def test_expired_execution_still_allows_authenticated_completion_and_exact_retry
     assert f.calls.count("send") == f.calls.count("localstop") == 1
 
 
-def test_real_completion_conflict_rejected_locally_and_duplicate_rechecks_bytes(completion_input):
-    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import CompletionIncomplete
+def test_real_completion_conflict_rejected_locally_and_duplicate_rechecks_bytes(
+    completion_input,
+):
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import (
+        CompletionIncomplete,
+    )
 
     f, handle, artifacts, receipt, root = completion_input
     f.coordinator.complete("local", receipt, artifacts, protect=lambda _: None)
@@ -1462,7 +2001,9 @@ def test_real_completion_conflict_rejected_locally_and_duplicate_rechecks_bytes(
 
 @pytest.mark.parametrize("bypass", ["fake_artifacts", "instance_adopter"])
 def test_real_completion_cannot_bypass_concrete_artifact_verification(completion_input, monkeypatch, bypass):
-    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import CompletionIncomplete
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import (
+        CompletionIncomplete,
+    )
 
     f, handle, artifacts, receipt, root = completion_input
 
@@ -1485,7 +2026,9 @@ def test_real_completion_cannot_bypass_concrete_artifact_verification(completion
 
 
 def test_real_completion_retry_reconciles_ack_loss_without_stopping_twice(completion_input, monkeypatch):
-    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import CompletionIncomplete
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import (
+        CompletionIncomplete,
+    )
 
     f, handle, artifacts, receipt, _ = completion_input
     original = f.store.acknowledge_cleanup
@@ -1514,9 +2057,15 @@ def test_real_completion_retry_reconciles_ack_loss_without_stopping_twice(comple
 
 
 def test_real_coordinator_completion_observes_validation_and_exact_cleanup(driver, tmp_path):
-    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
-    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import GenerationArtifacts
-    from isaaclab_arena.agentic_environment_generation.workflow.contracts import parse_contract
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import (
+        ArtifactArea,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import (
+        GenerationArtifacts,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import (
+        parse_contract,
+    )
 
     f = live_coordinator(driver, completion=True)
     handle = f.dispatch()
@@ -1579,7 +2128,9 @@ def test_real_coordinator_dispatch_retry_authenticated_cancel_exact_cleanup(driv
 
 
 def test_real_coordinator_lease_lost_before_release_never_sends(driver):
-    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import DispatchIncomplete
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import (
+        DispatchIncomplete,
+    )
 
     f = live_coordinator(driver, fault="lease_lost")
     with pytest.raises(DispatchIncomplete) as failure:
@@ -1596,7 +2147,9 @@ def test_real_coordinator_lease_lost_before_release_never_sends(driver):
 
 @pytest.mark.parametrize("committed", [False, True])
 def test_real_coordinator_registration_unknown_preserves_exact_cleanup_obligation(driver, committed):
-    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import DispatchIncomplete
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import (
+        DispatchIncomplete,
+    )
 
     f = live_coordinator(driver, fault="registration_after" if committed else "registration_before")
     with pytest.raises(DispatchIncomplete) as failure:
@@ -1620,9 +2173,15 @@ def test_real_coordinator_registration_unknown_preserves_exact_cleanup_obligatio
     assert f.calls.count("localstop") == 1 and "send" not in f.calls
 
 
-def test_real_coordinator_send_failure_persists_reconciliation_and_never_resends(driver):
-    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import DispatchIncomplete
-    from isaaclab_arena.agentic_environment_generation.workflow.results import ReconciliationReason
+def test_real_coordinator_send_failure_persists_reconciliation_and_never_resends(
+    driver,
+):
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import (
+        DispatchIncomplete,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.results import (
+        ReconciliationReason,
+    )
 
     f = live_coordinator(driver, fault="send_failure")
     with pytest.raises(DispatchIncomplete) as failure:
@@ -1643,7 +2202,9 @@ def test_real_coordinator_send_failure_persists_reconciliation_and_never_resends
 
 @pytest.mark.parametrize("fault", ["pre_claim", "claim_ack_unknown"])
 def test_real_coordinator_early_failure_retains_recovery_identifiers(driver, fault):
-    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import DispatchIncomplete
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import (
+        DispatchIncomplete,
+    )
 
     f = live_coordinator(driver, fault=fault)
     with pytest.raises(DispatchIncomplete) as failure:
@@ -1700,11 +2261,16 @@ def test_real_coordinator_cancel_before_dispatch_is_terminal_without_attempt(dri
     assert not second.durable_cancellation_pending and not second.cleanup_pending
     assert observed.phase == "dependency_readiness" and observed.version == 2
     assert f.store.request_cancel(f.run.run_id, 1) == observed
-    assert [e.kind for e in f.store.events_after(0).events] == ["WorkflowRequested", "CancellationRequested"]
+    assert [e.kind for e in f.store.events_after(0).events] == [
+        "WorkflowRequested",
+        "CancellationRequested",
+    ]
 
 
 def test_real_coordinator_reservation_ack_unknown_retains_command_identity(driver):
-    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import DispatchIncomplete
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import (
+        DispatchIncomplete,
+    )
 
     f = live_coordinator(driver, fault="reserve_ack_unknown")
     with pytest.raises(DispatchIncomplete) as failure:
@@ -1721,7 +2287,9 @@ def test_real_coordinator_reservation_ack_unknown_retains_command_identity(drive
 
 @pytest.mark.parametrize("round_index", range(3))
 def test_pending_cancel_vs_reserve_never_fabricates_cleanup(driver, round_index):
-    from isaaclab_arena.agentic_environment_generation.workflow.contracts import parse_contract
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import (
+        parse_contract,
+    )
     from isaaclab_arena.tests.test_environment_workflow_decisions import authority
 
     f = live_coordinator(driver)
@@ -1736,7 +2304,12 @@ def test_pending_cancel_vs_reserve_never_fabricates_cleanup(driver, round_index)
             if cancel:
                 return s.request_cancel(f.run.run_id, 1)
             return s.reserve_generation(
-                f.run.run_id, 1, "decision", auth, f.reservation, readiness=readiness(contract, auth)
+                f.run.run_id,
+                1,
+                "decision",
+                auth,
+                f.reservation,
+                readiness=readiness(contract, auth),
             )
         except ValueError:
             return None
@@ -1767,3 +2340,505 @@ def test_pending_cancel_vs_reserve_never_fabricates_cleanup(driver, round_index)
     kinds = [e.kind for e in s.events_after(0).events]
     assert kinds.count("CancellationRequested") == 1
     assert "AttemptCleanupAcknowledged" not in kinds
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "accept",
+        "unknown",
+        "cancel_before",
+        "cancel_during",
+        "budget",
+        "forbidden",
+        "stale",
+        "unsupported",
+        "readiness",
+        "deadline",
+        "retire",
+        "released_replay",
+        "finish_replay",
+        "corrupt_original",
+        "observe_budget",
+        "unbounded",
+        "missing_bound_capability",
+        "bound_revoked",
+        "managed_accept",
+        "managed_cancel_prepare",
+        "managed_cancel_execute",
+        "managed_prepare_unknown",
+        "managed_release_ack",
+        "managed_timeout",
+        "managed_cleanup_failure",
+        "managed_missing_ports",
+        "managed_binding_cas",
+        "managed_readiness_revoked",
+    ],
+)
+def test_scene_durable_trace_readback_replay(driver, tmp_path, case):
+    """Real Neo4j; synthetic ports/schema receipt, never native acceptance."""
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import (
+        ArtifactArea,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow import scene_loop
+    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import (
+        GenerationArtifacts,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.attempts import (
+        GenerationReservation,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import (
+        canonical_json,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.results import (
+        CleanupEvidence,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.service import (
+        WorkflowService,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_decisions import authority
+    from isaaclab_arena.tests.test_environment_workflow_repairs import scene
+    from isaaclab_arena.tests.test_environment_workflow_scene_loop import scene_contract
+
+    s = scoped(driver)
+    s.clock = lambda: 100.0
+    contract = scene_contract()
+    auth = authority(s, contract)
+    run = s.admit("scene-trace", "{}", canonical_json(contract), 1)
+    intent = s.reserve_generation(
+        run.run_id,
+        1,
+        "generation",
+        auth,
+        GenerationReservation(
+            model_calls=1,
+            model_tokens=100,
+            cost_ceiling_usd=0.0,
+            runtime_allowance_seconds=1.0,
+        ),
+        readiness=readiness(contract, auth),
+    )
+    fence = s.claim_intent(intent, "owner", s.begin_owner("owner"))
+    reg = s.register_worker(fence, registration(fence))
+    assert s.release_attempt(fence, reg.registration_id, auth, readiness=readiness(contract, auth))
+    with ArtifactArea.create(tmp_path / "scene", store_id="scene", registry_id="scene") as area:
+        artifacts = GenerationArtifacts(area)
+        import json
+
+        receipt = artifacts.write(
+            fence,
+            reg,
+            contract,
+            json.dumps(scene()).encode(),
+            scene(),
+            protect=lambda _: None,
+        )
+        s.commit_generation_receipt(fence, artifacts.verify(receipt, protect=lambda _: None))
+        s.acknowledge_cleanup(
+            fence,
+            CleanupEvidence(
+                registration=reg,
+                evidence_ref="synthetic-stop",
+                observation="owned_process_group_stopped",
+                remote_effects="unknown",
+            ),
+        )
+        validation = dict(
+            disposition="schema_validated",
+            fence=fence.model_dump(mode="json"),
+            contract_digest=receipt.contract_digest,
+            candidate_yaml_sha256=receipt.candidate_yaml_sha256,
+            candidate_json_sha256=receipt.candidate_json_sha256,
+            provenance_sha256=receipt.provenance_sha256,
+            manifest_sha256=receipt.manifest_sha256,
+            normalized_spec_sha256="a" * 64,
+            validator_identity="explicitly-synthetic-schema-port",
+        )
+        candidate = scene_loop.candidate_record(run.run_id, scene(), source_id=fence.attempt_id)
+        profile = scene_loop.ScenePortProfile(
+            port_id="synthetic-tracer",
+            assurance="synthetic",
+            producer_ids=tuple(c.evidence_producer for c in contract.criteria),
+            observe=scene_loop.SceneReservation(
+                model_calls=1,
+                model_tokens=100,
+                cost_ceiling_usd=0.0,
+                runtime_allowance_seconds=1.0,
+                realizations=1,
+                observations=1,
+                steps=10,
+            ),
+            repair=scene_loop.SceneReservation(
+                model_calls=1,
+                model_tokens=100,
+                cost_ceiling_usd=0.0,
+                runtime_allowance_seconds=1.0,
+                candidates=1,
+                revisions=1,
+            ),
+        )
+        if case.startswith("managed_"):
+            profile = scene_loop.ScenePortProfile.model_validate(dict(profile.model_dump(), owned_worker=True))
+        if case == "budget":
+            profile = profile.model_copy(
+                update={"observe": profile.observe.model_copy(update={"model_tokens": 10001})}
+            )
+        if case == "unsupported":
+            profile = profile.model_copy(update={"producer_ids": ()})
+
+        class ReadAuthority:
+            def require_read(self, principal):
+                assert principal == "local"
+
+        service = WorkflowService(s, ReadAuthority(), None, validate_support=lambda _: None)
+        if case == "corrupt_original":
+            (tmp_path / "scene" / receipt.artifact_directory / "candidate.json").write_bytes(b"corrupt")
+            with pytest.raises(ValueError):
+                service.start_scene(
+                    "local",
+                    run.run_id,
+                    artifacts=artifacts,
+                    protect=lambda _: None,
+                    validate_generation_candidate=lambda *a, **kw: validation,
+                    profile=profile,
+                )
+            assert s.scene_snapshot(run.run_id) is None
+            return
+        version = s.get_run(run.run_id).version
+        first = service.start_scene(
+            "local",
+            run.run_id,
+            artifacts=artifacts,
+            protect=lambda _: None,
+            validate_generation_candidate=lambda *a, **kw: validation,
+            profile=profile,
+        )
+        assert s.begin_scene(run.run_id, version, candidate, validation, profile) == first
+        assert s.scene_snapshot(run.run_id).candidate == candidate
+
+        ports = synthetic_scene_ports(case, s, run, auth)
+        ports.profile = profile
+        service = WorkflowService(s, ReadAuthority(), None, validate_support=lambda _: None)
+        if exercise_scene_worker_case(case, s, service, ports, run, fence, reg, auth, contract, receipt):
+            return
+        if case == "cancel_before":
+            s.request_cancel(run.run_id, s.get_run(run.run_id).version)
+        if case == "deadline":
+            s.clock = lambda: 159.5
+        if case == "missing_bound_capability":
+            ports.require_bounded_capability = None
+        if case in ("readiness", "deadline", "unbounded", "missing_bound_capability"):
+            with pytest.raises(ValueError, match="readiness|deadline|bounded"):
+                service.run_scene("local", run.run_id, ports=ports)
+            assert ports.calls == []
+            return
+        if case == "released_replay":
+            pending = s.scene_snapshot(run.run_id)
+            assert s.release_scene(
+                run.run_id,
+                pending.intent.intent_id,
+                auth,
+                readiness=readiness(contract, auth),
+            )
+            assert not s.release_scene(
+                run.run_id,
+                pending.intent.intent_id,
+                auth,
+                readiness=readiness(contract, auth),
+            )
+            final = service.run_scene("local", run.run_id, ports=ports)
+            assert final.run.state == "reconciliation_required" and ports.calls == []
+            return
+        final = service.run_scene("local", run.run_id, ports=ports)
+        if case in (
+            "managed_timeout",
+            "managed_release_ack",
+            "managed_cancel_execute",
+            "managed_readiness_revoked",
+        ):
+            assert final == s.scene_snapshot(run.run_id)
+            assert final.intent.worker_cleanup is not None
+            assert len(ports.prepared) == len(ports.cleaned) == 1
+            assert ports.calls == ([] if case in ("managed_release_ack", "managed_readiness_revoked") else ["observe"])
+            assert service.run_scene("local", run.run_id, ports=ports) == final
+            if case == "managed_cancel_execute":
+                assert final.run.state == "cancelled"
+                assert s.retire_owner("owner", fence.owner_epoch)
+            else:
+                assert final.run.state == "reconciliation_required"
+                with pytest.raises(ValueError, match="unresolved"):
+                    s.retire_owner("owner", fence.owner_epoch)
+            return
+        if case == "bound_revoked":
+            assert final.run.state == "reconciliation_required"
+            assert final.intent.status == "reconciliation_required" and ports.calls == []
+            return
+        if case == "observe_budget":
+            assert final.run.state == "stopped" and final.decision.reason == "budget_exhausted"
+            assert ports.calls == ["observe"] * 4
+            return
+        if case == "finish_replay":
+            result = scene_loop.SceneResult(observation=ports.last_observation)
+            assert not s.finish_scene(run.run_id, ports.last_intent.intent_id, 1, result)
+            with pytest.raises(ValueError, match="conflicting"):
+                s.finish_scene(
+                    run.run_id,
+                    ports.last_intent.intent_id,
+                    1,
+                    scene_loop.SceneResult(failure="invalid_candidate"),
+                )
+        if case in ("unknown", "cancel_during"):
+            assert final.run.state == ("reconciliation_required" if case == "unknown" else "cancel_requested")
+            assert final.intent.status == "reconciliation_required"
+            assert ports.calls == ["observe"]
+            assert service.run_scene("local", run.run_id, ports=ports) == final
+            with pytest.raises(ValueError, match="unresolved"):
+                s.retire_owner("owner", fence.owner_epoch)
+            return
+        if case == "cancel_before":
+            assert final.run.state == "cancelled" and ports.calls == []
+            return
+        if case in ("budget", "forbidden", "stale", "unsupported"):
+            assert final.run.state == "stopped"
+            assert (
+                final.decision.reason
+                == {
+                    "budget": "budget_exhausted",
+                    "forbidden": "repair_rejected",
+                    "stale": "stale_cohort",
+                    "unsupported": "unsupported_criterion",
+                }[case]
+            )
+            assert len(ports.calls) == {"budget": 0, "unsupported": 0, "forbidden": 2, "stale": 3}[case]
+            return
+        assert final.run.state == "accepted" and final.decision.action == "accept"
+        if case == "managed_accept":
+            assert len(ports.prepared) == len(ports.cleaned) == 3
+            for scene_id in ports.prepared:
+                retained_scene = s.get_scene_intent(run.run_id, scene_id)
+                assert retained_scene.status == "produced"
+                assert retained_scene.worker_cleanup.registration == retained_scene.worker_registration
+            assert s.retire_owner("owner", fence.owner_epoch)
+            s.begin_owner("replacement-scene-owner")
+            assert s.get_scene_intent(run.run_id, ports.prepared[-1]) == retained_scene
+            assert s.get_generation_attempt(run.run_id).receipt == receipt
+        if case == "retire":
+            assert s.retire_owner("owner", fence.owner_epoch)
+            assert s.get_owner().dirty is False
+        assert ports.calls == ["observe", "repair", "observe"]
+        assert final.candidate.parent_id == candidate.candidate_id
+        assert final.candidate.original_id == candidate.candidate_id
+        assert scoped(driver, workspace=s.scope["workspace_id"]).scene_snapshot(run.run_id) == final
+        assert service.run_scene("local", run.run_id, ports=ports) == final
+        assert ports.calls == ["observe", "repair", "observe"]
+        assert s.get_generation_attempt(run.run_id).receipt == receipt
+        assert (
+            service.start_scene(
+                "local",
+                run.run_id,
+                artifacts=artifacts,
+                protect=lambda _: None,
+                validate_generation_candidate=lambda *a, **kw: validation,
+                profile=profile,
+            )
+            == first
+        )
+        with driver.session(database=s.database) as session:
+            row = session.run(
+                "MATCH (child:ArenaWorkflowCandidate {record_id:$child})-[:DERIVED_FROM]->"
+                "(original:ArenaWorkflowCandidate {record_id:$original}) "
+                "MATCH (e:ArenaWorkflowEvidence)-[:FOR_CANDIDATE]->(child) "
+                "MATCH (a:ArenaCriterionAssessment)-[:ASSESSES]->(e) RETURN count(a) AS n",
+                child=final.candidate.candidate_id,
+                original=candidate.candidate_id,
+            ).single()
+            assert row["n"] == 1
+
+
+def synthetic_scene_ports(case, s, run, auth):
+    """Build controlled physical-port callbacks; no OS or native evidence."""
+    import json
+
+    from isaaclab_arena.agentic_environment_generation.workflow.results import (
+        CleanupEvidence,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_scene_loop import observation
+
+    class SyntheticPorts:
+        calls = []
+        bound_checks = 0
+        prepared = []
+        cleaned = []
+
+        def require_held_owner(self):
+            # Synthetic physical port: binding/order proof only, NO OS proof.
+            return s.get_owner()
+
+        def prepare_worker(self, intent, candidate, original, contract):
+            assert intent.worker_fence is not None and intent.released_at is None
+            assert len(self.prepared) == len(self.cleaned)
+            self.prepared.append(intent.intent_id)
+            if case == "managed_cancel_prepare":
+                cancelled = s.request_cancel(run.run_id, s.get_run(run.run_id).version)
+                assert cancelled.state == "cancel_requested"
+            if case == "managed_prepare_unknown":
+                raise TimeoutError("synthetic ambiguous prepare")
+            return registration(intent.worker_fence)
+
+        def cleanup_worker(self, intent):
+            if case == "managed_cleanup_failure":
+                raise TimeoutError("synthetic cleanup pending")
+            if intent.worker_registration is None:
+                raise ValueError("unregistered synthetic prepare remains unresolved")
+            assert intent.worker_registration.fence == intent.worker_fence
+            self.cleaned.append(intent.intent_id)
+            return CleanupEvidence(
+                registration=intent.worker_registration,
+                evidence_ref="synthetic-scene-stop",
+                observation="owned_process_group_stopped",
+                remote_effects="unknown",
+            )
+
+        def require_bounded_capability(self, principal, contract, reservation):
+            # Synthetic port has no provider effects; never provider attestation.
+            assert principal == "local"
+            self.bound_checks += 1
+            return case != "unbounded" and not (case == "bound_revoked" and self.bound_checks > 1)
+
+        def authorize(self, principal, contract, action):
+            assert principal == "local"
+            return auth
+
+        ready_checks = 0
+
+        def ready(self, contract):
+            self.ready_checks += 1
+            ready = readiness(contract, auth)
+            revoked = case == "managed_readiness_revoked" and self.ready_checks >= 3
+            return (
+                ready.model_copy(update={"profiles": ready.profiles[:-1]}) if case == "readiness" or revoked else ready
+            )
+
+        def execute(self, released, candidate, original, contract):
+            self.calls.append(released.action)
+            if case in ("unknown", "managed_timeout"):
+                raise TimeoutError("synthetic lost acknowledgement")
+            if case in ("cancel_during", "managed_cancel_execute"):
+                cancelled = s.request_cancel(run.run_id, s.get_run(run.run_id).version)
+                assert cancelled.state == "cancel_requested"
+            if released.action == "observe":
+                output = observation(
+                    contract,
+                    candidate,
+                    "A" if candidate.parent_id is None or case == "stale" else "B",
+                    fail=candidate.parent_id is None,
+                )
+                if case == "observe_budget":
+                    output = output.model_copy(update={"evidence": ()})
+                    output = output.model_copy(
+                        update={"cohort": output.cohort.model_copy(update={"realization_id": str(len(self.calls))})}
+                    )
+                self.last_observation = output
+                self.last_intent = released
+                return output
+            value = json.loads(candidate.scene_json)
+            value["relations"][2]["params"]["x"] = 0.03
+            if case == "forbidden":
+                value["relations"][2]["params"]["z"] = 1.0
+            return value
+
+        def verify_observation(self, value, contract, candidate):
+            return value  # Explicit synthetic evidence; production must read actual bytes.
+
+        def validate_candidate(self, value):
+            return None  # Explicit synthetic schema; native composition remains separate.
+
+    return SyntheticPorts()
+
+
+def exercise_scene_worker_case(case, s, service, ports, run, fence, reg, auth, contract, receipt):
+    """Exercise synthetic physical-port failure/CAS cases, never OS cleanup proof."""
+    from isaaclab_arena.agentic_environment_generation.workflow import scene_loop
+    from isaaclab_arena.agentic_environment_generation.workflow.results import (
+        CleanupEvidence,
+    )
+
+    if case == "managed_missing_ports":
+        ports.prepare_worker = None
+        with pytest.raises(ValueError, match="managed scene worker ports"):
+            service.run_scene("local", run.run_id, ports=ports)
+        assert ports.calls == ports.prepared == []
+        return True
+    if case == "managed_binding_cas":
+        pending = s.scene_snapshot(run.run_id)
+        scene_id = pending.intent.intent_id
+        with pytest.raises(ValueError, match="registration"):
+            s.release_scene(run.run_id, scene_id, auth, readiness=readiness(contract, auth))
+        sf = s.claim_scene_worker(run.run_id, scene_id, "owner", fence.owner_epoch)
+        sr = registration(sf)
+        with pytest.raises(ValueError, match="fence"):
+            s.register_scene_worker(sf, registration(fence))
+        assert s.register_scene_worker(sf, sr)
+        assert not s.register_scene_worker(sf, sr)
+        with pytest.raises(ValueError, match="conflicting"):
+            s.register_scene_worker(sf, sr.model_copy(update={"pid": 999}))
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            winners = list(
+                pool.map(
+                    lambda _: s.release_scene(
+                        run.run_id,
+                        scene_id,
+                        auth,
+                        readiness=readiness(contract, auth),
+                        fence=sf,
+                        registration_id=sr.registration_id,
+                    ),
+                    range(4),
+                )
+            )
+        assert winners.count(True) == 1
+        with pytest.raises(ValueError, match="cleanup"):
+            s.finish_scene(
+                run.run_id,
+                scene_id,
+                s.get_run(run.run_id).version,
+                scene_loop.SceneResult(failure="invalid_candidate"),
+            )
+        with pytest.raises(ValueError, match="registration"):
+            s.acknowledge_scene_cleanup(
+                sf,
+                CleanupEvidence(
+                    registration=reg,
+                    evidence_ref="wrong-scene-stop",
+                    observation="owned_process_group_stopped",
+                    remote_effects="unknown",
+                ),
+            )
+        assert s.get_generation_attempt(run.run_id).receipt == receipt
+        return True
+    if case == "managed_release_ack":
+        release = s.release_scene
+
+        def lost_ack(*args, **kwargs):
+            assert release(*args, **kwargs)
+            raise OSError("synthetic committed release acknowledgement lost")
+
+        s.release_scene = lost_ack
+    if case in (
+        "managed_prepare_unknown",
+        "managed_cleanup_failure",
+        "managed_cancel_prepare",
+    ):
+        with pytest.raises((ValueError, TimeoutError)):
+            service.run_scene("local", run.run_id, ports=ports)
+        retained = s.scene_snapshot(run.run_id)
+        assert retained.intent.worker_fence is not None and retained.intent.worker_cleanup is None
+        if case == "managed_cancel_prepare":
+            assert retained.run.state == "cancel_requested"
+        with pytest.raises(ValueError, match="unresolved"):
+            s.retire_owner("owner", fence.owner_epoch)
+        count = len(ports.prepared)
+        service.run_scene("local", run.run_id, ports=ports)
+        assert len(ports.prepared) == count == 1
+        return True
+    return False

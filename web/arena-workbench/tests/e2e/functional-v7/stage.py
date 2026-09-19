@@ -16,6 +16,11 @@ __all__ = ["stage", "read_confined"]
 FIXTURE = "isaaclab_arena/tests/test_data/pick_and_place_maple_table_env_graph.yaml"
 BACKEND_FIXTURE = "isaaclab_arena/tests/test_data/minimal_maple_table_env_graph.yaml"
 BACKEND_DATA = {
+    "isaaclab_arena/tests/test_environment_workflow_cli.py": (
+        "isaaclab_arena_examples/agentic_environment_generation/foreground_workflow_cli.py",
+        "isaaclab_arena/agentic_environment_generation/workflow/cli.py",
+        "isaaclab_arena/agentic_environment_generation/workflow/bootstrap.py",
+    ),
     "isaaclab_arena/tests/test_spec_wire_adapter.py": (
         "isaaclab_arena_environments/robolab/tasks/banana_on_plate.yaml",
         "isaaclab_arena_environments/robolab/scenes/bagel_plate_banana_bowl.yaml",
@@ -43,8 +48,19 @@ WORKFLOW_BACKEND_TESTS = (
     "isaaclab_arena/tests/test_environment_workflow_evidence.py",
     "isaaclab_arena/tests/test_environment_workflow_import_boundaries.py",
     "isaaclab_arena/tests/test_environment_workflow_service.py",
+    "isaaclab_arena/tests/test_environment_workflow_scene_loop.py",
+    "isaaclab_arena/tests/test_environment_workflow_cli.py",
 )
+GENERATION_PROCESS_TEST = "isaaclab_arena_examples/tests/test_workbench_generation_worker_process.py"
+INITIAL_GENERATION_PROCESS_TEST = "isaaclab_arena_examples/tests/test_workbench_initial_generation_worker_process.py"
+PROCESS_TESTS = (GENERATION_PROCESS_TEST, INITIAL_GENERATION_PROCESS_TEST)
+SCENE_ENGINES_TEST = "isaaclab_arena/tests/test_environment_workflow_scene_engines.py"
 EXPLICIT_BACKEND_TESTS = (
+    SCENE_ENGINES_TEST,
+    *PROCESS_TESTS,
+    "isaaclab_arena/tests/test_environment_workflow_scene_producers.py",
+    "isaaclab_arena_examples/tests/test_workbench_generation_receipts.py",
+    "isaaclab_arena_examples/tests/test_workbench_strict_receipt.py",
     "isaaclab_arena/tests/test_trajectory_assessment.py",
     "isaaclab_arena_examples/tests/test_workbench_readiness.py",
     "isaaclab_arena_examples/tests/test_workbench_paused_start.py",
@@ -124,7 +140,9 @@ def _frontend_reference(entry, reference):
 def stage(root, destination, browser, backend_tests=()):
     """Capture the inert closure, then copy and hash those exact frozen bytes."""
     if (
-        browser
+        (any(name in PROCESS_TESTS for name in backend_tests) and list(backend_tests) not in [[name] for name in PROCESS_TESTS])
+        or (SCENE_ENGINES_TEST in backend_tests and list(backend_tests) != [SCENE_ENGINES_TEST])
+        or browser
         and backend_tests
         or len(backend_tests) != len(set(backend_tests))
         or not set(backend_tests) <= set(BACKEND_TESTS + EXPLICIT_BACKEND_TESTS)

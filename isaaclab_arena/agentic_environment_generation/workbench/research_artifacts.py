@@ -400,13 +400,11 @@ class ArtifactArea:
             info = os.fstat(fd)
             if info.st_uid != os.geteuid() or info.st_mode & 0o077:
                 raise ArtifactError("Unsafe artifact lockfile")
-            expected = _canonical(
-                {
-                    "schema": 1,
-                    "store_id": self.store_id,
-                    "registry_id": self.registry_id,
-                }
-            )
+            expected = _canonical({
+                "schema": 1,
+                "store_id": self.store_id,
+                "registry_id": self.registry_id,
+            })
             if os.read(fd, 4097) != expected:
                 raise ArtifactError("Artifact lock binding mismatch")
             try:
@@ -423,6 +421,31 @@ class ArtifactArea:
     def expected_manifest(self, reservation_id, files: dict[str, bytes], binding: dict) -> dict:
         """Compute a bounded expected manifest without creating another artifact copy."""
         return self._manifest(reservation_id, files, binding)
+
+    def read_final_manifest(self, family, version, *, binding):
+        """Read and verify one exact final artifact without adopting staging files.
+
+        Args:
+            family: Exact retained artifact family.
+            version: Exact retained version identity, not a search prefix.
+            binding: Expected binding from the authoritative caller.
+
+        Returns:
+            The bounded manifest verified against its actual payload bytes.
+        """
+        _id(family)
+        _id(version)
+        binding = _binding(binding)
+        try:
+            with self.writer_lock(), _directory(self._fd, "final") as final:
+                with _directory(final, family) as parent, _directory(parent, version) as directory:
+                    manifest = json.loads(_read(directory, "manifest.json", 65536))
+                    self._verify_fd(directory, manifest)
+                    if manifest["reservation_id"] != version or _canonical(manifest["binding"]) != _canonical(binding):
+                        raise ArtifactError("Exact artifact recovery binding required")
+                    return manifest
+        except (OSError, ValueError, RecursionError):
+            raise ArtifactError("Artifact recovery read rejected") from None
 
     def has_final(self, family, version) -> bool:
         """Check directory presence only; corrupt or unsafe entries are never absence.

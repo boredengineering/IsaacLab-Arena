@@ -20,13 +20,11 @@ import math
 import os
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import get_fixture_sector_bounds
-from isaaclab_arena.agentic_environment_generation.usd_stage_introspection import resolve_surface_anchor_bounding_box
+from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import managed_inference_active
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
 
@@ -77,6 +75,7 @@ class VisualSceneCritic:
 
     def __init__(self, backend: Any | None = None, local_vlm_url: str | None = None):
         self.backend = backend
+        self._managed_inference = managed_inference_active(backend)
         self.local_vlm_url = local_vlm_url or os.environ.get("LOCAL_VLM_BASE_URL", "http://localhost:8000/v1")
 
     def evaluate_scene_spec(
@@ -92,6 +91,9 @@ class VisualSceneCritic:
         3. Tier 3: Deterministic Geometric & Camera Frustum Raycast Oracle
         4. Tier 4: Graceful Degradation & Non-Blocking User Advisory Banner
         """
+        managed = self._managed_inference or managed_inference_active(self.backend)
+        if rendered_images and managed and not (self.backend and hasattr(self.backend, "multimodal_chat")):
+            raise RuntimeError("Managed visual backend unavailable; fallback prohibited")
         # --- Tier 1: Cloud Frontier VLM ---
         if rendered_images and self.backend and hasattr(self.backend, "multimodal_chat"):
             try:
@@ -99,6 +101,8 @@ class VisualSceneCritic:
                 res.tier_used = "tier_1_cloud_vlm"
                 return res
             except Exception as exc:
+                if managed:
+                    raise RuntimeError("Managed visual assessment unavailable; fallback prohibited") from None
                 print(f"[VisualCritic] Tier 1 Cloud VLM unavailable ({exc}), attempting Tier 2 Local VLM...")
 
         # --- Tier 2: Self-Hosted Local VLM ---
@@ -145,6 +149,8 @@ class VisualSceneCritic:
 
     def _call_local_vlm_critic(self, spec: ArenaEnvGraphSpec, images: dict[str, Any]) -> VisualCriticResult | None:
         """Query local OpenAI-compatible VLM endpoint (e.g. vLLM / Ollama serving Qwen2.5-VL)."""
+        if self._managed_inference or managed_inference_active(self.backend):
+            raise RuntimeError("Managed local visual fallback prohibited")
         content_payload: list[dict[str, Any]] = [{
             "type": "text",
             "text": (
@@ -187,6 +193,10 @@ class VisualSceneCritic:
 
     def _run_deterministic_geometric_oracle(self, spec: ArenaEnvGraphSpec) -> VisualCriticResult:
         """Evaluate camera FOV coverage, line-of-sight occlusion, and support grounding via geometry."""
+        from isaaclab_arena.agentic_environment_generation.usd_stage_introspection import (
+            resolve_surface_anchor_bounding_box,
+        )
+
         anomalies: list[str] = []
         occluded: list[str] = []
         floating: list[str] = []
@@ -324,6 +334,10 @@ class PhysXPreflightCritic:
 
     def evaluate_physical_stability(self, spec: ArenaEnvGraphSpec) -> list[str]:
         """Check for physical placement instabilities (e.g. excessive drop heights, overlap)."""
+        from isaaclab_arena.agentic_environment_generation.usd_stage_introspection import (
+            resolve_surface_anchor_bounding_box,
+        )
+
         issues: list[str] = []
         bg_reg = spec.background.registry_name if spec.background else "maple_table_robolab"
 

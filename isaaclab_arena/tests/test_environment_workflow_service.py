@@ -13,6 +13,51 @@ from isaaclab_arena.agentic_environment_generation.workflow.contracts import par
 from isaaclab_arena.agentic_environment_generation.workflow.readiness import DependencyGate, DependencyResult
 
 
+@pytest.mark.parametrize(
+    "case", ["valid", "denied", "missing_attempt", "foreign_run", "foreign_principal", "changed_contract"]
+)
+def test_recovery_read_is_authenticated_and_never_resolves_execution(case):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    calls = []
+    run = SimpleNamespace(run_id="run", contract_json="retained frozen contract")
+    attempt = SimpleNamespace(
+        fence=SimpleNamespace(run_id="other" if case == "foreign_run" else "run"),
+        authorization=SimpleNamespace(principal="other" if case == "foreign_principal" else "creator"),
+        contract_json="different" if case == "changed_contract" else run.contract_json,
+    )
+    owner = SimpleNamespace(owner_id="original", owner_epoch=1, dirty=True)
+
+    def require_read(principal):
+        calls.append("read_authority")
+        assert principal == "creator"
+        if case == "denied":
+            raise PermissionError("read denied")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("recovery read must not probe, resolve grants, or execute")
+
+    store = SimpleNamespace(
+        get_run=lambda run_id: calls.append("run") or run,
+        get_generation_attempt=lambda run_id: calls.append("attempt")
+        or (None if case == "missing_attempt" else attempt),
+        get_owner=lambda: calls.append("owner") or owner,
+    )
+    authority = SimpleNamespace(
+        require_read=require_read, require_submit=forbidden, require_execute=forbidden, private_envelope=forbidden
+    )
+    service = WorkflowService(store, authority, SimpleNamespace(check=forbidden), validate_support=forbidden)
+    if case == "valid":
+        assert service.read_generation_recovery("creator", "run") == (run, attempt, owner)
+        assert calls == ["read_authority", "run", "attempt", "owner"]
+    else:
+        with pytest.raises(PermissionError if case == "denied" else ValueError):
+            service.read_generation_recovery("creator", "run")
+        assert calls == (["read_authority"] if case == "denied" else ["read_authority", "run", "attempt"])
+
+
 def contract(*, policy=False, existing=False):
     profile = {"profile_id": "synthetic", "settings_sha256": "a" * 64}
     criterion = {
@@ -652,6 +697,25 @@ def coordinator_fixture():
         store=store,
         worker=worker,
     )
+
+
+def test_owned_receiver_failure_does_not_require_read_or_cancel_user():
+    f = coordinator_fixture()
+    handle = f.dispatch()
+    f.state.db_down = True
+
+    def expired(principal):
+        raise PermissionError("expired")
+
+    f.coordinator._authority.require_read = expired
+    with pytest.raises(PermissionError):
+        f.coordinator.fail_owned(object())
+    outcome = f.coordinator.fail_owned(handle.prepared)
+    assert outcome.durable_reconciliation_pending and not outcome.cleanup_pending
+    assert handle.reconciliation_required and handle.cleanup is not None
+    assert "cancel_db" not in f.calls and f.calls.count("stop") == 1
+    with pytest.raises(PermissionError):
+        f.coordinator.cancel("creator")
 
 
 def test_coordinator_preparation_latch_and_release_guard_boundaries():

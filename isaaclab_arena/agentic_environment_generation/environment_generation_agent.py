@@ -144,6 +144,7 @@ class EnvironmentGenerationAgent:
         task_catalog: TaskCatalogue | None = None,
         *,
         publish_to_graph: bool = True,
+        proposal_only: bool = False,
         progress: Callable[[str], None] | None = None,
         prior_context: str | None = None,
     ) -> tuple[ArenaEnvGraphSpec | None, dict[str, Any] | None]:
@@ -165,6 +166,8 @@ class EnvironmentGenerationAgent:
             task_catalog: Pre-built task vocabulary. When ``None``, built from
                 ``TaskRegistry`` tasks marked ``@agent_ready``.
             publish_to_graph: Publish the completed spec to Neo4j; False returns an unpublished draft.
+            proposal_only: Return the schema-checked model proposal without native grounding,
+                autonomous repair or fallback; requires publication disabled.
             progress: Observer of real execution stages, without estimated percentages.
             prior_context: Exact prior context to consume without retrieval, including an empty
                 string. None preserves legacy CLI Graph-RAG retrieval.
@@ -174,6 +177,9 @@ class EnvironmentGenerationAgent:
             ``data`` is None. On failure, ``spec`` is None and ``data`` is the corresponding JSON dict.
             When validation fails, ``agent.traces`` holds the diagnostic trace.
         """
+        if proposal_only and publish_to_graph:
+            raise ValueError("Proposal-only inference cannot publish")
+        self._telemetry = None
         self._traces = []
         emit = progress or (lambda stage: None)
         emit("catalogues_loading")
@@ -216,6 +222,10 @@ class EnvironmentGenerationAgent:
             relation_catalog=relation_catalog,
             task_catalog=task_catalog,
         )
+        if proposal_only:
+            # The application owns grounding, validation, repair admission and routing.
+            emit("proposal_completed")
+            return spec, data
         if spec is None:
             duration_s = time.perf_counter() - start_t
             backend_tel = getattr(self.inference_backend, "telemetry", None)
@@ -396,6 +406,7 @@ class EnvironmentGenerationAgent:
         task_catalog: Any = None,
         *,
         publish_to_graph: bool = True,
+        proposal_only: bool = False,
         progress: Callable[[str], None] | None = None,
     ) -> tuple[ArenaEnvGraphSpec | None, dict[str, Any] | None]:
         """Refine or modify an existing ArenaEnvGraphSpec using natural-language instructions.
@@ -407,11 +418,16 @@ class EnvironmentGenerationAgent:
             relation_catalog: Pre-built relation vocabulary.
             task_catalog: Pre-built task vocabulary.
             publish_to_graph: Publish the completed spec to Neo4j; False returns an unpublished draft.
+            proposal_only: Return the schema-checked model proposal without native grounding,
+                autonomous repair or fallback; requires publication disabled.
             progress: Observer of real execution stages, without estimated percentages.
 
         Returns:
             A ``(spec, data)`` tuple with the refined, validated specification.
         """
+        if proposal_only and publish_to_graph:
+            raise ValueError("Proposal-only inference cannot publish")
+        self._telemetry = None
         self._traces = []
         emit = progress or (lambda stage: None)
         emit("catalogues_loading")
@@ -438,6 +454,10 @@ class EnvironmentGenerationAgent:
             original_prompt=feedback,
             available_affordances=affordances,
         )
+        if proposal_only:
+            # The application owns grounding, validation, repair admission and routing.
+            emit("proposal_completed")
+            return spec, data
         if spec is None:
             duration_s = time.perf_counter() - start_t
             backend_tel = getattr(self.inference_backend, "telemetry", None)

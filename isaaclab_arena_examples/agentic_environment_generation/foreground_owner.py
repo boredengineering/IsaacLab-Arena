@@ -98,6 +98,31 @@ class ForegroundOwnerLease:
             raise ValueError("Foreground owner lease changed")
 
     @_locked
+    def recover_unprepared_owner(self, store, ownership_artifacts):
+        """Adopt only an unprepared durable owner under this actual exclusive flock.
+
+        Independently inspect exact retained physical identities of every past
+        produced worker. No signal, invented cleanup, retirement or budget mutation.
+        """
+        from .web_api.owned_process_group import OwnedProcessGroup
+
+        self.require_held(self.run_id, self.principal)
+        if self._prepared is not None:
+            raise ValueError("Never-prepared replacement lease required")
+        snapshot = store.unprepared_owner_snapshot(self.run_id)
+        owner, registrations = snapshot
+        for registration in registrations:
+            identity = ownership_artifacts.load(registration)
+            group = OwnedProcessGroup(registration.pid, identity)
+            if group.members():
+                raise ValueError("Historical scene worker remains physically live")
+        if store.unprepared_owner_snapshot(self.run_id) != snapshot:
+            raise ValueError("Continuation obligations changed")
+        self.require_held(self.run_id, self.principal)
+        self.owner_id = owner.owner_id
+        return owner
+
+    @_locked
     def mark_prepared(self, registration):
         """Disarm never-prepared release before any worker preparation side effect."""
         self.require_held(self.run_id, self.principal)
@@ -133,6 +158,91 @@ class ForegroundOwnerLease:
         ):
             raise ValueError("Exact trusted cleanup proof required")
         self._release()
+
+    @_locked
+    def mark_recovery(self, fence):
+        """Latch an authenticated original fence; this grants no release authority."""
+        self.require_held(self.run_id, self.principal)
+        if type(fence) is not AttemptFence or fence.run_id != self.run_id:
+            raise ValueError("Exact recovery fence required")
+        if self._prepared is not None and self._prepared != fence:
+            raise ValueError("Conflicting recovery fence")
+        self._prepared = fence
+
+    @_locked
+    def retire_and_release(self, store, registration, evidence):
+        """Verify actual cleanup, retire exact durable owner, read back, then unlock."""
+        self.require_held(self.run_id, self.principal)
+        if self._prepared != registration.fence or self._cleanup_verified(registration, evidence) is not True:
+            raise ValueError("Exact trusted cleanup proof required")
+        fence = registration.fence
+        store.retire_owner(fence.owner_id, fence.owner_epoch)
+        owner = store.get_owner()
+        if owner is None or owner.dirty or (owner.owner_id, owner.owner_epoch) != (fence.owner_id, fence.owner_epoch):
+            raise ValueError("Durable retirement readback unresolved")
+        self.release_after_cleanup(registration, evidence)
+
+    @_locked
+    def require_scene_settled(self, store, registration, evidence):
+        """Require physical local cleanup AND exact durable stage completion."""
+        from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import canonical
+
+        self.require_held(self.run_id, self.principal)
+        if (
+            type(registration) is not WorkerRegistration
+            or self._prepared != registration.fence
+            or self._cleanup_verified(registration, evidence) is not True
+        ):
+            raise ValueError("Exact trusted cleanup proof required")
+        fence = registration.fence
+        retained = store.get_scene_intent(self.run_id, fence.intent_id)
+        if (
+            retained.status != "produced"
+            or retained.worker_fence is None
+            or type(retained.worker_fence.generation) is not int
+            or type(retained.worker_fence.owner_epoch) is not int
+            or canonical(dict(retained.worker_fence)) != canonical(dict(fence))
+            or retained.worker_registration is None
+            or retained.worker_cleanup is None
+            or canonical(retained.worker_registration.model_dump(mode="json"))
+            != canonical(registration.model_dump(mode="json"))
+            or canonical(retained.worker_cleanup.model_dump(mode="json")) != canonical(evidence.model_dump(mode="json"))
+        ):
+            raise ValueError("Authoritative settled scene readback required")
+
+    @_locked
+    def advance_scene(self, store, registration, evidence, next_fence):
+        """Atomically latch next claimed stage without unlocking or clearing uncertainty."""
+        from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import canonical
+
+        self.require_scene_settled(store, registration, evidence)
+        if type(next_fence) is not AttemptFence:
+            raise ValueError("Same held owner next scene fence required")
+        AttemptFence.model_validate(dict(next_fence))
+        previous = registration.fence
+        if (
+            type(next_fence) is not AttemptFence
+            or next_fence == previous
+            or (next_fence.run_id, next_fence.owner_id, next_fence.owner_epoch)
+            != (self.run_id, self.owner_id, previous.owner_epoch)
+        ):
+            raise ValueError("Same held owner next scene fence required")
+        owner = store.get_owner()
+        following = store.get_scene_intent(self.run_id, next_fence.intent_id)
+        if (
+            owner is None
+            or not owner.dirty
+            or (owner.owner_id, owner.owner_epoch) != (next_fence.owner_id, next_fence.owner_epoch)
+            or following.worker_fence is None
+            or canonical(following.worker_fence.model_dump(mode="json"))
+            != canonical(next_fence.model_dump(mode="json"))
+            or following.status != "reserved"
+            or following.worker_registration is not None
+            or following.worker_cleanup is not None
+            or store.get_run(self.run_id).state != "running"
+        ):
+            raise ValueError("Exact next claimed scene readback required")
+        self._prepared = next_fence
 
     def _release(self):
         self._lease.__exit__(None, None, None)

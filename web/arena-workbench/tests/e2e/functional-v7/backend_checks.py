@@ -14,11 +14,21 @@ from pathlib import Path
 
 
 def selection(names):
-    from stage import BACKEND_TESTS, EXPLICIT_BACKEND_TESTS
+    from stage import BACKEND_TESTS, EXPLICIT_BACKEND_TESTS, PROCESS_TESTS, SCENE_ENGINES_TEST
     names = list(names) or list(BACKEND_TESTS)
     if len(names) != len(set(names)) or not set(names) <= set(BACKEND_TESTS + EXPLICIT_BACKEND_TESTS):
         raise ValueError("Only unique approved backend test files are permitted; no pytest flags")
+    if any(name in PROCESS_TESTS for name in names) and names not in [[name] for name in PROCESS_TESTS]:
+        raise ValueError("Generation process approved backend profile requires exact singleton")
+    if SCENE_ENGINES_TEST in names and names != [SCENE_ENGINES_TEST]:
+        raise ValueError("Scene engine profile requires exact singleton")
     return names
+
+
+def collector_timeout(names):
+    """Bound host collection only; child alarms and operation deadlines are unchanged."""
+    from stage import PROCESS_TESTS
+    return 300 if selection(names) in [[name] for name in PROCESS_TESTS] else 180
 
 
 def core_only(names):
@@ -80,9 +90,17 @@ def inside(names):
         metadata = capture_git_metadata()
         proof["metadata_capture"] = {"stdout": metadata["stdout"].decode("ascii"), "returncode": metadata["returncode"]}
         replay = MetadataReplay(metadata, counts)
-        sys.addaudithook(make_audit(counts))
+        from stage import PROCESS_TESTS
+        process_profile = names in [[name] for name in PROCESS_TESTS]
+        gate = None
+        if process_profile:
+            from generation_worker_fixture import OWNER, SpawnGate
+            Path("/private/owner").write_text(OWNER)
+            gate = SpawnGate(counts)
+        sys.addaudithook(gate.audit if gate else make_audit(counts))
         profile = make_profile(counts)
-        if names == ["isaaclab_arena/tests/test_inference_backend.py"]:
+        from stage import SCENE_ENGINES_TEST
+        if names in (["isaaclab_arena/tests/test_inference_backend.py"], [SCENE_ENGINES_TEST]):
             # Network/process audit remains installed. A missed test mock fails
             # before HTTP dispatch, including in an initializer.
             from openai import DefaultHttpxClient
@@ -92,7 +110,11 @@ def inside(names):
                 counts["provider"] += 1
                 raise RuntimeError("Inference units require a synthetic SDK transport")
             transport_type.handle_request = denied_transport
-            profile = inference_unit_profile(profile)
+            if names == [SCENE_ENGINES_TEST]:
+                from generation_worker_fixture import production_sdk_profile
+                profile = production_sdk_profile(profile)
+            else:
+                profile = inference_unit_profile(profile)
             proof["scope"] = "synthetic SDK transport units; no live model execution"
         sys.setprofile(profile)
         threading.setprofile(profile)
@@ -103,6 +125,9 @@ def inside(names):
             import git  # noqa: F401 -- genuine immutable-image metadata import
         finally:
             subprocess.Popen = native
+        if gate:
+            subprocess.Popen = gate.popen_type()
+            proof["mode"] = "generation-process"
         if not core:
             # No module replacement: API tests require a real immutable package.
             import neo4j
@@ -113,6 +138,13 @@ def inside(names):
                 "--junitxml=/evidence/pytest.xml", *["/source/" + name for name in names]]
         proof["pytest_argv"] = args
         proof["test_exit"] = int(pytest.main(args))
+        if gate:
+            proof["permitted_launches"] = gate.launches
+            proof["permitted_launch_count"] = len(gate.launches)
+            proof["launch_rejections"] = gate.rejections
+            proof["child_witnesses"] = gate.verify_children()
+            proof["permitted_total_processes"] = len(proof["child_witnesses"])
+            assert not list(Path("/evidence").glob("generation-child-*-forbidden.json"))
         proof["metadata_replays"] = replay.reads
         proof["forbidden"] = counts
         assert proof["test_exit"] == 0 and not any(counts.values())
@@ -177,6 +209,9 @@ def main(names=(), *, runtime_image=None, provision_manifest=None):
         run.proof["host_output"] = host
         mounts = [f"type=bind,src={host}/source,dst=/source,readonly",
                   f"type=bind,src={host}/evidence,dst=/evidence"]
+        from stage import PROCESS_TESTS
+        if names in [[name] for name in PROCESS_TESTS]:
+            mounts.append(f"type=bind,src={host}/source-manifest.json,dst=/generation-source-manifest.json,readonly")
         if not core:
             mounts.append(f"type=bind,src={host}/pydeps,dst=/pydeps,readonly")
         argv = ["-i", "HOME=/tmp", "PATH=/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE=1",
@@ -188,7 +223,9 @@ def main(names=(), *, runtime_image=None, provision_manifest=None):
         images = [record["image"] for record in run.proof["containers"] if record["id"] == cid]
         assert images == [selected_image(discovery)], "Pytest image readback mismatch"
         docker("start", cid)
-        wait_file(run, cid, output / "evidence/backend-proof.json", timeout=180)
+        run.proof["collector_timeout_seconds"] = collector_timeout(names)
+        run.save()
+        wait_file(run, cid, output / "evidence/backend-proof.json", timeout=collector_timeout(names))
         observed = json.loads(read_confined(output, "evidence/backend-proof.json"))
         run.proof["backend"] = observed
         assert docker("wait", cid) == "0" and observed["status"] == "passed"

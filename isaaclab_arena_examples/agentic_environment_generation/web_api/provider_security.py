@@ -56,22 +56,27 @@ def checked_config(config, *, trusted_server=False):
     result = {"api_key": key, "model": model, "base_url": endpoint}
     if "inference_profile" in config:
         from isaaclab_arena.agentic_environment_generation.inference_profiles import checked_inference_profile
-        result["inference_profile"] = checked_inference_profile(config["inference_profile"], model=model, base_url=endpoint)
+
+        result["inference_profile"] = checked_inference_profile(
+            config["inference_profile"], model=model, base_url=endpoint
+        )
         reject_secret(result["inference_profile"], key)
     return result
 
 
 @contextmanager
-def bounded_client(config):
+def bounded_client(config, *, allowance=None):
     """Install transport before the legacy agent's initialization ping, in its isolated worker only."""
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance
     from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import (
-        CallAllowance,
         bounded_client as shared_bounded_client,
     )
 
     # Legacy contexts retain eight calls, a 45s HTTP timeout and no new expiry.
     with shared_bounded_client(
-        config, allowance=CallAllowance(max_calls=8, deadline=float("inf")), strict_model_binding=False
+        config,
+        allowance=allowance if allowance is not None else CallAllowance(max_calls=8, deadline=float("inf")),
+        strict_model_binding=allowance is not None,
     ) as client:
         yield client
 

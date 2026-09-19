@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Initial read-only CLI slice: inspect intent, never release execution or check readiness."""
+"""Pure contract inspection; execution belongs to the examples composition CLI."""
 
 import argparse
 import json
@@ -43,7 +43,9 @@ def main(argv=None):
     parser = _StaticArgumentParser(prog="workflow.cli", description=__doc__, allow_abbrev=False)
     commands = parser.add_subparsers(dest="command", required=True)
     inspect = commands.add_parser(
-        "inspect-contract", help="Inspect intent without checking live readiness", allow_abbrev=False
+        "inspect-contract",
+        help="Inspect intent without checking live readiness",
+        allow_abbrev=False,
     )
     inspect.add_argument("path", help="Explicit JSON request file")
     try:

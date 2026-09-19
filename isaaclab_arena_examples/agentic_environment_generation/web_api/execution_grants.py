@@ -90,9 +90,22 @@ def _private_strings(credentials):
         metadata.update({"uri", "user", "database"})
     if "inference_profile" in credentials:
         from isaaclab_arena.agentic_environment_generation.inference_profiles import checked_inference_profile
-        checked_inference_profile(credentials["inference_profile"], model=credentials.get("model"),
-                                  base_url=credentials.get("base_url"))
+
+        checked_inference_profile(
+            credentials["inference_profile"], model=credentials.get("model"), base_url=credentials.get("base_url")
+        )
         metadata.add("inference_profile")
+    if "workflow_accounting" in credentials:
+        from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import (
+            checked_workflow_accounting,
+        )
+
+        if any(type(credentials.get(key)) is not str or not credentials[key] for key in ("model", "base_url")):
+            raise ValueError("Invalid workflow accounting origin")
+        checked_workflow_accounting(
+            credentials["workflow_accounting"], model=credentials["model"], endpoint=credentials["base_url"]
+        )
+        metadata.add("workflow_accounting")
     for key, value in credentials.items():
         if key not in metadata:
             yield from walk(value)
@@ -103,6 +116,7 @@ def _nonsecret_profile(value, path=()):
         for key, child in value.items():
             if path == () and key == "inference_profile":
                 from isaaclab_arena.agentic_environment_generation.inference_profiles import checked_inference_profile
+
                 checked_inference_profile(child, model=value.get("model"), base_url=value.get("base_url"))
                 continue
             normalized = key.lower().replace("_", "").replace("-", "")

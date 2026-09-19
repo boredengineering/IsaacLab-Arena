@@ -1,14 +1,16 @@
 # Event Mapping Refactoring Plan 02 — Application-Owned Generate and Verify
 
-Status: **PROPOSAL — documentation only; implementation and live execution are not authorized by this plan.**
+Status: **guarded isolated workflow milestone complete; final parent snapshot and bounded review passed.** Actual generation/SDK calls join Neo4j-owned observation, permitted repair, fresh reassessment and acceptance through fresh CLI processes. All five findings (CLI-01, RESUME-01/02, CANCEL-01, RESULT-01), including B1/B2, are closed for this isolated scope. Final proof `arena-neo4j-6fe820f218de4774a8cb46c049125986` has matching Python source hashes, 31 fresh CLI processes, 28 verified SDK workers, zero forbidden effects and verified container/network cleanup. The default composition remains unavailable outside its explicitly initialized isolated environment; installed-host startup, production deployment, native/live execution and live retrieval are not verified or newly authorized. The [current handoff](dashboard_cli_workflow_parity/research-stack-implementation-handoff.md), [isolated runbook](dashboard_cli_workflow_parity/foreground-workflow-runbook.md) and [implementation review](event-mapping-refactoring_plan_02-implementation-review.md) record the deliverable and remaining boundaries. The original design-review baseline below is historical.
 
 Baseline inspected: `45a0b26466`, branch `dev/0.3.0-prerelease`. Source anchors below describe this baseline; recheck before implementation.
 
-Planning checkpoint: review-loop corrections are incorporated. Section 13 now decomposes P0 into owned work packages and explicit handoff gates; section 15 distinguishes decisions required for the first CLI from later-phase selections. These are planned deliverables, not completed contracts or permission to execute workloads. The review ledger preserves the exact revision reviewed before this action-plan elaboration.
+Planning checkpoint: design-review corrections are incorporated. Section 13 decomposes P0 into owned work packages and explicit handoff gates; section 15 distinguishes first-CLI decisions from later selections. These sections are the design/acceptance contract, not a current completion ledger or permission to execute workloads. Several foundations and isolated compositions are now implemented; consult the current handoff for verified coverage. The original review ledger preserves the earlier design revision, not approval of later code.
 
 ## 1. Decision, scope and document ownership
 
 Implement one application-owned, bounded **generate and verify environment** workflow over the existing Arena engines. Use Python, the existing Neo4j driver and existing bounded worker/process mechanisms. Do not add a general-purpose agent framework, message broker, distributed service stack or replacement policy runner.
+
+The broader objective is the coherent domain/application model identified through the step-by-step event-modeling study: research entities → identity → authoritative owner → lifecycle → persistence/refresh behavior → available actions. The application-owned orchestrator must coordinate the existing researched tools instead of relying on an external harness such as Hermes with GPT-6-Astra to interpret outputs and select subsequent operations. Preserve that reference workflow and trace its steps to the concrete gaps in §11. Contracts, Neo4j lifecycle and worker controls enable this transfer; they are not substitutes for it. Derive later GraphQL input/output and read-model contracts from these semantics rather than directly exposing database nodes or local schemas.
 
 The first deliverable is a complete CLI submission/status workflow: generate from a prompt using retained Graph-RAG context, validate, realize/capture, assess, and autonomously perform permitted repair and reassessment. The dashboard subsequently calls the **same application service**, not a browser-side sequence of Generate/Build/Repair buttons.
 
@@ -402,7 +404,7 @@ Add these cases to P0-07/P6 test admission and record separately which are synth
 
 ## 11. Source-to-target extraction map
 
-Aliases in this section: `C/` = `isaaclab_arena/agentic_environment_generation/`; `E/` = `isaaclab_arena_examples/agentic_environment_generation/`; `W/` = `E/web_api/`. Targets marked **new** are proposed, not implemented modules.
+Aliases in this section: `C/` = `isaaclab_arena/agentic_environment_generation/`; `E/` = `isaaclab_arena_examples/agentic_environment_generation/`; `W/` = `E/web_api/`. Targets marked **new** describe the original extraction proposal, not current file-existence or completion claims; the handoff maps the implemented workflow/foreground modules and their evidence.
 
 | Existing source / callable | Proposed owner and change | Compatibility / acceptance obligation |
 | --- | --- | --- |
@@ -521,7 +523,7 @@ These are implementation requirements, not tests executed by this documentation 
 
 ## 13. Phased action plan and gates
 
-All implementation phases below are **not started**. The design review and this documentation update do not complete P0. Each phase closes only with its stated evidence, not with a file-count or test-count claim. No commits/pushes are implied.
+Implementation has started; the former blanket “not started” status is stale. The [current implementation handoff](dashboard_cli_workflow_parity/research-stack-implementation-handoff.md#resumption-checkpoint-after-the-sbom-detour) records the source-confirmed checkpoint after the SBOM detour: contracts/readiness, generation lifecycle/adoption/completion, foreground authority/lease, schema/evidence/repair utilities and a read-only CLI exist. The concrete generation worker bridge, integrated scene loop and complete CLI remain unfinished. This source inspection does not close P0/P1/P2 as whole phases or establish native acceptance. Each phase closes only with its stated evidence, not a file-count or historical test-count claim. No commits/pushes are implied.
 
 | Phase | Work / files | Entry dependencies | Exit evidence |
 | --- | --- | --- | --- |
@@ -538,7 +540,7 @@ Parallelism: once P0 freezes interfaces, Neo4j/lifecycle and pure evidence/repai
 
 ### 13.1 P0 work packages — what to freeze before implementation fan-out
 
-Owners below are responsibility roles to assign when implementation is authorized, not additional services or already assigned people. New production/test files remain **proposed**. Use the aliases `C/`, `W/` and `E/` from section 11. One contracts owner integrates edits to shared `workflow/contracts.py`/`store.py`; other owners propose changes through that owner rather than editing those files concurrently.
+Owners below are logical responsibility roles, not additional services. The table retains the original work-package destinations; some production/test files now exist, as recorded in the implementation handoff. Do not recreate them or equate their existence with completed phase gates. Use the aliases `C/`, `W/` and `E/` from section 11. One contracts owner integrates edits to shared `workflow/contracts.py`/`store.py`; other owners propose changes through that owner rather than editing those files concurrently.
 
 | Package | Accountable role | Existing source / proposed destination | Concrete P0 deliverable | Completion evidence / dependency |
 | --- | --- | --- | --- | --- |
@@ -671,6 +673,8 @@ Review the plan independently for persistence/execution and evidence/research se
 | Coarse phases and ambiguous repair scenarios | Sections 11–14 give source owners, dependencies and evidence-based acceptance cases. |
 
 ## 16. Draft verification boundary
+
+This section records the original documentation/review boundary. Subsequent scoped implementation is tracked in §13 and the current handoff; the historical statements below must not be read as saying that no implementation now exists or as permission for native/shared-service execution.
 
 Writing this plan changes documentation only. Runtime code, database schema/state, workers, services, credentials and queued jobs remain untouched. Documentation checks validate links/format and review consistency; implementation, native acceptance and deployment remain future work under their own approval and evidence gates.
 

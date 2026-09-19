@@ -287,55 +287,9 @@ class EditorExecution:
 
     def validate_managed_receipt(self, job, result):
         """Revalidate the candidate and reject unrecognized public result fields."""
-        fields = {
-            "yaml_text",
-            "validation",
-            "traces",
-            "publication",
-            "warnings",
-            "operation",
-            "prior_snapshot",
-            "catalogue_sha256",
-        }
-        if type(result) is not dict or set(result) != fields:
-            raise ValueError("Invalid generation result fields")
-        if result["operation"] != job["inputs"]["operation"] or result["publication"] != "not_published":
-            raise ValueError("Invalid generation operation")
-        if not isinstance(result["yaml_text"], str):
-            raise ValueError("Invalid candidate text")
-        validation = self.documents.validate(result["yaml_text"])
-        if not validation["valid"]:
-            raise ValueError("Invalid candidate")
-        if not isinstance(result["traces"], list) or any(stage not in GENERATION_STAGES for stage in result["traces"]):
-            raise ValueError("Invalid generation traces")
-        warnings = {
-            "Not published to Neo4j. No simulation or policy evaluation was run.",
-            "Agent did not converge on all physical/semantic checks; review the draft before use.",
-        }
-        if not isinstance(result["warnings"], list) or any(w not in warnings for w in result["warnings"]):
-            raise ValueError("Invalid generation warnings")
-        digest = result["catalogue_sha256"]
-        if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
-            raise ValueError("Invalid catalogue digest")
-        expected = job["inputs"].get("execution_catalogue_sha256")
-        if type(expected) is not str or expected != digest:
-            raise ValueError("Execution catalogue identity mismatch")
-        snapshot = result["prior_snapshot"]
-        if type(snapshot) is not dict:
-            raise ValueError("Missing prior snapshot")
-        status = snapshot.get("status")
-        if result["operation"] == "new":
-            if status == "not_requested":
-                raise ValueError("New generation requires a retrieval outcome")
-            if job["inputs"].get("retrieval_policy") == "require_service" and status == "unavailable":
-                raise ValueError("Required retrieval unavailable")
-        elif status != "not_requested":
-            raise ValueError("Refinement cannot claim retrieval")
-        from isaaclab_arena.agentic_environment_generation.prior_receipt import validate_prior_snapshot
+        from isaaclab_arena.agentic_environment_generation.workflow.generation_output import validate_generation_output
 
-        prompt = job["inputs"].get("prompt", "") if result["operation"] == "new" else ""
-        validate_prior_snapshot(snapshot, prompt=prompt)
-        return {**result, "validation": validation}
+        return validate_generation_output(job["inputs"], result, validate_document=self.documents.validate)
 
     def request_cancel(self):
         if self.snapshots is not None and self.cancel_task is None:

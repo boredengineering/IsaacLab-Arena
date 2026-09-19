@@ -77,6 +77,12 @@ class StopResult:
     cleanup_pending: bool
 
 
+@dataclass(frozen=True)
+class FailureResult:
+    durable_reconciliation_pending: bool
+    cleanup_pending: bool
+
+
 class HeldOwnerLease(Protocol):
     owner_id: str
 
@@ -215,10 +221,10 @@ class GenerationCoordinator:
         )
         return durable_readiness(request, requirements, report, mapping=self._clock)
 
-    def dispatch(self, principal, *, expected_version, decision_id, reservation):
+    def dispatch(self, principal, *, expected_version, decision_id, reservation, pending_intent=None):
         """Release once and return locally; retries never construct another worker."""
         self._authenticate(principal)
-        key = (expected_version, decision_id, reservation)
+        key = (expected_version, decision_id, reservation, pending_intent)
         with self._lock:
             if self._handle is not None:
                 if key != self._key:
@@ -239,20 +245,26 @@ class GenerationCoordinator:
             try:
                 self._lease.require_held(self._run_id, principal)
                 run = self._store.get_run(self._run_id)
-                if run.state != "pending" or run.version != expected_version:
+                if run.version != expected_version or (run.state != "pending" and pending_intent is None):
                     raise ValueError("dirty dispatch requires reconciliation")
                 request = parse_contract(run.contract_json)
                 self._timeout = min(120, request.budget.per_operation_timeout_seconds)
                 auth = self._authorization(request)
                 readiness = self._readiness(request)
-                intent = self._store.reserve_generation(
-                    self._run_id,
-                    expected_version,
-                    decision_id,
-                    auth,
-                    reservation,
-                    readiness=readiness,
-                )
+                if pending_intent is None:
+                    intent = self._store.reserve_generation(
+                        self._run_id,
+                        expected_version,
+                        decision_id,
+                        auth,
+                        reservation,
+                        readiness=readiness,
+                    )
+                else:
+                    pending = self._store.pending_generation(self._run_id)
+                    if pending != dict(intent_id=pending_intent, reservation=reservation):
+                        raise ValueError("Original unclaimed reservation required")
+                    intent = pending_intent
                 # Retain acknowledged identities before another outcome can be unknown.
                 self._handle.intent_id = intent
                 epoch = self._store.begin_owner(self._handle.owner_id)
@@ -402,6 +414,38 @@ class GenerationCoordinator:
                 pass
             raise CompletionIncomplete(handle) from None
 
+    def fail_owned(self, prepared):
+        """Reconcile an owned receiver failure without requiring a current read grant.
+
+        Exact retained object identity is the local stop capability. This endpoint
+        returns no run/read data, never requests user cancellation, and never sends.
+        Public cancel/complete remain authenticated. Physical stop precedes DB I/O.
+        """
+        with self._lock:
+            handle = self._handle
+            if handle is None or handle.prepared is not prepared:
+                raise PermissionError("Exact retained owner capability required")
+            handle.incomplete = handle.reconciliation_required = True
+            handle.durable_reconciliation_pending = True
+            try:
+                self._stop()
+            except Exception:
+                handle.cleanup_pending = True
+            try:
+                reason = (
+                    ReconciliationReason.RELEASED_WITHOUT_RECEIPT
+                    if handle.completion_receipt is None
+                    else ReconciliationReason.OWNER_OUTCOME_UNCERTAIN
+                )
+                self._store.mark_reconciliation_required(handle.fence, reason)
+                if handle.cleanup is not None:
+                    self._store.acknowledge_cleanup(handle.fence, handle.cleanup)
+                retained = self._store.get_attempt(handle.fence)
+                handle.durable_reconciliation_pending = retained.reconciliation_reason != reason
+            except Exception:
+                pass
+            return FailureResult(handle.durable_reconciliation_pending, handle.cleanup_pending)
+
     def _stop(self):
         handle = self._handle
         if handle is not None and handle.prepared is not None and handle.cleanup is None:
@@ -410,6 +454,25 @@ class GenerationCoordinator:
                 raise ValueError("exact cleanup evidence required")
             handle.cleanup = evidence
             handle.cleanup_pending = False
+
+    def stop_local(self, principal):
+        """Fence and stop retained work without authority, model or database I/O.
+
+        This owner-memory capability checks the frozen creator only and exposes no
+        run data. The authenticated owner transport supplies that exact principal.
+        A pending result is not physical cleanup proof; callers must not ACK it.
+        """
+        if type(principal) is not str or principal != self._principal:
+            raise PermissionError("creator required")
+        with self._lock:
+            self._cancelled = True
+            try:
+                self._stop()
+            except Exception:
+                if self._handle is not None:
+                    self._handle.cleanup_pending = True
+                return StopResult(True, True)
+            return StopResult(True, self._preparing)
 
     def cancel(self, principal):
         """Authenticate locally, fence send, stop owned work, then attempt persistence.

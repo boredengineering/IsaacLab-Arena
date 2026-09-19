@@ -11,8 +11,8 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from .attempts import AttemptFence, AuthorizationSnapshot, WorkerRegistration
-from .contracts import FrozenModel, Hash, Identifier, ModelProfile
+from .attempts import AttemptFence, AuthorizationSnapshot, GenerationReservation, WorkerRegistration
+from .contracts import Amount, FrozenModel, Hash, Identifier, ModelProfile
 
 
 class GenerationReceipt(FrozenModel):
@@ -59,6 +59,14 @@ class ReconciliationReason(str, Enum):
     OWNER_OUTCOME_UNCERTAIN = "owner_outcome_uncertain"
 
 
+class OwnerView(FrozenModel):
+    """Nonsecret retained owner metadata, never proof of a physical lease."""
+
+    owner_id: Identifier
+    owner_epoch: Annotated[int, Field(strict=True, ge=1)]
+    dirty: bool
+
+
 class AttemptView(FrozenModel):
     """Retained bindings for read-authorized result recovery."""
 
@@ -66,6 +74,9 @@ class AttemptView(FrozenModel):
     registration: WorkerRegistration | None
     contract_json: str
     authorization: AuthorizationSnapshot
+    reservation: GenerationReservation
+    admitted_at: Amount
+    released_at: Amount | None
     released: bool
     status: str
     reconciliation_reason: ReconciliationReason | None = None

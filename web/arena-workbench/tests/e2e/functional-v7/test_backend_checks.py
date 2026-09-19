@@ -28,10 +28,198 @@ WORKFLOW = (
     "isaaclab_arena/tests/test_environment_workflow_evidence.py",
     "isaaclab_arena/tests/test_environment_workflow_import_boundaries.py",
     "isaaclab_arena/tests/test_environment_workflow_service.py",
+    "isaaclab_arena/tests/test_environment_workflow_scene_loop.py",
+    "isaaclab_arena/tests/test_environment_workflow_cli.py",
 )
 
 
 class CoreRunnerTests(unittest.TestCase):
+    def test_process_collector_wait_and_initial_generation_admission(self):
+        from stage import GENERATION_PROCESS_TEST, INITIAL_GENERATION_PROCESS_TEST
+        for selected in (GENERATION_PROCESS_TEST, INITIAL_GENERATION_PROCESS_TEST):
+            self.assertEqual(backend_checks.selection([selected]), [selected])
+            self.assertFalse(backend_checks.core_only([selected]))
+            self.assertEqual(backend_checks.collector_timeout([selected]), 300)
+            for names in ([selected, CORE], [selected, selected], [selected + "::arbitrary"]):
+                with self.assertRaises(ValueError):
+                    backend_checks.selection(names)
+        self.assertEqual(backend_checks.collector_timeout([]), 180)
+        self.assertEqual(backend_checks.collector_timeout([CORE]), 180)
+        self.assertEqual(backend_checks.selection([]), [CORE, API])
+
+    def test_cli_units_are_exact_core_only_admission(self):
+        import stage
+
+        name = "isaaclab_arena/tests/test_environment_workflow_cli.py"
+        self.assertEqual(backend_checks.selection([name]), [name])
+        self.assertTrue(backend_checks.core_only([name]))
+        self.assertEqual(backend_checks.selection([]), [CORE, API])
+        self.assertEqual(stage.BACKEND_DATA[name], (
+            "isaaclab_arena_examples/agentic_environment_generation/foreground_workflow_cli.py",
+            "isaaclab_arena/agentic_environment_generation/workflow/cli.py",
+            "isaaclab_arena/agentic_environment_generation/workflow/bootstrap.py",
+        ))
+
+    def test_scene_suites_are_exact_explicit_admissions(self):
+        loop = "isaaclab_arena/tests/test_environment_workflow_scene_loop.py"
+        producers = "isaaclab_arena/tests/test_environment_workflow_scene_producers.py"
+        for selected in (loop, producers):
+            self.assertEqual(backend_checks.selection([selected]), [selected])
+            for names in ([selected, selected], [selected + "::test_x"]):
+                with self.assertRaises(ValueError):
+                    backend_checks.selection(names)
+        self.assertTrue(backend_checks.core_only([loop]))
+        self.assertFalse(backend_checks.core_only([producers]))
+        self.assertEqual(backend_checks.selection([]), [CORE, API])
+
+    def test_scene_models_require_exact_singleton_sdk_profile(self):
+        from stage import SCENE_ENGINES_TEST
+
+        self.assertEqual(backend_checks.selection([SCENE_ENGINES_TEST]), [SCENE_ENGINES_TEST])
+        self.assertFalse(backend_checks.core_only([SCENE_ENGINES_TEST]))
+        for names in ([SCENE_ENGINES_TEST, API], [SCENE_ENGINES_TEST, SCENE_ENGINES_TEST],
+                      [SCENE_ENGINES_TEST + "::arbitrary"]):
+            with self.assertRaises(ValueError):
+                backend_checks.selection(names)
+
+    def test_restart_modes_remain_fixed_and_bounded(self):
+        import generation_worker_fixture as fixture
+
+        self.assertEqual(
+            {m for m in fixture.MODES if m.startswith("restart-")},
+            {
+                "restart-old",
+                "restart-new",
+                "restart-locality",
+                "restart-missing",
+                "restart-cancel",
+                "restart-old-live",
+                "restart-live-missing",
+                "restart-live-cancel",
+            },
+        )
+        self.assertEqual(fixture.MAX_LAUNCHES, 48)
+        with self.assertRaises(ValueError):
+            fixture.spawn_spec("restart-arbitrary-script")
+
+    def test_legacy_receipts_are_ordinary_explicit_api(self):
+        import stage
+
+        for selected in (
+            "isaaclab_arena_examples/tests/test_workbench_generation_receipts.py",
+            "isaaclab_arena_examples/tests/test_workbench_strict_receipt.py",
+        ):
+            self.assertEqual(backend_checks.selection([selected]), [selected])
+            self.assertFalse(backend_checks.core_only([selected]))
+            self.assertEqual(backend_checks.selection([selected, API]), [selected, API])
+            self.assertEqual(backend_checks.selection([]), [CORE, API])
+            for names in ([selected, selected], [selected + "::test_x"], [selected, stage.GENERATION_PROCESS_TEST]):
+                with self.assertRaises(ValueError):
+                    backend_checks.selection(names)
+
+    def test_production_sdk_profile_is_exact_and_no_graph_configuration(self):
+        from types import SimpleNamespace
+
+        import generation_worker_fixture as fixture
+        from api import make_profile
+
+        self.assertTrue(hasattr(fixture, "production_sdk_profile"), "missing exact SDK profile")
+        counts = dict.fromkeys(("network", "provider", "graph", "render", "workload", "subprocess"), 0)
+        profile = fixture.production_sdk_profile(make_profile(counts))
+        for owner in ("InferenceBackend", "EnvironmentGenerationAgent", "OpenAI", "AsyncOpenAI"):
+            frame = SimpleNamespace(
+                f_globals={"__name__": "synthetic"},
+                f_code=SimpleNamespace(co_name="__init__", co_filename="/private/injected.py"),
+                f_locals={"self": type(owner, (), {})()},
+            )
+            with self.assertRaisesRegex(RuntimeError, "provider"):
+                profile(frame, "call", None)
+        module = "isaaclab_arena_examples.agentic_environment_generation.web_api.graph_access"
+        scope = {"__name__": module}
+        exec(
+            compile(
+                "def retrieve_snapshot(prompt, config, *, driver_factory=None, managed_context=None): pass",
+                "/source/" + module.replace(".", "/") + ".py",
+                "exec",
+            ),
+            scope,
+        )
+        function = scope["retrieve_snapshot"]
+        frame = SimpleNamespace(
+            f_globals=scope,
+            f_code=function.__code__,
+            f_locals={"config": None, "driver_factory": None, "managed_context": None},
+        )
+        with mock.patch.dict(sys.modules, {module: SimpleNamespace(retrieve_snapshot=function)}):
+            profile(frame, "call", None)
+            for key in ("config", "driver_factory", "managed_context"):
+                frame.f_locals[key] = object()
+                with self.assertRaisesRegex(RuntimeError, "graph"):
+                    profile(frame, "call", None)
+                frame.f_locals[key] = None
+            frame.f_code = function.__code__.replace(co_filename="/private/injected.py")
+            with self.assertRaisesRegex(RuntimeError, "graph"):
+                profile(frame, "call", None)
+        self.assertEqual(counts["provider"], 4)
+        self.assertEqual(counts["graph"], 4)
+
+    def test_sdk_superclass_exception_requires_exact_code_type_and_readonly_source(self):
+        from types import SimpleNamespace
+
+        import generation_worker_fixture as fixture
+        from api import make_profile
+
+        scope = {"__name__": "openai._base_client"}
+        exec(
+            compile(
+                "class BaseClient:\n def __init__(self): pass\n"
+                "class SyncAPIClient(BaseClient):\n def __init__(self): pass\n",
+                "/isaac-sim/kit/python/site-packages/openai/_base_client.py",
+                "exec",
+            ),
+            scope,
+        )
+        client = type("OpenAI", (scope["SyncAPIClient"],), {})
+        instance = object.__new__(client)
+        counts = dict.fromkeys(("network", "provider", "graph", "render", "workload", "subprocess"), 0)
+        profile = fixture.production_sdk_profile(make_profile(counts))
+        modules = {"openai._client": SimpleNamespace(OpenAI=client), "openai._base_client": SimpleNamespace(**scope)}
+        with mock.patch.dict(sys.modules, modules), mock.patch.object(fixture.os, "statvfs") as stat:
+            stat.return_value = SimpleNamespace(f_flag=os.ST_RDONLY)
+            for name in ("BaseClient", "SyncAPIClient"):
+                code = scope[name].__init__.__code__
+                frame = SimpleNamespace(f_globals=scope, f_code=code, f_locals={"self": instance})
+                profile(frame, "call", None)
+                # Structurally equal code is not the exact installed callable.
+                frame.f_code = code.replace()
+                with self.assertRaisesRegex(RuntimeError, "provider"):
+                    profile(frame, "call", None)
+                frame.f_code = code
+                frame.f_locals = {"self": object.__new__(type("OpenAI", (client,), {}))}
+                with self.assertRaisesRegex(RuntimeError, "provider"):
+                    profile(frame, "call", None)
+                frame.f_locals = {"self": instance}
+                stat.return_value = SimpleNamespace(f_flag=0)
+                with self.assertRaisesRegex(RuntimeError, "provider"):
+                    profile(frame, "call", None)
+                stat.return_value = SimpleNamespace(f_flag=os.ST_RDONLY)
+        self.assertEqual(counts["provider"], 6)
+
+    def test_generation_process_is_exact_singleton_before_discovery(self):
+        import stage
+
+        selected = "isaaclab_arena_examples/tests/test_workbench_generation_worker_process.py"
+        self.assertEqual(backend_checks.selection([selected]), [selected])
+        self.assertFalse(backend_checks.core_only([selected]))
+        self.assertEqual(backend_checks.selection([]), [CORE, API])
+        for names in ([selected, CORE], [API, selected], [selected, selected]):
+            with mock.patch.object(stage, "ConfinedRoot") as source:
+                with self.assertRaises(ValueError):
+                    backend_checks.selection(names)
+                with self.assertRaises(ValueError):
+                    stage.stage("/unused", "/unused-out", False, backend_tests=names)
+                source.assert_not_called()
+
     def test_workflow_nonempty_unique_subsets_are_explicit_core_only(self):
         import stage
 
@@ -73,7 +261,11 @@ class CoreRunnerTests(unittest.TestCase):
         import stage
 
         self.assertTrue(set(WORKFLOW) <= set(stage.EXPLICIT_BACKEND_TESTS))
-        old = [name for name in (*stage.BACKEND_TESTS, *stage.EXPLICIT_BACKEND_TESTS) if name not in WORKFLOW]
+        old = [
+            name
+            for name in (*stage.BACKEND_TESTS, *stage.EXPLICIT_BACKEND_TESTS)
+            if name not in WORKFLOW and name not in {*stage.PROCESS_TESTS, stage.SCENE_ENGINES_TEST}
+        ]
         old_core = {CORE, "isaaclab_arena/tests/test_trajectory_assessment.py"}
         self.assertEqual(stage.BACKEND_TESTS, (CORE, API))
         for name in old:
@@ -103,8 +295,14 @@ class CoreRunnerTests(unittest.TestCase):
         conftest = "isaaclab_arena/tests/conftest.py"
         for name in (*WORKFLOW, unapproved, conftest):
             fixture.put(name, b"from isaaclab_arena.workflow_helper import VALUE\n")
+        auxiliary = {path for name in WORKFLOW for path in stage.BACKEND_DATA.get(name, ())}
+        for path in auxiliary:
+            fixture.put(path, b"# approved inert source fixture\n")
         for index, names in enumerate(([], list(WORKFLOW), list(WORKFLOW[::2]))):
             manifest = stage.stage(fixture.root, fixture.base / f"workflow-{index}", False, backend_tests=names)
+            self.assertEqual(set(manifest) & auxiliary, {
+                path for name in names for path in stage.BACKEND_DATA.get(name, ())
+            })
             self.assertEqual(set(manifest) & set(WORKFLOW), set(names))
             self.assertEqual(helper in manifest, bool(names))
             self.assertNotIn(unapproved, manifest)
@@ -147,11 +345,14 @@ class CoreRunnerTests(unittest.TestCase):
         self.assertEqual(set(stage.backend_fixture_paths([selected])), required)
         self.assertEqual(stage.backend_fixture_paths([]), ())
         self.assertEqual(stage.backend_fixture_paths([CORE]), (stage.BACKEND_FIXTURE,))
-        self.assertEqual(set(stage.backend_fixture_paths(["isaaclab_arena/tests/test_spec_wire_adapter.py"])), {
-            stage.BACKEND_FIXTURE,
-            "isaaclab_arena_environments/robolab/tasks/banana_on_plate.yaml",
-            "isaaclab_arena_environments/robolab/scenes/bagel_plate_banana_bowl.yaml",
-        })
+        self.assertEqual(
+            set(stage.backend_fixture_paths(["isaaclab_arena/tests/test_spec_wire_adapter.py"])),
+            {
+                stage.BACKEND_FIXTURE,
+                "isaaclab_arena_environments/robolab/tasks/banana_on_plate.yaml",
+                "isaaclab_arena_environments/robolab/scenes/bagel_plate_banana_bowl.yaml",
+            },
+        )
 
     def test_stack_readiness_units_are_explicit_only(self):
         for selected in (
@@ -692,7 +893,10 @@ def sandbox():
         import hashlib
 
         with ConfinedRoot(here) as source:
-            captured = {name: source.read(name) for name in (*UNIT_SOURCES, "test_backend_checks.py")}
+            captured = {
+                name: source.read(name)
+                for name in (*UNIT_SOURCES, "test_backend_checks.py", "generation_worker_fixture.py")
+            }
         with ConfinedRoot(root) as source:
             captured["run-functional-checks.py"] = source.read("scripts/run-functional-checks.py")
         with new_destination(output / "source") as destination:

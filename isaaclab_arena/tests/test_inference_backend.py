@@ -101,20 +101,51 @@ def _request() -> StructuredOutputRequest:
     )
 
 
-@pytest.mark.parametrize("text", ['{"count":1,"count":2}', '```json\n{"count":1}\n```', '{"count":"1"}', '{"count":1,"extra":true}'])
+@pytest.mark.parametrize(
+    "text", ['{"count":1,"count":2}', '```json\n{"count":1}\n```', '{"count":"1"}', '{"count":1,"extra":true}']
+)
 def test_user_profile_run_json_preserves_raw_keys_and_validates_schema(stub_openai, text):
-    profile = {"id": "strict-user", "revision": 1, "provider": "openrouter", "model": "literal",
-        "endpoint": "https://openrouter.ai/api/v1", "origin": "user_defined", "support": "unverified",
-        "verification": "not_checked", "documentation_urls": [], "request_policy": {
-            "api": "chat_completions", "temperature_mode": "omitted", "token_limit_parameter": "max_tokens",
-            "structured_output": "omitted", "multimodal_output": "omitted", "store": None}}
+    profile = {
+        "id": "strict-user",
+        "revision": 1,
+        "provider": "openrouter",
+        "model": "literal",
+        "endpoint": "https://openrouter.ai/api/v1",
+        "origin": "user_defined",
+        "support": "unverified",
+        "verification": "not_checked",
+        "documentation_urls": [],
+        "request_policy": {
+            "api": "chat_completions",
+            "temperature_mode": "omitted",
+            "token_limit_parameter": "max_tokens",
+            "structured_output": "omitted",
+            "multimodal_output": "omitted",
+            "store": None,
+        },
+    }
     stub_openai[1].base_url = profile["endpoint"]
-    backend = InferenceBackend(api_key="dummy-explicit-key", model="literal", base_url=profile["endpoint"],
-                               inference_profile=profile, max_retries=0, load_dotenv=False)
+    backend = InferenceBackend(
+        api_key="dummy-explicit-key",
+        model="literal",
+        base_url=profile["endpoint"],
+        inference_profile=profile,
+        max_retries=0,
+        load_dotenv=False,
+    )
     backend.client.chat.completions.create.return_value = chat_response(content=text)
-    request = StructuredOutputRequest(schema_name="Count", schema={"type": "object", "properties": {
-        "count": {"type": "integer"}}, "required": ["count"], "additionalProperties": False},
-        system="system", user="user", retry_label="strict")
+    request = StructuredOutputRequest(
+        schema_name="Count",
+        schema={
+            "type": "object",
+            "properties": {"count": {"type": "integer"}},
+            "required": ["count"],
+            "additionalProperties": False,
+        },
+        system="system",
+        user="user",
+        retry_label="strict",
+    )
     with pytest.raises(RuntimeError):
         backend.run_json(request)
 
@@ -122,27 +153,48 @@ def test_user_profile_run_json_preserves_raw_keys_and_validates_schema(stub_open
 class TestAstraWireCompatibility:
     @pytest.mark.parametrize("max_tokens", [4, 123])
     @pytest.mark.parametrize("mode", ["json_schema", "json_object", "omitted"])
-    @pytest.mark.parametrize("temperature_mode,tokens,store,multimodal", [
-        ("omitted", "max_completion_tokens", None, "omitted"),
-        ("configured", "max_tokens", False, "json_object"),
-    ])
+    @pytest.mark.parametrize(
+        "temperature_mode,tokens,store,multimodal",
+        [
+            ("omitted", "max_completion_tokens", None, "omitted"),
+            ("configured", "max_tokens", False, "json_object"),
+        ],
+    )
     def test_explicit_profile_policy_reaches_all_sdk_calls_without_model_rewrite(
         self, sdk_transport, mode, temperature_mode, tokens, store, multimodal, max_tokens
     ):
         from isaaclab_arena_examples.agentic_environment_generation.web_api.provider_security import bounded_client
+
         profile = {
-            "id": "literal-claude", "revision": 1, "provider": "openrouter", "model": "claude-sonnet-latest",
-            "endpoint": "https://openrouter.ai/api/v1", "origin": "user_defined", "support": "unverified",
-            "verification": "not_checked", "documentation_urls": [],
-            "request_policy": {"api": "chat_completions", "temperature_mode": temperature_mode,
-                "token_limit_parameter": tokens, "store": store, "structured_output": mode,
-                "multimodal_output": multimodal},
+            "id": "literal-claude",
+            "revision": 1,
+            "provider": "openrouter",
+            "model": "claude-sonnet-latest",
+            "endpoint": "https://openrouter.ai/api/v1",
+            "origin": "user_defined",
+            "support": "unverified",
+            "verification": "not_checked",
+            "documentation_urls": [],
+            "request_policy": {
+                "api": "chat_completions",
+                "temperature_mode": temperature_mode,
+                "token_limit_parameter": tokens,
+                "store": store,
+                "structured_output": mode,
+                "multimodal_output": multimodal,
+            },
         }
-        config = {"api_key": "synthetic-unit-key-only", "base_url": profile["endpoint"],
-                  "model": profile["model"], "inference_profile": profile}
+        config = {
+            "api_key": "synthetic-unit-key-only",
+            "base_url": profile["endpoint"],
+            "model": profile["model"],
+            "inference_profile": profile,
+        }
         requests, _ = sdk_transport
         with bounded_client(config):
-            backend = InferenceBackend(**config, temperature=0.7, max_tokens=max_tokens, max_retries=0, load_dotenv=False)
+            backend = InferenceBackend(
+                **config, temperature=0.7, max_tokens=max_tokens, max_retries=0, load_dotenv=False
+            )
             assert backend.model == config["model"]
             backend.run_json(_request())
             backend.multimodal_chat("unit JSON", {})
@@ -406,6 +458,335 @@ class TestRunJson:
         assert client.chat.completions.create.call_count == 2
 
 
+def test_visual_critic_import_does_not_require_geometry_introspection(monkeypatch):
+    import importlib
+    import sys
+
+    name = "isaaclab_arena.agentic_environment_generation.visual_critic"
+    monkeypatch.delitem(sys.modules, name, raising=False)
+    monkeypatch.setitem(sys.modules, "isaaclab_arena.agentic_environment_generation.usd_stage_introspection", None)
+    assert importlib.import_module(name).VisualSceneCritic is not None
+
+
+def test_managed_visual_failure_cannot_escape_to_unmetered_fallback(sdk_transport, monkeypatch):
+    import time
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.visual_critic import VisualSceneCritic
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance, bounded_client
+
+    requests, statuses = sdk_transport
+    config = {"api_key": "synthetic-unit-key-only", "base_url": "https://api.openai.com/v1", "model": "gpt-6-astra"}
+    allowance = CallAllowance(max_calls=2, deadline=time.monotonic() + 60)
+    spec = SimpleNamespace(task=SimpleNamespace(description="synthetic visual criterion"))
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("managed visual failure reached unmetered fallback")
+
+    with bounded_client(config, allowance=allowance):
+        backend = InferenceBackend(**config, max_retries=0, load_dotenv=False)
+        critic = VisualSceneCritic(backend=backend)
+        monkeypatch.setattr(critic, "_call_local_vlm_critic", forbidden)
+        monkeypatch.setattr(critic, "_run_deterministic_geometric_oracle", forbidden)
+        statuses.append(500)
+        with pytest.raises(RuntimeError, match="fallback prohibited"):
+            critic.evaluate_scene_spec(spec, {"camera": b"synthetic image"})
+        assert allowance.attempted_calls == len(requests) == 2
+
+
+@pytest.mark.parametrize("late_critic", [False, True])
+def test_managed_backend_keeps_fallback_prohibition_after_context_closes(sdk_transport, monkeypatch, late_critic):
+    import time
+    import urllib.request
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.visual_critic import VisualSceneCritic
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import (
+        CallAllowance,
+        bounded_client,
+        managed_inference_active,
+    )
+
+    requests, _ = sdk_transport
+    config = {"api_key": "synthetic-unit-key-only", "base_url": "https://api.openai.com/v1", "model": "gpt-6-astra"}
+    with bounded_client(config, allowance=CallAllowance(max_calls=2, deadline=time.monotonic() + 60)):
+        backend = InferenceBackend(**config, max_retries=0, load_dotenv=False)
+        critic = None if late_critic else VisualSceneCritic(backend)
+    assert not managed_inference_active() and managed_inference_active(backend)
+    critic = VisualSceneCritic(backend) if late_critic else critic
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("closed managed backend must not construct a local HTTP request")
+
+    monkeypatch.setattr(urllib.request, "Request", forbidden)
+    spec = SimpleNamespace(task=SimpleNamespace(description="synthetic visual criterion"))
+    with pytest.raises(RuntimeError, match="fallback prohibited"):
+        critic._call_local_vlm_critic(spec, {"camera": b"synthetic"})
+    with pytest.raises(RuntimeError, match="fallback prohibited"):
+        critic.evaluate_scene_spec(spec, {"camera": b"synthetic"})
+    assert len(requests) == 1
+
+
+def test_legacy_visual_fallback_and_managed_spec_only_geometry_are_preserved(sdk_transport, monkeypatch):
+    import time
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.visual_critic import VisualCriticResult, VisualSceneCritic
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance, bounded_client
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("synthetic cloud unavailable")
+
+    spec = SimpleNamespace(task=SimpleNamespace(description="synthetic"))
+    critic = VisualSceneCritic(SimpleNamespace(multimodal_chat=unavailable))
+    monkeypatch.setattr(critic, "_call_local_vlm_critic", lambda *a: VisualCriticResult(conforms=False))
+    assert critic.evaluate_scene_spec(spec, {"camera": b"synthetic"}).tier_used == "tier_2_local_vlm"
+    config = {"api_key": "synthetic-unit-key-only", "base_url": "https://api.openai.com/v1", "model": "gpt-6-astra"}
+    with bounded_client(config, allowance=CallAllowance(max_calls=1, deadline=time.monotonic() + 60)):
+        managed = VisualSceneCritic()
+        with pytest.raises(RuntimeError, match="fallback prohibited"):
+            managed.evaluate_scene_spec(spec, {"camera": b"synthetic"})
+        monkeypatch.setattr(
+            managed, "_run_deterministic_geometric_oracle", lambda *a: VisualCriticResult(conforms=False)
+        )
+        assert managed.evaluate_scene_spec(spec).tier_used == "tier_3_geometric_oracle"
+    assert not sdk_transport[0]
+
+
+def _attested_bound():
+    return {
+        "version": 1,
+        "attested": True,
+        "model": "gpt-6-astra",
+        "endpoint": "https://api.openai.com/v1",
+        "max_tokens": 100,
+        "max_cost_usd": "0.10",
+    }
+
+
+@pytest.mark.parametrize("tokens,cost", [(100, "1.00"), (1000, "0.10")])
+def test_attested_envelope_charges_ping_and_blocks_next_sdk_call(sdk_transport, tokens, cost):
+    import time
+    from decimal import Decimal
+
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance, bounded_client
+
+    config = {"api_key": "synthetic-unit-key-only", "base_url": "https://api.openai.com/v1", "model": "gpt-6-astra"}
+    allowance = CallAllowance(
+        max_calls=10,
+        deadline=time.monotonic() + 60,
+        max_tokens=tokens,
+        cost_ceiling_usd=cost,
+        per_call_bound=_attested_bound(),
+    )
+    assert allowance.token_cost_bounded is True
+    with bounded_client(config, allowance=allowance):
+        backend = InferenceBackend(**config, max_retries=0, load_dotenv=False)
+        with pytest.raises(RuntimeError, match="budget exhausted"):
+            backend.run_json(_request())
+        with pytest.raises(ValueError, match="budget exhausted"):
+            backend.multimodal_chat("unit JSON", {"camera": b"synthetic"})
+    assert allowance.attempted_calls == len(sdk_transport[0]) == 1
+    assert allowance.charged_tokens == 100
+    assert allowance.charged_cost_usd == Decimal("0.10")
+
+
+def test_explicit_free_attestation_allows_zero_cost_but_still_limits_tokens(sdk_transport):
+    import time
+
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance, bounded_client
+
+    config = {"api_key": "synthetic-unit-key-only", "base_url": "https://api.openai.com/v1", "model": "gpt-6-astra"}
+    allowance = CallAllowance(
+        max_calls=4,
+        deadline=time.monotonic() + 60,
+        max_tokens=200,
+        cost_ceiling_usd="0",
+        per_call_bound={**_attested_bound(), "max_cost_usd": "0"},
+    )
+    with bounded_client(config, allowance=allowance):
+        backend = InferenceBackend(**config, max_retries=0, load_dotenv=False)
+        assert backend.run_json(_request()) == {"unit_evidence": True}
+        with pytest.raises(ValueError, match="token budget exhausted"):
+            backend.multimodal_chat("unit JSON", {"camera": b"synthetic"})
+    assert allowance.token_cost_bounded
+    assert allowance.attempted_calls == len(sdk_transport[0]) == 2
+    assert allowance.charged_tokens == 200 and allowance.charged_cost_usd == 0
+
+
+@pytest.mark.parametrize("change", [{"model": "foreign"}, {"base_url": "https://foreign.invalid/v1"}])
+def test_attested_allowance_cannot_cross_model_or_endpoint(sdk_transport, change):
+    import time
+
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance, bounded_client
+
+    config = {"api_key": "synthetic-unit-key-only", "base_url": "https://api.openai.com/v1", "model": "gpt-6-astra"}
+    allowance = CallAllowance(
+        max_calls=4,
+        deadline=time.monotonic() + 60,
+        max_tokens=1000,
+        cost_ceiling_usd="1",
+        per_call_bound=_attested_bound(),
+    )
+    with pytest.raises(ValueError, match="accounting"):
+        with bounded_client(config | change, allowance=allowance):
+            InferenceBackend(**(config | change), max_retries=0, load_dotenv=False)
+    assert not sdk_transport[0] and allowance.attempted_calls == 0
+
+
+@pytest.mark.parametrize("tokens,cost", [(99, "1"), (1000, "0.09"), (0, "0")])
+def test_attested_first_bound_does_not_fit_charges_nothing(sdk_transport, tokens, cost):
+    import time
+
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance, bounded_client
+
+    allowance = CallAllowance(
+        max_calls=4,
+        deadline=time.monotonic() + 60,
+        max_tokens=tokens,
+        cost_ceiling_usd=cost,
+        per_call_bound=_attested_bound(),
+    )
+    config = {"api_key": "synthetic-unit-key-only", "base_url": "https://api.openai.com/v1", "model": "gpt-6-astra"}
+    with bounded_client(config, allowance=allowance):
+        with pytest.raises(ValueError, match="budget exhausted"):
+            InferenceBackend(**config, max_retries=0, load_dotenv=False)
+    assert not sdk_transport[0]
+    assert allowance.attempted_calls == allowance.charged_tokens == allowance.charged_cost_usd == 0
+
+
+def test_attested_failure_image_and_context_reentry_never_refund(sdk_transport):
+    import time
+    from decimal import Decimal, localcontext
+
+    from openai import InternalServerError
+
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance, bounded_client
+
+    requests, statuses = sdk_transport
+    config = {"api_key": "synthetic-unit-key-only", "base_url": "https://api.openai.com/v1", "model": "gpt-6-astra"}
+    bound = _attested_bound()
+    allowance = CallAllowance(
+        max_calls=10, deadline=time.monotonic() + 60, max_tokens=1000, cost_ceiling_usd="0.30", per_call_bound=bound
+    )
+    bound["max_tokens"] = 1
+    with localcontext() as context:
+        context.prec = 1  # Integer charging must not depend on thread-local Decimal precision.
+        with bounded_client(config, allowance=allowance):
+            backend = InferenceBackend(**config, max_retries=0, load_dotenv=False)
+            statuses.append(500)
+            with pytest.raises(InternalServerError):
+                backend.multimodal_chat("unit JSON", {"camera": b"synthetic"})
+        with bounded_client(config, allowance=allowance):
+            InferenceBackend(**config, max_retries=0, load_dotenv=False)
+            with pytest.raises(ValueError, match="cost budget exhausted"):
+                InferenceBackend(**config, max_retries=0, load_dotenv=False)
+        assert allowance.charged_cost_usd == Decimal("0.30")
+    assert len(requests) == allowance.attempted_calls == 3
+    assert allowance.charged_tokens == 300  # Not the synthetic SDK's reported usage.
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("version", True),
+        ("version", 2),
+        ("attested", False),
+        ("attested", 1),
+        ("max_tokens", True),
+        ("max_tokens", 0),
+        ("max_tokens", -1),
+        ("max_tokens", 1.0),
+        ("max_cost_usd", 0.1),
+        ("max_cost_usd", True),
+        ("max_cost_usd", "NaN"),
+        ("max_cost_usd", "Infinity"),
+        ("max_cost_usd", None),
+        ("max_cost_usd", "-0.1"),
+        ("max_cost_usd", "0.0000000001"),
+        ("model", ""),
+        ("endpoint", None),
+    ],
+)
+def test_attested_bound_rejects_malformed_values(field, value):
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance
+
+    with pytest.raises(ValueError):
+        CallAllowance(
+            max_calls=1,
+            deadline=100,
+            max_tokens=100,
+            cost_ceiling_usd="1",
+            per_call_bound=_attested_bound() | {field: value},
+        )
+
+
+@pytest.mark.parametrize("missing", ["version", "attested", "model", "endpoint", "max_tokens", "max_cost_usd"])
+def test_attested_bound_requires_complete_shape(missing):
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance
+
+    bound = _attested_bound()
+    del bound[missing]
+    with pytest.raises(ValueError):
+        CallAllowance(max_calls=1, deadline=100, max_tokens=100, cost_ceiling_usd="1", per_call_bound=bound)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"max_tokens": 100},
+        {"cost_ceiling_usd": "1"},
+        {"per_call_bound": _attested_bound()},
+        {"max_tokens": True, "cost_ceiling_usd": "1", "per_call_bound": _attested_bound()},
+        {"max_tokens": 100, "cost_ceiling_usd": 1.0, "per_call_bound": _attested_bound()},
+    ],
+)
+def test_token_cost_allowance_is_complete_or_absent(kwargs):
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance
+
+    with pytest.raises(ValueError):
+        CallAllowance(max_calls=1, deadline=100, **kwargs)
+    legacy = CallAllowance(max_calls=1, deadline=100)
+    assert not legacy.token_cost_bounded and legacy.charged_tokens is None and legacy.charged_cost_usd is None
+
+
+@pytest.mark.parametrize("resource", ["tokens", "cost"])
+def test_attested_charge_is_atomic_across_threads(resource):
+    import threading
+    from decimal import Decimal
+
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance
+
+    allowance = CallAllowance(
+        max_calls=20,
+        deadline=float("inf"),
+        max_tokens=300 if resource == "tokens" else 10000,
+        cost_ceiling_usd="0.30" if resource == "cost" else "10",
+        per_call_bound=_attested_bound(),
+    )
+    barrier = threading.Barrier(12)
+    outcomes = [None] * 12
+
+    def charge(index):
+        barrier.wait(timeout=10)
+        try:
+            allowance.charge()
+        except ValueError:
+            outcomes[index] = False
+        else:
+            outcomes[index] = True
+
+    threads = [threading.Thread(target=charge, args=(i,)) for i in range(12)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=15)
+    assert not any(thread.is_alive() for thread in threads)
+    assert outcomes.count(True) == allowance.attempted_calls == 3
+    assert outcomes.count(False) == 9
+    assert allowance.charged_tokens == 300 and allowance.charged_cost_usd == Decimal("0.30")
+
+
 def test_shared_call_allowance_counts_before_sdk_across_contexts(sdk_transport, monkeypatch):
     import time
 
@@ -487,14 +868,17 @@ def test_shared_allowance_deadline_denies_ping_and_later_calls(sdk_transport, mo
     assert allowance.attempted_calls == len(requests) == 1
 
 
-def test_allowance_charged_before_sdk_validation_failure(sdk_transport, monkeypatch):
+@pytest.mark.parametrize("accounting", [False, True])
+def test_allowance_charged_before_sdk_validation_failure(sdk_transport, monkeypatch, accounting):
     import time
 
     from openai.resources.chat.completions import Completions
+
     from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance, bounded_client
 
     requests, _ = sdk_transport
-    allowance = CallAllowance(max_calls=1, deadline=time.monotonic() + 60)
+    bounds = dict(max_tokens=100, cost_ceiling_usd="0.10", per_call_bound=_attested_bound()) if accounting else {}
+    allowance = CallAllowance(max_calls=1, deadline=time.monotonic() + 60, **bounds)
     entered = []
 
     def fail_before_http(self, *args, **kwargs):
@@ -511,6 +895,10 @@ def test_allowance_charged_before_sdk_validation_failure(sdk_transport, monkeypa
             InferenceBackend(**config, max_retries=0, load_dotenv=False)
     assert entered == [1]
     assert allowance.attempted_calls == 1 and requests == []
+    if accounting:
+        from decimal import Decimal
+
+        assert allowance.charged_tokens == 100 and allowance.charged_cost_usd == Decimal("0.10")
 
 
 def test_shared_transport_restores_after_overlap_body_and_close_failure(sdk_transport, monkeypatch):
@@ -554,6 +942,7 @@ def test_shared_transport_restores_after_overlap_body_and_close_failure(sdk_tran
 
 def test_transport_factory_failure_releases_patch_lock(sdk_transport, monkeypatch):
     import time
+
     import openai
 
     from isaaclab_arena.agentic_environment_generation import inference_backend as module
@@ -602,6 +991,58 @@ def test_transport_freezes_config_and_rejects_wrong_model_policy(sdk_transport, 
     for request in requests:
         assert str(request.url) == "https://api.openai.com/v1/chat/completions"
         assert json.loads(request.content)["model"] == "gpt-6-astra"
+
+
+def test_existing_generation_wrapper_uses_one_reserved_call_before_constructor(sdk_transport):
+    import time
+
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.generation import generate
+
+    allowance = CallAllowance(max_calls=1, deadline=time.monotonic() + 10)
+    config = {"api_key": "synthetic-unit-key-only", "base_url": "https://api.openai.com/v1", "model": "gpt-6-astra"}
+
+    class Agent:
+        def __init__(self, **kwargs):
+            self.backend = InferenceBackend(**kwargs)
+
+        def generate_spec(self, prompt, **kwargs):
+            self.backend.run_json(_request())
+            pytest.fail("exhausted reservation reached generation")
+
+    with pytest.raises(RuntimeError, match="Generation call budget exhausted"):
+        generate({"prompt": "synthetic"}, lambda stage: None, config=config, agent_factory=Agent, allowance=allowance)
+    assert len(sdk_transport[0]) == allowance.attempted_calls == 1
+
+
+def test_workflow_wrapper_rejects_ambient_configuration(sdk_transport, monkeypatch):
+    import time
+
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import generation
+
+    monkeypatch.setattr(generation, "configuration", lambda: pytest.fail("ambient configuration consulted"))
+    with pytest.raises(ValueError, match="Explicit workflow provider configuration required"):
+        generation.generate(
+            {"prompt": "synthetic"},
+            lambda stage: None,
+            allowance=CallAllowance(max_calls=1, deadline=time.monotonic() + 10),
+        )
+    assert sdk_transport[0] == []
+
+
+def test_workflow_wrapper_keeps_strict_model_binding(sdk_transport):
+    import time
+
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import CallAllowance
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.provider_security import bounded_client
+
+    config = {"api_key": "synthetic-unit-key-only", "base_url": "https://api.openai.com/v1", "model": "gpt-6-astra"}
+    allowance = CallAllowance(max_calls=1, deadline=time.monotonic() + 10)
+    with bounded_client(config, allowance=allowance) as client:
+        with pytest.raises(ValueError, match="model binding mismatch"):
+            client.chat.completions.create(model="foreign-model", messages=[])
+    assert sdk_transport[0] == [] and allowance.attempted_calls == 0
 
 
 def test_legacy_contexts_get_fresh_eight_calls_without_deadline(sdk_transport, monkeypatch):
@@ -679,6 +1120,22 @@ def test_allowance_charge_is_atomic_across_actual_threads():
     assert not any(thread.is_alive() for thread in threads)
     assert outcomes.count("charged") == allowance.attempted_calls == 3
     assert outcomes.count("Generation call budget exhausted") == 9
+
+
+def test_frozen_configuration_is_shared_pure_policy_not_generation_adapter():
+    from isaaclab_arena.agentic_environment_generation import inference_profiles
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import generation
+
+    assert hasattr(inference_profiles, "freeze_configuration"), "pure configuration freezing extraction missing"
+    assert generation.freeze_configuration is inference_profiles.freeze_configuration
+    source = {"api_key": "synthetic-unit-only", "model": "gpt-6-astra", "base_url": "https://api.openai.com/v1"}
+    original = dict(source)
+    frozen = inference_profiles.freeze_configuration(source)
+    assert source == original and "inference_profile" not in source
+    assert frozen["inference_profile"]["model"] == source["model"]
+    frozen["inference_profile"]["request_policy"]["store"] = None
+    assert inference_profiles.freeze_configuration(source)["inference_profile"]["request_policy"]["store"] is False
+    assert inference_profiles.freeze_configuration(None) is None
 
 
 def test_transport_module_import_defers_sdk_and_backend(monkeypatch):

@@ -9,6 +9,7 @@ import os
 import yaml
 from pathlib import Path
 
+from isaaclab_arena.agentic_environment_generation import inference_profiles as _inference_profiles
 from isaaclab_arena.agentic_environment_generation.workbench.documents import Documents
 from isaaclab_arena.agentic_environment_generation.workbench.generation_diagnostics import GENERATION_STAGES
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
@@ -19,6 +20,7 @@ from .generation_diagnostics import SafeGenerationFailure
 from .provider_security import bounded_client, checked_config, reject_secret
 
 GENERATION_TIMEOUT = 180
+freeze_configuration = _inference_profiles.freeze_configuration
 
 
 def configuration():
@@ -50,27 +52,10 @@ def configuration():
     return None
 
 
-def freeze_configuration(config):
-    """Detach effective documented policy before granting or comparing authority."""
-    from copy import deepcopy
-    from isaaclab_arena.agentic_environment_generation.inference_profiles import (
-        checked_inference_profile, frozen_builtin_profile, resolve_inference_profile,
-    )
-    if config is None:
-        return None
-    result = deepcopy(config)
-    if "inference_profile" in result:
-        result["inference_profile"] = checked_inference_profile(result["inference_profile"],
-            model=result.get("model"), base_url=result.get("base_url"))
-    else:
-        profile = resolve_inference_profile(result.get("model"), result.get("base_url"))
-        if profile is not None:
-            result["inference_profile"] = frozen_builtin_profile(profile)
-    return result
-
-
-def generate(inputs, emit, *, agent_factory=None, config=None, graph_config=None, managed_context=None):
+def generate(inputs, emit, *, agent_factory=None, config=None, graph_config=None, managed_context=None, allowance=None):
     """Run a fresh bounded agent and return only schema-validated output and allowlisted stages."""
+    if allowance is not None and config is None:
+        raise ValueError("Explicit workflow provider configuration required")
     config = configuration() if config is None else config
     config = checked_config(config, trusted_server=isinstance(config, dict) and config.get("trusted_server") is True)
     if agent_factory is None:
@@ -78,11 +63,21 @@ def generate(inputs, emit, *, agent_factory=None, config=None, graph_config=None
             EnvironmentGenerationAgent,
         )
 
-        with bounded_client(config):
+        with bounded_client(config, allowance=allowance):
             result = _generate(
                 inputs,
                 emit,
                 agent_factory=EnvironmentGenerationAgent,
+                config=config,
+                graph_config=graph_config,
+                managed_context=managed_context,
+            )
+    elif allowance is not None:
+        with bounded_client(config, allowance=allowance):
+            result = _generate(
+                inputs,
+                emit,
+                agent_factory=agent_factory,
                 config=config,
                 graph_config=graph_config,
                 managed_context=managed_context,

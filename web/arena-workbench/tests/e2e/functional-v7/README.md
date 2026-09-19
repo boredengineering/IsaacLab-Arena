@@ -1,5 +1,66 @@
 # F0 real API / browser acceptance
 
+## Additive foreground restart proof (isolated only)
+
+The exact singleton `isaaclab_arena_examples/tests/test_workbench_generation_worker_process.py`
+now also launches fixed `restart-old`, `restart-locality`, `restart-missing`,
+`restart-cancel`, and `restart-new` helpers. The old helper launches exactly one
+existing `production-sdk` worker, retains real synthetic-HTTP SDK output in final
+artifacts, persists a **test-owned synthetic store snapshot**, and exits before DB
+adoption. The replacement interpreter imports the real foreground recovery path;
+it has no old Python process handles, provider profile exception, or spawn permit.
+Missing final generation bytes remain reconciliation-blocked, foreign boot is
+rejected before constructing/scanning a process group, and cancellation can settle
+with verified cleanup without a receipt. Restart witnesses are saved separately
+as `generation-child-*-restart.json`, plus old-owner nested child verification.
+
+This is not live Neo4j or provider acceptance. All original 29 process cases stay
+in the suite; one added case exercises live-group fresh-process cleanup (30 total).
+The fixed launch ceiling remains 48; default
+profile/audit behavior and source-closure/preimport checks are unchanged.
+`ForegroundGenerationWorker(ownership_artifacts=OwnershipArtifacts(area))` writes
+separate immutable v1 ownership witnesses before preparation returns, without
+changing serialized WorkerRegistration. Recovery acquires the same private-parent
+flock, authenticates original attempt reads, re-verifies exact artifact bytes,
+cleans the witnessed group, and uses the original fence until durable retirement
+and readback complete. `receive(..., release_lease=False)` and
+`recover(release_lease=False)` retain the lease for subsequent workflow stages;
+generation completion is not whole-workflow success.
+
+The fixed `restart-old-live` helper instead launches exactly one
+`production-orphan` worker through the actual generation entry/envelope/protocol.
+Only its test-injected generation function clears PDEATHSIG and ignores TERM;
+production worker safety is unchanged. The fixture creates a known TERM-resistant
+same-group descendant. The old owner exits **without stopping either process**.
+`restart-live-missing` independently sees both live identities, verifies locality,
+kills the group and retains cleanup in the synthetic store while leaving the
+unknown result blocked. `restart-live-cancel` reopens that cleanup and settles
+cancellation. The **surviving leader is the anchor**: this does not prove
+member-only or unanchored/PID-reuse recovery. The old and replacement helpers have
+no SDK exceptions; source-bound preimport, nested launch, zero-forbidden-activity,
+SDK-absence and final group-liveness witnesses are retained.
+
+Settled/current-retired replay verifies the exact retained receipt and cleanup
+without rewriting them; repeated resume never sends. A foreign/new active owner
+is rejected without retiring it. Historical replay after replacement remains
+blocked pending a read-only retained-retirement query. Known damaged receipts
+remain invalid even after cancellation. Cleanup is acknowledged/read back before
+missing-result reconciliation, so a missing result cannot erase physical cleanup.
+Ownership final-directory re-sync runs under the existing writer lock and refuses
+to promote staging as recovery. Boot, PID-namespace mismatch and corrupt ownership
+bytes reject before process-group construction.
+
+Actual assertion REDs: `arena-f0-backend-42b840d2538f` (retired replay),
+`arena-f0-backend-b622697625fa` (missing-result cleanup),
+`arena-f0-backend-26133a9b877f` (unlocked final sync), and
+`arena-f0-backend-869d4d2289ef` (settled receipt/cleanup mutation).
+Final formatted process proof: `arena-f0-backend-5d4bde8987b6`; runner sandbox:
+`arena-core-units-1efa8c3de415`. These are isolated proofs, not live-database,
+full SDK-generation, scene validity or complete CLI acceptance.
+Missing/unregistered ownership and hung kernel syscalls remain blocked; there is
+no automatic takeover/resend.
+
+
 **Next manual-research profile: NOT-RUN, held for parent-approved API security
 AND UI closure.** See [MANUAL_RESEARCH.md](MANUAL_RESEARCH.md) for the additive
 `manual-research-v1` journey, strict firewall/checker, isolated unit evidence and
@@ -377,3 +438,112 @@ python3 web/arena-workbench/tests/e2e/functional-v7/run.py --fault preimport-den
 ```
 
 If image/dependency discovery or isolation is unavailable, the harness stops rather than weakening the boundary. It never executes the historical `isolated-real/run.py`.
+
+## Exact generation process fixture profile
+
+Only `isaaclab_arena_examples/tests/test_workbench_generation_worker_process.py`
+selects this additive profile. Mixed selections reject before discovery/staging.
+Defaults, core, SDK and API profiles retain their existing guards. Commands from
+repository root (put the test positional before the optional flags):
+
+```sh
+python3 web/arena-workbench/tests/e2e/functional-v7/test_backend_checks.py --sandbox
+python3 scripts/run-functional-checks.py backend isaaclab_arena_examples/tests/test_workbench_generation_worker_process.py --runtime-image sha256:e20b3cc8258b793aaf1fe47c130f54e677fa9c0a6427991cfc1045b743162da5 --provision-manifest web/arena-workbench/tests/e2e/functional-v7/.runs/arena-f0-backend-1353292277b9/provision-manifest.json
+```
+
+Private Python test seam for an adapter's **actual** Popen:
+
+```python
+import generation_worker_fixture as fixture
+argv, kwargs = fixture.spawn_spec("production")
+proc = subprocess.Popen(argv, **kwargs)
+```
+
+Keep kwargs unchanged: immutable image's resolved interpreter, sanitized frozen
+image environment, `cwd=/source`, binary stdin/stdout/stderr PIPEs, `shell=False`,
+`close_fds=True`, empty `pass_fds`, `start_new_session=True`, `text=False`.
+The fixed argv is `INTERPRETER -s -B
+/source/web/arena-workbench/tests/e2e/functional-v7/generation_worker_fixture.py MODE`.
+No shell, `-c`, writable script, import selector, extra kwargs or type-coerced flags.
+Maximum 48 parent launches; only the fully validated native Popen's one-use audit
+event is permitted. Everything else delegates to existing `make_audit`;
+`make_profile` remains unchanged, including model and graph constructor denials.
+
+Fixed modes are test code choices, never generation packet fields:
+
+- `production`: actual captured `generation_worker.main()`, actual parent PID,
+  ordinary private stdin protocol; no model/graph allowance.
+- `production-result`: same actual worker entry with a code-injected fixed
+  `generation.generate` result. This proves entry/protocol only, **not** SDK or
+  generation pipeline execution.
+- `production-sdk`: actual worker → `generation.generate` → actual agent constructor,
+  InferenceBackend constructor/ping, installed SDK serialization and synthetic HTTPX
+  transport. Only `EnvironmentGenerationAgent.generate_spec` is replaced: it calls
+  real `run_json`, returns the already captured pick-and-place `ArenaEnvGraphSpec`,
+  and explicitly sets nonconverged telemetry. Real catalogue, unavailable empty
+  prior and Documents schema validation remain. No full generation algorithm,
+  USD grounding, physical validity, real provider or graph reads are proved.
+- `production-wait`: real worker protocol, private fixed producer emits
+  `spec_inference`, then blocks. No ready frame is written to adapter stdout.
+- `production-resistant`: same, but starts one fixed TERM-resistant descendant
+  in its own group before emitting the stage. Existing retained-witness cleanup
+  verification applies; the descendant's internal ready pipe is not forwarded.
+- `result`: wait for exactly binary `release\n`, emit
+  `{"result":{"fixture":"fixed-result"}}` plus newline.
+- `wait`: emit `{"ready": PID}`, then wait for timeout/cancel/owned cleanup.
+- `resistant`: start one fixed `descendant` in the same group/session, emit ready
+  and descendant PID, then wait. Descendant ignores TERM; real existing
+  `OwnedProcessGroup.stop()` must escalate after the leader exits.
+- `descendant`: internal-only; rejected by the parent launch gate.
+
+Only the SDK child wraps the unchanged default profile with exact callable/code
+and source-file exceptions for synchronous OpenAI, InferenceBackend and agent
+constructors, plus real `graph_access.retrieve_snapshot` **only when config,
+driver_factory and managed_context are all None**. Async SDK, configured graph,
+fake same-name constructors, wrong code/source and ordinary profiles remain denied.
+Synthetic transport is installed before SDK construction. Trusted image git
+metadata is captured after kernel denial and replayed for child GitPython imports;
+package subprocesses remain denied. Source closure and fixed mode enum contain
+all injected code; request/env/CLI import callbacks are not accepted.
+
+Isolated parent bootstrap (never host-import Arena):
+
+```python
+packet = fixture.production_packet(model_calls=2, runtime_seconds=15)
+# Real model validation/catalogue; synthetic registration metadata only.
+# A real adapter must replace workflow_execution fence/registration/timing
+# with its actual authorized release; this helper is not OS authority.
+```
+
+The intended cap-1 integration observes one constructor ping then error before
+another transport call; cap-2 observes ping plus completion and the real eight-field
+modern result, unavailable empty prior, and nonconvergence warning. These are
+integration assertions for the adapter owner, not claims from harness units.
+`/evidence/generation-child-PID-sdk.json` is written initially and **before each**
+synthetic response: `{schema_version:1,pid,calls,responses:[{ordinal,kind}],scope}`.
+No request body, headers, URL or keys are retained. `kind` is `ping` then
+`completion`. Preimport readiness uses `generation-child-PID-preimport.json`,
+never adapter stdout; descendant and post-execution counter witnesses use
+`-descendant.json` and `-final.json`. Charged denial effects use `-forbidden.json`
+even if generation catches the exception.
+
+`test_workbench_generation_receipts.py` and `test_workbench_strict_receipt.py`
+are explicit ordinary API-profile cohorts, not process or core cohorts. Defaults
+and mixed-process rejection are unchanged; they reuse existing captured fixtures.
+
+Children have 30-second alarms. They reuse revision-process preimport checks with
+`fresh=False`, verifying inherited UID/caps/no-new-privileges, readonly mounts,
+no GPU, actual kernel egress denial and PID namespace **before Arena imports**.
+This does not rerun `api.preflight()`'s empty-private guard after pytest creates
+state. Each child hashes the entire captured closure against the read-only
+`/generation-source-manifest.json` mount: shim, real worker and injected test code.
+No new runner/container framework or live service is involved.
+
+Proofs retain PID/start/namespace/PGID/SID witnesses, child source hashes, separate
+permitted-parent and total process counts, launch rejections, unchanged forbidden
+counters, real JUnit, owned-group cleanup and ordinary container cleanup. Charged
+child denials remain fatal even when the worker catches them. The legacy profile's
+cleared-module teardown AttributeError may still appear; zero-counter teardown
+errors are not mislabelled forbidden effects. Claims cover owned groups, not
+processes deliberately escaping the session. These tests are not workflow,
+live-provider, graph or rendering acceptance.

@@ -1,6 +1,6 @@
 # IsaacLab-Arena SBOM creation plan 01
 
-Status: S0/S1 executed; S2 source collection, structural validation and coverage report delivered with explicit coverage gaps. S3–S6 remain unexecuted. This is not complete source coverage or installed-runtime acceptance. See the [runbook](RUNBOOK.md) for commands, current artifact paths, findings and retention.
+Status: **paused for delivery-scope and software/license study**. S0/S1 executed; S2 produced a preliminary source SBOM and technical coverage report, not the software-and-license assessment the user needs for delivery. S3–S7 remain unexecuted. The primary review deliverable below is still outstanding. See the [runbook](RUNBOOK.md) for existing collection evidence and §13 for the session handoff.
 
 Prepared: 2026-09-18. This is the canonical SBOM plan in this directory. The original request was documentation-only; the subsequent request to proceed authorized the recommended first source milestone and its bounded tooling acquisition. Private state, image downloads/builds, CI changes and publication remain outside execution scope. Workflow-refactoring implementation remains on hold; its status stays in the [existing implementation handoff](../plans/dashboard_cli_workflow_parity/research-stack-implementation-handoff.md).
 
@@ -8,13 +8,40 @@ Execution checkpoint: the verified source snapshot is `outputs/sbom/20260918T234
 
 ## 1. Outcome and terminology
 
-Create a traceable, machine-readable inventory of the software used by this repository and selected builds/deployments. Each artifact must identify its subject, collection method, scope, unresolved coverage and source evidence.
+The user's clarified goal is to **understand the software and licenses in this project in preparation for later software delivery**. The primary deliverable is a readable, evidence-backed software-and-license review, not scanner JSON, a package count or a tooling test report. The machine-readable SBOM supports that review and must eventually describe the selected delivery subject accurately.
 
 An SBOM is an inventory, not a security certificate, proof of reproducibility, legal opinion or guarantee that every component was detected. A vulnerability report and a VEX/exploitability assessment are separate artifacts. A model/checkpoint inventory is related provenance, not automatically covered by a software-package scan.
 
-The first deliverable is a **source-dependency baseline and coverage report**. It must not claim to enumerate the installed robotics runtime or the complete deployed stack. Subsequent deliverables add profile-specific dependencies, exact-image inventories, frontend build provenance and explicitly authorized deployment/research-artifact records.
+The existing **source-dependency baseline and coverage report** are preliminary evidence. They do not enumerate the complete deployed stack, establish all licenses or authorize redistribution. Further collection should answer specific gaps in the delivery review, rather than becoming an end in itself.
 
 Completion is per declared subject/profile, not a single unqualified “repository fully covered” badge.
+
+### 1.1 Review sequence before further implementation
+
+1. **Define the delivery scenario with the user.** Source distribution, customer-run binaries/containers, an installer that obtains dependencies, a hosted service, or a combination are possibilities—not decisions already made. Record intended recipients/use, target platforms, what is bundled, what the customer supplies, and whether modified components, policy weights or simulation assets will accompany it. Do not assume either commercial or noncommercial use.
+2. **Explain the software composition.** Build a readable inventory of major subsystems and their dependencies, purpose and inclusion evidence. Separate first-party code, third-party code, build/dev/test tools, shipped runtime software, customer-supplied prerequisites and externally hosted services. Being present in a lockfile or container recipe does not prove shipment.
+3. **Establish exact-version license evidence.** Review applicable license/NOTICE files, release or source evidence, package metadata and vendor terms for the actual version, revision or artifact. Distinguish detected declarations from reviewed conclusions; retain conflicting, dual/multiple-license and unknown cases. The repository's Apache-2.0 declaration does not license every dependency, SDK, model or asset.
+4. **Map terms to the proposed delivery.** Record potentially applicable attribution, notice, license-copy, source-provision, modification, redistribution, network-use or other conditions, citing the exact supporting terms and explaining the relevant trigger. Track required actions, owners, open questions and items needing qualified legal/vendor review. Do not infer compatibility or clearance from a license label alone.
+5. **Collect only the additional evidence needed.** After scope review, select the relevant S3/S4 profiles/builds/images and, if necessary, separately approved S5 research artifacts. Manifest/lock drift is a known evidence gap, not automatic authority to change dependencies before the licensing study. Final release SBOMs and notice packages follow review of the actual delivery contents.
+
+No new scanner, resolver, image inspection, application implementation or publication is authorized by this documentation update. The immediate next step is study and scope review, not resuming collection commands.
+
+### 1.2 Primary review report and component register
+
+The report should open with what the product contains, what is proposed to ship, the main unresolved licensing questions and the actions required before delivery. Accompany it with a component register containing:
+
+| Field | Required content |
+| --- | --- |
+| Identity and purpose | Component, ecosystem, exact version/commit/artifact identity or explicit unknown, upstream/fork and role in the project |
+| Delivery treatment | Shipped, build/dev/test-only, customer-supplied, external service, optional or undecided; inclusion evidence and delivery/profile subject |
+| Integration/modification | How the component is used or incorporated; local modifications and redistribution status where known |
+| License evidence | License expression/text and exceptions where established; exact-version source/file/URL and evidence date; distinguish metadata hints from applicable terms |
+| Conditions and applicability | Cited potential obligations/restrictions, the delivery behavior that makes them relevant, and interpretation confidence; no automatic legal approval |
+| Review/action | Evidence verified, interpretation pending, inclusion undecided, conflict/unknown or qualified review needed; action, owner and closure evidence |
+
+Cover Python/npm dependencies, recursive submodules and vendored code, frontend bundles, container OS/native software, NVIDIA/Isaac SDK and other proprietary terms. Separately assess models, datasets and simulation assets if they are proposed for delivery; record external service terms separately from shipped-package licenses. Do not invent a provider's internal software inventory.
+
+Unknown license metadata is an evidence gap, not proof of a license violation or permission to distribute. Summaries are technical compliance analysis, not a substitute for qualified legal decisions where needed.
 
 ## 2. Observed repository baseline
 
@@ -105,7 +132,7 @@ Do not query running containers, export their writable layers, scan dependency v
 
 ## 7. Evidence and artifact layout
 
-Proposed generated outputs, created only during the execution phases:
+Generated collection layout (the recorded source snapshot already exists; later views remain proposed):
 
 ```text
 outputs/sbom/<snapshot-id>/
@@ -129,7 +156,7 @@ outputs/sbom/<snapshot-id>/
   vulnerabilities/<subject-id>.json
 ```
 
-Confirm ignore/retention behavior before generating files; the path is proposed, not currently created. Keep large/generated SBOMs and local scan evidence outside source commits by default. For releases, attach reviewed artifacts to the release/image subject. Do not concatenate SBOM JSON or claim a merged inventory is complete merely because duplicate names were removed.
+The existing `.gitignore` rule `*outputs/` covers this location; report paths were verified ignored during collection. Keep generated inventories and local evidence outside source commits by default. The future primary review artifacts are proposed as `outputs/sbom/<delivery-subject>/review/software-license-review.md` and `software-license-register.csv`, with cited evidence and an action list beside them. They have **not** been created or reviewed. Keep durable scope decisions and the session handoff in this canonical plan so they survive ignored-output cleanup. For releases, attach only reviewed artifacts to the approved release/image subject. Do not concatenate SBOM JSON or claim a merged inventory is complete merely because duplicate names were removed.
 
 `collection.json` must record:
 
@@ -144,7 +171,7 @@ Record field provenance: a lockfile's artifact hash is a recorded expected hash,
 
 ## 8. Phased work packages and exit gates
 
-All execution phases are **not started**. Source discovery used to draft this plan is not an SBOM scan. Each role is a responsibility, not a new service or framework.
+Historical technical progress: S0/S1 executed; S2 collected a structurally validated source baseline with incomplete coverage; S3–S7 are not started. **The next priority is the review sequence in §1.1, not further scanner implementation or lockfile repair.** License study is an upfront workstream, not something postponed until S6. Each role is a responsibility, not a new service or framework.
 
 | Phase | Work | Responsible role | Exit evidence |
 | --- | --- | --- | --- |
@@ -154,16 +181,28 @@ All execution phases are **not started**. Source discovery used to draft this pl
 | S3 — selected profiles and frontend build linkage | Produce per-profile resolution inventories; connect first-party/submodule identities; bind existing build outputs when available, or leave build linkage pending | Python/frontend owners | No mixing of mutually exclusive profiles; existing lockfiles unchanged; frontend build dependencies not falsely labelled bundled; source/output hashes linked |
 | S4 — exact image inventories | Select approved existing image/platform identities; scan Arena, frontend and chosen policy/database/development images separately; reconcile recipe declarations and installed findings | Runtime inventory owner | Per-image validated SBOMs, exact immutable subjects, base/native/OS coverage and documented gaps; no service start or assumed tag equivalence |
 | S5 — deployment and research provenance | Inventory only explicitly approved overlays, host prerequisites, checkpoints/assets/datasets or remote-service declarations | Runtime/research owner | Distinct observed/declared/unknown states, origin and license evidence, no unapproved private-state reads or unsupported loaded-model claim |
-| S6 — consume findings | Run vulnerability analysis with a dated/pinned database; review license gaps and actionable results; add VEX only with evidence-backed adjudication | Security/license reviewer | Separate subject-bound reports; false positives and unknowns retained; no claim of exploitability or license clearance from package presence alone |
+| S6 — security analysis and review closure | If selected, run vulnerability analysis with a dated/pinned database; revisit the ongoing license/action register against final subject evidence; add VEX only with evidence-backed adjudication | Security/license reviewer | Separate subject-bound reports; false positives and unknowns retained; no claim of exploitability or license clearance from package presence alone; license study has already begun under §1.1 |
 | S7 — automate and distribute | After local acceptance, propose scripts/runbook and CI/release integration; sign/attest and publish only to an approved destination | Maintainer/release owner | Re-runnable commands, reproducible input identity, SBOM diff review and release linkage; CI/signing/publication separately authorized |
 
-First milestone: S0–S2 only, producing a source baseline with honest limitations. Do not make full deployment or ML artifact inventory a prerequisite for this useful first deliverable.
+The original technical milestone was S0–S2, producing a source baseline with honest limitations. It yielded useful evidence but did not fulfill the user's software/license understanding goal. The **next user-facing milestone** is an agreed delivery scope and readable software/license review with explicit unresolved items. Do not require full deployment or large ML artifact scans merely to begin that study.
 
-S3 and S4 may proceed independently once their subjects are approved. S5–S7 are not required to declare the initial source baseline complete, and that baseline never implies those later subjects are covered.
+S3 and S4 may proceed independently after delivery-scope review and approval of their subjects. S5–S7 are not prerequisites for studying existing evidence. Neither the preliminary baseline nor a license-text inventory implies those later subjects are covered or the release is cleared.
 
 ## 9. Acceptance checklist
 
+### Primary software/license review — outstanding
+
+- [ ] Delivery scenario, intended contents, customer-supplied prerequisites and undecided choices are recorded without assumptions.
+- [ ] A readable subsystem overview and component register explain purpose and shipped/dev/build/external distinctions, including transitive software where relevant to delivery.
+- [ ] License and vendor-term findings cite exact-version/revision evidence; unknown, conflicting and multiple-license cases remain explicit.
+- [ ] Potential obligations are tied to the actual delivery/integration behavior, with concrete actions and qualified review where needed—not blanket compatibility claims.
+- [ ] Proposed weights/assets/datasets have separately scoped provenance/license review; a software package license is not substituted for their terms.
+- [ ] Notice/license-copy and any applicable source-provision requirements are tracked; no deliverable is called ready while necessary evidence or decisions remain unresolved.
+- [ ] The user can review the human-readable report without interpreting raw scanner JSON. Machine-readable SBOMs are linked evidence, not the only deliverable.
+
 ### Source baseline
+
+Retained technical gates below do not constitute completion of the primary review above. The current source baseline remains qualified, notably because declared dependencies are missing from locked/scanned records.
 
 - [ ] Root/project version and snapshot identity match captured metadata; dirty source is not labelled a clean release.
 - [ ] Root Python and frontend lockfile inputs are represented; both submodule identities are recorded and their manifest coverage is explicit.
@@ -189,9 +228,9 @@ S3 and S4 may proceed independently once their subjects are approved. S5–S7 ar
 
 ## 10. Required decisions and approval boundaries
 
-Proposed defaults: source baseline first; current working tree labelled as a development snapshot; CycloneDX plus Syft JSON; offline collection; no image builds, package installs, source upload or publication.
+Current decision: pause further implementation/collection and review the software and licenses for eventual delivery. Delivery mode, bundled components, platform and inclusion of models/assets remain undecided. Existing defaults for any later approved collection remain a labelled development subject, CycloneDX plus Syft JSON, offline collection and no implicit image builds, project installs, source upload or publication.
 
-Before S1/S2 execution, confirm scanner acquisition/version/provenance and the approved source snapshot/output location. The present plan-writing request does not authorize installing a scanner.
+S1/S2 tooling acquisition and collection occurred under the subsequent execution request; their evidence is retained. That history is not permission to resume after the user's review-first clarification. A new tooling acquisition or expanded collection scope still requires its appropriate approval. The current request authorizes updating this plan and preserving session context, not additional execution.
 
 Before S3/S4, select the installation profiles and exact images/builds. Read-only image collection is not permission to pull/build images, run their entrypoints or inspect private runtime mounts. Existing permission for disposable Neo4j tests is not SBOM collection authority for a research database/container.
 
@@ -217,10 +256,24 @@ Regenerate or reassess the relevant view when lockfiles, submodule revisions, se
 - [CycloneDX SBOM capabilities](https://cyclonedx.org/capabilities/sbom/).
 - [Syft getting started](https://oss.anchore.com/docs/guides/sbom/getting-started/), [catalogers](https://oss.anchore.com/docs/guides/sbom/catalogers/), [formats](https://oss.anchore.com/docs/guides/sbom/formats/) and [CLI reference](https://oss.anchore.com/docs/reference/syft/cli/).
 
-This plan is grounded in repository metadata/build-source inspection and official documentation. No scanner capability test, SBOM schema validation, image scan, vulnerability scan, runtime inventory or license clearance has occurred. Documentation checks and plan review must be reported separately from those future execution gates.
+This plan is grounded in repository metadata/build-source inspection and official documentation. Since the original planning review, scanner capability tests, source collection and structural/schema validation have occurred as recorded above. Image/runtime inventory, vulnerability scanning and the delivery-focused license assessment remain unperformed. Keep documentation checks, technical scan validation and license/delivery conclusions distinct.
 
 ### Planning review disposition
 
 A bounded independent source review on 2026-09-18 approved the plan's scope with no blocking findings. It confirmed the source/profile/image distinctions, frontend bundle caveat, submodule identities and useful source-only first milestone. Scanner/cataloger compatibility, nested manifest coverage, dependency-edge preservation, native-binary detection and historical build provenance remain execution-time unknowns. Review approval does not authorize or establish collection.
 
-Scoped documentation hooks, local-link resolution, phase-ID ordering and Markdown fence checks passed. No application tests, scanners or runtime services were executed for this planning task.
+For the original documentation-only planning task, scoped documentation hooks, local-link resolution, phase-ID ordering and Markdown fence checks passed; no application tests, scanners or runtime services ran during that planning task. Subsequent source execution is recorded separately above and does not constitute license clearance.
+
+## 13. Session handoff and resume point
+
+**User's clarified intent:** “The idea was to understand the licenses and the software in the project. I need this for the software delivery later.” The user requested updating this plan for later review and preserving the session context. No delivery model has been selected.
+
+**Assistant's correction:** the emphasis on scanner implementation and technical validation did not fully address that goal. A preliminary source SBOM does exist; it is supporting inventory evidence, not the requested delivery-focused software/license assessment. Do not erase the actual collection or describe it as a complete licensing review.
+
+**Retained work:** reusable collection/validation tooling in `scripts/sbom/`; operating instructions in [RUNBOOK.md](RUNBOOK.md); the current qualified collection under `outputs/sbom/20260918T234038Z-83cc62b90a1f/`. Start with `coverage.md`; raw SBOM is `source/repository.cdx.json`. Existing findings include unresolved Shapely/Neo4j/Uvicorn declarations, root dependency-metadata drift, source/profile ambiguity and missing license evidence. Generated reports remain ignored; no application dependency/lockfile correction, runtime scan, publication or assistant commit was made during collection.
+
+**Still outstanding:** delivery scope; a human-readable software/component register; exact-version license/vendor-term research; delivery-specific obligations/actions; review of proposed research artifacts; and any qualified legal/vendor decisions. The existing technical coverage report is not a substitute for those outputs.
+
+**Next conversation:** review §1.1 and determine how the user expects to deliver the software. Then agree the license-study scope and report contents before choosing further collection or maintenance work. Do not automatically run the runbook, regenerate `uv.lock`, inspect images, resume workflow implementation or publish artifacts.
+
+**Memory placement:** this section owns session progress and the resume point; the persistent `software-supply-chain-inventory` skill retains the reusable delivery/license-first workflow and points back to this plan. Keep this as the single current SBOM plan rather than creating competing session plans.

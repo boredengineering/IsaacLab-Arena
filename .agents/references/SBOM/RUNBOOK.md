@@ -2,6 +2,8 @@
 
 ## Current result and boundary
 
+**Paused for study and scope review.** The user's goal is understanding project software and licenses for later delivery. These commands reproduce a preliminary inventory, not a delivery/license assessment. Read the [canonical plan](sbom_creation_plan_01.md), especially §1 and §13, before further execution; this runbook is not authority to resume scans or dependency changes.
+
 The first source inventory has been collected with pinned Syft 1.46.0. It is **not a complete source or installed-runtime inventory**. Read the generated coverage report before using the component list.
 
 Current verified development snapshot:
@@ -106,7 +108,7 @@ The validator checks official schema hashes/format, source identity, successful 
 - Source/profile ambiguities, missing license metadata, unparsed declarations, an uninitialized nested submodule, native build dependencies and installed/build/asset identities remain explicit limits.
 - Independent review identified dropped-scope and wrong-subject acceptance gaps. Parent reproduced them with failing regressions, added binding checks, and reran the tooling tests and actual paired collection. This closes those findings, not the remaining source-coverage gaps or later plan phases.
 
-The source baseline is delivered with qualified coverage, not a complete-stack sign-off. Next work is a separately scoped dependency-maintenance decision for manifest/lock drift, then regeneration and selected-profile/image inventory under S3/S4. Do not regenerate project locks, fetch submodules, inspect private runtime overlays, scan/pull images, modify CI or publish under the pretext of repairing this collection.
+The source baseline is delivered with qualified coverage, not a complete-stack or licensing sign-off. The next step is defining the delivery scenario and studying software/license evidence under the canonical plan—not immediately repairing locks or expanding scans. Manifest/lock maintenance and selected-profile/image inventories are later, separately scoped decisions. Do not regenerate project locks, fetch submodules, inspect private runtime overlays, scan/pull images, modify CI or publish under the pretext of repairing this collection.
 
 ## Retention
 

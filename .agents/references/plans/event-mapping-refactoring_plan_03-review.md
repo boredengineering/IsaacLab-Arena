@@ -1,10 +1,76 @@
 # Plan 03 source-grounded review ledger
 
-Status: the bounded three-round review below records the earlier plan revision. A subsequent user-directed scope correction makes bottom-up GraphQL/application refactoring the target and removes dashboard compatibility/integration obligations. That correction is recorded below; the earlier review does not certify the changed scope. Implementation and live release gates remain unexecuted.
+Status: the bounded DDD/GraphQL review is complete for its recorded revision; subsequent user clarifications below amend the plan and are separately documentation-checked, not independently re-reviewed. These include general Physical AI scope, mandatory modeling-study inputs and local credential bootstrap. Implementation, native calibration and live acceptance remain unexecuted.
 
 Canonical plan: [event-mapping-refactoring_plan_03.md](event-mapping-refactoring_plan_03.md). Implementation status remains in the [existing handoff](dashboard_cli_workflow_parity/research-stack-implementation-handoff.md). This ledger records documentation review, not implementation approval or runtime acceptance.
 
 ## Baseline and scope
+
+### Subsequent clarification: launcher-managed local credential bootstrap
+
+The user asks for explicit launcher creation/storage and emphasizes that this is bootstrap work before production readiness. Earlier plan text described private handoff but prohibited persistence, so it did not cover the agreed local-file approach. §6.2 now specifies hidden-prompt setup, owner-private files outside Git, versioned parsing, safe create/update/removal, host/container path handling, explicit loading, controlled restart/reapproval and a separate finite-lived runtime API-auth file. The default client walkthrough no longer requires manually assembled descriptors. The launcher stores operator-supplied third-party keys; it generates only the application's own auth token. No keys enter Neo4j/domain profiles/GraphQL/logs, and setup performs no inference/database/native probes.
+
+The plaintext-at-rest and same-user/root/backup risks are explicit. Production secret management/identity/rotation/auditing remain later work behind the same credential-source boundary, not prerequisites for the research prototype. T21 requires synthetic-only end-to-end bootstrap tests. No real credential file was read, created or changed, and no launcher was implemented by this documentation amendment. The earlier memory-only-token and no-secret-persistence statements are superseded only by these explicit private-file bootstrap provisions.
+
+### Subsequent clarification: implementing agents need the original modeling questions
+
+The user re-emphasized the original `entity → identity → owner → lifecycle → persistence → available actions` study as a prerequisite for Phase 5. The plan already linked the study in §7.1, but that was insufficient as an implementation handoff. Phase 5 now requires direct reads of the session study, source inventory and plan 02 §§3/4/11/12; embeds the original five questions plus DDD/recovery follow-ups; and requires completed per-interaction modeling records linked to G01–G10 and Given/When/Then tests before implementing the affected schema. T20 enforces traceability. Backend reconnect/restart/read semantics remain in scope without reviving dashboard implementation. Existing documents are extended instead of adding another design home.
+
+The quoted “many local schemas” diagnosis originated in an earlier assistant explanation and was reiterated by the user to restore the broader goal; it is not evidence that the user authored that diagnosis or approved every later design proposal. Historical notes inform semantics, while current source/status and the latest Neo4j-only/GraphQL/general-Physical-AI decisions govern implementation. This amendment is documentation-only and does not inherit the earlier revision's independent-review digest.
+
+### Subsequent user clarification: scenario examples are not the architecture
+
+The user clarified that the project targets general Physical AI, not the A2 example. Phase 4 is now **General Policy Evaluation and Task-Specific Acceptance**. A2/DROID/GR00T/lift-and-place assumptions are confined to the reference acceptance profile. Common application, Neo4j and GraphQL contracts bind task/embodiment/policy/evaluator identities and declared criteria without scenario-name branches or universal manipulation metrics. M3/V2/G09/T08 were generalized; T19 adds positive isolated contract coverage for distinct task semantics and another embodiment/action-interface binding. Existing TaskBase and OpenDoorTask sources ground the separation; no broad live compatibility is claimed.
+
+This clarification changes the previously reviewed plan bytes. The prior independent verdict and digest below remain evidence for that earlier revision, not independent verification of this amendment. Scoped documentation and structural checks verify the amendment; runtime/generalization tests are implementation obligations, not executed results.
+
+### Current review: original DDD method → full GraphQL → live integration
+
+- User asks whether plan 03 is the right next implementation step for live inference/native simulation and fully transitions the application to GraphQL according to the prior event-storming/DDD/event-mapping study. Neo4j-only persistence and no dashboard work remain explicit constraints.
+- Recovered original user statements: session `20260916_171442_92ddc8`, message `48723` requested a hypothetical step-by-step workflow to understand event modeling and document DDD for GraphQL information/API design; `48727` required command then modeling, without execution. Session `20260918_161956_6f5661`, message `54866` rejected local schemas without a coherent application model connecting research entities, workflow state, actions and retained state. The repository study records the five authority/identity/retention questions at `quick_notes/session_memory.md:25–61`.
+- An exact history search for “event storming” returned no match; the broader DDD search recovered the actual study. The method's semantics are retained without claiming a formally completed EventStorming workshop or that newly proposed aggregate boundaries were already agreed. Official EventStorming/Event Modeling/DDD references are now cited in plan §7.1.
+- Current HEAD is `57a7d1f3fe67b1d2c3fa4a89a54f8ce5f8797b77`, initially clean. Git shows only the three planning/index documents changed since source revision `3440d6352dc90ba2b2451bb29f29f8f0bd165af9`.
+- Starting plan SHA-256: `09ce7b40526e819d5e83d3431c1c7b49386736f9d49dc9afa0653e6732419a3e`. New scoped inventory contains 661 first-party source/config paths; content fingerprint `be8acf4feb8843a6a5f1629f663ebe39ee40d53bbf42311fed02c72de8a369a9`. Exact records: `outputs/workflow/plan03-research/ddd-live-review-baseline.json`. Fingerprinting is not reviewed coverage.
+- Round 1 `deleg_bbf5e8a6`: independent DDD, native, GraphQL/Neo4j and delivery-order reviewers read the frozen plan/source. Parent read decisive methods/imports/SQL/window/routing code before corrections. Round 2 `deleg_8a49460c` challenged and narrowed the findings; round 3 `deleg_01ff7389` verified the full corrected plan and spot-checked decisive source.
+
+| ID | Supported gap / strongest existing counterargument | Correction and implementation verification |
+| --- | --- | --- |
+| DR01 | Entity table lacked domain invariant ownership; existing store already atomically commits decisions/reservations | §7.1 defines proposed logical contexts/run consistency root without replacing current atomicity; T15 concurrent-result/ownership gate |
+| DR02 | Invalidation events plus latest view lose exact historical causes; current store already retains source_id internally | §7.2 named facts, typed source/causation/committed-version linkage and exact history queries; T10/T15 |
+| DR03 | Scene→policy separation was stated but lacked a complete transition projection; current scene acceptance is terminal | §7.3 transition/outcome table preserves scene pass independently of failed/unknown/cancelled policy; T08/T15 |
+| DR04 | Illustrative WorkflowResult/SDL could pass narrow tests without full research traversal | §9 G01–G10 coverage, typed candidate→decision→assessment→evidence traversal, WorkflowAdmitted naming and executable-schema gate; T16 |
+| DR05 | One scene intent registers one model worker before parent capture; adding native child leaves ownership/deadline ambiguous | Phase 3 selects separately fenced capture/assessment stages with verified adoption/cleanup and original deadlines; T14 positive slow-capture and crash/recovery cases |
+| DR06 | Post-settle windows conflict with zero-based admission/capture/displacement consumers | Phase 3 requires one absolute reset-relative offset across all consumers and charged settling; T14 nonzero-window proof |
+| DR07 | Guard rejects forbidden repairs but actual refiner lacks original/permitted-delta envelope | Phase 3 bounded repair input; first supported repair is visual-only failure with physical pass, not general physical repair; T07 |
+| DR08 | Profile hash alone does not configure module-global evaluator thresholds | Versioned exact settings bytes consumed at admission/production/evaluation/replay; T14 catalogue-change replay |
+| DR09 | Neo4j-only intent missed eager web_api imports and SQL-backed managed-prior metadata | §8–9 extraction closure and Phase 2 migration of membership/reservation/readback repositories; T13 denies SQLite on positive retrieval/boot path |
+| DR10 | HTTP principal/auth, process-private grants and direct CLI owner lifetime remained open choices | §6.4 selects local single-operator bearer auth with same-process long-lived owner/grants; §6 default network GraphQL CLI, no fallback; T09/T16 |
+| DR11 | No explicit route from empty scope to immutable registered profiles/artifact identity | §6.5 admin initialization/register/open-verify contract; T17 fresh-process positive and missing-binding negatives |
+| DR12 | Native CLI and isolated GraphQL could satisfy separate milestones without joined live delivery | §5 V0/V1/V2 and T18 require one GraphQL-submitted live scene run before policy extension, then same-boundary A2 |
+
+Parent verdict at correction stage: right direction, but the prior revision was insufficiently explicit for unambiguous implementation. These are bounded missing connections/contracts, not a reason to rebuild the engines or add services. No model, GPU, database or package test executed during this review.
+
+Round-2 challenge `deleg_8a49460c` narrowed the findings rather than treating every allegation as an absent subsystem:
+
+- DR01/DR02/DR04: existing entities, evidence projections and internally retained source_id already supply foundations. Corrections add explicit ownership, typed causal traversal and enumerable schema coverage; they do not claim those foundations were missing or mandate event sourcing.
+- DR05: rejected the broad claim that slow capture necessarily expires assessment. Existing `scene_ports.py:189–204` already checks capture plus model ceiling against the intent allowance. Remaining work is native ownership/topology and startup/retention/cleanup overhead. Separately fenced substages are a **selected design**, not the only theoretically valid design; a composite worker was considered but would need separately tracked native cleanup to satisfy GPU release before VLM. No second-registration API is assumed.
+- DR06: retained evaluators already validate nonzero exact windows; only composition/reset/label/displacement consumers need the new propagation seam. Preserve existing evaluators/legacy defaults.
+- DR07: original-baseline bounds and visual-only routing already enforce permission. The missing input is model guidance. Corrected “remaining allowance” to the original-centered admissible disk: no accidental cumulative-travel/shrinking-radius restriction; inward/tangential moves remain valid.
+- DR08: existing runtime/capture profile identity/hashes remain. Bind actual native settings bytes/consumer parameters to them, not another registry.
+- DR09: importing web_api eagerly imports legacy code but does not itself prove a DB was created; construction occurs in lifespan. Plain explicit-driver GraphRAG retrieval is not inherently SQLite-dependent. SQL migration is required for the managed callback path; do not silently discard that capability.
+- DR10/DR11: added finite API authentication expiry/generation, private rotation/reapproval, grant-deadline caps and serialized private handoff. Default installed client is network GraphQL; emergency owner-local cancellation remains a distinct control path, not fallback execution. Explicit administration reuses existing schema/scope primitives rather than inventing another store.
+
+Round 3 `deleg_01ff7389`: **passed at planning level**, with no blocking contradiction. The verifier confirmed DDD ownership/causation→Neo4j→typed GraphQL traversal; coherent native-stage ownership/window/settings/repair choices; Neo4j-only import/retrieval extraction; same-process authentication/grant/owner lifetime; explicit admin bootstrap; and one joined V1 GraphQL/live checkpoint before V2 policy. Earlier overbroad claims about slow-capture timeout, absent permission enforcement and absent nonzero-window evaluators remain rejected/narrowed, not silently promoted to defects. Review stops here.
+
+Current parent conclusion: **the corrected plan is the right next implementation step**, beginning with V0 and a narrow V1 vertical slice rather than a dashboard migration or a new orchestration platform. Full GraphQL completion is G01–G10 plus their executable-schema/query tests, not the illustrative SDL alone. Numerical native calibration, installed package compatibility, exact provider/policy/profile settings and separately authorized positive live acceptance remain release gates, not performed tests.
+
+Current verification record:
+
+- Final reviewed plan SHA-256: `93eb2ad2cd6187bd797a5cbfbf8103b75814491abeb8d69731f3aeb24e1c9681`.
+- Scoped host pre-commit, citation identity/evidence verification and `git diff --check` passed. All 15 cited official sources have evidence quotes; unused research sources yield informational warnings only.
+- Static checks reconcile 12 requirement IDs, 12 DR finding IDs, 18 acceptance-test IDs and 10 GraphQL-coverage IDs; links/fences and proposed CLI shell syntax pass. Proposed commands were not executed.
+- The 661-file source/config snapshot has no drift; only plan 03, this ledger and the references index were edited. Exact local evidence: `outputs/workflow/plan03-research/ddd-live-review-checks.json` and its baseline manifest. Inventory size is not reviewed coverage.
+- No runtime tests, package imports, service/database operations, live inference, native simulation, installation, staging or commit. Source/tabletop/plan verification does not establish deployment or scientific acceptance.
 
 ### User-directed scope correction after the bounded review
 
@@ -34,15 +100,19 @@ Further user correction: “I do not want SQlite I want to enforce the architect
 | --- | --- | --- | --- |
 | R01 | Actual provider credentials and model configuration | Phase 1, §6, §11 | T01–T03 |
 | R02 | Live Graph-RAG using existing provenance machinery | Phase 2, §7–8 | T05 |
-| R03 | Native realization and capture, not synthetic relabelling | Phase 3, §8 | T06–T07 |
+| R03 | Native realization and capture, not synthetic relabelling | Phase 3, §8 | T06–T07/T14 |
 | R04 | Supported user-facing launch configuration | §5–6 | T02–T04, T09 |
 | R05 | Manipulation-level policy acceptance | Phase 4, §4, §11 | T08 |
-| R06 | Bottom-up application/event model and GraphQL contracts; dashboard deferred | Phase 5, M0/M4/M5, §7, §9 | T10–T12 |
+| R06 | Bottom-up DDD ownership/event-causation model and complete GraphQL contracts; dashboard deferred | Phase 5, M0/M4/M5, §7, §9 G01–G10 | T10–T12/T15–T16 |
 | R07 | Reuse engines/application rather than new controller/services | §2, §5, §8 | T01–T02 |
 | R08 | Separate isolated/native/live/deployed evidence and authorization | §1–2, §10–11 | All gates retain their scope |
 | R09 | Honest scene/policy/publication/prior distinctions | §2, §7, §9 | T07–T08 |
 | R10 | Original identities, replay, cancellation and retained refresh | §6–9 | T04, T09–T12 |
 | R11 | Neo4j is the sole authoritative application database; no SQLite runtime dependency/fallback | §2, M0, §7–8, §11 | T01/T13 |
+| R12 | Joined live inference/native workflow through GraphQL, with explicit initialization and request-independent owner | §5 V0/V1/V2, §6.4–6.5 | T09/T14/T17–T18 |
+| R13 | General Physical AI architecture; A2 is an example, not hardcoded task/embodiment/policy semantics | Phase 4, M3/V2, G09 | T08/T19 |
+| R14 | Original domain/event-modeling questions are mandatory implementation inputs, with explicit answers driving the schema | Phase 5 mandatory study, §7, §9 | T20 |
+| R15 | Launcher creates/stores/loads local credentials for a usable research bootstrap, not a production secret manager | §6.2–6.4, M1 | T21 |
 
 ## Parent findings and initial corrections
 

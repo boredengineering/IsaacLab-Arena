@@ -24,8 +24,8 @@ query Inspection($id: ID!, $operation: ID!) {
       }
       budget {
         actualConsumption accounting runtimeAccounting admittedAt deadline perOperationCeilingSeconds
-        reserved { modelCalls modelTokens costCeilingUsd runtimeAllowanceSeconds candidates revisions realizations steps observations }
-        remaining { modelCalls modelTokens costCeilingUsd runtimeAllowanceSeconds candidates revisions realizations steps observations }
+        reserved { modelCalls modelTokens costCeilingUsd runtimeAllowanceSeconds candidates revisions realizations steps observations policyEpisodes policySteps }
+        remaining { modelCalls modelTokens costCeilingUsd runtimeAllowanceSeconds candidates revisions realizations steps observations policyEpisodes policySteps }
       }
       cleanup {
         projectionRevision currentScopeOwner { id epoch dirty }
@@ -40,6 +40,7 @@ query Inspection($id: ID!, $operation: ID!) {
         selectedCandidateReference { candidateId digest sourceId originalId parentId }
         acceptance assessmentStatus decisionId decisionIdentityProvenance action reason nextIntentId evidenceId assessmentId selectedAssessed detailCoverage
         criteria { criterionId requirement verdict reportedVerdicts manifests } limitations
+        policyTrial { intentId manifestDigest episodeRecordsDigest }
       }
       generationOutputs { intentId attemptId registrationId contractDigest candidateYamlSha256 candidateJsonSha256 provenanceSha256 manifestSha256 disposition freshArtifactVerification }
       readiness { intentId attemptId source contractDigest checkedAt currentReadiness ttlSeconds profiles { role profileId settingsDigest expectedInstanceId observedInstanceId } }

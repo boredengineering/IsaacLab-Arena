@@ -1626,6 +1626,80 @@ def keyed_scene_fixture():
     )
 
 
+@pytest.mark.parametrize("fault", ["cleanup", "ack", "slot", "false_slot", None])
+def test_split_capture_cleanup_and_resource_release_precede_adoption(fault):
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import Observation, ScenePortProfile
+    from isaaclab_arena.tests.test_environment_workflow_evidence import cohort
+
+    t = keyed_scene_fixture()
+    capture = dict(
+        model_calls=0,
+        model_tokens=0,
+        cost_ceiling_usd=0.0,
+        runtime_allowance_seconds=1.0,
+        realizations=1,
+        observations=1,
+        steps=10,
+    )
+    profile = ScenePortProfile(
+        codec_version=2,
+        port_id="split-synthetic",
+        assurance="native-unverified",
+        owned_worker=True,
+        producer_ids=(),
+        capture=capture,
+        assess=t.ports.profile.observe,
+        repair=t.ports.profile.repair,
+    )
+    t.ports.profile = t.snapshot.profile = profile
+    t.snapshot.intent = t.snapshot.intent.model_copy(
+        update={"codec_version": 2, "action": "capture", "reservation": profile.capture}
+    )
+    t.ports.execute = lambda *a: Observation(cohort=cohort(), evidence=(), verified_manifest_digests=())
+
+    def verify(value, *args):
+        t.calls.append("verify")
+        return value
+
+    t.ports.verify_observation = verify
+    cleanup = t.ports.cleanup_worker
+
+    def clean(intent):
+        if fault == "cleanup":
+            t.calls.append("cleanup")
+            raise TimeoutError("cleanup")
+        return cleanup(intent)
+
+    def ack(*args):
+        t.calls.append("ack")
+        if fault == "ack":
+            raise TimeoutError("ack")
+
+    def release(*args):
+        t.calls.append("slot")
+        if fault == "slot":
+            raise TimeoutError("slot")
+        return fault != "false_slot"
+
+    def finish(*args):
+        t.calls.append("finish")
+        t.snapshot.run.state = "stopped"
+
+    t.ports.cleanup_worker = clean
+    t.ports.release_native_resource = release
+    t.store.acknowledge_scene_cleanup = ack
+    t.store.finish_scene = finish
+    if fault:
+        with pytest.raises(ValueError if fault == "false_slot" else TimeoutError):
+            t.service.run_scene("creator", "run", ports=t.ports)
+        assert "finish" not in t.calls and t.calls[-1] == "unknown"
+        if fault in ("cleanup", "ack"):
+            assert "slot" not in t.calls
+    else:
+        t.service.run_scene("creator", "run", ports=t.ports)
+        assert t.calls[-5:] == ["cleanup", "ack", "slot", "verify", "finish"]
+
+
 @pytest.mark.parametrize("fault", [None, "stale", "replacement", "claim_unknown"])
 def test_keyed_scene_first_claim_only_and_stale_pin_never_marks_replacement_unknown(fault):
     import inspect

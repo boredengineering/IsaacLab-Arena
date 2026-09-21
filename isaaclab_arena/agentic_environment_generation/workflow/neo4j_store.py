@@ -884,7 +884,17 @@ class Neo4jWorkflowStore:
                             resume_intent_id=preview.selection.intent_id if preview.selection else None,
                         ),
                         policy_outcome=(
-                            "not_requested" if intent.contract.execution.policy is None else "unsupported_or_unretained"
+                            "not_requested"
+                            if intent.contract.execution.policy is None
+                            else (
+                                scene.policy_trial.aggregate().outcome
+                                if scene is not None and scene.policy_trial
+                                else (
+                                    "ready_for_policy"
+                                    if scene is not None and scene.action == "policy"
+                                    else "unsupported_or_unretained"
+                                )
+                            )
                         ),
                         publication_outcome="unknown" if intent.contract.effects.allow_publication else "not_permitted",
                         retained_dependencies_revision=hashlib.sha256(
@@ -2609,6 +2619,62 @@ class Neo4jWorkflowStore:
         except (ValueError, TypeError, KeyError, RecursionError):
             raise CorruptSceneRecord("invalid retained scene record") from None
 
+    def _historical_policy_trial(self, tx, run_id, candidate, decision, evidence_id):
+        """Bind retained policy metadata to the exact producing cleaned intent."""
+        from .scene_loop import SceneIntent, SceneResult, identity
+
+        trial = decision.policy_trial
+        row = self._historical_node(tx, "ArenaExecutionIntent", trial.intent_id)
+        if row is None:
+            raise CorruptSceneRecord("missing policy trial intent")
+        intent = self._historical_payload(row, SceneIntent, "scene_json")
+        results = list(
+            tx.run(
+                "MATCH (i:ArenaExecutionIntent) WHERE elementId(i)=$key "
+                "RETURN CASE WHEN size(toStringOrNull(i.result_json))<=2097152 "
+                "THEN i.result_json ELSE null END AS result LIMIT 2",
+                key=row["key"],
+            )
+        )
+        if len(results) != 1:
+            raise CorruptSceneRecord("missing policy result")
+        result = self._historical_payload({"node": {"payload": results[0]["result"]}}, SceneResult)
+        owner = self._historical_owner(tx, row, "HAS_SCENE_INTENT")
+        if (
+            owner["node"]["run_id"] != run_id
+            or intent.action != "policy"
+            or intent.status != "produced"
+            or intent.intent_id != trial.intent_id
+            or intent.candidate_id != candidate.candidate_id
+            or intent.worker_cleanup is None
+            or intent.worker_registration is None
+            or intent.worker_fence is None
+            or intent.worker_fence.intent_id != trial.intent_id
+            or intent.worker_fence.run_id != run_id
+            or intent.worker_registration.fence != intent.worker_fence
+            or intent.worker_cleanup.registration != intent.worker_registration
+            or result.codec_version != 2
+            or result.failure is not None
+            or result.observation is not None
+            or result.candidate_json is not None
+            or intent.policy_binding != trial.binding
+            or result.policy_trial != trial
+            or trial.binding.candidate_digest != candidate.digest
+            or evidence_id != identity(trial.intent_id, "observation")
+        ):
+            raise CorruptSceneRecord("retained policy trial binding mismatch")
+        try:
+            contract = parse_contract(owner["node"]["contract_json"])
+            if (
+                trial.binding.contract_digest != contract_digest(contract)
+                or trial.binding.seed != contract.execution.seed
+            ):
+                raise ValueError("policy contract mismatch")
+            if decision.action == "accept" and trial.aggregate().outcome != "passed":
+                raise ValueError("policy acceptance mismatch")
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptSceneRecord("invalid retained policy trial") from None
+
     def _historical_decision(self, tx, row):
         from .scene_loop import SceneDecision, SceneIntent, identity
 
@@ -2646,6 +2712,10 @@ class Neo4jWorkflowStore:
                 assessment_id = assessment.assessment_id
             elif decision.assessment is not None:
                 raise CorruptSceneRecord("missing selected retained assessment")
+        if decision.policy_trial is not None:
+            self._historical_policy_trial(
+                tx, run_id, self._historical_candidate(tx, candidate_row).candidate, decision, evidence_id
+            )
         next_intent_id = node.get("intent_id")
         if next_intent_id is not None:
             if next_intent_id != identity(node["decision_id"], "intent"):
@@ -3220,7 +3290,7 @@ class Neo4jWorkflowStore:
             return self._scene_snapshot(tx, run_id)
 
     def _scene_decide(self, tx, run, candidate, decision, profile, selected_evidence_id=None):
-        from .scene_loop import SceneDecision, SceneIntent, identity
+        from .scene_loop import SceneIntent, identity
 
         contract = parse_contract(run.contract_json)
         admitted = tx.run(
@@ -3243,8 +3313,14 @@ class Neo4jWorkflowStore:
         charged = [json.loads(r["reservation"]) for r in rows]
         b = contract.budget
         if now < admitted or now >= admitted + b.total_deadline_seconds:
-            decision = SceneDecision(action="stop", reason="budget_exhausted", assessment=decision.assessment)
-        allowance = getattr(profile, decision.action, None) if decision.action in ("observe", "repair") else None
+            decision = decision.model_copy(update={"action": "stop", "reason": "budget_exhausted"})
+        if decision.action == "observe" and profile.codec_version == 2:
+            decision = decision.model_copy(update={"action": "capture"})
+        allowance = (
+            getattr(profile, decision.action, None)
+            if decision.action in ("observe", "repair", "capture", "assess", "policy")
+            else None
+        )
         if allowance is not None:
             limits = {
                 "model_calls": b.max_model_calls,
@@ -3256,6 +3332,8 @@ class Neo4jWorkflowStore:
                 "realizations": b.max_realizations,
                 "steps": b.max_steps,
                 "observations": b.max_observations,
+                "policy_episodes": b.max_policy_episodes,
+                "policy_steps": b.max_policy_steps,
             }
             invalid = any(
                 sum(c.get(key, 0) for c in charged) + getattr(allowance, key) > limit for key, limit in limits.items()
@@ -3264,30 +3342,51 @@ class Neo4jWorkflowStore:
                 not 0 < allowance.runtime_allowance_seconds <= b.per_operation_timeout_seconds
                 or now + allowance.runtime_allowance_seconds > admitted + b.total_deadline_seconds
             )
-            if decision.action == "observe":
+            if decision.action in ("observe", "capture"):
                 invalid |= allowance.realizations < 1 or allowance.observations < 1
                 required_steps = max(
-                    c.observation_window.end_step for c in contract.criteria if c.requirement == "required"
+                    c.observation_window.end_step for c in contract.criteria if c.requirement == "required" and c.kind != "policy"
                 )
                 invalid |= allowance.steps < required_steps
-            else:
+            elif decision.action == "repair":
                 invalid |= allowance.candidates < 1 or allowance.revisions < 1
-            if invalid:
-                decision = SceneDecision(
-                    action="stop",
-                    reason="budget_exhausted",
-                    assessment=decision.assessment,
+            elif decision.action == "policy":
+                binding = profile.policy_binding
+                invalid |= (
+                    allowance.policy_episodes != binding.max_episodes
+                    or allowance.policy_steps != binding.max_policy_steps
+                    or allowance.steps < binding.max_prerequisite_steps
+                    or allowance.realizations < 1
+                    or now >= binding.deadline_unix
+                    or binding.deadline_unix > admitted + b.total_deadline_seconds
                 )
+            if invalid:
+                decision = decision.model_copy(update={"action": "stop", "reason": "budget_exhausted"})
                 allowance = None
         decision_id = identity(run.run_id, run.version, "scene-decision")
         intent = None
         if allowance is not None:
+            observation_digest = None
+            if decision.action in ("assess", "policy"):
+                row = self._historical_node(tx, "ArenaWorkflowEvidence", selected_evidence_id)
+                evidence = self._historical_evidence(tx, row)
+                if evidence.run_id != run.run_id or evidence.candidate_id != candidate.candidate_id:
+                    raise ValueError("capture candidate binding mismatch")
+                observation_digest = identity(evidence.observation.model_dump(mode="json"))
             intent = SceneIntent(
+                codec_version=profile.codec_version,
                 intent_id=identity(decision_id, "intent"),
                 candidate_id=candidate.candidate_id,
                 action=decision.action,
                 status="reserved",
                 reservation=allowance,
+                observation_id=selected_evidence_id if decision.action in ("assess", "policy") else None,
+                observation_digest=observation_digest,
+                policy_binding=(
+                    profile.policy_binding.model_copy(update={"candidate_digest": candidate.digest})
+                    if decision.action == "policy"
+                    else None
+                ),
             )
             tx.run(
                 "MATCH (r:ArenaWorkflowRun "
@@ -3336,7 +3435,7 @@ class Neo4jWorkflowStore:
         its receipt to the retained generation, not a caller's success boolean.
         """
         from .evidence_contracts import project_required_criteria
-        from .scene_loop import CandidateRecord, SceneDecision, ScenePortProfile
+        from .scene_loop import CandidateRecord, SceneDecision, ScenePortProfile, policy_compatible
 
         candidate = CandidateRecord.model_validate_json(candidate.model_dump_json())
         profile = ScenePortProfile.model_validate_json(profile.model_dump_json())
@@ -3391,7 +3490,10 @@ class Neo4jWorkflowStore:
             if validation.get("disposition") != "schema_validated":
                 decision = SceneDecision(action="stop", reason="invalid_candidate")
             try:
-                required = project_required_criteria(parse_contract(run.contract_json))
+                contract = parse_contract(run.contract_json)
+                if profile.policy_binding is not None and profile.policy_binding.candidate_digest != candidate.digest:
+                    raise ValueError("policy original candidate mismatch")
+                required = project_required_criteria(contract, include_policy=policy_compatible(contract, profile))
                 if not {r.producer_id for r in required} <= set(profile.producer_ids):
                     raise ValueError("unsupported producer")
             except ValueError:
@@ -3431,6 +3533,29 @@ class Neo4jWorkflowStore:
         with self._transaction() as tx:
             self._lock(tx)
             return self._retained_scene_intent(tx, run_id, intent_id)
+
+    def _scene_capture(self, tx, run_id, intent):
+        from .scene_loop import identity
+
+        if intent.codec_version != 2 or intent.action not in ("assess", "policy"):
+            raise ValueError("split assessment intent required")
+        row = self._historical_node(tx, "ArenaWorkflowEvidence", intent.observation_id)
+        if row is None:
+            raise ValueError("retained capture missing")
+        value = self._historical_evidence(tx, row)
+        if (
+            value.run_id != run_id
+            or value.candidate_id != intent.candidate_id
+            or identity(value.observation.model_dump(mode="json")) != intent.observation_digest
+        ):
+            raise ValueError("retained capture binding mismatch")
+        return value.observation
+
+    def get_scene_capture(self, run_id, intent_id):
+        """Read only the exact pinned capture; ports must independently reopen bytes."""
+        with self._transaction() as tx:
+            self._lock(tx)
+            return self._scene_capture(tx, run_id, self._retained_scene_intent(tx, run_id, intent_id))
 
     def _write_scene_intent(self, tx, run_id, intent):
         tx.run(
@@ -3567,6 +3692,8 @@ class Neo4jWorkflowStore:
             now = self._now()
             self._generation_authority(contract, authorization, now)
             self._readiness(contract, readiness, now)
+            if intent.policy_binding is not None and now >= intent.policy_binding.deadline_unix:
+                raise ValueError("policy trial deadline exhausted")
             original_auth = tx.run(
                 "MATCH (r:ArenaWorkflowRun "
                 + _SCOPE
@@ -3625,6 +3752,8 @@ class Neo4jWorkflowStore:
                 or s.run.state != "running"
             ):
                 raise ValueError("inactive scene release")
+            if s.intent.policy_binding is not None and self._now() >= s.intent.policy_binding.deadline_unix:
+                raise ValueError("policy trial deadline exhausted")
             stored = self._intent(tx, intent_id)
             if stored.get("authorization_json") != authorization.model_dump_json():
                 raise ValueError("scene release authorization changed")
@@ -3688,7 +3817,14 @@ class Neo4jWorkflowStore:
 
     def finish_scene(self, run_id, intent_id, expected_version, result):
         """Retain immutable result/assessment and atomically decide/reserve next work."""
-        from .scene_loop import SceneDecision, SceneResult, assess_and_route, identity, repaired_candidate
+        from .scene_loop import (
+            SceneDecision,
+            SceneResult,
+            assess_and_route,
+            identity,
+            repaired_candidate,
+            route_capture,
+        )
 
         result = SceneResult.model_validate_json(result.model_dump_json())
         payload = result.model_dump_json()
@@ -3706,15 +3842,71 @@ class Neo4jWorkflowStore:
                 raise ValueError("released scene intent required")
             if s.run.version != expected_version or s.run.state != "running":
                 raise ValueError("stale scene completion or cancellation")
+            if result.codec_version != s.intent.codec_version:
+                raise ValueError("scene result codec mismatch")
             if s.profile.owned_worker:
                 if s.intent.worker_fence is None or s.intent.worker_cleanup is None:
                     raise ValueError("scene worker cleanup required")
                 self._fenced_scene(tx, s.intent.worker_fence)
             candidate = s.candidate
             contract = parse_contract(s.run.contract_json)
+            selected_evidence_id = None
             if result.failure:
                 decision = SceneDecision(action="stop", reason=result.failure)
-            elif s.intent.action == "observe" and result.observation is not None and result.candidate_json is None:
+                if s.intent.action == "policy":
+                    observation = self._scene_capture(tx, run_id, s.intent)
+                    prerequisite = assess_and_route(contract, candidate, observation, s.profile)
+                    if prerequisite.action != "policy" or prerequisite.assessment != s.decision.assessment:
+                        raise ValueError("policy prerequisite assessment mismatch")
+                    decision = SceneDecision(
+                        action="stop",
+                        reason=result.failure,
+                        assessment=prerequisite.assessment,
+                        scene_disposition=prerequisite.scene_disposition,
+                    )
+                    selected_evidence_id = self._retain_policy_prerequisites(
+                        tx, run_id, intent_id, candidate, observation, prerequisite.assessment
+                    )
+            elif (
+                s.intent.action == "policy"
+                and result.policy_trial is not None
+                and result.observation is None
+                and result.candidate_json is None
+            ):
+                from .scene_loop import policy_compatible
+
+                trial = result.policy_trial
+                if (
+                    trial.intent_id != intent_id
+                    or not policy_compatible(contract, s.profile)
+                    or trial.binding != s.intent.policy_binding
+                    or trial.binding.candidate_digest != candidate.digest
+                    or trial.binding.contract_digest != contract_digest(contract)
+                    or trial.binding.seed != contract.execution.seed
+                ):
+                    raise ValueError("policy trial frozen binding mismatch")
+                observation = self._scene_capture(tx, run_id, s.intent)
+                prerequisite = assess_and_route(contract, candidate, observation, s.profile)
+                if prerequisite.action != "policy" or prerequisite.assessment != s.decision.assessment:
+                    raise ValueError("policy prerequisite assessment mismatch")
+                outcome = trial.aggregate().outcome
+                expired = self._now() >= trial.binding.deadline_unix
+                decision = SceneDecision(
+                    action="accept" if outcome == "passed" and not expired else "stop",
+                    reason="policy_" + ("deadline_exceeded" if expired else outcome),
+                    assessment=prerequisite.assessment,
+                    policy_trial=trial,
+                    scene_disposition=prerequisite.scene_disposition,
+                )
+                selected_evidence_id = self._retain_policy_prerequisites(
+                    tx, run_id, intent_id, candidate, observation, prerequisite.assessment
+                )
+            elif (
+                s.intent.action in ("observe", "capture", "assess")
+                and result.observation is not None
+                and result.candidate_json is None
+                and result.policy_trial is None
+            ):
                 observation = result.observation
                 previous = list(
                     tx.run(
@@ -3726,10 +3918,22 @@ class Neo4jWorkflowStore:
                     )
                 )
                 old = [json.loads(r["payload"])["cohort"] for r in previous]
-                if any(c["realization_id"] == observation.cohort.realization_id for c in old):
+                if s.intent.action == "assess":
+                    capture = self._scene_capture(tx, run_id, s.intent)
+                    if (
+                        observation.cohort != capture.cohort
+                        or not all(e in observation.evidence for e in capture.evidence)
+                        or not set(capture.verified_manifest_digests) <= set(observation.verified_manifest_digests)
+                        or (capture.static_failure is not None and capture.static_failure != observation.static_failure)
+                    ):
+                        raise ValueError("assessment changed retained capture")
+                    decision = assess_and_route(contract, candidate, observation, s.profile)
+                elif any(c["realization_id"] == observation.cohort.realization_id for c in old):
                     decision = SceneDecision(action="stop", reason="stale_cohort")
+                elif s.intent.action == "capture":
+                    decision = route_capture(contract, candidate, observation)
                 else:
-                    decision = assess_and_route(contract, candidate, observation)
+                    decision = assess_and_route(contract, candidate, observation, s.profile)
                 self._scene_node(
                     tx,
                     "ArenaWorkflowEvidence",
@@ -3737,6 +3941,17 @@ class Neo4jWorkflowStore:
                     observation.model_dump_json(),
                     run_id,
                 )
+                if s.intent.codec_version == 2 and decision.assessment is None:
+                    tx.run(
+                        "MATCH (e:ArenaWorkflowEvidence "
+                        + _SCOPE
+                        + ") WHERE e.record_id=$evidence MATCH (c:ArenaWorkflowCandidate "
+                        + _SCOPE
+                        + ") WHERE c.record_id=$candidate CREATE (e)-[:FOR_CANDIDATE]->(c)",
+                        **self.scope,
+                        evidence=identity(intent_id, "observation"),
+                        candidate=candidate.candidate_id,
+                    ).consume()
                 if decision.assessment is not None:
                     self._scene_node(
                         tx,
@@ -3809,9 +4024,32 @@ class Neo4jWorkflowStore:
                 candidate,
                 decision,
                 s.profile,
-                identity(intent_id, "observation") if result.observation is not None else None,
+                identity(intent_id, "observation") if result.observation is not None else selected_evidence_id,
             )
         return True
+
+    def _retain_policy_prerequisites(self, tx, run_id, intent_id, candidate, observation, assessment):
+        """Retain selected scene facts for a policy disposition without another capture."""
+        from .scene_loop import identity
+
+        evidence_id = identity(intent_id, "observation")
+        assessment_id = identity(intent_id, "assessment")
+        self._scene_node(tx, "ArenaWorkflowEvidence", evidence_id, observation.model_dump_json(), run_id)
+        self._scene_node(tx, "ArenaCriterionAssessment", assessment_id, assessment.model_dump_json(), run_id)
+        tx.run(
+            "MATCH (a:ArenaCriterionAssessment "
+            + _SCOPE
+            + ") WHERE a.record_id=$assessment MATCH (e:ArenaWorkflowEvidence "
+            + _SCOPE
+            + ") WHERE e.record_id=$evidence MATCH (c:ArenaWorkflowCandidate "
+            + _SCOPE
+            + ") WHERE c.record_id=$candidate CREATE (a)-[:ASSESSES]->(e), (e)-[:FOR_CANDIDATE]->(c)",
+            **self.scope,
+            assessment=assessment_id,
+            evidence=evidence_id,
+            candidate=candidate.candidate_id,
+        ).consume()
+        return evidence_id
 
     def unprepared_owner_snapshot(self, run_id):
         """Read a bounded continuation obligation set; caller must hold the OS lease.

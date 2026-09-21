@@ -196,6 +196,60 @@ def test_refine_actual_method_exact_base_feedback_shared_budget(tmp_path, monkey
     assert len(calls) == 2
 
 
+def test_refine_receives_original_centered_permissions_and_returns_guarded_child(tmp_path, monkeypatch):
+    from isaaclab_arena.agentic_environment_generation.environment_generation_agent import (
+        build_asset_catalogue,
+        build_relation_catalogue,
+        build_task_catalogue,
+    )
+    from isaaclab_arena.agentic_environment_generation.spec_wire_adapter import SpecWireAdapter
+    from isaaclab_arena.agentic_environment_generation.workflow.repairs import repair_permission_envelope
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import candidate_record, repaired_candidate
+    from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+    from isaaclab_arena.tests._workflow_scene_fixture import composed_fixture
+
+    f = composed_fixture(tmp_path)
+    try:
+        f.original = candidate_record(
+            f.original.run_id,
+            ArenaEnvGraphSpec.model_validate(json.loads(f.original.scene_json)).model_dump(mode="json"),
+            source_id="generation",
+        )
+        parent_spec = json.loads(f.original.scene_json)
+        parent_spec["relations"][5]["params"]["x"] += 0.08
+        parent = repaired_candidate(f.contract, f.original, f.original, parent_spec, source_id="parent")
+        proposed = json.loads(parent.scene_json)
+        proposed["relations"][5]["params"]["x"] -= 0.12
+        wire = SpecWireAdapter().encode(ArenaEnvGraphSpec.model_validate(proposed).model_dump(mode="json"))
+        calls, _ = sdk(monkeypatch, completion=json.dumps(wire))
+        tools, allowance = model_tools(tmp_path, max_calls=2)
+        permissions = repair_permission_envelope(
+            f.contract, f.original, parent, effective_subjects=f.ports.direct_root_subjects
+        )
+        assert permissions["admissible_disk"]["radius_m"] == 0.1
+        assert permissions["current"]["xy_m"] != permissions["admissible_disk"]["center_xy_m"]
+        feedback = {"assessment": {"failed_ids": ["visible"]}, "repair_permissions": permissions}
+        result = tools.refine(
+            base_spec=ArenaEnvGraphSpec.model_validate(parent_spec),
+            feedback=feedback,
+            protect=lambda _: None,
+            asset_catalog=build_asset_catalogue(),
+            relation_catalog=build_relation_catalogue(),
+            task_catalog=build_task_catalogue(),
+        )
+        assert allowance.attempted_calls == len(calls) == 2
+        message = calls[1]["messages"][1]["content"]
+        assert json.dumps(feedback, sort_keys=True, separators=(",", ":")) in message
+        # The model sees the whole original-centered disk, not a shrinking path budget.
+        assert isinstance(result.spec, ArenaEnvGraphSpec)
+        child = repaired_candidate(
+            f.contract, f.original, parent, result.spec.model_dump(mode="json"), source_id="refiner"
+        )
+        assert child.parent_id == parent.candidate_id
+    finally:
+        f.area.close()
+
+
 @pytest.mark.parametrize("operation", ["generate", "refine"])
 def test_model_proposal_is_screened_before_return(tmp_path, monkeypatch, operation):
     from isaaclab_arena.agentic_environment_generation.environment_generation_agent import (
@@ -257,7 +311,7 @@ def test_assess_sends_retained_image_bytes_and_exact_request(tmp_path, monkeypat
         ObservationRecorder,
         visual_request,
     )
-    from isaaclab_arena.tests.test_environment_workflow_scene_producers import artifacts, criterion, identities, sample
+    from isaaclab_arena.tests._workflow_scene_fixture import artifacts, criterion, identities, sample
 
     tools, allowance = model_tools(tmp_path)
     calls, _ = sdk(monkeypatch)

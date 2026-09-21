@@ -15,6 +15,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
+from .policy_contracts import PolicyTrialReceipt
 from .attempts import AttemptFence, ReadinessReceipt
 from .contracts import FrozenModel, Hash, Identifier, WorkflowContract
 from .evidence import SceneEvidenceAssessment
@@ -177,6 +178,8 @@ class ReservationTotals(FrozenModel):
     realizations: Annotated[int, Field(strict=True, ge=0)]
     steps: Annotated[int, Field(strict=True, ge=0)]
     observations: Annotated[int, Field(strict=True, ge=0)]
+    policy_episodes: Annotated[int, Field(strict=True, ge=0)] = 0
+    policy_steps: Annotated[int, Field(strict=True, ge=0)] = 0
 
 
 class InspectionBudget(FrozenModel):
@@ -254,13 +257,14 @@ class SceneInspection(FrozenModel):
     candidate: CandidateReference
     decision_id: Identifier | None
     decision_identity_provenance: Literal["latest_scene_event", "unavailable_retained_causality"]
-    action: Literal["accept", "observe", "repair", "stop"]
+    action: Literal["accept", "observe", "repair", "capture", "assess", "policy", "stop"]
     reason: Identifier
     next_intent_id: Identifier | None
     evidence_id: Hash | None
     observation: Observation | None
     assessment_id: Hash | None
     assessment: SceneEvidenceAssessment | None
+    policy_trial: PolicyTrialReceipt | None = None
     selected_assessed: bool
     assessment_status: Literal["established", "not_established", "inconclusive", "not_assessed"]
     acceptance: Literal["accepted", "not_established"]
@@ -291,7 +295,9 @@ class RunInspection(FrozenModel):
     generation_outputs: Annotated[tuple[GenerationOutputReference, ...], Field(max_length=1000)]
     readiness: Annotated[tuple[RetainedReadiness, ...], Field(max_length=2000)]
     actions: InspectionActions
-    policy_outcome: Literal["not_requested", "unsupported_or_unretained"]
+    policy_outcome: Literal[
+        "not_requested", "unsupported_or_unretained", "ready_for_policy", "passed", "failed", "unknown"
+    ]
     publication_outcome: Literal["not_permitted", "unknown"]
     experiment_outcome: Literal["unknown"] = "unknown"
     retained_dependencies_revision: Hash

@@ -325,7 +325,7 @@ def test_foreground_application_full_outcome(tmp_path, missing):
     from isaaclab_arena.agentic_environment_generation.workflow.contracts import contract_digest
     from isaaclab_arena.agentic_environment_generation.workflow.prior_artifacts import RetainedPriorArtifacts
     from isaaclab_arena.agentic_environment_generation.workflow.readiness import DependencyGate, DependencyResult
-    from isaaclab_arena.tests.test_environment_workflow_scene_producers import composed_fixture
+    from isaaclab_arena.tests._workflow_scene_fixture import composed_fixture
     from isaaclab_arena_examples.agentic_environment_generation.foreground_authorization import (
         ForegroundAuthority,
         model_settings_sha256,
@@ -1059,7 +1059,7 @@ def test_real_neo4j_foreground_scene_ports_three_stage_trace(tmp_path):
 
     import workflow_process_harness as harness
 
-    from isaaclab_arena.tests.test_environment_workflow_scene_producers import composed_fixture
+    from isaaclab_arena.tests._workflow_scene_fixture import composed_fixture
     from isaaclab_arena_examples.agentic_environment_generation.foreground_authorization import (
         ForegroundAuthority,
         model_settings_sha256,

@@ -5968,6 +5968,47 @@ def test_pending_cancel_vs_reserve_never_fabricates_cleanup(driver, round_index)
         "managed_resume_error_intent",
         "managed_resume_error_profile",
         "managed_resume_error_scalar",
+        "policy_pass",
+        "policy_distinct_window",
+        "policy_fail",
+        "policy_empty",
+        "policy_partial",
+        "policy_unknown",
+        "policy_profile_mismatch",
+        "policy_candidate_mismatch",
+        "policy_budget",
+        "policy_cleanup_failure",
+        "policy_slot_failure",
+        "policy_cancel",
+        "policy_deadline",
+        "policy_foreign_binding",
+        "policy_foreign_seed",
+        "policy_duplicate_reset",
+        "policy_zero_steps",
+        "policy_second_task",
+        "policy_v1_unsupported",
+        "policy_foreign_intent",
+        "policy_retained_tamper",
+        "policy_intent_identity_tamper",
+        "policy_producer_failure",
+        "policy_atomic_rollback",
+        "policy_contract_mismatch",
+        "policy_seed_mismatch",
+        "policy_foreign_candidate",
+        "policy_foreign_contract",
+        "policy_foreign_policy",
+        "policy_foreign_instruction",
+        "policy_foreign_task_digest",
+        "policy_repair",
+        "split_accept",
+        "split_cleanup_unknown",
+        "split_slot_unknown",
+        "split_static_failure",
+        "split_repair",
+        "split_observe",
+        "split_recover_assess",
+        "split_tampered_assess",
+        "split_cancel_capture",
     ],
 )
 def test_scene_durable_trace_readback_replay(driver, tmp_path, case):
@@ -6022,6 +6063,15 @@ def test_scene_durable_trace_readback_replay(driver, tmp_path, case):
         s = scoped(driver)
     s.clock = lambda: 100.0
     contract = scene_contract()
+    if case.startswith("policy_"):
+        from isaaclab_arena.tests.test_environment_workflow_scene_loop import required_policy_contract
+
+        contract = required_policy_contract()
+        if case == "policy_distinct_window":
+            raw = contract.model_dump(mode="python")
+            raw["criteria"][-1]["observation_window"]["end_step"] = 20
+            raw["budget"]["max_policy_steps"] = 20
+            contract = type(contract).model_validate(raw)
     auth = authority(s, contract)
     run = s.admit("scene-trace", "{}", canonical_json(contract), 1)
     if scene_binding is not None:
@@ -6130,6 +6180,66 @@ def test_scene_durable_trace_readback_replay(driver, tmp_path, case):
         )
         if case.startswith("managed_"):
             profile = scene_loop.ScenePortProfile.model_validate(dict(profile.model_dump(), owned_worker=True))
+        if case.startswith(("split_", "policy_")):
+            profile = scene_loop.ScenePortProfile(
+                codec_version=2,
+                port_id="split-native-contract-synthetic-effects",
+                assurance="native-unverified",
+                owned_worker=True,
+                producer_ids=profile.producer_ids,
+                capture=scene_loop.SceneReservation(
+                    model_calls=0,
+                    model_tokens=0,
+                    cost_ceiling_usd=0.0,
+                    runtime_allowance_seconds=1.0,
+                    realizations=1,
+                    observations=1,
+                    steps=10,
+                ),
+                assess=scene_loop.SceneReservation(
+                    model_calls=1,
+                    model_tokens=100,
+                    cost_ceiling_usd=0.0,
+                    runtime_allowance_seconds=1.0,
+                ),
+                repair=profile.repair,
+            )
+        if case.startswith("policy_"):
+            from isaaclab_arena.tests.test_environment_workflow_scene_loop import required_policy_profile
+
+            if case == "policy_v1_unsupported":
+                profile = scene_loop.ScenePortProfile(
+                    port_id="v1-policy-denied",
+                    assurance="synthetic",
+                    producer_ids=profile.producer_ids,
+                    observe=profile.capture,
+                    repair=profile.repair,
+                )
+            else:
+                profile = required_policy_profile(
+                    profile, contract, candidate, task="navigation" if case == "policy_second_task" else "a2"
+                )
+                if case == "policy_profile_mismatch":
+                    profile = profile.model_copy(update={"policy_criteria": ("0" * 64,)})
+                if case in ("policy_contract_mismatch", "policy_seed_mismatch"):
+                    update = (
+                        {"contract_digest": "0" * 64}
+                        if case == "policy_contract_mismatch"
+                        else {"seed": contract.execution.seed + 1}
+                    )
+                    profile = profile.model_copy(
+                        update={"policy_binding": profile.policy_binding.model_copy(update=update)}
+                    )
+                if case == "policy_candidate_mismatch":
+                    profile = profile.model_copy(
+                        update={
+                            "policy_binding": profile.policy_binding.model_copy(update={"candidate_digest": "0" * 64})
+                        }
+                    )
+                if case == "policy_budget":
+                    profile = profile.model_copy(
+                        update={"policy": profile.policy.model_copy(update={"policy_episodes": 3})}
+                    )
         if case == "budget":
             profile = profile.model_copy(
                 update={"observe": profile.observe.model_copy(update={"model_tokens": 10001})}
@@ -6166,6 +6276,12 @@ def test_scene_durable_trace_readback_replay(driver, tmp_path, case):
         )
         assert s.begin_scene(run.run_id, version, candidate, validation, profile) == first
         assert s.scene_snapshot(run.run_id).candidate == candidate
+        if case.startswith("policy_"):
+            exercise_policy_scene(case, s, service, run, auth, profile)
+            return
+        if case.startswith("split_"):
+            exercise_split_scene(case, s, service, run, auth, profile)
+            return
         if case == "escape_heavy_history":
             compact = service.read_run_inspection("local", run.run_id, protect=lambda _: None)
             assert compact.scene.candidate.candidate_id == candidate.candidate_id
@@ -7273,6 +7389,483 @@ def check_joined_causality(driver, store, run_id, expected):
                     store.get_run_inspection(run_id)
         session.run(exact + "SET e.source_id=$source", **args, source=expected.scene.decision_id).consume()
     assert store.get_run_inspection(run_id) == expected
+
+
+def exercise_policy_scene(case, store, service, run, auth, profile):
+    """Actual DB, explicitly synthetic task/evaluator/cleanup ports."""
+    from isaaclab_arena.agentic_environment_generation.workflow import scene_loop
+    from isaaclab_arena.agentic_environment_generation.workflow.policy_contracts import (
+        PolicyEpisode,
+        PolicyTrialReceipt,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_scene_loop import observation
+
+    base = synthetic_scene_ports("managed_accept", store, run, auth)
+    events, captures, results = [], [], []
+    from isaaclab_arena.agentic_environment_generation.workflow.read_model import workflow_result
+
+    class PolicyPorts(type(base)):
+        paused = True
+
+        def ready(self, contract):
+            return super().ready(contract).model_copy(update={"checked_at": store._now()})
+
+        def authorize(self, principal, contract, action):
+            if action == "policy" and self.paused:
+                raise PermissionError("pause at durable policy handoff")
+            return super().authorize(principal, contract, action)
+
+        def prepare_worker(self, intent, candidate, original, contract, **kwargs):
+            return super().prepare_worker(intent, candidate, original, contract)
+
+        def execute(self, intent, candidate, original, contract, *, retained_observation=None):
+            events.append(("execute", intent.action))
+            if intent.action == "capture":
+                complete = observation(contract, candidate, intent.intent_id, include_policy=True)
+                capture = complete.model_copy(
+                    update={"evidence": tuple(e for e in complete.evidence if e.modality != "visual")}
+                )
+                captures.append(capture)
+                return capture
+            if intent.action == "assess":
+                result = observation(
+                    contract,
+                    candidate,
+                    retained_observation.cohort.realization_id,
+                    include_policy=True,
+                    fail=case == "policy_repair" and len(captures) == 1,
+                )
+                self.assessment_result = (intent, result)
+                return result
+            if intent.action == "repair":
+                return super().execute(intent, candidate, original, contract)
+            assert intent.action == "policy"
+            assert intent.policy_binding.candidate_digest == candidate.digest
+            if case == "policy_repair":
+                assert candidate.digest != profile.policy_binding.candidate_digest
+                assert intent.policy_binding.task_definition_digest == profile.policy_binding.task_definition_digest
+            assert store.get_run(run.run_id).state == "running"
+            binding = intent.policy_binding
+            episodes = tuple(
+                PolicyEpisode(
+                    binding_digest=binding.digest(),
+                    episode_id=f"e{i}",
+                    reset_id=binding.reset_id if i == 0 else f"next-reset-{i}",
+                    seed=binding.seed,
+                    success=False if case == "policy_fail" else None if case == "policy_unknown" else True,
+                )
+                for i in range(0 if case == "policy_empty" else 1 if case == "policy_partial" else binding.max_episodes)
+            )
+            assert "intent_id" in PolicyTrialReceipt.model_fields, "policy trial requires exact intent identity"
+            receipt = PolicyTrialReceipt(
+                intent_id=intent.intent_id,
+                binding=binding,
+                episodes=episodes,
+                manifest_digest="e" * 64,
+                episode_records_digest="f" * 64,
+                policy_steps=10,
+                prerequisite_steps=2,
+            )
+            corruptions = {
+                "policy_foreign_binding": {"task_id": "foreign-task"},
+                "policy_foreign_candidate": {"candidate_digest": "0" * 64},
+                "policy_foreign_contract": {"contract_digest": "0" * 64},
+                "policy_foreign_policy": {"policy_artifact_digest": "0" * 64},
+                "policy_foreign_instruction": {"instruction": "different instruction"},
+                "policy_foreign_task_digest": {"task_definition_digest": "0" * 64},
+                "policy_foreign_seed": {"seed": binding.seed + 1},
+            }
+            if case in corruptions:
+                foreign = binding.model_copy(update=corruptions[case])
+                receipt = receipt.model_copy(
+                    update={
+                        "binding": foreign,
+                        "episodes": tuple(
+                            e.model_copy(update={"binding_digest": foreign.digest(), "seed": foreign.seed})
+                            for e in episodes
+                        ),
+                    }
+                )
+            if case == "policy_duplicate_reset":
+                receipt = receipt.model_copy(
+                    update={
+                        "episodes": (episodes[0], episodes[1].model_copy(update={"reset_id": episodes[0].reset_id}))
+                    }
+                )
+            if case == "policy_zero_steps":
+                receipt = receipt.model_copy(update={"policy_steps": 0})
+            if case == "policy_foreign_intent":
+                receipt = receipt.model_copy(update={"intent_id": "0" * 64})
+            results.append((intent, receipt))
+            if case == "policy_cancel":
+                store.request_cancel(run.run_id, store.get_run(run.run_id).version)
+            return receipt
+
+        def cleanup_worker(self, intent):
+            events.append(("cleanup", intent.action))
+            if intent.action == "policy" and case == "policy_cleanup_failure":
+                raise TimeoutError("policy cleanup unknown")
+            return super().cleanup_worker(intent)
+
+        def release_native_resource(self, intent, cleanup):
+            events.append(("release", intent.action))
+            if intent.action == "policy" and case == "policy_slot_failure":
+                return False
+            return True
+
+        def verify_policy(self, output, contract, candidate, binding):
+            assert events[-1] == ("release", "policy")
+            assert output.binding == binding or case.startswith("policy_foreign_")
+            return output
+
+    ports = PolicyPorts()
+    ports.profile = profile
+    if case in (
+        "policy_profile_mismatch",
+        "policy_candidate_mismatch",
+        "policy_contract_mismatch",
+        "policy_seed_mismatch",
+        "policy_v1_unsupported",
+    ):
+        final = service.run_scene("local", run.run_id, ports=ports)
+        assert final.run.state == "stopped" and final.decision.reason == "unsupported_criterion"
+        assert not events
+        return
+    if case == "policy_budget":
+        final = service.run_scene("local", run.run_id, ports=ports)
+        assert final.run.state == "stopped" and final.decision.reason == "budget_exhausted"
+        assert [a for event, a in events if event == "execute"] == ["capture", "assess"]
+        assert store.get_run_inspection(run.run_id).budget.reserved.policy_episodes == 0
+        inspected = store.get_run_inspection(run.run_id)
+        assert inspected.scene.acceptance == "accepted"
+        assert all(c.verdict == "established" for c in inspected.scene.criteria if c.criterion_id != "task-success")
+        assert workflow_result(store, run.run_id, protect=lambda _: None)["scene_acceptance"] == "accepted"
+        return
+    if case == "policy_atomic_rollback":
+        original_event = store._event
+
+        def fail_event(tx, run_id, kind, *args, **kwargs):
+            current = store._scene_snapshot(tx, run_id)
+            if kind == "SceneDecisionRecorded" and current.decision.action == "policy":
+                assert current.run.state == "running" and current.intent.action == "policy"
+                raise ValueError("injected policy transaction rollback")
+            return original_event(tx, run_id, kind, *args, **kwargs)
+
+        store._event = fail_event
+        with pytest.raises(ValueError, match="transaction rollback"):
+            service.run_scene("local", run.run_id, ports=ports)
+        store._event = original_event
+        rolled_back = store.scene_snapshot(run.run_id)
+        assert rolled_back.run.state == "running" and rolled_back.intent.action == "assess"
+        assert store.get_run_inspection(run.run_id).budget.reserved.policy_episodes == 0
+        assessment_intent, assessed = ports.assessment_result
+        assert store.finish_scene(
+            run.run_id,
+            assessment_intent.intent_id,
+            rolled_back.run.version,
+            scene_loop.SceneResult(codec_version=2, observation=assessed),
+        )
+    with pytest.raises(PermissionError, match="handoff"):
+        service.run_scene("local", run.run_id, ports=ports)
+    pending = store.scene_snapshot(run.run_id)
+    assert pending.run.state == "running" and pending.decision.action == pending.intent.action == "policy"
+    assert pending.decision.assessment.status == "established"
+    assert pending.intent.worker_fence is None
+    checked = store.get_run_inspection(run.run_id)
+    assert checked.scene.acceptance == "accepted" and checked.policy_outcome == "ready_for_policy"
+    assert checked.actions.resume_branch == "scene"
+    assert checked.budget.reserved.policy_episodes == 2 and checked.budget.reserved.policy_steps == profile.policy.policy_steps
+    assert store.get_scene_decision(checked.scene.decision_id).decision.action == "policy"
+    assessment_intent, assessed = ports.assessment_result
+    assert not store.finish_scene(
+        run.run_id,
+        assessment_intent.intent_id,
+        pending.run.version,
+        scene_loop.SceneResult(codec_version=2, observation=assessed),
+    )
+    assert store.scene_snapshot(run.run_id) == pending
+    assert store.get_run_inspection(run.run_id).budget == checked.budget
+    # Fresh service instance reconstructs the same unclaimed, durable policy work.
+    service = type(service)(store, service._authority, None, validate_support=lambda _: None)
+    ports.paused = False
+    if case == "policy_producer_failure":
+        from isaaclab_arena.agentic_environment_generation.workflow.results import CleanupEvidence
+        from isaaclab_arena.agentic_environment_generation.workflow.contracts import parse_contract
+
+        owner = store.get_owner()
+        fence = store.claim_scene_worker(run.run_id, pending.intent.intent_id, owner.owner_id, owner.owner_epoch)
+        reg = registration(fence)
+        store.register_scene_worker(fence, reg)
+        contract = parse_contract(pending.run.contract_json)
+        assert store.release_scene(
+            run.run_id,
+            pending.intent.intent_id,
+            auth,
+            readiness=readiness(contract, auth),
+            fence=fence,
+            registration_id=reg.registration_id,
+        )
+        store.acknowledge_scene_cleanup(
+            fence,
+            CleanupEvidence(
+                registration=reg,
+                evidence_ref="synthetic-policy-cleanup",
+                observation="owned_process_group_stopped",
+                remote_effects="unknown",
+            ),
+        )
+        current = store.scene_snapshot(run.run_id)
+        store.finish_scene(
+            run.run_id,
+            pending.intent.intent_id,
+            current.run.version,
+            scene_loop.SceneResult(codec_version=2, failure="evidence_verification_failed"),
+        )
+        inspected = store.get_run_inspection(run.run_id)
+        assert inspected.intent.state == "stopped" and inspected.scene.acceptance == "accepted"
+        assert inspected.scene.selected_assessed
+        assert workflow_result(store, run.run_id, protect=lambda _: None)["scene_acceptance"] == "accepted"
+        return
+    if case == "policy_deadline":
+        store.clock = lambda: 151.0
+    if case in (
+        "policy_cleanup_failure",
+        "policy_slot_failure",
+        "policy_foreign_binding",
+        "policy_foreign_seed",
+        "policy_duplicate_reset",
+        "policy_zero_steps",
+        "policy_foreign_intent",
+        "policy_foreign_candidate",
+        "policy_foreign_contract",
+        "policy_foreign_policy",
+        "policy_foreign_instruction",
+        "policy_foreign_task_digest",
+    ):
+        with pytest.raises((TimeoutError, ValueError)):
+            service.run_scene("local", run.run_id, ports=ports)
+        final = store.scene_snapshot(run.run_id)
+        assert final.run.state == "reconciliation_required"
+        assert store.get_run_inspection(run.run_id).policy_outcome == "ready_for_policy"
+        assert final.intent.intent_id == pending.intent.intent_id
+        assert service.run_scene("local", run.run_id, ports=ports) == final
+        return
+    final = service.run_scene("local", run.run_id, ports=ports)
+    if case in ("policy_cancel", "policy_deadline"):
+        assert final.run.state == ("cancelled" if case == "policy_cancel" else "reconciliation_required")
+        if case == "policy_deadline":
+            assert not any(a == "policy" for event, a in events if event == "execute")
+        assert service.run_scene("local", run.run_id, ports=ports) == final
+        return
+    expected = (
+        "failed"
+        if case == "policy_fail"
+        else "unknown" if case in ("policy_empty", "policy_partial", "policy_unknown") else "passed"
+    )
+    assert final.run.state == ("accepted" if expected == "passed" else "stopped")
+    assert final.decision.policy_trial.aggregate().outcome == expected
+    assert (
+        store.get_scene_decision(scene_loop.identity(run.run_id, final.run.version - 1, "scene-decision")).decision
+        == final.decision
+    )
+    checked = store.get_run_inspection(run.run_id)
+    assert checked.policy_outcome == expected
+    assert checked.scene.acceptance == "accepted"  # Required policy failure does not erase scene prerequisites.
+    assert checked.scene.selected_assessed
+    legacy = workflow_result(store, run.run_id, protect=lambda _: None)
+    assert legacy["scene_acceptance"] == "accepted"
+    assert legacy["policy_outcome"] == expected
+    assert (
+        next(c["verdict"] for c in legacy["criteria"] if c["criterion_id"] == "task-success")
+        == {"passed": "established", "failed": "violated", "unknown": "inconclusive"}[expected]
+    )
+    assert store.get_scene_decision(checked.scene.decision_id).decision == final.decision
+    expected_actions = (
+        ["capture", "assess"] + (["repair", "capture", "assess"] if case == "policy_repair" else []) + ["policy"]
+    )
+    assert [a for event, a in events if event == "execute"] == expected_actions
+    assert service.run_scene("local", run.run_id, ports=ports) == final
+    intent, receipt = results[0]
+    assert not store.finish_scene(
+        run.run_id, intent.intent_id, final.run.version, scene_loop.SceneResult(codec_version=2, policy_trial=receipt)
+    )
+    assert store.get_run_inspection(run.run_id).budget == checked.budget
+    check_policy_history_tamper(case, store, run, receipt, final, checked)
+
+
+def check_policy_history_tamper(case, store, run, receipt, final, checked):
+    """Preserve exact producing identity checks independently of the happy trace."""
+    if case == "policy_intent_identity_tamper":
+        import json
+        from isaaclab_arena.agentic_environment_generation.workflow.queries import CorruptSceneRecord
+
+        changed = store.get_scene_intent(run.run_id, receipt.intent_id).model_dump(mode="json")
+        changed["intent_id"] = "0" * 64
+        with store._transaction() as tx:
+            tx.run(
+                "MATCH (i:ArenaExecutionIntent) WHERE i.intent_id=$id SET i.scene_json=$payload",
+                id=receipt.intent_id,
+                payload=json.dumps(changed),
+            ).consume()
+        with pytest.raises(CorruptSceneRecord):
+            store.get_scene_decision(checked.scene.decision_id)
+    if case == "policy_retained_tamper":
+        import json
+        from isaaclab_arena.agentic_environment_generation.workflow.queries import CorruptSceneRecord
+
+        forged = final.decision.policy_trial.binding.model_copy(update={"instruction": "foreign instruction"})
+        raw = final.decision.model_dump(mode="json")
+        raw["policy_trial"]["binding"] = forged.model_dump(mode="json")
+        for episode in raw["policy_trial"]["episodes"]:
+            episode["binding_digest"] = forged.digest()
+        with store._transaction() as tx:
+            tx.run(
+                "MATCH (d:ArenaWorkflowDecision) WHERE d.decision_id=$id SET d.payload=$payload",
+                id=checked.scene.decision_id,
+                payload=json.dumps(raw),
+            ).consume()
+        with pytest.raises(CorruptSceneRecord):
+            store.get_scene_decision(checked.scene.decision_id)
+
+
+def exercise_split_scene(case, store, service, run, auth, profile):
+    """Real DB split lifecycle; synthetic capture/cleanup is NOT native proof."""
+    from isaaclab_arena.agentic_environment_generation.workflow import scene_loop
+    from isaaclab_arena.tests.test_environment_workflow_scene_loop import observation
+
+    base = synthetic_scene_ports("managed_accept", store, run, auth)
+    events = []
+    captured = []
+    owner = store.get_owner()
+    capture_ids = []
+
+    class SplitPorts(type(base)):
+        def prepare_worker(self, intent, candidate, original, contract, *, retained_observation=None):
+            events.append(("prepare", intent.action))
+            if intent.action == "assess":
+                assert events[-2] == ("gpu_released", "capture")
+                assert retained_observation == captured[-1]
+                assert intent.observation_digest == scene_loop.identity(retained_observation.model_dump(mode="json"))
+                inspected = store.get_run_inspection(run.run_id)
+                assert inspected.scene.action == "assess" and not inspected.scene.selected_assessed
+                assert inspected.scene.evidence_id == intent.observation_id
+                assert inspected.budget.reserved.realizations == len(captured)
+                assert inspected.budget.reserved.observations == len(captured)
+                assert store.get_owner() == owner
+            return super().prepare_worker(intent, candidate, original, contract)
+
+        def execute(self, intent, candidate, original, contract, *, retained_observation=None):
+            events.append(("execute", intent.action))
+            if intent.action == "capture":
+                assert intent.reservation.model_calls == intent.reservation.model_tokens == 0
+                complete = observation(contract, candidate, intent.intent_id)
+                value = complete.model_copy(
+                    update={"evidence": tuple(e for e in complete.evidence if e.modality != "visual")}
+                )
+                if case == "split_static_failure":
+                    value = value.model_copy(update={"static_failure": "ineffective_edit"})
+                captured.append(value)
+                capture_ids.append(intent.intent_id)
+                if case == "split_cancel_capture":
+                    store.request_cancel(run.run_id, store.get_run(run.run_id).version)
+                return value
+            if intent.action == "repair":
+                import json
+
+                child = json.loads(candidate.scene_json)
+                child["relations"][2]["params"]["x"] = 0.03
+                return child
+            assert intent.action == "assess" and retained_observation == captured[-1]
+            assert intent.reservation.realizations == intent.reservation.steps == 0
+            result = observation(
+                contract,
+                candidate,
+                retained_observation.cohort.realization_id,
+                fail=case == "split_repair" and len(captured) == 1,
+            )
+            if case == "split_observe" and len(captured) == 1:
+                result = result.model_copy(
+                    update={"evidence": tuple(e for e in result.evidence if e.modality != "visual")}
+                )
+            if case == "split_tampered_assess":
+                result = result.model_copy(update={"cohort": result.cohort.model_copy(update={"reset_id": "foreign"})})
+            return result
+
+        def cleanup_worker(self, intent):
+            events.append(("cleanup", intent.action))
+            if case == "split_cleanup_unknown":
+                raise TimeoutError("cleanup unknown")
+            return super().cleanup_worker(intent)
+
+        def release_native_resource(self, intent, cleanup):
+            assert events[-1] == ("cleanup", "capture")
+            retained = store.get_scene_intent(run.run_id, intent.intent_id)
+            assert retained.worker_cleanup == cleanup and retained.status in ("released", "reconciliation_required")
+            assert store.scene_snapshot(run.run_id).intent.action == "capture"
+            if case == "split_slot_unknown":
+                raise TimeoutError("slot unknown")
+            events.append(("gpu_released", "capture"))
+            return True
+
+        def authorize(self, principal, contract, action):
+            if case == "split_recover_assess" and action == "assess" and not getattr(self, "resumed", False):
+                raise PermissionError("pause before assessment preparation")
+            return super().authorize(principal, contract, action)
+
+    ports = SplitPorts()
+    ports.profile = profile
+    initial = store.scene_snapshot(run.run_id)
+    assert initial.intent.action == "capture" and initial.intent.codec_version == 2
+    if case in ("split_cleanup_unknown", "split_slot_unknown"):
+        with pytest.raises(TimeoutError, match="unknown"):
+            service.run_scene("local", run.run_id, ports=ports)
+        pending = store.scene_snapshot(run.run_id)
+        assert pending.run.state == "reconciliation_required"
+        assert pending.intent.action == "capture" and pending.intent.status == "reconciliation_required"
+        assert len(captured) == 1 and not any(action == "assess" for _, action in events)
+        assert (
+            pending.intent.worker_cleanup is None
+            if case == "split_cleanup_unknown"
+            else pending.intent.worker_cleanup is not None
+        )
+        assert store.get_run_inspection(run.run_id).scene.evidence_id is None
+        assert service.run_scene("local", run.run_id, ports=ports) == pending
+        return
+    if case == "split_recover_assess":
+        with pytest.raises(PermissionError, match="pause"):
+            service.run_scene("local", run.run_id, ports=ports)
+        pending = store.scene_snapshot(run.run_id)
+        assert pending.intent.action == "assess" and pending.intent.worker_fence is None
+        assert store.get_scene_capture(run.run_id, pending.intent.intent_id) == captured[-1]
+        assert store.get_run_inspection(run.run_id).actions.resume_branch == "scene"
+        # A fresh application service reads the same exact retained capture.
+        service = type(service)(store, service._authority, None, validate_support=lambda _: None)
+        ports.resumed = True
+    if case == "split_tampered_assess":
+        with pytest.raises(ValueError, match="assessment changed retained capture"):
+            service.run_scene("local", run.run_id, ports=ports)
+        pending = store.scene_snapshot(run.run_id)
+        assert pending.run.state != "accepted" and pending.intent.action == "assess"
+        assert store.get_scene_capture(run.run_id, pending.intent.intent_id) == captured[-1]
+        return
+    final = service.run_scene("local", run.run_id, ports=ports)
+    if case in ("split_static_failure", "split_cancel_capture"):
+        assert final.run.state == ("stopped" if case == "split_static_failure" else "cancelled")
+        assert [action for stage, action in events if stage == "execute"] == ["capture"]
+        assert store.get_owner() == owner
+        return
+    assert final.run.state == "accepted"
+    expected = ["capture", "assess"]
+    if case in ("split_repair", "split_observe"):
+        expected += (["repair"] if case == "split_repair" else []) + ["capture", "assess"]
+        assert len({value.cohort.realization_id for value in captured}) == 2
+    assert [action for stage, action in events if stage == "execute"] == expected
+    assert store.get_scene_intent(run.run_id, initial.intent.intent_id).status == "produced"
+    checked = store.get_run_inspection(run.run_id)
+    assert checked.scene.selected_assessed and checked.scene.acceptance == "accepted"
+    assert checked.budget.reserved.realizations == checked.budget.reserved.observations == len(captured)
+    assert checked.budget.reserved.steps == 10 * len(captured)
+    assert service.run_scene("local", run.run_id, ports=ports) == final
 
 
 def synthetic_scene_ports(case, s, run, auth):

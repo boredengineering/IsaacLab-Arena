@@ -9,7 +9,20 @@ import re
 from pathlib import Path
 
 
-def capture_trajectory(env, policy, *, out_dir, num_steps, frame_interval, camera_names, save_frame, sample_state=None):
+def capture_trajectory(
+    env,
+    policy,
+    *,
+    out_dir,
+    num_steps,
+    frame_interval,
+    camera_names,
+    save_frame,
+    sample_state=None,
+    initial_observation=None,
+    step_offset=0,
+    reset_policy=True,
+):
     """Capture reset and sampled observations, excluding post-autoreset end-step observations.
 
     Args:
@@ -22,6 +35,12 @@ def capture_trajectory(env, policy, *, out_dir, num_steps, frame_interval, camer
         save_frame: Callable taking one camera observation and a destination PNG path.
         sample_state: Optional trusted callback(env, step), invoked at reset and every
             nonterminal post-step; owns bounded retention. Return value is ignored.
+        initial_observation: Trusted observation from an already initialized, nonterminal
+            cohort. If provided, do not reset the environment. None preserves legacy reset.
+        step_offset: Reset-relative control step of initial_observation; all sample and
+            frame labels use this absolute offset, while executed_steps counts new steps.
+        reset_policy: Reset policy state at entry (legacy default); disable only for an
+            already initialized policy in the same cohort.
 
     Returns:
         Frame paths, actual executed steps, stop reason and terminal-image unavailability.
@@ -29,11 +48,18 @@ def capture_trajectory(env, policy, *, out_dir, num_steps, frame_interval, camer
     """
     assert type(num_steps) is int and num_steps > 0, "num_steps must be positive"
     assert type(frame_interval) is int and frame_interval > 0, "frame_interval must be positive"
+    assert type(step_offset) is int and step_offset >= 0, "step_offset must be nonnegative"
+    assert initial_observation is not None or step_offset == 0, "Offset requires initialized observation"
+    assert type(reset_policy) is bool, "reset_policy must be boolean"
+    assert reset_policy or initial_observation is not None, "Policy reuse requires initialized observation"
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     frames = {}
-    obs, _ = env.reset()
-    policy.reset()
+    obs = initial_observation
+    if obs is None:
+        obs, _ = env.reset()
+    if reset_policy:
+        policy.reset()
     cameras = obs.get("camera_obs", {})
     selected = sorted(cameras) if camera_names is None else list(camera_names)
     assert len(selected) == len(set(selected)), "Camera names must be unique"
@@ -53,9 +79,9 @@ def capture_trajectory(env, policy, *, out_dir, num_steps, frame_interval, camer
             save_frame(cameras[name], path)
             frames[label] = path
 
-    capture(obs, 0)
+    capture(obs, step_offset)
     if sample_state is not None:
-        sample_state(env, 0)
+        sample_state(env, step_offset)
     stop_reason = "step_budget"
     for executed_steps in range(1, num_steps + 1):
         action = policy.get_action(env, obs)
@@ -65,12 +91,15 @@ def capture_trajectory(env, policy, *, out_dir, num_steps, frame_interval, camer
             stop_reason = "terminated_and_truncated" if ended and limited else "terminated" if ended else "truncated"
             break
         if sample_state is not None:
-            sample_state(env, executed_steps)
+            sample_state(env, step_offset + executed_steps)
         if executed_steps % frame_interval == 0 or executed_steps == num_steps:
-            capture(obs, executed_steps)
-    return {
+            capture(obs, step_offset + executed_steps)
+    result = {
         "frames": frames,
         "executed_steps": executed_steps,
         "stop_reason": stop_reason,
         "terminal_image_unavailable": ended or limited,
     }
+    if initial_observation is not None:
+        result.update(step_offset=step_offset, end_step=step_offset + executed_steps)
+    return result

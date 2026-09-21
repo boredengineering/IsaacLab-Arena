@@ -108,9 +108,7 @@ class WorkflowService:
         _protected(result.model_dump(mode="json"), protect, max_bytes=MAX_PAGE_BYTES)
         return result
 
-    def list_scene_candidates(
-        self, principal, run_id, *, first=100, after=None, protect
-    ):
+    def list_scene_candidates(self, principal, run_id, *, first=100, after=None, protect):
         """Discover run-owned identities, not validated candidate payloads or artifacts."""
         from .paging import (
             MAX_PAGE_BYTES,
@@ -122,23 +120,15 @@ class WorkflowService:
         )
         from .scene_evidence_artifacts import _protected
 
-        position = self._page_request(
-            principal, first, after, protect, CandidatePosition
-        )
+        position = self._page_request(principal, first, after, protect, CandidatePosition)
         RunPosition(position=run_id)
         if position is not None and position.run_id != run_id:
             raise CursorQueryMismatch()
-        window = self._store.list_scene_candidates_window(
-            self._read_scope, run_id, first=first, after=position
-        )
+        window = self._store.list_scene_candidates_window(self._read_scope, run_id, first=first, after=position)
         result = None
         if window is not None:
             rows = window.candidates[:first]
-            end = (
-                CandidatePosition(run_id=run_id, position=rows[-1].candidate_id)
-                if rows
-                else position
-            )
+            end = CandidatePosition(run_id=run_id, position=rows[-1].candidate_id) if rows else position
             result = CandidatePage(
                 binding=window.binding,
                 run_id=run_id,
@@ -570,17 +560,18 @@ class WorkflowService:
         false capability blocks release. Native composition must bind the existing
         authority token/cost check and CallAllowance.token_cost_bounded, not copy
         reservation values or accept provider self-reported usage as proof.
+        V2 splits capture/assessment into separately owned intents. Capture has no
+        model reservation. After trusted cleanup and durable acknowledgement,
+        release_native_resource(intent, cleanup) must verify/release the physical
+        GPU slot and return literal True; it must not release the scope owner lease.
+        Assessment prepare/execute receive retained_observation=Observation, read
+        from the intent's exact observation_id/digest. Ports reopen its manifests,
+        never recreate a simulator. V2 output verification runs after child cleanup,
+        before atomic capture adoption and next-intent reservation. Zero-call numeric
+        assessment may use an owned evaluator child, never a model child.
         """
-        from .repairs import _scene_json
-        from .scene_loop import Observation, ScenePortProfile, SceneResult
-
         self._authority.require_read(principal)
-        profile = ScenePortProfile.model_validate_json(ports.profile.model_dump_json())
-        if profile.owned_worker and any(
-            not callable(getattr(ports, name, None))
-            for name in ("prepare_worker", "cleanup_worker", "require_held_owner")
-        ):
-            raise ValueError("managed scene worker ports required")
+        profile = self._checked_scene_ports(ports)
         while True:
             snapshot = self._store.scene_snapshot(run_id)
             if snapshot is None:
@@ -618,6 +609,9 @@ class WorkflowService:
             if snapshot.intent.worker_fence is not None:
                 return snapshot  # Prepared/ambiguous ownership is never fresh work.
             contract = parse_contract(snapshot.run.contract_json)
+            stage_args = {}
+            if snapshot.intent.action == "assess":
+                stage_args["retained_observation"] = self._store.get_scene_capture(run_id, snapshot.intent.intent_id)
             auth = ports.authorize(principal, contract, snapshot.intent.action)
             ready = ports.ready(contract)
             auth = ports.authorize(principal, contract, snapshot.intent.action)
@@ -639,7 +633,9 @@ class WorkflowService:
                     )
                     resume_receipt = None  # Only acknowledged first claim consumes the pin.
                     worker_intent = snapshot.intent.model_copy(update={"worker_fence": fence})
-                    registration = ports.prepare_worker(worker_intent, snapshot.candidate, snapshot.original, contract)
+                    registration = ports.prepare_worker(
+                        worker_intent, snapshot.candidate, snapshot.original, contract, **stage_args
+                    )
                     worker_intent = worker_intent.model_copy(update={"worker_registration": registration})
                     self._store.register_scene_worker(fence, registration)
                     if ports.require_held_owner() != owner:
@@ -655,29 +651,16 @@ class WorkflowService:
                     return self._store.scene_snapshot(run_id)
                 released = self._store.scene_snapshot(run_id)
                 # Recheck after committed release; a denial is unresolved, not retry.
-                auth = ports.authorize(principal, contract, released.intent.action)
-                ready = ports.ready(contract)
-                checked = self._store.check_scene_release(
-                    run_id, released.intent.intent_id, auth, readiness=ready, **release_args
+                self._check_released_scene(
+                    ports, principal, run_id, contract, released, release_args, owner if profile.owned_worker else None
                 )
-                if checked != released.intent:
-                    raise ValueError("committed scene release changed")
-                if profile.owned_worker and ports.require_held_owner() != owner:
-                    raise ValueError("scene owner changed")
-                if bounded(principal, contract, released.intent.reservation) is not True:
-                    raise ValueError("bounded scene port capability revoked")
-                if released.run.state != "running":
-                    raise ValueError("scene cancelled after release")
-                output = ports.execute(released.intent, released.candidate, released.original, contract)
-                if released.intent.action == "observe":
-                    checked = ports.verify_observation(output, contract, released.candidate)
-                    result = SceneResult(observation=Observation.model_validate(checked))
+                output = ports.execute(released.intent, released.candidate, released.original, contract, **stage_args)
+                if released.intent.action in ("capture", "assess", "policy"):
+                    # Reopen immutable receipt bytes only after the owned child
+                    # has stopped; an earlier read could race its final writes.
+                    result = None
                 else:
-                    try:
-                        ports.validate_candidate(output)
-                        result = SceneResult(candidate_json=_scene_json(output))
-                    except ValueError:
-                        result = SceneResult(failure="invalid_candidate")
+                    result = self._verify_scene_result(ports, released, contract, output)
                 if self._store.get_run(run_id).state != "running":
                     raise ValueError("scene cancelled during execution")
             except Exception:
@@ -692,14 +675,92 @@ class WorkflowService:
                 failed = True
             finally:
                 if worker_intent is not None:
-                    # Stop remains executable without database access. The port
-                    # retains its local witness if durable acknowledgement fails.
-                    cleanup = ports.cleanup_worker(worker_intent)
-                    self._store.acknowledge_scene_cleanup(worker_intent.worker_fence, cleanup)
+                    self._cleanup_scene_stage(ports, run_id, worker_intent, profile)
             current = self._store.scene_snapshot(run_id)
             if failed or current.run.state != "running":
                 return current
-            self._store.finish_scene(run_id, released.intent.intent_id, current.run.version, result)
+            if result is None:
+                try:
+                    result = self._verify_scene_result(ports, released, contract, output)
+                except Exception:
+                    self._store.mark_scene_unknown(run_id, released.intent.intent_id)
+                    raise
+            try:
+                self._store.finish_scene(run_id, released.intent.intent_id, current.run.version, result)
+            except Exception:
+                if released.intent.action == "policy":
+                    self._store.mark_scene_unknown(run_id, released.intent.intent_id)
+                raise
+
+    @staticmethod
+    def _checked_scene_ports(ports):
+        """Validate the selected version's trusted lifecycle hooks without effects."""
+        from .scene_loop import ScenePortProfile
+
+        profile = ScenePortProfile.model_validate_json(ports.profile.model_dump_json())
+        if profile.owned_worker and any(
+            not callable(getattr(ports, name, None))
+            for name in ("prepare_worker", "cleanup_worker", "require_held_owner")
+        ):
+            raise ValueError("managed scene worker ports required")
+        if profile.codec_version == 2 and not callable(getattr(ports, "release_native_resource", None)):
+            raise ValueError("trusted capture slot release port required")
+        if profile.policy is not None and not callable(getattr(ports, "verify_policy", None)):
+            raise ValueError("trusted policy receipt verification port required")
+        return profile
+
+    def _check_released_scene(self, ports, principal, run_id, contract, released, release_args, owner):
+        """Recheck authority, readiness and exact ownership at the released effect boundary."""
+        auth = ports.authorize(principal, contract, released.intent.action)
+        ready = ports.ready(contract)
+        checked = self._store.check_scene_release(
+            run_id, released.intent.intent_id, auth, readiness=ready, **release_args
+        )
+        if checked != released.intent:
+            raise ValueError("committed scene release changed")
+        if released.profile.owned_worker and ports.require_held_owner() != owner:
+            raise ValueError("scene owner changed")
+        if ports.require_bounded_capability(principal, contract, released.intent.reservation) is not True:
+            raise ValueError("bounded scene port capability revoked")
+        if released.run.state != "running":
+            raise ValueError("scene cancelled after release")
+
+    def _cleanup_scene_stage(self, ports, run_id, intent, profile):
+        """Stop before database dependence; release GPU only after exact cleanup acknowledgement."""
+        try:
+            cleanup = ports.cleanup_worker(intent)
+            self._store.acknowledge_scene_cleanup(intent.worker_fence, cleanup)
+            if intent.action in ("capture", "policy"):
+                if ports.release_native_resource(intent, cleanup) is not True:
+                    raise ValueError("capture slot release unverified")
+        except Exception:
+            if profile.codec_version == 2:
+                self._store.mark_scene_unknown(run_id, intent.intent_id)
+            raise
+
+    @staticmethod
+    def _verify_scene_result(ports, released, contract, output):
+        """Reopen exact stage evidence; V2 callers invoke only after child cleanup."""
+        from .policy_contracts import PolicyTrialReceipt
+        from .repairs import _scene_json
+        from .scene_loop import Observation, SceneResult
+
+        version = released.profile.codec_version
+        if released.intent.action == "policy":
+            checked = ports.verify_policy(output, contract, released.candidate, released.intent.policy_binding)
+            if type(checked) is not PolicyTrialReceipt:
+                raise ValueError("typed verified policy trial required")
+            return SceneResult(
+                codec_version=version, policy_trial=PolicyTrialReceipt.model_validate_json(checked.model_dump_json())
+            )
+        if released.intent.action in ("observe", "capture", "assess"):
+            checked = ports.verify_observation(output, contract, released.candidate)
+            return SceneResult(codec_version=version, observation=Observation.model_validate(checked))
+        try:
+            ports.validate_candidate(output)
+            return SceneResult(codec_version=version, candidate_json=_scene_json(output))
+        except ValueError:
+            return SceneResult(codec_version=version, failure="invalid_candidate")
 
     def submit(self, principal, operation_id: str, raw: str | bytes) -> SubmissionResult:
         """Admit or replay without releasing model, simulator or worker execution.

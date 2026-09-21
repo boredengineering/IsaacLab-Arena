@@ -443,6 +443,19 @@ class ReachTracer:
             fh.write("\n".join(self._rows) + "\n")
 
 
+_RESET_AT_ENTRY = object()
+
+
+def _checked_policy_action(policy, env, obs, before_action, before_step):
+    """Check both sides of potentially blocking inference before advancing physics."""
+    if before_action is not None:
+        before_action()
+    actions = policy.get_action(env, obs)
+    if before_step is not None:
+        before_step()
+    return actions
+
+
 def rollout_policy(
     env,
     policy: PolicyBase,
@@ -456,14 +469,39 @@ def rollout_policy(
     trace_reach_object: str | None = None,
     trace_reach_destination: str | None = None,
     trace_reach_hand_body: str | None = None,
+    *,
+    initialized_observation: Any = _RESET_AT_ENTRY,
+    post_reset: Callable[[Any, Any, Any], Any] | None = None,
+    before_action: Callable[[], None] | None = None,
+    before_step: Callable[[], None] | None = None,
+    episode_limit: int | None = None,
+    on_episode_completed: Callable[[Any], None] | None = None,
 ) -> MetricsDataCollection | None:
+    """Roll out a policy, optionally preserving and checking an initialized cohort.
+
+    ``post_reset(env, observation, env_ids)`` returns the observation after the
+    caller's prerequisite checks, or raises to block inference. It runs at entry
+    (env_ids=None) and after autoreset only when another action is requested.
+    Managed callers disable legacy settling and own all bounded hold/measurement
+    work in this hook. Omitted hooks preserve the legacy reset/settle behavior.
+    ``episode_limit`` additionally caps a step-bounded rollout; ``before_action``
+    is a trusted deadline/pin guard. ``before_step`` checks again after potentially
+    blocking inference, before advancing physics. ``on_episode_completed(env_ids)`` reports
+    actual termination/truncation, not terminal pixels (step may have autoreset).
+    """
     assert num_steps is not None or num_episodes is not None, "Either num_steps or num_episodes must be provided"
     assert num_steps is None or num_episodes is None, "Only one of num_steps or num_episodes must be provided"
+    if episode_limit is not None:
+        assert type(episode_limit) is int and episode_limit > 0, "Invalid managed episode limit"
+        assert type(num_steps) is int and num_steps > 0, "Managed episode limit requires a positive step budget"
 
     pbar = None
     tracer = None
     try:
-        obs, _ = env.reset()
+        if initialized_observation is _RESET_AT_ENTRY:
+            obs, _ = env.reset()
+        else:
+            obs = initialized_observation
 
         # Check and verify object settling at start of inference
         if check_settling:
@@ -475,6 +513,9 @@ def rollout_policy(
             )
             if settle_obs is not None:
                 obs = settle_obs
+
+        if post_reset is not None:
+            obs = post_reset(env, obs, None)
 
         policy.reset()
         policy.set_task_description(env.unwrapped.get_language_instruction())
@@ -501,7 +542,7 @@ def rollout_policy(
 
         while True:
             with torch.inference_mode():
-                actions = policy.get_action(env, obs)
+                actions = _checked_policy_action(policy, env, obs, before_action, before_step)
                 obs, _, terminated, truncated, _ = env.step(actions)
                 if tracer is not None:
                     tracer.record()
@@ -513,8 +554,13 @@ def rollout_policy(
                         f" and truncated env_ids: {truncated.nonzero().flatten()}"
                     )
                     env_ids = (terminated | truncated).nonzero().flatten()
+                    if on_episode_completed is not None:
+                        on_episode_completed(env_ids)
                     completed_episodes = env_ids.shape[0]
                     num_episodes_completed += completed_episodes
+                    if episode_limit is not None and num_episodes_completed >= episode_limit:
+                        pbar.update(1)
+                        break
                     if num_episodes is not None:
                         pbar.update(completed_episodes)
                         if num_episodes_completed >= num_episodes:
@@ -531,6 +577,9 @@ def rollout_policy(
                         )
                         if settle_obs is not None:
                             obs = settle_obs
+
+                    if post_reset is not None:
+                        obs = post_reset(env, obs, env_ids)
 
                     policy.reset(env_ids=env_ids)
                     if tracer is not None:

@@ -234,7 +234,7 @@ def _scene_roundtrip(tmp_path, action, *, secret=False):
                 from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import \
                     SceneEvidenceArtifacts
                 from isaaclab_arena.agentic_environment_generation.workflow.scene_observation import ObservationRecorder
-                from isaaclab_arena.tests.test_environment_workflow_scene_producers import criterion, identities, sample
+                from isaaclab_arena.tests._workflow_scene_fixture import criterion, identities, sample
 
                 candidate, cohort = identities()
                 digest = contract_digest(request)
@@ -330,7 +330,7 @@ def _scene_composition_trace(tmp_path, *, expiry=False, dependency_blocked=False
     from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
     from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
     from isaaclab_arena.tests.test_environment_workflow_scene_engines import configuration
-    from isaaclab_arena.tests.test_environment_workflow_scene_producers import composed_fixture
+    from isaaclab_arena.tests._workflow_scene_fixture import composed_fixture
     from isaaclab_arena_examples.agentic_environment_generation.foreground_authorization import (ForegroundAuthority,
                                                                                                  model_settings_sha256)
     from isaaclab_arena_examples.agentic_environment_generation.foreground_owner import ForegroundOwnerLease

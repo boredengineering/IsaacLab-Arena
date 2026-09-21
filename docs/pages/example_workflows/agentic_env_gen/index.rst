@@ -20,6 +20,10 @@ the existing Graph-RAG retriever remains responsible for reading prior experienc
 See :doc:`dcrg` for the bounded CLI, runtime prerequisites, artifact layout, and
 the measured C1 pilot outcome.
 
+For Plan 03's managed capture and task-bound policy adapter contracts, see
+:doc:`workflow_native_policy`. Those isolated-tested components do not enable
+native execution through the :doc:`query-only installed CLI <workflow_query_cli>`.
+
 
 Prompt to Environment Graph Spec
 --------------------------------

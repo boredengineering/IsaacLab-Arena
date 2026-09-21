@@ -7,57 +7,33 @@
 
 import pytest
 
-
-def identities():
-    from isaaclab_arena.agentic_environment_generation.workflow.evidence import CandidateBinding, EvidenceCohort
-
-    candidate = CandidateBinding(candidate_digest="a" * 64, contract_digest="b" * 64, profile_digest="c" * 64)
-    cohort = EvidenceCohort(
-        realization_id="r1",
-        reset_id="reset1",
-        environment_id="env0",
-        window_id="w1",
-        frame_id="world",
-        contract_digest="b" * 64,
-        profile_digest="c" * 64,
-    )
-    return candidate, cohort
+from isaaclab_arena.tests._workflow_scene_fixture import artifacts, composed_fixture, criterion, identities, sample
 
 
-def criterion(producer="scene.linear-speed", **updates):
-    from isaaclab_arena.agentic_environment_generation.workflow.contracts import Criterion
-
-    return Criterion(**(
-        dict(
-            criterion_id="speed",
-            kind="runtime",
-            evidence_producer=producer,
-            requirement="required",
-            evaluator_version="1",
-            required_modalities=("state",),
-            coordinate_frames=("world",),
-            observation_window={"start_step": 0, "end_step": 2},
-            rubric="maximum linear speed",
-            subjects=("cup",),
-            limit={"operator": "le", "value": 0.01, "unit": "m_per_s"},
-        )
-        | updates
-    ))
+def test_shared_synthetic_fixture_has_one_pure_owner():
+    for helper in (artifacts, composed_fixture, criterion, identities, sample):
+        assert helper.__module__ == "isaaclab_arena.tests._workflow_scene_fixture"
 
 
-def sample(step, speed=0.0):
-    return {
-        "step": step,
-        "frame": "world",
-        "origin_w": [10.0, 0.0, 0.0],
-        "subjects": {
-            "cup": {
-                "position_w": [10.0, 0.0, 1.0],
-                "linear_velocity_w": [speed, 0.0, 0.0],
-                "angular_velocity_w": [0.0, 0.0, 0.0],
-            }
-        },
-    }
+def test_legacy_foreground_source_excludes_opt_in_split_composition():
+    import ast
+    from pathlib import Path
+
+    source = (
+        Path(__file__).parents[2] / "isaaclab_arena_examples/agentic_environment_generation/foreground_scene_ports.py"
+    ).read_text()
+    tree = ast.parse(source)
+    imports = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imports.append(node.module or "")
+            imports.extend(alias.name for alias in node.names)
+    assert not any("split_scene_ports" in name for name in imports), "V2 must remain an explicit opt-in import"
+    assert not any(
+        isinstance(node, ast.ClassDef) and node.name == "ForegroundSplitScenePorts" for node in ast.walk(tree)
+    ), "V2 composition must not live in the legacy module"
 
 
 @pytest.mark.parametrize("speed,verdict", [(0.009, "established"), (0.01, "established"), (0.011, "violated")])
@@ -95,11 +71,7 @@ def test_exact_scene_receipt_loader_reopens_and_rejects_wrong_bindings(tmp_path)
     try:
         receipt = store.write(candidate, cohort, payload, protect=lambda value: None)
         reopened = SceneEvidenceArtifacts(area).load_receipt(
-            candidate,
-            cohort,
-            kind="observation",
-            manifest_digest=receipt.manifest_digest,
-            protect=lambda value: None,
+            candidate, cohort, kind="observation", manifest_digest=receipt.manifest_digest, protect=lambda value: None
         )
         assert reopened == receipt
         assert store.verified_payload(reopened, protect=lambda value: None) == payload
@@ -137,12 +109,168 @@ def test_exact_scene_receipt_loader_reopens_and_rejects_wrong_bindings(tmp_path)
         area.close()
 
 
-def artifacts(tmp_path):
-    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
-    from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import SceneEvidenceArtifacts
+def split_fixture(tmp_path, *, effective=True):
+    import json
 
-    area = ArtifactArea.create(tmp_path / "artifacts", store_id="store", registry_id="registry")
-    return area, SceneEvidenceArtifacts(area)
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import contract_digest
+    from isaaclab_arena.agentic_environment_generation.workflow.evidence import CandidateBinding, EvidenceCohort
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import (
+        ScenePortProfile,
+        identity,
+        profile_digest,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_observation import ObservationRecorder
+    from isaaclab_arena.agentic_environment_generation.workflow.split_scene_ports import SplitScenePorts
+
+    f = composed_fixture(tmp_path)
+    raw = f.contract.model_dump(mode="python")
+    for c in raw["criteria"]:
+        c["observation_window"] = dict(start_step=4, end_step=6)
+    contract = type(f.contract).model_validate(raw)
+    profile = ScenePortProfile(
+        codec_version=2,
+        port_id="split-retained",
+        assurance="synthetic",
+        owned_worker=True,
+        producer_ids=f.profile.producer_ids,
+        capture=dict(
+            runtime_allowance_seconds=10,
+            steps=6,
+            observations=1,
+            realizations=1,
+            model_calls=0,
+            model_tokens=0,
+            cost_ceiling_usd=0,
+        ),
+        assess=dict(runtime_allowance_seconds=10, model_calls=1, model_tokens=100, cost_ceiling_usd=0),
+        repair=f.profile.repair,
+    )
+
+    def capture_stage(intent, candidate, original, contract):
+        f.events.append("capture-stage")
+        tag = identity(intent.intent_id, candidate.candidate_id)
+        cohort = EvidenceCohort(
+            realization_id=tag,
+            reset_id=identity(tag, "reset"),
+            environment_id="env0",
+            window_id=identity(tag, "window"),
+            frame_id="world",
+            contract_digest=contract_digest(contract),
+            profile_digest=profile_digest(contract),
+        )
+        binding = CandidateBinding(
+            candidate_digest=candidate.digest,
+            contract_digest=cohort.contract_digest,
+            profile_digest=cohort.profile_digest,
+        )
+        source = candidate if effective else f.original
+        position = json.loads(source.scene_json)["relations"][5]["params"]
+
+        def state(env, step):
+            value = sample(step)
+            value["subjects"] = {f.subject: value["subjects"].pop("cup")}
+            value["subjects"][f.subject]["position_w"] = [10 + position["x"], position["y"], position["z"]]
+            return value
+
+        recorder = ObservationRecorder(state, provenance="synthetic")
+        for step in range(4, 7):
+            recorder(None, step)
+            recorder.add_frame(camera="wrist", step=step, subject_ids=(f.subject,), image_bytes=b"synthetic-image")
+        return f.evidence_store.write(binding, cohort, recorder.payload(), protect=f.ports.protect)
+
+    def fresh():
+        return SplitScenePorts(
+            profile=profile,
+            artifacts=f.evidence_store,
+            protect=f.ports.protect,
+            authorize=f.ports._authorize,
+            ready=f.ports._ready,
+            capture_stage=capture_stage,
+            capture_start_step=4,
+            capture_steps=2,
+            capture_timeout_seconds=5,
+            refine=f.refine,
+            visual=f.visual,
+            model_ceiling=f.ceiling,
+            output_root=tmp_path / "split",
+            direct_root_subjects=(f.subject,),
+            displacement_tolerance_m=0.001,
+            check_active=lambda: None,
+        )
+
+    f.split_contract, f.split_profile, f.capture_stage, f.fresh_split = (contract, profile, capture_stage, fresh)
+    return f
+
+
+def test_split_capture_reopens_numeric_then_assesses_exact_cohort(tmp_path):
+    import json
+
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import SceneIntent, identity
+
+    f = split_fixture(tmp_path)
+    fresh, contract, profile = f.fresh_split, f.split_contract, f.split_profile
+    try:
+        ports = fresh()
+        intent = SceneIntent(
+            codec_version=2,
+            intent_id=identity("capture"),
+            candidate_id=f.original.candidate_id,
+            action="capture",
+            status="released",
+            released_at=1,
+            reservation=profile.capture,
+        )
+        pending = ports.execute(intent, f.original, f.original, contract)
+        assert f.events == ["capture-stage"]
+        captured = ports.verify_observation(pending, contract, f.original)
+        assert [e.criterion_id for e in captured.evidence] == ["speed"]
+        assert captured.static_failure is None
+        assess = SceneIntent(
+            codec_version=2,
+            intent_id=identity("assess"),
+            candidate_id=f.original.candidate_id,
+            action="assess",
+            status="released",
+            released_at=1,
+            reservation=profile.assess,
+            observation_id=identity(intent.intent_id, "observation"),
+            observation_digest=identity(captured.model_dump(mode="json")),
+        )
+        ports = fresh()  # no producer cache and no simulator needed for assessment
+        with pytest.raises(ValueError, match="retained capture"):
+            ports.execute(
+                assess,
+                f.original,
+                f.original,
+                contract,
+                retained_observation=captured.model_copy(update={"verified_manifest_digests": ("a" * 64,)}),
+            )
+        assert f.events == ["capture-stage"]
+        pending = ports.execute(assess, f.original, f.original, contract, retained_observation=captured)
+        assessed = ports.verify_observation(pending, contract, f.original)
+        assert assessed.cohort == captured.cohort
+        assert [e.criterion_id for e in assessed.evidence] == ["speed", "visible"]
+        assert f.events == ["capture-stage", "visual"]
+        assert assessed.evidence[0] == captured.evidence[0]
+        restored = fresh()
+        restored.restore_observations(
+            [
+                dict(
+                    candidate_id=f.original.candidate_id,
+                    candidate=f.original.model_dump_json(),
+                    payload=assessed.model_dump_json(),
+                )
+            ],
+            contract,
+        )
+        assert restored.verify_observation(assessed, contract, f.original) == assessed
+        assert f.events == ["capture-stage", "visual"]
+        receipt = restored._retained[assessed.cohort.realization_id][1]
+        (tmp_path / "artifacts" / receipt.relative_directory / "evidence.json").write_text(json.dumps({}))
+        with pytest.raises(ValueError):
+            restored.verify_observation(assessed, contract, f.original)
+    finally:
+        f.area.close()
 
 
 @pytest.mark.parametrize(
@@ -357,6 +485,137 @@ def test_effective_displacement_explicit_origin_mapping(tmp_path, moved, expecte
             )
     finally:
         area.close()
+
+
+@pytest.fixture
+def cpu_native_sampler():
+    """Real CPU Warp/ProxyArray conversion; synthetic scene, no simulator startup."""
+    from types import SimpleNamespace
+
+    import torch
+    import warp as wp
+
+    # Disable CUDA initialization, not the isolated runner's denial boundaries.
+    wp.config.enable_cuda = False
+    from isaaclab.utils.warp import ProxyArray
+
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_observation import make_native_sampler
+    from isaaclab_arena.tasks.predicates.object_settling import ObjectInitialRestPoseRecorder
+
+    def array(shape):
+        return ProxyArray(wp.zeros(shape, dtype=wp.vec3f, device="cpu"))
+
+    class Scene(dict):
+        env_origins = torch.zeros((1, 3))
+
+    scene = Scene()
+    for name in ("cup", "table"):
+        scene[name] = SimpleNamespace(
+            cfg=SimpleNamespace(prim_path="/World/" + name),
+            data=SimpleNamespace(root_pos_w=array((1,)), root_lin_vel_w=array((1,)), root_ang_vel_w=array((1,))),
+        )
+    scene["contact"] = SimpleNamespace(
+        cfg=SimpleNamespace(prim_path="/World/cup", filter_prim_paths_expr=["/World/table"]),
+        data=SimpleNamespace(force_matrix_w=array((1, 1, 1))),
+    )
+    env = SimpleNamespace(
+        num_envs=1, scene=scene, object_initial_rest_pose_recorder=ObjectInitialRestPoseRecorder(1, "cpu")
+    )
+    req = criterion(
+        "scene.filtered-support",
+        subjects=("cup", "table"),
+        rubric="filtered contact with settled proximity",
+        limit={"operator": "ge", "value": 1.0, "unit": "N"},
+    )
+    sampler = make_native_sampler(
+        (req,), subject_names={"cup": "cup", "table": "table"}, contact_sensors={req.subjects: "contact"}
+    )
+    return SimpleNamespace(env=env, sampler=sampler, array=array)
+
+
+@pytest.mark.parametrize("values", [[0.0, 0.0, 0.0], [1.0, -2.0, 3.0]])
+def test_native_sampler_cpu_proxy_contact_vector(cpu_native_sampler, values):
+    import torch
+
+    f = cpu_native_sampler
+    force = f.env.scene["contact"].data.force_matrix_w
+    assert force.shape == (1, 1, 1)
+    assert tuple(force.torch.shape) == (1, 1, 1, 3)
+    force.torch[0, 0, 0] = torch.tensor(values)
+    result = f.sampler(f.env, 0)
+    force.torch.zero_()  # The retained vector is detached from the native buffer.
+    assert result["contacts"] == [{
+        "subject": "cup",
+        "destination": "table",
+        "filter_paths": ["/World/table"],
+        "destination_path": "/World/table",
+        "sensor_path": "/World/cup",
+        "force_w": values,
+    }]
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+def test_native_sampler_cpu_proxy_contact_rejects_nonfinite(cpu_native_sampler, value):
+    f = cpu_native_sampler
+    f.env.scene["contact"].data.force_matrix_w.torch[0, 0, 0, 1] = value
+    with pytest.raises(ValueError, match="nonfinite"):
+        f.sampler(f.env, 0)
+
+
+@pytest.mark.parametrize("shape", [(2, 1, 1), (1, 2, 1), (1, 1, 2), (1, 1), (1, 0, 1)])
+def test_native_sampler_cpu_proxy_contact_rejects_non_singleton_axes(cpu_native_sampler, shape):
+    f = cpu_native_sampler
+    f.env.scene["contact"].data.force_matrix_w = f.array(shape)
+    with pytest.raises(ValueError, match="unsupported native contact filter"):
+        f.sampler(f.env, 0)
+
+
+@pytest.mark.parametrize("fault", ["wrong-filter", "extra-filter", "source", "regex", "multi-env"])
+def test_native_sampler_cpu_proxy_contact_requires_exact_binding(cpu_native_sampler, fault):
+    f = cpu_native_sampler
+    sensor = f.env.scene["contact"]
+    if fault == "wrong-filter":
+        sensor.cfg.filter_prim_paths_expr = ["/World/floor"]
+    elif fault == "extra-filter":
+        sensor.cfg.filter_prim_paths_expr.append("/World/floor")
+    elif fault == "source":
+        sensor.cfg.prim_path = "/World/other"
+    elif fault == "regex":
+        f.env.scene["table"].cfg.prim_path = "/World/table*"
+        sensor.cfg.filter_prim_paths_expr = ["/World/table*"]
+    else:
+        f.env.num_envs = 2
+    with pytest.raises(ValueError, match="native contact filter|source mismatch|single environment"):
+        f.sampler(f.env, 0)
+
+
+def test_native_sampler_cpu_proxy_root_getters_use_scalar_view(cpu_native_sampler):
+    import torch
+
+    from isaaclab_arena.tasks.predicates.predicate_utils import (
+        get_root_ang_vel_w,
+        get_root_lin_vel_w,
+        get_root_pos_w,
+    )
+
+    f = cpu_native_sampler
+    data = f.env.scene["cup"].data
+    for index, (field, getter) in enumerate((
+        ("root_pos_w", get_root_pos_w),
+        ("root_lin_vel_w", get_root_lin_vel_w),
+        ("root_ang_vel_w", get_root_ang_vel_w),
+    )):
+        proxy = getattr(data, field)
+        values = [1.0 + index, 2.0 + index, 3.0 + index]
+        proxy.torch[0] = torch.tensor(values)
+        assert proxy.shape == (1,)
+        converted = getter(f.env, "cup")
+        assert tuple(converted.shape) == (1, 3)
+        assert converted.tolist() == [values]
+    result = f.sampler(f.env, 0)["subjects"]["cup"]
+    assert result["position_w"] == [1.0, 2.0, 3.0]
+    assert result["linear_velocity_w"] == [2.0, 3.0, 4.0]
+    assert result["angular_velocity_w"] == [3.0, 4.0, 5.0]
 
 
 def test_native_sampler_lazy_admission_before_import(monkeypatch):
@@ -583,164 +842,6 @@ def test_repair_radius_is_original_not_previous_revision(tmp_path):
     assert child.original_id == original.candidate_id
     with pytest.raises(ValueError, match="repair_no_op"):
         repaired_candidate(contract, original, parent, positive, source_id="same-as-parent")
-
-
-def composed_fixture(tmp_path, *, effective=True, role_ceilings=False):
-    """Real schema and retained producers, controlled synthetic runtime/model effects."""
-    import json
-    import yaml
-    from contextlib import contextmanager
-    from pathlib import Path
-    from types import SimpleNamespace
-
-    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import ScenePortProfile, candidate_record
-    from isaaclab_arena.agentic_environment_generation.workflow.scene_ports import (
-        CaptureRuntime,
-        ModelCeiling,
-        ScenePorts,
-    )
-    from isaaclab_arena.tests.test_environment_workflow_scene_loop import scene_contract
-
-    scene = yaml.safe_load((Path(__file__).parent / "test_data/pick_and_place_maple_table_env_graph.yaml").read_text())
-    # Explicit derived fixture: original authored relation plus unique support.
-    subject = "mug_ycb_robolab"
-    scene["relations"].append(
-        {"kind": "on", "subject": subject, "reference": "maple_table_robolab_table", "params": {}}
-    )
-    raw = scene_contract().model_dump(mode="python")
-    raw["criteria"] = [
-        criterion(subjects=(subject,)).model_dump(mode="python"),
-        criterion(
-            "scene.visible",
-            criterion_id="visible",
-            subjects=(subject,),
-            kind="visual",
-            required_modalities=("rgb",),
-            coordinate_frames=("wrist",),
-            rubric="subject visible in every retained frame",
-            limit={"operator": "eq", "value": 1.0, "unit": "boolean"},
-        ).model_dump(mode="python"),
-    ]
-    raw["preserved"] = []
-    raw["allowed_interventions"] = [
-        dict(
-            subject_id=subject,
-            schema_path=f"/relations/5/params/{axis}",
-            operation="replace",
-            coordinate_frame="env_local",
-            units="m",
-            max_total_displacement_m=0.1,
-        )
-        for axis in ("x", "y")
-    ]
-    contract = type(scene_contract()).model_validate(raw)
-    common = dict(model_calls=1, model_tokens=100, cost_ceiling_usd=0.0, runtime_allowance_seconds=10.0)
-    profile = ScenePortProfile(
-        port_id="synthetic-retained",
-        assurance="synthetic",
-        producer_ids=("scene.linear-speed", "scene.visible"),
-        observe=dict(common, observations=1, realizations=1, steps=2),
-        repair=dict(common, candidates=1, revisions=1),
-    )
-    area, evidence_store = artifacts(tmp_path)
-    events = []
-    original = candidate_record("run", scene, source_id="generation")
-
-    class Flag:
-        def any(self):
-            return False
-
-    class Env:
-        def reset(self):
-            return {"camera_obs": {"wrist": b"synthetic-image"}}, {}
-
-        def step(self, action):
-            return self.reset()[0], 0, Flag(), Flag(), {}
-
-    class Policy:
-        def reset(self):
-            pass
-
-        def get_action(self, *args):
-            return 0
-
-    @contextmanager
-    def capture(*, candidate, contract, cohort):
-        events.append("capture")
-        position = json.loads(candidate.scene_json)["relations"][5]["params"]
-
-        def state(env, step):
-            value = sample(step)
-            value["subjects"] = {subject: value["subjects"].pop("cup")}
-            value["subjects"][subject]["position_w"] = [
-                10 + (position["x"] if effective else 0.65),
-                position["y"],
-                position["z"],
-            ]
-            return value
-
-        yield CaptureRuntime(Env(), Policy(), state, lambda image, path: path.write_bytes(image))
-        events.append("closed")
-
-    def visual(*, request, frames, allowance):
-        events.append("visual")
-        allowance.charge()
-        assert frames and frames[0]["bytes"]
-        visible = request["candidate"]["candidate_digest"] != original.digest
-        return json.dumps(
-            dict(request, answers=[dict(frame_digest=f["sha256"], visible=visible) for f in request["frames"]])
-        ).encode()
-
-    def refine(*, parent, original, feedback, contract, allowance):
-        events.append("refine")
-        allowance.charge()
-        assert parent.candidate_id == original.candidate_id
-        assert feedback["assessment"]["failed_ids"] == ["visible"]
-        result = json.loads(parent.scene_json)
-        result["relations"][5]["params"]["x"] += 0.03
-        return result
-
-    ceiling = ModelCeiling(
-        max_calls=1,
-        max_tokens=100,
-        max_cost_usd="0",
-        timeout_seconds=5.0,
-        per_call_bound=dict(
-            version=1,
-            attested=True,
-            model="synthetic",
-            endpoint="synthetic://controlled",
-            max_tokens=100,
-            max_cost_usd="0",
-        ),
-    )
-    from dataclasses import replace
-
-    role_options = {}
-    if role_ceilings:
-        role_options["model_ceilings"] = {
-            role: replace(ceiling, per_call_bound=dict(ceiling.per_call_bound, model=role))
-            for role in ("generation", "assessment")
-        }
-    ports = ScenePorts(
-        **role_options,
-        profile=profile,
-        artifacts=evidence_store,
-        protect=lambda value: None,
-        authorize=lambda *args: events.append("authorize"),
-        ready=lambda contract: events.append("ready"),
-        capture=capture,
-        refine=refine,
-        visual=visual,
-        model_ceiling=None if role_ceilings else ceiling,
-        capture_steps=2,
-        capture_timeout_seconds=5.0,
-        output_root=tmp_path / "capture",
-        direct_root_subjects=(subject,),
-        displacement_tolerance_m=0.001,
-        check_active=lambda: None,
-    )
-    return SimpleNamespace(**locals())
 
 
 def test_restore_repeated_candidate_requires_durable_selection(tmp_path):
@@ -1169,4 +1270,516 @@ def test_workflow_service_consumes_concrete_ports(tmp_path, mode):
         assert service.run_scene("principal", "run", ports=f.ports).run.state == "accepted"
         assert f.events == before  # terminal read dispatches no checks/effects
     finally:
+        f.area.close()
+
+
+@pytest.mark.parametrize("effective", [True, False])
+def test_split_absolute_displacement_and_fresh_lineage_restore(tmp_path, effective):
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import (
+        SceneIntent,
+        identity,
+        repaired_candidate,
+    )
+
+    f = split_fixture(tmp_path, effective=effective)
+    ports, contract, profile = f.fresh_split(), f.split_contract, f.split_profile
+
+    def run(action, candidate, captured=None):
+        intent = SceneIntent(
+            codec_version=2,
+            intent_id=identity(action, candidate.candidate_id),
+            candidate_id=candidate.candidate_id,
+            action=action,
+            status="released",
+            released_at=1,
+            reservation=getattr(profile, action),
+            observation_id=(identity(candidate.candidate_id, "observation") if captured else None),
+            observation_digest=(identity(captured.model_dump(mode="json")) if captured else None),
+        )
+        args = {} if captured is None else dict(retained_observation=captured)
+        return ports.execute(intent, candidate, f.original, contract, **args)
+
+    try:
+        baseline = ports.verify_observation(run("capture", f.original), contract, f.original)
+        baseline = ports.verify_observation(run("assess", f.original, baseline), contract, f.original)
+        proposed = run("repair", f.original)
+        child = repaired_candidate(contract, f.original, f.original, proposed, source_id=identity("repair"))
+        captured = ports.verify_observation(run("capture", child), contract, child)
+        assert captured.static_failure == (None if effective else "ineffective_edit")
+        if effective:
+            captured = ports.verify_observation(run("assess", child, captured), contract, child)
+            assert all(e.verdict == "established" for e in captured.evidence)
+        events = list(f.events)
+        restored = f.fresh_split()
+        restored.restore_observations(
+            [
+                dict(candidate_id=c.candidate_id, candidate=c.model_dump_json(), payload=o.model_dump_json())
+                for c, o in ((child, captured), (f.original, baseline))
+            ],
+            contract,
+        )
+        assert restored.verify_observation(captured, contract, child) == captured
+        assert f.events == events
+    finally:
+        f.area.close()
+
+
+def test_split_native_admission_requires_real_frozen_producer(tmp_path):
+    from isaaclab_arena.agentic_environment_generation.workflow.native_capture import (
+        NativeCaptureProducer,
+        NativeCaptureSettings,
+    )
+
+    f = split_fixture(tmp_path)
+    try:
+        ports = f.fresh_split()
+        ports.profile = ports.profile.model_copy(update={"assurance": "native-unverified"})
+        with pytest.raises(ValueError, match="frozen native producer"):
+            ports.admit(f.split_contract)
+        criteria = f.split_contract.criteria[:1]
+        execution = f.split_contract.execution
+        settings = NativeCaptureSettings(
+            runtime_profile_id="native-runtime",
+            capture_profile_id="native-capture",
+            seed=execution.seed,
+            timestep_seconds=execution.timestep_seconds,
+            decimation=execution.decimation,
+            settle_steps=4,
+            settle_consecutive_steps=1,
+            settle_angular_rad_per_s=0.01,
+            window=dict(start_step=4, end_step=6),
+            subjects=(dict(subject_id=f.subject, scene_name=f.subject, prim_path="/World/subject"),),
+            criteria=criteria,
+            max_runtime_seconds=5,
+        )
+        ports.native_producer = NativeCaptureProducer(
+            settings=settings, artifacts=f.evidence_store, protect=ports.protect, output_root=tmp_path / "native"
+        )
+        with pytest.raises(ValueError, match="binding"):
+            ports.admit(f.split_contract)
+        contract = f.split_contract.model_copy(
+            update={
+                "criteria": criteria,
+                "execution": execution.model_copy(
+                    update={"runtime": settings.runtime_reference(), "capture": settings.capture_reference()}
+                ),
+            }
+        )
+        assert ports.admit(contract) == criteria
+        ports.capture_start_step = 3
+        with pytest.raises(ValueError, match="window"):
+            ports.admit(contract)
+        assert not f.events
+    finally:
+        f.area.close()
+
+
+def test_native_gpu_lease_requires_exact_verified_cleanup_before_unlock(tmp_path):
+    import fcntl
+    import os
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow import native_resources
+
+    path = tmp_path / "common-gpu.lock"
+    lease = native_resources.NativeGpuLease(path)
+    fence = SimpleNamespace(run_id="run", attempt_id="capture")
+    registration = SimpleNamespace(fence=fence, registration_id="owned-child")
+    cleanup = SimpleNamespace(registration=registration, observation="owned_process_group_stopped")
+    lease.acquire(fence)
+    competitor = os.open(path, os.O_RDWR)
+    try:
+        with pytest.raises(BlockingIOError):
+            fcntl.flock(competitor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(ValueError, match="cleanup"):
+            lease.release(registration, cleanup, verify_cleanup=lambda *_: False)
+        with pytest.raises(BlockingIOError):
+            fcntl.flock(competitor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        wrong = SimpleNamespace(fence=SimpleNamespace(run_id="other", attempt_id="capture"))
+        with pytest.raises(ValueError, match="binding"):
+            lease.release(wrong, cleanup, verify_cleanup=lambda *_: True)
+        lease.release(registration, cleanup, verify_cleanup=lambda *_: True)
+        fcntl.flock(competitor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert not lease.held
+    finally:
+        os.close(competitor)
+
+
+def test_owned_split_stage_gpu_contention_cleanup_and_numeric_routing(tmp_path):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.native_resources import NativeGpuLease
+    from isaaclab_arena.agentic_environment_generation.workflow.split_scene_ports import OwnedSceneStageAdapter
+
+    events = []
+    allowed = [False]
+    verified = [False]
+    gpu = NativeGpuLease(tmp_path / "gpu.lock")
+    competitor = NativeGpuLease(tmp_path / "gpu.lock")
+
+    class Worker:
+        def __init__(self, kind):
+            self.kind = kind
+
+        def prepare(self, fence, contract, *, timeout_s):
+            events.append(self.kind + "-prepare")
+            return SimpleNamespace(registration=SimpleNamespace(fence=fence, registration_id=fence.attempt_id))
+
+        def stop_owned(self, prepared, *, timeout_s):
+            events.append(self.kind + "-stop")
+            return SimpleNamespace(registration=prepared.registration)
+
+        def cleanup_verified(self, registration, cleanup):
+            return verified[0] and cleanup.registration == registration
+
+        def send_capture(self, prepared, intent, candidate, original, contract, *, protect):
+            events.append("native-capture")
+
+        def receive_capture(self, prepared, *, protect):
+            return "controlled receipt seam"
+
+        def send_evaluate(self, prepared, intent, candidate, original, contract, *, retained_observation, protect):
+            self.observation = retained_observation
+
+        def receive_evaluate(self, prepared, *, protect):
+            events.append("numeric-evaluate")
+            return self.observation
+
+        def send(self, *args, **kwargs):
+            events.append("model-send")
+
+        def receive(self, *args, **kwargs):
+            events.append("model-receive")
+
+    adapter = OwnedSceneStageAdapter(
+        native_worker=Worker("native"),
+        model_worker=Worker("model"),
+        numeric_worker=Worker("numeric"),
+        gpu_lease=gpu,
+        authorize_native=lambda intent, contract: allowed[0],
+    )
+    contract = SimpleNamespace(criteria=[criterion()])
+
+    def intent(action):
+        return SimpleNamespace(action=action, worker_fence=SimpleNamespace(attempt_id=action), intent_id=action)
+
+    capture, assess = intent("capture"), intent("assess")
+    with pytest.raises(ValueError, match="native authorization"):
+        adapter.prepare_stage(capture, contract, timeout_s=1)
+    assert not gpu.held and not events
+    allowed[0] = True
+    competitor.acquire(capture.worker_fence)
+    with pytest.raises(BlockingIOError):
+        adapter.prepare_stage(capture, contract, timeout_s=1)
+    assert not gpu.held and not events
+    competitor.release(
+        SimpleNamespace(fence=capture.worker_fence),
+        SimpleNamespace(registration=SimpleNamespace(fence=capture.worker_fence)),
+        verify_cleanup=lambda *_: True,
+    )
+    prepared = adapter.prepare_stage(capture, contract, timeout_s=1)
+    assert gpu.held and events == ["native-prepare"]
+    with pytest.raises(ValueError, match="GPU"):
+        adapter.prepare_stage(assess, contract, timeout_s=1)
+    assert events == ["native-prepare"]
+    cleanup = adapter.stop_owned(prepared, timeout_s=1)
+    with pytest.raises(ValueError, match="cleanup"):
+        adapter.release_native_resource(prepared.registration, cleanup)
+    assert gpu.held
+    with pytest.raises(BlockingIOError):
+        competitor.acquire(capture.worker_fence)
+    verified[0] = True
+    assert adapter.release_native_resource(prepared.registration, cleanup) is True
+    assert not gpu.held
+    prepared = adapter.prepare_stage(assess, contract, timeout_s=1)
+    adapter.send_evaluate(prepared, assess, None, None, contract, retained_observation="exact", protect=lambda _: None)
+    result = adapter.receive_evaluate(prepared, protect=lambda _: None)
+    assert result == "exact"
+    assert events == ["native-prepare", "native-stop", "numeric-prepare", "numeric-evaluate"]
+    with pytest.raises(ValueError, match="model"):
+        adapter.send(prepared, b"forbidden", timeout_s=1)
+
+
+@pytest.mark.parametrize("numeric_only", [False, True])
+@pytest.mark.parametrize("expired", [False, True])
+def test_foreground_split_service_keeps_owner_and_cleans_before_model(tmp_path, numeric_only, expired):
+    import json
+    import time
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.attempts import AttemptFence, WorkerRegistration
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import canonical_json
+    from isaaclab_arena.agentic_environment_generation.workflow.native_resources import NativeGpuLease
+    from isaaclab_arena.agentic_environment_generation.workflow.results import CleanupEvidence, OwnerView
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import (
+        SceneDecision,
+        SceneIntent,
+        SceneSnapshot,
+        identity,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_observation import visual_request
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+    from isaaclab_arena.agentic_environment_generation.workflow.split_scene_ports import OwnedSceneStageAdapter
+    from isaaclab_arena_examples.agentic_environment_generation.foreground_owner import ForegroundOwnerLease
+    from isaaclab_arena_examples.agentic_environment_generation.foreground_split_scene_ports import (
+        ForegroundSplitScenePorts,
+    )
+
+    f = split_fixture(tmp_path)
+    contract, profile = f.split_contract, f.split_profile
+    contract = contract.model_copy(update={"criteria": contract.criteria[:1] if numeric_only else contract.criteria})
+    profile = profile.model_copy(
+        update={
+            "assess": profile.assess.model_copy(
+                update={"model_calls": 0 if numeric_only else 1, "model_tokens": 0 if numeric_only else 100}
+            )
+        }
+    )
+    gpu = NativeGpuLease(tmp_path / "gpu.lock")
+    events = []
+
+    class Worker:
+        def __init__(self, kind):
+            self.kind, self.cleanups = kind, {}
+
+        def prepare(self, fence, contract, *, timeout_s):
+            assert self.kind == "native" or not gpu.held
+            assert self.kind == "native" or "ack-capture" in events
+            events.append(self.kind + "-prepare")
+            return SimpleNamespace(
+                registration=WorkerRegistration(
+                    registration_id=self.kind,
+                    fence=fence,
+                    host="synthetic",
+                    boot="synthetic",
+                    pid=1,
+                    pgid=1,
+                    sid=1,
+                    start_ticks=1,
+                )
+            )
+
+        def stop_owned(self, prepared, *, timeout_s):
+            events.append(self.kind + "-stop")
+            evidence = CleanupEvidence(
+                registration=prepared.registration,
+                evidence_ref=self.kind,
+                observation="owned_process_group_stopped",
+                remote_effects="unknown",
+            )
+            self.cleanups[self.kind] = evidence
+            return evidence
+
+        def cleanup_verified(self, registration, cleanup):
+            return cleanup == self.cleanups.get(self.kind) and cleanup.registration == registration
+
+        def send_capture(self, prepared, intent, candidate, original, contract, *, protect, deadline):
+            assert (
+                gpu.held and time.time() < deadline <= intent.released_at + intent.reservation.runtime_allowance_seconds
+            )
+            self.capture_args = intent, candidate, original, contract
+
+        def receive_capture(self, prepared, *, protect):
+            assert not ports._interlock._is_owned(), "capture receive must not block local stop"
+            return f.capture_stage(*self.capture_args)
+
+        def send_evaluate(
+            self, prepared, intent, candidate, original, contract, *, retained_observation, protect, deadline
+        ):
+            assert time.time() < deadline <= intent.released_at + intent.reservation.runtime_allowance_seconds
+            self.evaluate_args = candidate, contract, retained_observation
+
+        def receive_evaluate(self, prepared, *, protect):
+            assert not ports._interlock._is_owned(), "evaluator receive must not block local stop"
+            candidate, contract, retained_observation = self.evaluate_args
+            events.append("numeric-evaluate")
+            assert not gpu.held
+            # Synthetic owned evaluator seam; real immutable numeric evaluators.
+            evaluator = f.fresh_split()
+            evaluator.profile = profile
+            return evaluator.verify_observation(retained_observation, contract, candidate)
+
+        def send(self, prepared, raw, *, timeout_s):
+            assert not gpu.held and "ack-capture" in events
+            packet = json.loads(raw)
+            assert packet["inputs"]["scene_action"] == "assess"
+            assert packet["workflow_execution"]["registration"] == prepared.registration.model_dump(mode="json")
+            events.append("model-send")
+
+        def receive(self, prepared, *, protect):
+            observation = store.captured
+            receipt = f.evidence_store.load_receipt(
+                ports._retained[observation.cohort.realization_id][1].candidate,
+                observation.cohort,
+                kind="observation",
+                manifest_digest=observation.verified_manifest_digests[0],
+                protect=protect,
+            )
+            request = visual_request(
+                contract.criteria[1], receipt.candidate, receipt.cohort, f.evidence_store, receipt, protect=protect
+            )
+            raw = json.dumps(
+                dict(request, answers=[dict(frame_digest=x["sha256"], visible=True) for x in request["frames"]])
+            )
+            return SimpleNamespace(output={"raw_response": raw})
+
+    adapter = OwnedSceneStageAdapter(
+        native_worker=Worker("native"),
+        model_worker=Worker("model"),
+        numeric_worker=Worker("numeric"),
+        gpu_lease=gpu,
+        authorize_native=lambda intent, contract: True,
+    )
+    private = tmp_path / "private"
+    private.mkdir(mode=0o700)
+    lease = ForegroundOwnerLease(
+        private, run_id="run", principal="principal", cleanup_verified=adapter.cleanup_verified
+    )
+
+    class Store:
+        def __init__(self):
+            self.run = SimpleNamespace(state="running", version=1, contract_json=canonical_json(contract))
+            self.owner = OwnerView(owner_id=lease.owner_id, owner_epoch=1, dirty=True)
+            self.intents, self.captured = {}, None
+            self.next("capture")
+
+        def next(self, action):
+            self.intent = SceneIntent(
+                codec_version=2,
+                intent_id=identity(action),
+                candidate_id=f.original.candidate_id,
+                action=action,
+                status="reserved",
+                reservation=getattr(profile, action),
+                observation_id=(identity("capture", "observation") if action == "assess" else None),
+                observation_digest=(identity(self.captured.model_dump(mode="json")) if action == "assess" else None),
+            )
+            self.update()
+
+        def update(self, **changes):
+            self.intent = self.intent.model_copy(update=changes)
+            self.intents[self.intent.intent_id] = self.intent
+
+        def get_run(self, run_id):
+            return self.run
+
+        def get_owner(self):
+            return self.owner
+
+        def get_scene_intent(self, run_id, intent_id):
+            return self.intents[intent_id]
+
+        def get_scene_capture(self, run_id, intent_id):
+            return self.captured
+
+        def get_generation_attempt(self, run_id):
+            return SimpleNamespace(
+                admitted_at=time.time() - (contract.budget.total_deadline_seconds + 1 if expired else 0)
+            )
+
+        def scene_snapshot(self, run_id):
+            return SceneSnapshot(
+                self.run,
+                f.original,
+                f.original,
+                SceneDecision(action=self.intent.action, reason="test"),
+                self.intent,
+                profile,
+            )
+
+        def claim_scene_worker(self, run_id, intent_id, owner_id, owner_epoch):
+            fence = AttemptFence(
+                run_id=run_id,
+                intent_id=intent_id,
+                attempt_id=self.intent.action,
+                generation=1,
+                owner_id=owner_id,
+                owner_epoch=owner_epoch,
+            )
+            self.update(worker_fence=fence)
+            return fence
+
+        def register_scene_worker(self, fence, registration):
+            self.update(worker_registration=registration)
+
+        def release_scene(self, *args, **kwargs):
+            self.update(status="released", released_at=time.time())
+            return True
+
+        def check_scene_release(self, *args, **kwargs):
+            return self.intent
+
+        def acknowledge_scene_cleanup(self, fence, cleanup):
+            self.update(worker_cleanup=cleanup)
+            events.append("ack-" + self.intent.action)
+
+        def mark_scene_unknown(self, *args):
+            self.run.state = "reconciliation_required"
+
+        def finish_scene(self, run_id, intent_id, version, result):
+            assert self.intent.worker_cleanup is not None and not gpu.held
+            self.update(status="produced")
+            if self.intent.action == "capture":
+                self.captured = result.observation
+                self.next("assess")
+            else:
+                assert result.observation.evidence[0] == self.captured.evidence[0]
+                assert all(e.verdict == "established" for e in result.observation.evidence)
+                self.run.state = "accepted"
+
+    store = Store()
+    authority = SimpleNamespace(
+        store=store,
+        require_read=lambda *_: None,
+        require_scene_execute=lambda *args, **kwargs: "auth",
+        release_guard=lambda *args, **kwargs: nullcontext(),
+        require_workflow_model_bounds=lambda *_: {
+            role: f.ceiling.per_call_bound for role in ("generation", "assessment")
+        },
+        private_model_config=lambda *args, **kwargs: {},
+        private_model_deadline=lambda *args, **kwargs: time.time() + 60,
+        clock=time.time,
+    )
+    try:
+        ports = ForegroundSplitScenePorts(
+            store=store,
+            authority=authority,
+            lease=lease,
+            worker=adapter,
+            principal="principal",
+            run_id="run",
+            catalogue_sha256="a" * 64,
+            artifact_root=tmp_path / "artifacts",
+            ready=lambda _: "ready",
+            profile=profile,
+            artifacts=f.evidence_store,
+            protect=lambda _: None,
+            model_ceilings={role: f.ceiling for role in ("generation", "assessment")},
+            capture_start_step=4,
+            capture_steps=2,
+            capture_timeout_seconds=5,
+            output_root=tmp_path / "capture",
+            direct_root_subjects=(f.subject,),
+            displacement_tolerance_m=0.001,
+        )
+        service = WorkflowService(store, authority, None, validate_support=ports.admit)
+        result = service.run_scene("principal", "run", ports=ports)
+        if expired:
+            assert result.run.state == "reconciliation_required"
+            assert f.events == []  # No native dispatch or subsequent model process.
+            assert events == ["native-prepare", "native-stop", "ack-capture"]
+            assert not gpu.held
+            lease.require_held("run", "principal")
+            return
+        assert result.run.state == "accepted", events
+        assert f.events == ["capture-stage"]
+        assert not gpu.held
+        lease.require_held("run", "principal")  # GPU release never releases workflow ownership.
+        assert "numeric-evaluate" in events if numeric_only else "model-send" in events
+        assert ("model-prepare" in events) is not numeric_only
+    finally:
+        ports.stop_local()
+        prepared = ports.prepared_workers[-1]
+        lease.release_after_cleanup(prepared.registration, ports._cleanups[prepared.registration.fence.intent_id])
         f.area.close()

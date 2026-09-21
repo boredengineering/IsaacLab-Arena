@@ -50,6 +50,73 @@ def _preserved_subtree(original, path, subject_id):
         raise ValueError("repair_unsupported_preservation")
 
 
+def repair_permission_envelope(contract, original, current, *, effective_subjects):
+    """Describe the original-centered XY permission disk without granting execution.
+
+    Args:
+        contract: Frozen intervention and preservation rules.
+        original: Retained original candidate, never a previous revision.
+        current: Retained candidate whose selected assessment permits repair.
+        effective_subjects: Trusted adapter's direct-root mapping capability.
+
+    Returns:
+        Bounded public model instructions; the full-candidate guard remains authoritative.
+    """
+    contract = parse_contract(canonical_json(contract))
+    rules = contract.allowed_interventions
+    if not rules or len({r.subject_id for r in rules}) != 1:
+        raise ValueError("repair_missing_or_unsupported_permissions")
+    subject = rules[0].subject_id
+    if subject not in effective_subjects:
+        raise ValueError("repair_effective_mapping_required")
+    if current.run_id != original.run_id or current.original_id != original.candidate_id:
+        raise ValueError("repair_lineage_mismatch")
+    baseline, selected = json.loads(original.scene_json), json.loads(current.scene_json)
+    for record, value in ((original, baseline), (current, selected)):
+        if hashlib.sha256(_scene_json(value).encode()).hexdigest() != record.digest:
+            raise ValueError("repair_candidate_digest_mismatch")
+    index, _ = _target_relation(baseline, subject)
+    paths = [r.schema_path for r in rules]
+    supported = {f"/relations/{index}/params/{axis}" for axis in ("x", "y")}
+    if any(r.coordinate_frame != "env_local" or r.schema_path not in supported for r in rules):
+        raise ValueError("repair_unsupported_path_or_frame")
+    if current.scene_json != original.scene_json:
+        validate_permitted_scene_repair(contract, baseline, selected)
+    for rule in contract.preserved:
+        _preserved_subtree(baseline, rule.schema_path, rule.subject_id)
+
+    def placement(record, value):
+        params = value["relations"][index]["params"]
+        return dict(
+            candidate_id=record.candidate_id,
+            digest=record.digest,
+            xy_m=[_number(params[axis], "repair_invalid_coordinate") for axis in ("x", "y")],
+        )
+
+    original_placement = placement(original, baseline)
+    envelope = dict(
+        codec="scene-repair-permissions-v1",
+        contract_digest=contract_digest(contract),
+        subject_id=subject,
+        original=original_placement,
+        current=placement(current, selected),
+        coordinate_frame="env_local",
+        mapping="direct-root-translation-v1",
+        allowed_paths=paths,
+        allowed_axes=sorted({path.rsplit("/", 1)[1] for path in paths}),
+        admissible_disk=dict(
+            center_xy_m=original_placement["xy_m"],
+            radius_m=min(r.max_total_displacement_m for r in rules),
+            interpretation="distance_from_original_not_total_path_length",
+        ),
+        preserved=[r.model_dump(mode="json") for r in contract.preserved],
+        preserve_all_other_fields=True,
+        forbidden_changes=["task", "physics", "z", "topology"],
+        requires_fresh_native_evidence=True,
+    )
+    return json.loads(_scene_json(envelope))
+
+
 def validate_permitted_scene_repair(
     contract: WorkflowContract, original: dict, candidate: dict
 ) -> PermittedSceneRepairReceipt:

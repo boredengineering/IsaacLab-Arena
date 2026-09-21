@@ -133,7 +133,7 @@ class ScenePorts:
         project_required_criteria(contract)
         criteria = tuple(admit_criterion(c) for c in contract.criteria)
         windows = {(c.observation_window.start_step, c.observation_window.end_step) for c in criteria}
-        if windows != {(0, self.capture_steps)} or type(self.capture_steps) is not int or self.capture_steps < 1:
+        if windows != {self.capture_window()} or type(self.capture_steps) is not int or self.capture_steps < 1:
             raise ValueError("unsupported capture window")
         visual = [c for c in criteria if c.kind == "visual"]
         if len(visual) > 1:
@@ -145,6 +145,10 @@ class ScenePorts:
         if any(rule.subject_id not in self.direct_root_subjects for rule in contract.allowed_interventions):
             raise ValueError("explicit direct root origin mapping required")
         return criteria
+
+    def capture_window(self):
+        """Return the exact absolute evidence window admitted by this producer."""
+        return (0, self.capture_steps)
 
     def authorize(self, principal, contract, action):
         self.admit(contract)
@@ -197,10 +201,7 @@ class ScenePorts:
                 or reservation.observations < 1
             ):
                 raise ValueError("configured capture ceiling exceeds reservation")
-        if runtime > min(
-            reservation.runtime_allowance_seconds,
-            contract.budget.per_operation_timeout_seconds,
-        ):
+        if runtime > min(reservation.runtime_allowance_seconds, contract.budget.per_operation_timeout_seconds):
             raise ValueError("configured runtime ceiling exceeds reservation")
         return True
 
@@ -251,6 +252,11 @@ class ScenePorts:
             if decision.action != "repair":
                 raise ValueError("retained assessment does not permit repair")
             feedback = decision.model_dump(mode="json") | {"observation": checked.model_dump(mode="json")}
+            from .repairs import repair_permission_envelope
+
+            feedback["repair_permissions"] = repair_permission_envelope(
+                contract, original, candidate, effective_subjects=self.direct_root_subjects
+            )
             proposed = self._refine(
                 parent=candidate,
                 original=original,
@@ -312,38 +318,20 @@ class ScenePorts:
                     if path is not None:
                         with Path(path).open("rb") as stream:
                             raw = stream.read(128 * 1024 + 1)
-                        recorder.add_frame(
-                            camera=camera,
-                            step=step,
-                            subject_ids=visual.subjects,
-                            image_bytes=raw,
-                        )
+                        recorder.add_frame(camera=camera, step=step, subject_ids=visual.subjects, image_bytes=raw)
         self.check_active()
         payload = recorder.payload() | {"diagnostics": {k: v for k, v in captured.items() if k != "frames"}}
         observation = self.artifacts.write(binding, cohort, payload, protect=self.protect)
         answer = None
         if visual:
-            request = visual_request(
-                visual,
-                binding,
-                cohort,
-                self.artifacts,
-                observation,
-                protect=self.protect,
-            )
+            request = visual_request(visual, binding, cohort, self.artifacts, observation, protect=self.protect)
             raw = self._visual(
                 request=request,
                 frames=payload["frames"],
                 allowance=self.ceiling_for("observe").allowance(now=time.monotonic()),
             )
             answer = retain_visual_answer(
-                visual,
-                binding,
-                cohort,
-                self.artifacts,
-                observation,
-                raw,
-                protect=self.protect,
+                visual, binding, cohort, self.artifacts, observation, raw, protect=self.protect
             )
         self._retained[tag] = (candidate, observation, answer)
         self.check_active()
@@ -351,7 +339,7 @@ class ScenePorts:
         self._latest[candidate.candidate_id] = output
         return output
 
-    def _evaluate(self, tag, contract, candidate):
+    def _evaluate(self, tag, contract, candidate, *, include_visual=True):
         retained_candidate, receipt, answer = self._retained[tag]
         if retained_candidate != candidate or receipt.candidate != CandidateBinding(
             candidate_digest=candidate.digest,
@@ -367,6 +355,8 @@ class ScenePorts:
             self.artifacts.verified_payload(answer, protect=self.protect)
         for criterion in self.admit(contract):
             if criterion.kind == "visual":
+                if not include_visual:
+                    continue
                 try:
                     value = evaluate_visual_answer(
                         criterion,
@@ -382,12 +372,7 @@ class ScenePorts:
                     continue
             else:
                 value = evaluate_measurement(
-                    criterion,
-                    receipt.candidate,
-                    receipt.cohort,
-                    self.artifacts,
-                    receipt,
-                    protect=self.protect,
+                    criterion, receipt.candidate, receipt.cohort, self.artifacts, receipt, protect=self.protect
                 )
             evidence.append(value)
             digests.append(value.manifest_digest)  # evaluator has verified the actual bytes above
@@ -404,16 +389,13 @@ class ScenePorts:
             params = relations[0]["params"]
             before_payload = self.artifacts.verified_payload(before, protect=self.protect)
             initial = before_payload["samples"][0]
-            z = params.get(
-                "z",
-                initial["subjects"][subject]["position_w"][2] - initial["origin_w"][2],
-            )
+            z = params.get("z", initial["subjects"][subject]["position_w"][2] - initial["origin_w"][2])
             result = effective_displacement(
                 self.artifacts,
                 before,
                 receipt,
                 subject=subject,
-                step=0,
+                step=self.capture_window()[0],
                 target_local=[params["x"], params["y"], z],
                 mapping="direct-root-translation-v1",
                 tolerance_m=self.displacement_tolerance_m,
@@ -425,7 +407,7 @@ class ScenePorts:
                 diagnostic_cohort,
                 {
                     "kind": "observation",
-                    "provenance": "synthetic",
+                    "provenance": self.artifacts.verified_payload(receipt, protect=self.protect).get("provenance"),
                     "diagnostics": result,
                 },
                 protect=self.protect,
@@ -446,10 +428,7 @@ class ScenePorts:
 
         records = self._selected_restore_rows(records)
         pending = [
-            (
-                CandidateRecord.model_validate_json(row["candidate"]),
-                Observation.model_validate_json(row["payload"]),
-            )
+            (CandidateRecord.model_validate_json(row["candidate"]), Observation.model_validate_json(row["payload"]))
             for row in records
         ]
         while pending:

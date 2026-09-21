@@ -17,6 +17,658 @@ FIXTURE = Path(__file__).resolve().parents[2] / "isaaclab_arena/tests/test_data/
 FIXED = {"headless": True, "enable_cameras": True, "num_envs": 1, "num_steps": 1000}
 
 
+def native_transport_fixture(tmp_path):
+    """Pure released metadata; never native permission or process evidence."""
+    import time
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
+    from isaaclab_arena.agentic_environment_generation.workflow.attempts import AttemptFence, WorkerRegistration
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import Criterion, WorkflowContract
+    from isaaclab_arena.agentic_environment_generation.workflow.native_capture import NativeCaptureSettings
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import (
+        SceneIntent,
+        SceneReservation,
+        candidate_record,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_contracts import request
+
+    criterion = Criterion.model_validate(
+        dict(
+            criterion_id="speed",
+            kind="runtime",
+            evidence_producer="scene.linear-speed",
+            requirement="required",
+            evaluator_version="1",
+            required_modalities=["state"],
+            coordinate_frames=["world"],
+            observation_window=dict(start_step=2, end_step=3),
+            rubric="maximum linear speed",
+            subjects=["table"],
+            limit=dict(operator="le", value=0.01, unit="m_per_s"),
+        )
+    )
+    settings = NativeCaptureSettings(
+        runtime_profile_id="runtime",
+        capture_profile_id="capture",
+        seed=42,
+        timestep_seconds=0.01,
+        decimation=2,
+        settle_steps=2,
+        settle_consecutive_steps=1,
+        settle_angular_rad_per_s=0.01,
+        window=criterion.observation_window,
+        subjects=(dict(subject_id="table", scene_name="table", prim_path="/World/table"),),
+        criteria=(criterion,),
+        max_runtime_seconds=5.0,
+    )
+    raw = request()
+    raw["criteria"] = [criterion.model_dump(mode="json")]
+    raw["execution"].update(
+        runtime=settings.runtime_reference().model_dump(mode="json"),
+        capture=settings.capture_reference().model_dump(mode="json"),
+    )
+    raw["effects"]["allow_runtime"] = True
+    raw["budget"].update(max_realizations=1, max_observations=1, max_steps=3)
+    contract = WorkflowContract.model_validate(raw)
+    candidate = candidate_record("native-run", {"objects": []}, source_id="fixture")
+    fence = AttemptFence(
+        run_id=candidate.run_id, intent_id="a" * 64, attempt_id="attempt", generation=1, owner_id="owner", owner_epoch=1
+    )
+    registration = WorkerRegistration(
+        registration_id="native-worker",
+        fence=fence,
+        host="host",
+        boot="boot",
+        pid=101,
+        pgid=101,
+        sid=101,
+        start_ticks=1,
+    )
+    intent = SceneIntent(
+        codec_version=2,
+        intent_id=fence.intent_id,
+        candidate_id=candidate.candidate_id,
+        action="capture",
+        status="released",
+        released_at=time.time(),
+        worker_fence=fence,
+        worker_registration=registration,
+        reservation=SceneReservation(
+            model_calls=0,
+            model_tokens=0,
+            cost_ceiling_usd=0.0,
+            realizations=1,
+            observations=1,
+            steps=3,
+            runtime_allowance_seconds=5.0,
+        ),
+    )
+    root = tmp_path / "artifacts"
+    area = ArtifactArea.create(root, store_id="store", registry_id="registry")
+    return SimpleNamespace(
+        settings=settings,
+        contract=contract,
+        candidate=candidate,
+        intent=intent,
+        registration=registration,
+        root=root,
+        area=area,
+        protect=lambda value: None,
+    )
+
+
+def test_native_transport_request_retains_exact_released_bindings(tmp_path):
+    import copy
+    import time
+
+    try:
+        from isaaclab_arena.agentic_environment_generation.workflow import native_worker_protocol as protocol
+    except ImportError:
+        pytest.fail("native/numeric immutable worker protocol is missing")
+    f = native_transport_fixture(tmp_path)
+    try:
+        deadline = time.time() + 4
+        packet = protocol.retain_request(
+            f.area,
+            root=f.root,
+            action="capture",
+            intent=f.intent,
+            candidate=f.candidate,
+            original=f.candidate,
+            contract=f.contract,
+            settings=f.settings,
+            deadline=deadline,
+            protect=f.protect,
+        )
+        assert packet["codec"] == "native-scene-packet-v1"
+        request = protocol.read_request(f.area, packet, protect=f.protect)
+        assert request.intent == f.intent
+        assert request.settings == f.settings
+        assert request.deadline == deadline
+        for field in ("deadline", "candidate_digest", "settings_sha256", "registration", "contract_digest"):
+            changed = copy.deepcopy(packet)
+            changed["payload"]["request"]["binding"][field] = "forged"
+            with pytest.raises(ValueError):
+                protocol.read_request(f.area, changed, protect=f.protect)
+        changed = copy.deepcopy(packet)
+        changed["config"] = {"api_key": "not-allowed"}
+        with pytest.raises(ValueError):
+            protocol.read_request(f.area, changed, protect=f.protect)
+        with pytest.raises(ValueError):
+            protocol.retain_request(
+                f.area,
+                root=f.root,
+                action="capture",
+                intent=f.intent.model_copy(update={"status": "reserved"}),
+                candidate=f.candidate,
+                original=f.candidate,
+                contract=f.contract,
+                settings=f.settings,
+                deadline=deadline,
+                protect=f.protect,
+            )
+    finally:
+        f.area.close()
+
+
+def native_transport_evidence(f):
+    """Synthetic samples exercising real immutable storage and numeric replay."""
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import contract_digest
+    from isaaclab_arena.agentic_environment_generation.workflow.evidence import CandidateBinding, EvidenceCohort
+    from isaaclab_arena.agentic_environment_generation.workflow.native_capture import NativeCaptureProducer
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import SceneEvidenceArtifacts
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import identity, profile_digest
+
+    tag = identity(f.intent.intent_id, f.candidate.candidate_id)
+    cohort = EvidenceCohort(
+        realization_id=tag,
+        reset_id=identity(tag, "reset"),
+        environment_id="native-env0",
+        window_id=identity(tag, "window", f.settings.window.model_dump(), f.settings.digest()),
+        frame_id="world",
+        contract_digest=contract_digest(f.contract),
+        profile_digest=profile_digest(f.contract),
+    )
+    binding = CandidateBinding(
+        candidate_digest=f.candidate.digest,
+        contract_digest=cohort.contract_digest,
+        profile_digest=cohort.profile_digest,
+    )
+    artifacts = SceneEvidenceArtifacts(f.area)
+    receipt = artifacts.write(
+        binding,
+        cohort,
+        dict(
+            kind="observation",
+            provenance="native-unverified",
+            settings=f.settings.model_dump(mode="json"),
+            settings_sha256=f.settings.digest(),
+            diagnostics={"status": "complete"},
+            frames=[],
+            samples=[
+                dict(step=step, frame="world", subjects={"table": {"linear_velocity_w": [0.0, 0.0, 0.0]}})
+                for step in (2, 3)
+            ],
+        ),
+        protect=f.protect,
+    )
+    producer = NativeCaptureProducer(settings=f.settings, artifacts=artifacts, protect=f.protect, output_root=f.root)
+    return receipt, producer.replay(receipt, contract=f.contract, candidate=f.candidate)
+
+
+def test_numeric_worker_replays_exact_retained_capture_and_result(tmp_path, monkeypatch):
+    import time
+
+    from isaaclab_arena.agentic_environment_generation.workflow import native_worker_protocol as protocol
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import identity
+
+    try:
+        from isaaclab_arena_examples.agentic_environment_generation.web_api import native_scene_worker as child
+    except ImportError:
+        pytest.fail("fixed native/numeric worker entrypoint is missing")
+    f = native_transport_fixture(tmp_path)
+    try:
+        receipt, observation = native_transport_evidence(f)
+        assess_id = "b" * 64
+        fence = f.registration.fence.model_copy(update={"intent_id": assess_id})
+        reg = f.registration.model_copy(update={"fence": fence})
+        intent = f.intent.model_copy(
+            update=dict(
+                action="assess",
+                intent_id=assess_id,
+                worker_fence=fence,
+                worker_registration=reg,
+                observation_id="c" * 64,
+                observation_digest=identity(observation.model_dump(mode="json")),
+                reservation=f.intent.reservation.model_copy(update=dict(realizations=0, observations=0, steps=0)),
+            )
+        )
+        packet = protocol.retain_request(
+            f.area,
+            root=f.root,
+            action="assess",
+            intent=intent,
+            candidate=f.candidate,
+            original=f.candidate,
+            contract=f.contract,
+            settings=f.settings,
+            deadline=time.time() + 4,
+            protect=f.protect,
+            retained_observation=observation,
+        )
+        assert packet["codec"] == "numeric-scene-packet-v1"
+        monkeypatch.setattr(child, "_verify_identity", lambda request: None)
+        monkeypatch.setattr(child, "_initialize_kit", lambda settings: pytest.fail("numeric child imported Kit"))
+        result = child.execute(packet, protect=f.protect, action="assess")
+        request = protocol.read_request(f.area, packet, protect=f.protect)
+        assert protocol.read_result(f.area, packet, request, result, protect=f.protect) == observation
+        assert observation.evidence[0].verdict == "established"
+        forged = dict(result, manifest_digest="0" * 64)
+        with pytest.raises(ValueError):
+            protocol.read_result(f.area, packet, request, forged, protect=f.protect)
+        # The retained verdict cannot substitute for re-reading actual source bytes.
+        path = f.root / receipt.relative_directory / "evidence.json"
+        path.write_bytes(path.read_bytes().replace(b'"complete"', b'"tampered"'))
+        with pytest.raises(ValueError):
+            protocol.read_result(f.area, packet, request, result, protect=f.protect)
+    finally:
+        f.area.close()
+
+
+@pytest.mark.parametrize("terminating_close", [False, True])
+def test_native_child_validates_release_then_retains_before_kit_close(tmp_path, monkeypatch, terminating_close):
+    import copy
+    import time
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow import native_worker_protocol as protocol
+    from isaaclab_arena.agentic_environment_generation.workflow.native_capture import (
+        NativeCaptureProducer,
+        NativeCaptureResult,
+    )
+
+    try:
+        from isaaclab_arena_examples.agentic_environment_generation.web_api import native_scene_worker as child
+    except ImportError:
+        pytest.fail("fixed native/numeric worker entrypoint is missing")
+    f = native_transport_fixture(tmp_path)
+    events = []
+    try:
+        receipt, observation = native_transport_evidence(f)
+        packet = protocol.retain_request(
+            f.area,
+            root=f.root,
+            action="capture",
+            intent=f.intent,
+            candidate=f.candidate,
+            original=f.candidate,
+            contract=f.contract,
+            settings=f.settings,
+            deadline=time.time() + 4,
+            protect=f.protect,
+        )
+
+        def close():
+            # Final output exists before Kit teardown (not just a transient pipe reply).
+            assert f.area.has_final("native-scene-output", protocol.result_version(packet))
+            assert events[-1] == "published"
+            events.append("close")
+            if terminating_close:
+                raise SystemExit(0)
+
+        monkeypatch.setattr(child, "_verify_identity", lambda request: events.append("identity"))
+        monkeypatch.setattr(
+            child, "_initialize_kit", lambda settings: (events.append("kit") or SimpleNamespace(close=close))
+        )
+        monkeypatch.setattr(child, "_validate_spec", lambda candidate: candidate)
+
+        def capture(self, **kwargs):
+            assert kwargs["worker_initialized"] is True
+            assert kwargs["candidate"] == f.candidate
+            kwargs["check_active"]()
+            kwargs["charge_step"](1)
+            events.append("capture")
+            return NativeCaptureResult(receipt, observation)
+
+        monkeypatch.setattr(NativeCaptureProducer, "__call__", capture)
+        forged = copy.deepcopy(packet)
+        forged["payload"]["request"]["binding"]["deadline"] = 0
+        with pytest.raises(ValueError):
+            child.execute(forged, protect=f.protect, action="capture")
+        assert not events
+        published = []
+
+        def publish(reference):
+            published.append(reference)
+            events.append("published")
+
+        if terminating_close:
+            with pytest.raises(SystemExit):
+                child.execute(packet, protect=f.protect, action="capture", on_retained=publish)
+            result = published[0]
+        else:
+            result = child.execute(packet, protect=f.protect, action="capture", on_retained=publish)
+        assert events == ["identity", "kit", "capture", "published", "close"]
+        request = protocol.read_request(f.area, packet, protect=f.protect)
+        assert protocol.read_result(f.area, packet, request, result, protect=f.protect) == receipt
+    finally:
+        f.area.close()
+
+
+@pytest.mark.parametrize("exit_code", [0, 7, -9])
+def test_native_parent_requires_genuine_exit_before_receipt_adoption(tmp_path, monkeypatch, exit_code):
+    import time
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow import native_worker_protocol as protocol
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import PreparedWorker
+    from isaaclab_arena_examples.agentic_environment_generation.foreground_generation import (
+        ForegroundGenerationReceiver,
+    )
+
+    try:
+        from isaaclab_arena_examples.agentic_environment_generation.foreground_native_scene import (
+            ForegroundNativeCaptureWorker,
+            SceneChildFailed,
+        )
+    except ImportError:
+        pytest.fail("owned native transport is missing")
+    f = native_transport_fixture(tmp_path)
+    try:
+        receipt, _ = native_transport_evidence(f)
+        packet = protocol.retain_request(
+            f.area,
+            root=f.root,
+            action="capture",
+            intent=f.intent,
+            candidate=f.candidate,
+            original=f.candidate,
+            contract=f.contract,
+            settings=f.settings,
+            deadline=time.time() + 4,
+            protect=f.protect,
+        )
+        request = protocol.read_request(f.area, packet, protect=f.protect)
+        result = protocol.retain_result(f.area, packet, protocol.capture_reference(receipt), protect=f.protect)
+        worker = ForegroundNativeCaptureWorker(
+            settings=f.settings, artifacts=SimpleNamespace(area=f.area), artifact_root=f.root
+        )
+        events = []
+
+        def wait(timeout):
+            events.append("natural-exit")
+            process.returncode = exit_code
+            return exit_code
+
+        process = SimpleNamespace(wait=wait, returncode=None)
+        owned = SimpleNamespace(
+            process=process,
+            registration=f.registration,
+            deadline=time.monotonic() + 4,
+            packet=packet,
+            request=request,
+            cleanup=None,
+        )
+        worker._owned.append(owned)
+        prepared = PreparedWorker(f.registration, owned)
+        monkeypatch.setattr(ForegroundGenerationReceiver, "_read", lambda *args: result)
+
+        def stop(prepared, *, timeout_s):
+            if owned.cleanup is None:
+                events.append("cleanup")
+                owned.cleanup = object()
+            return owned.cleanup
+
+        monkeypatch.setattr(worker, "stop_owned", stop)
+        monkeypatch.setattr(worker, "cleanup_verified", lambda reg, cleanup: cleanup is owned.cleanup)
+        if exit_code:
+            with pytest.raises(SceneChildFailed) as failed:
+                worker.receive_capture(prepared, protect=f.protect)
+            assert failed.value.returncode == exit_code
+        else:
+            assert worker.receive_capture(prepared, protect=f.protect) == receipt
+        assert events == ["natural-exit", "cleanup"]
+    finally:
+        f.area.close()
+
+
+def test_native_transport_one_shot_send_is_latched_before_invalid_release(tmp_path):
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import PreparedWorker
+
+    try:
+        from isaaclab_arena_examples.agentic_environment_generation.foreground_native_scene import (
+            ForegroundNativeCaptureWorker,
+        )
+    except ImportError:
+        pytest.fail("owned native transport is missing")
+    f = native_transport_fixture(tmp_path)
+    try:
+        worker = ForegroundNativeCaptureWorker(
+            settings=f.settings, artifacts=SimpleNamespace(area=f.area), artifact_root=f.root
+        )
+        owned = SimpleNamespace(
+            registration=f.registration,
+            contract=f.contract,
+            lock=threading.RLock(),
+            attempted=False,
+            cleanup=None,
+            deadline=time.monotonic() + 4,
+        )
+        worker._owned.append(owned)
+        prepared = PreparedWorker(f.registration, owned)
+        with pytest.raises(ValueError):
+            worker.send_capture(
+                prepared,
+                f.intent.model_copy(update={"status": "reserved"}),
+                f.candidate,
+                f.candidate,
+                f.contract,
+                protect=f.protect,
+                deadline=time.time() + 4,
+            )
+        with pytest.raises(RuntimeError, match="already attempted"):
+            worker.send_capture(
+                prepared, f.intent, f.candidate, f.candidate, f.contract, protect=f.protect, deadline=time.time() + 4
+            )
+    finally:
+        f.area.close()
+
+
+def test_native_packet_decoder_rejects_ambiguous_json():
+    from isaaclab_arena.agentic_environment_generation.workflow import native_worker_protocol as protocol
+
+    assert callable(getattr(protocol, "decode_packet", None)), "strict native packet decoder required"
+    for raw in (
+        b'{"codec":"numeric-scene-packet-v1","codec":"native-scene-packet-v1","payload":{}}\n',
+        b'{"codec":"native-scene-packet-v1","payload":{"root":NaN}}\n',
+        b"{}",
+        b"{}\n{}\n",
+        b"x" * (512 * 1024 + 1),
+    ):
+        with pytest.raises(ValueError):
+            protocol.decode_packet(raw)
+
+
+def test_native_alarm_does_not_extend_absolute_deadline(monkeypatch):
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import native_scene_worker as child
+
+    armed = []
+    monkeypatch.setattr(child.time, "monotonic", lambda: 100.0)
+    monkeypatch.setattr(child.signal, "signal", lambda *args: None)
+    monkeypatch.setattr(child.signal, "setitimer", lambda *args: armed.append(args))
+    child._arm_deadline(103.0)
+    assert armed == [(child.signal.ITIMER_REAL, 3.0)]
+    with pytest.raises(TimeoutError):
+        child._arm_deadline(99.0)
+
+
+@pytest.mark.parametrize("failure", ["capture", "shutdown", "exit-zero", "exit-seven"])
+def test_native_child_failure_remains_nonzero_after_retention(tmp_path, monkeypatch, failure):
+    import io
+    import json
+    import time
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow import native_worker_protocol as protocol
+    from isaaclab_arena.agentic_environment_generation.workflow.native_capture import (
+        NativeCaptureProducer,
+        NativeCaptureResult,
+    )
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import native_scene_worker as child
+
+    f = native_transport_fixture(tmp_path)
+    events = []
+    try:
+        receipt, observation = native_transport_evidence(f)
+        packet = protocol.retain_request(
+            f.area,
+            root=f.root,
+            action="capture",
+            intent=f.intent,
+            candidate=f.candidate,
+            original=f.candidate,
+            contract=f.contract,
+            settings=f.settings,
+            deadline=time.time() + 4,
+            protect=f.protect,
+        )
+
+        def close():
+            events.append("close")
+            if failure.startswith("exit-"):
+                raise SystemExit(0 if failure == "exit-zero" else 7)
+            if failure == "shutdown":
+                assert f.area.has_final("native-scene-output", protocol.result_version(packet))
+                raise RuntimeError("synthetic Kit shutdown failure")
+
+        def capture(self, **kwargs):
+            events.append("capture")
+            if failure == "capture":
+                raise RuntimeError("synthetic native failure")
+            return NativeCaptureResult(receipt, observation)
+
+        monkeypatch.setattr(child, "_parent_guard", lambda parent: None)
+        monkeypatch.setattr(child, "_arm_deadline", lambda deadline: None)
+        monkeypatch.setattr(child, "_verify_identity", lambda request: None)
+        monkeypatch.setattr(child, "_initialize_kit", lambda settings: SimpleNamespace(close=close))
+        monkeypatch.setattr(child, "_validate_spec", lambda candidate: candidate)
+        monkeypatch.setattr(NativeCaptureProducer, "__call__", capture)
+        monkeypatch.setattr(child.sys, "stdin", SimpleNamespace(buffer=io.BytesIO(json.dumps(packet).encode() + b"\n")))
+        monkeypatch.setattr(child.os, "dup2", lambda *args: None)  # Never redirect the test runner's stdout.
+        with (tmp_path / "channel").open("w+") as channel:
+            monkeypatch.setattr(child.sys, "stdout", channel)
+            assert child.main(["--parent-pid", "101", "--stage", "capture"]) == {
+                "exit-zero": 0,
+                "exit-seven": 7,
+            }.get(failure, 1)
+            channel.seek(0)
+            raw = channel.read()
+            if failure == "capture":
+                assert raw == ""
+            else:
+                # A receipt precedes possibly process-terminating Kit shutdown;
+                # the receiver must still refuse its nonzero exit (tested above).
+                frame = json.loads(raw)
+                assert frame["result"]["version"] == protocol.result_version(packet)
+        assert events == ["capture", "close"]
+    finally:
+        f.area.close()
+
+
+@pytest.mark.parametrize("stage", ["capture", "assess"])
+def test_owned_native_numeric_send_receive_over_local_pipe_without_child(tmp_path, monkeypatch, stage):
+    """Real bounded pipe I/O and immutable receipts; synthetic process/cleanup seam."""
+    import os
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow import native_worker_protocol as protocol
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import PreparedWorker
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import identity
+    from isaaclab_arena_examples.agentic_environment_generation.foreground_generation import (
+        ForegroundGenerationReceiver,
+    )
+    from isaaclab_arena_examples.agentic_environment_generation.foreground_native_scene import (
+        ForegroundNativeCaptureWorker,
+        ForegroundNumericAssessmentWorker,
+    )
+
+    f = native_transport_fixture(tmp_path)
+    read_fd, write_fd = os.pipe()
+    try:
+        receipt, observation = native_transport_evidence(f)
+        if stage == "assess":
+            fence = f.registration.fence.model_copy(update={"intent_id": "b" * 64})
+            f.registration = f.registration.model_copy(update={"fence": fence})
+            f.intent = f.intent.model_copy(
+                update=dict(
+                    action="assess",
+                    intent_id=fence.intent_id,
+                    worker_fence=fence,
+                    worker_registration=f.registration,
+                    observation_id="c" * 64,
+                    observation_digest=identity(observation.model_dump(mode="json")),
+                    reservation=f.intent.reservation.model_copy(update=dict(realizations=0, observations=0, steps=0)),
+                )
+            )
+        worker_type = ForegroundNativeCaptureWorker if stage == "capture" else ForegroundNumericAssessmentWorker
+        worker = worker_type(settings=f.settings, artifacts=SimpleNamespace(area=f.area), artifact_root=f.root)
+        monkeypatch.setenv("OPENAI_API_KEY", "must-not-leave-parent")
+        args, kwargs = worker._production_spawn()
+        assert args[2].endswith(".native_scene_worker") and args[-2:] == ["--stage", stage]
+        assert "OPENAI_API_KEY" not in kwargs["env"]
+        process = SimpleNamespace(stdin=os.fdopen(write_fd, "wb"), returncode=0, wait=lambda timeout: 0)
+        owned = SimpleNamespace(
+            process=process,
+            registration=f.registration,
+            contract=f.contract,
+            lock=threading.RLock(),
+            attempted=False,
+            cleanup=None,
+            started=time.monotonic(),
+            deadline=time.monotonic() + 3,
+        )
+        worker._owned.append(owned)
+        prepared = PreparedWorker(f.registration, owned)
+        deadline = owned.deadline
+        monkeypatch.setattr(worker, "_arm", lambda owned, value: setattr(owned, "deadline", value))
+        options = dict(protect=f.protect, deadline=time.time() + 4)
+        send = worker.send_capture if stage == "capture" else worker.send_evaluate
+        receive = worker.receive_capture if stage == "capture" else worker.receive_evaluate
+        if stage == "assess":
+            options["retained_observation"] = observation
+        send(prepared, f.intent, f.candidate, f.candidate, f.contract, **options)
+        packet = protocol.decode_packet(os.read(read_fd, 512 * 1024))
+        assert packet == owned.packet and owned.deadline <= deadline
+        with pytest.raises(RuntimeError, match="already attempted"):
+            send(prepared, f.intent, f.candidate, f.candidate, f.contract, **options)
+        output = protocol.capture_reference(receipt) if stage == "capture" else observation.model_dump(mode="json")
+        result = protocol.retain_result(f.area, packet, output, protect=f.protect)
+        monkeypatch.setattr(ForegroundGenerationReceiver, "_read", lambda *args: result)
+
+        def stop(prepared, *, timeout_s):
+            if owned.cleanup is None:
+                owned.cleanup = object()
+            return owned.cleanup
+
+        monkeypatch.setattr(worker, "stop_owned", stop)
+        monkeypatch.setattr(worker, "cleanup_verified", lambda reg, cleanup: cleanup is owned.cleanup)
+        assert receive(prepared, protect=f.protect) == (receipt if stage == "capture" else observation)
+        with pytest.raises(RuntimeError, match="stopped"):
+            receive(prepared, protect=f.protect)
+    finally:
+        os.close(read_fd)
+        if not process.stdin.closed:
+            process.stdin.close()
+        f.area.close()
+
+
 def server_info():
     """Synthetic admitted worker identity, not a live server assertion."""
     return {
@@ -147,9 +799,12 @@ def test_gr00t_admission_refuses_worker_contract_failures(tmp_path, monkeypatch,
         assert client.get("/api/workspaces/default").json() == before
 
 
-@pytest.mark.parametrize("value", ["", "0", "65536", "999999", "05559", "+5559", "-1", " 5559", "5559 ", "5559\n", "５５５９", "5559.0", "1e3"])
+@pytest.mark.parametrize(
+    "value",
+    ["", "0", "65536", "999999", "05559", "+5559", "-1", " 5559", "5559 ", "5559\n", "５５５９", "5559.0", "1e3"],
+)
 def test_invalid_operator_port_fails_closed_before_admission(tmp_path, monkeypatch, value):
-    from isaaclab_arena_examples.agentic_environment_generation.web_api import readiness, policy_endpoint
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import policy_endpoint, readiness
 
     monkeypatch.setenv("ARENA_WORKBENCH_GR00T_PORT", value)
     with pytest.raises(ValueError, match="Invalid GR00T port configuration"):
@@ -158,8 +813,11 @@ def test_invalid_operator_port_fails_closed_before_admission(tmp_path, monkeypat
     with TestClient(create_app(tmp_path, start_paused=True), base_url=ORIGIN) as client:
         headers = login(client)
         before = client.get("/api/workspaces/default").json()
-        result = client.post("/api/editor/evaluate", headers=headers,
-                             json={"yaml_text": droid_text(), "profile": "gr00t-droid", "idempotency_key": "bad-port"})
+        result = client.post(
+            "/api/editor/evaluate",
+            headers=headers,
+            json={"yaml_text": droid_text(), "profile": "gr00t-droid", "idempotency_key": "bad-port"},
+        )
         assert result.status_code == 503
         assert result.json()["detail"] == "configuration_changed"
         assert client.get("/api/workspaces/default").json() == before
@@ -180,25 +838,43 @@ def test_admission_retires_policy_proof_after_port_configuration_changes(tmp_pat
     with TestClient(create_app(tmp_path, start_paused=True), base_url=ORIGIN) as client:
         headers = login(client)
         before = client.get("/api/workspaces/default").json()
-        result = client.post("/api/editor/evaluate", headers=headers,
-                             json={"yaml_text": droid_text(), "profile": "gr00t-droid", "idempotency_key": "changed-port"})
+        result = client.post(
+            "/api/editor/evaluate",
+            headers=headers,
+            json={"yaml_text": droid_text(), "profile": "gr00t-droid", "idempotency_key": "changed-port"},
+        )
         assert result.status_code == 503
         assert result.json()["detail"] == "configuration_changed"
         assert client.get("/api/workspaces/default").json() == before
 
 
-@pytest.mark.parametrize("endpoint", [
-    {"remote_host": "127.0.0.1"}, {"remote_port": 5559},
-    {"remote_host": "example.test", "remote_port": 5559},
-    *({"remote_host": "127.0.0.1", "remote_port": value} for value in (None, True, 0, -1, 65536, 5559.0, "5559")),
-])
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        {"remote_host": "127.0.0.1"},
+        {"remote_port": 5559},
+        {"remote_host": "example.test", "remote_port": 5559},
+        *({"remote_host": "127.0.0.1", "remote_port": value} for value in (None, True, 0, -1, 65536, 5559.0, "5559")),
+    ],
+)
 def test_worker_rejects_malformed_frozen_endpoint_before_read_or_write(tmp_path, monkeypatch, endpoint):
     from isaaclab_arena_examples.agentic_environment_generation.web_api import evaluation_worker, policy_readiness
 
-    monkeypatch.setattr(policy_readiness, "probe_gr00t", lambda *_a, **_k: pytest.fail("Invalid endpoint reached policy"))
-    inputs = {**FIXED, "yaml_text": "unparsed", "document_id": None, "input_hash": "a" * 64,
-              "canonical_hash": "b" * 64, "request_sha256": "c" * 64, "profile": "gr00t-droid",
-              "language_instruction": None, "expected_server_info": server_info(), **endpoint}
+    monkeypatch.setattr(
+        policy_readiness, "probe_gr00t", lambda *_a, **_k: pytest.fail("Invalid endpoint reached policy")
+    )
+    inputs = {
+        **FIXED,
+        "yaml_text": "unparsed",
+        "document_id": None,
+        "input_hash": "a" * 64,
+        "canonical_hash": "b" * 64,
+        "request_sha256": "c" * 64,
+        "profile": "gr00t-droid",
+        "language_instruction": None,
+        "expected_server_info": server_info(),
+        **endpoint,
+    }
     with pytest.raises(ValueError, match="Invalid frozen evaluation"):
         evaluation_worker.run_evaluation(inputs, tmp_path, on_completed=lambda _: pytest.fail("No evaluation"))
     assert list(tmp_path.iterdir()) == []

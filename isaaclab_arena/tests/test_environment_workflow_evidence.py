@@ -534,3 +534,160 @@ def test_bounded_strict_inputs_and_revalidation():
         assess((requirement(),), (receipt(),), verified_manifest_digests={"d" * 64})
     with pytest.raises(ValidationError):
         assess((requirement(),), (receipt().model_copy(update={"candidate_digest": True}),))
+
+
+def test_policy_contract_types_live_in_pure_module():
+    from isaaclab_arena.agentic_environment_generation.workflow import policy_contracts as pe
+
+    assert pe.PolicyTaskBinding.__module__.endswith(".policy_contracts")
+    assert pe.PolicyEpisode.__module__.endswith(".policy_contracts")
+    assert pe.PolicyCohortReadiness.__module__.endswith(".policy_contracts")
+
+
+def policy_binding(**updates):
+    from isaaclab_arena.agentic_environment_generation.workflow import policy_contracts as pe
+
+    return pe.PolicyTaskBinding(**(
+        dict(
+            candidate_digest="a" * 64,
+            contract_digest="b" * 64,
+            policy_artifact_digest="c" * 64,
+            policy_config_digest="d" * 64,
+            observation_interface_digest="e" * 64,
+            action_interface_digest="f" * 64,
+            transport_digest="1" * 64,
+            task_definition_digest="2" * 64,
+            evaluator_digest="3" * 64,
+            runtime_digest="4" * 64,
+            embodiment_id="test-droid",
+            policy_adapter_id="test-policy-v1",
+            task_id="pick-place",
+            evaluator_id="task-v1",
+            instruction="Move the object",
+            environment_id="env-0",
+            realization_id="realization-1",
+            reset_id="reset-1",
+            seed=7,
+            max_policy_steps=10,
+            max_episodes=2,
+            deadline_unix=1000.0,
+            minimum_successes=2,
+            max_prerequisite_steps=6,
+        )
+        | updates
+    ))
+
+
+def test_policy_aggregation_is_frozen_task_bound_and_empty_is_unknown():
+    from isaaclab_arena.agentic_environment_generation.workflow import policy_contracts as pe
+
+    frozen = policy_binding()
+    with pytest.raises(ValidationError):
+        frozen.task_id = "changed"
+    empty = pe.aggregate_policy_episodes(frozen, ())
+    assert (empty.completed, empty.successes, empty.success_rate, empty.outcome) == (0, 0, None, "unknown")
+    records = tuple(
+        pe.PolicyEpisode(
+            binding_digest=frozen.digest(),
+            episode_id=f"episode-{index}",
+            reset_id=f"reset-{index}",
+            seed=7,
+            success=success,
+        )
+        for index, success in enumerate((True, False))
+    )
+    result = pe.aggregate_policy_episodes(frozen, records)
+    assert (result.completed, result.successes, result.success_rate, result.outcome) == (2, 1, 0.5, "failed")
+
+
+def test_policy_receipt_coverage_is_bounded_before_execution():
+    from isaaclab_arena.agentic_environment_generation.workflow.policy_contracts import (
+        PolicyEpisode,
+        PolicyTrialReceipt,
+    )
+
+    with pytest.raises(ValueError):
+        policy_binding(max_episodes=513)
+    binding = policy_binding(max_episodes=512, max_policy_steps=512)
+    receipt = PolicyTrialReceipt(
+        intent_id="1" * 64,
+        episode_records_digest="2" * 64,
+        manifest_digest="3" * 64,
+        binding=binding,
+        policy_steps=512,
+        prerequisite_steps=0,
+        episodes=tuple(
+            PolicyEpisode(
+                binding_digest=binding.digest(),
+                episode_id=f"{i:0128d}",
+                reset_id=binding.reset_id if i == 0 else f"{i:0128d}",
+                seed=binding.seed,
+                success=True,
+            )
+            for i in range(512)
+        ),
+    )
+    assert len(receipt.model_dump_json().encode()) < 512 * 1024
+
+
+@pytest.mark.parametrize("corruption", ["binding", "seed", "duplicate", "reset", "overflow", "forged", "mutable"])
+def test_policy_aggregation_rejects_mixed_or_unbounded_evidence(corruption):
+    from isaaclab_arena.agentic_environment_generation.workflow import policy_contracts as pe
+
+    frozen = policy_binding()
+    record = pe.PolicyEpisode(binding_digest=frozen.digest(), episode_id="e1", reset_id="r1", seed=7, success=True)
+    records = (record,)
+    if corruption == "binding":
+        records = (record.model_copy(update={"binding_digest": "f" * 64}),)
+    elif corruption == "seed":
+        records = (record.model_copy(update={"seed": 8}),)
+    elif corruption == "duplicate":
+        records = (record, record)
+    elif corruption == "reset":
+        records = (record, record.model_copy(update={"episode_id": "e2"}))
+    elif corruption == "overflow":
+        records = tuple(record.model_copy(update={"episode_id": f"e{i}", "reset_id": f"r{i}"}) for i in range(3))
+    elif corruption == "forged":
+        records = (record.model_copy(update={"success": 1}),)
+    else:
+        records = [record]
+    with pytest.raises((ValueError, TypeError)):
+        pe.aggregate_policy_episodes(frozen, records)
+
+
+def test_policy_aggregation_unknowns_and_distinct_task_profiles():
+    from isaaclab_arena.agentic_environment_generation.workflow import policy_contracts as pe
+
+    for task, embodiment, evaluator in (("pick-place", "droid", "lift-place-v1"), ("navigate", "g1", "goal-v1")):
+        frozen = policy_binding(task_id=task, embodiment_id=embodiment, evaluator_id=evaluator)
+        records = tuple(
+            pe.PolicyEpisode(binding_digest=frozen.digest(), episode_id=f"e{i}", reset_id=f"r{i}", seed=7, success=True)
+            for i in range(2)
+        )
+        assert pe.aggregate_policy_episodes(frozen, records).outcome == "passed"
+        partial = pe.aggregate_policy_episodes(frozen, records[:1])
+        assert partial.outcome == "unknown" and partial.success_rate == 1.0
+        unknown = records[1].model_copy(update={"success": None})
+        result = pe.aggregate_policy_episodes(frozen, (records[0], unknown))
+        assert result.outcome == "unknown" and result.success_rate is None
+    with pytest.raises(ValidationError):
+        policy_binding(minimum_successes=3)
+
+
+@pytest.mark.parametrize(
+    "required,established,status,terminal",
+    [
+        (True, True, "ready_for_policy", False),
+        (False, True, "accepted", True),
+        (True, False, "blocked", False),
+        (False, False, "blocked", False),
+    ],
+)
+def test_policy_prerequisite_readiness_is_nonterminal(required, established, status, terminal):
+    from isaaclab_arena.agentic_environment_generation.workflow import policy_contracts as pe
+
+    result = pe.policy_prerequisite_readiness(required_policy=required, prerequisites_established=established)
+    assert result.status == status and result.terminal is terminal
+    assert result.reserve_policy is (required and established)
+    with pytest.raises((TypeError, ValueError)):
+        pe.policy_prerequisite_readiness(required_policy=1, prerequisites_established=established)

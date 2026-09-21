@@ -45,6 +45,8 @@ def inspection_budget(intent, reservations):
         realizations=b.max_realizations,
         steps=b.max_steps,
         observations=b.max_observations,
+        policy_episodes=b.max_policy_episodes,
+        policy_steps=b.max_policy_steps,
     )
     # Inputs are the validated finite float Amount/Count ledger and budget,
     # not arbitrary Decimal coefficients. Include limits in the aligned width
@@ -58,8 +60,14 @@ def inspection_budget(intent, reservations):
     most = max(value.adjusted() + 1 for value in operands)
     most += len(str(len(reservations) + 1))
     context = Context(
-        prec=most - least, Emin=least, Emax=most, rounding=ROUND_HALF_EVEN,
-        capitals=1, clamp=0, flags=[], traps=[],
+        prec=most - least,
+        Emin=least,
+        Emax=most,
+        rounding=ROUND_HALF_EVEN,
+        capitals=1,
+        clamp=0,
+        flags=[],
+        traps=[],
     )
     with localcontext(context):
         totals = {key: sum(values, Decimal(0)) for key, values in amounts.items()}
@@ -89,7 +97,12 @@ def inspection_scene(contract, candidate, decision, evidence, assessment_id, dec
     )
     limitations = ["retained_metadata_not_fresh_verification"]
     try:
-        required = project_required_criteria(contract)
+        required = project_required_criteria(
+            contract,
+            include_policy=decision.scene_disposition == "accepted"
+            or decision.action == "policy"
+            or decision.policy_trial is not None,
+        )
     except ValueError:
         required = ()
         limitations.append("unsupported_criterion_projector")
@@ -117,6 +130,14 @@ def inspection_scene(contract, candidate, decision, evidence, assessment_id, dec
         verdict = "not_assessed"
         if criterion.requirement == "advisory":
             verdict = "reported_only" if found else "not_assessed"
+        elif criterion.kind == "policy":
+            verdict = (
+                "not_assessed"
+                if decision.policy_trial is None
+                else {"passed": "established", "failed": "violated", "unknown": "inconclusive"}[
+                    decision.policy_trial.aggregate().outcome
+                ]
+            )
         elif not required:
             verdict = "unsupported"
         elif selected:
@@ -151,8 +172,11 @@ def inspection_scene(contract, candidate, decision, evidence, assessment_id, dec
         assessment_id=assessment_id,
         assessment=decision.assessment,
         selected_assessed=selected,
+        policy_trial=decision.policy_trial,
         assessment_status=decision.assessment.status if decision.assessment else "not_assessed",
-        acceptance="accepted" if decision.action == "accept" else "not_established",
+        acceptance=(
+            "accepted" if decision.action == "accept" or decision.scene_disposition == "accepted" else "not_established"
+        ),
         criteria=tuple(criteria),
         limitations=tuple(limitations),
     )
@@ -174,6 +198,8 @@ def workflow_result(store, run_id, *, protect):
         realizations=budget.max_realizations,
         steps=budget.max_steps,
         observations=budget.max_observations,
+        policy_episodes=budget.max_policy_episodes,
+        policy_steps=budget.max_policy_steps,
     )
     reservations = [json.loads(i["reservation"]) for i in records["intents"]]
     reserved = {key: float(sum(Decimal(str(r.get(key, 0))) for r in reservations)) for key in limits}
@@ -189,6 +215,8 @@ def workflow_result(store, run_id, *, protect):
         "realizations",
         "steps",
         "observations",
+        "policy_episodes",
+        "policy_steps",
     }
     for key in counts:
         reserved[key], remaining[key] = int(reserved[key]), int(remaining[key])
@@ -217,11 +245,24 @@ def workflow_result(store, run_id, *, protect):
             scene is not None
             and row["candidate_id"] == scene.candidate.candidate_id
             and row["evidence_id"] == selected_id
+            and scene.decision.action not in ("capture", "assess")
         ):
             selected_observations.append(Observation.model_validate_json(row["payload"]))
             for item in observation["evidence"]:
                 selected.setdefault(item["criterion_id"], []).append(item)
-    requirements = {r.criterion_id: r for r in project_required_criteria(contract)} if selected_observations else {}
+    requirements = (
+        {
+            r.criterion_id: r
+            for r in project_required_criteria(
+                contract,
+                include_policy=scene.decision.scene_disposition == "accepted"
+                or scene.decision.action == "policy"
+                or scene.decision.policy_trial is not None,
+            )
+        }
+        if selected_observations
+        else {}
+    )
     for criterion in contract.criteria:
         found = selected.get(criterion.criterion_id, [])
         verdict = found[0]["verdict"] if len(found) == 1 else "inconclusive" if found else "not_run"
@@ -250,6 +291,10 @@ def workflow_result(store, run_id, *, protect):
                         "not_established": "violated",
                         "inconclusive": "inconclusive",
                     }[assessment.status]
+        if criterion.kind == "policy" and criterion.requirement == "required" and scene and scene.decision.policy_trial:
+            verdict = {"passed": "established", "failed": "violated", "unknown": "inconclusive"}[
+                scene.decision.policy_trial.aggregate().outcome
+            ]
         criteria.append(
             dict(
                 criterion_id=criterion.criterion_id,
@@ -295,9 +340,20 @@ def workflow_result(store, run_id, *, protect):
             admitted_at=records["admitted_at"],
             deadline=records["admitted_at"] + budget.total_deadline_seconds,
         ),
-        scene_acceptance="accepted" if run.state == "accepted" else "not_established",
+        scene_acceptance=(
+            "accepted"
+            if run.state == "accepted" or (scene and scene.decision.scene_disposition == "accepted")
+            else "not_established"
+        ),
         workflow_outcome=run.state,
-        policy_outcome="not_run",
+        policy_outcome=(
+            scene.decision.policy_trial.aggregate().outcome
+            if scene and scene.decision.policy_trial is not None
+            else "ready_for_policy" if scene and scene.decision.action == "policy" else "not_run"
+        ),
+        policy_trial=(
+            scene.decision.policy_trial.model_dump(mode="json") if scene and scene.decision.policy_trial else None
+        ),
         publication=("not_published" if contract.effects.allow_publication else "not_requested"),
         experiment=("not_run" if contract.execution.policy or contract.effects.allow_dcrg else "not_requested"),
         cleanup=(

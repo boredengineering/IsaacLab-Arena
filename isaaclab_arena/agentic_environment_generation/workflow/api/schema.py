@@ -445,6 +445,8 @@ class ReservationTotals:
     realizations: Counter
     steps: Counter
     observations: Counter
+    policy_episodes: Counter
+    policy_steps: Counter
 
 
 @strawberry.type
@@ -554,6 +556,54 @@ class CriterionInspection:
 
 
 @strawberry.type
+class PolicyBinding:
+    candidate_digest: Digest
+    contract_digest: Digest
+    policy_artifact_digest: Digest
+    policy_config_digest: Digest
+    observation_interface_digest: Digest
+    action_interface_digest: Digest
+    transport_digest: Digest
+    task_definition_digest: Digest
+    evaluator_digest: Digest
+    runtime_digest: Digest
+    embodiment_id: strawberry.ID
+    policy_adapter_id: strawberry.ID
+    task_id: strawberry.ID
+    evaluator_id: strawberry.ID
+    instruction: str
+    environment_id: strawberry.ID
+    realization_id: strawberry.ID
+    reset_id: strawberry.ID
+    seed: Counter
+    max_policy_steps: Counter
+    max_episodes: Counter
+    deadline_unix: DecimalString
+    minimum_successes: Counter
+    max_prerequisite_steps: Counter
+
+
+@strawberry.type
+class PolicyEpisode:
+    binding_digest: Digest
+    episode_id: strawberry.ID
+    reset_id: strawberry.ID
+    seed: Counter
+    success: bool | None
+
+
+@strawberry.type
+class PolicyTrial:
+    intent_id: strawberry.ID
+    episode_records_digest: Digest
+    manifest_digest: Digest
+    binding: PolicyBinding
+    episodes: list[PolicyEpisode]
+    policy_steps: Counter
+    prerequisite_steps: Counter
+
+
+@strawberry.type
 class SceneSummary:
     selected_candidate_reference: CandidateReference
     criteria: list[CriterionInspection]
@@ -568,6 +618,7 @@ class SceneSummary:
     evidence_id: strawberry.ID | None
     assessment_id: strawberry.ID | None
     selected_assessed: bool
+    policy_trial: PolicyTrial | None
     detail_coverage: str = "compact_summary_only"
 
 
@@ -958,6 +1009,32 @@ def submission_view(value):
     )
 
 
+def policy_trial_view(value):
+    """Project already validated retained trial facts without executing or deciding."""
+    if value is None:
+        return None
+    return PolicyTrial(
+        **fields(value, "intent_id episode_records_digest manifest_digest"),
+        policy_steps=str(value.policy_steps),
+        prerequisite_steps=str(value.prerequisite_steps),
+        binding=PolicyBinding(
+            **fields(
+                value.binding,
+                "candidate_digest contract_digest policy_artifact_digest policy_config_digest"
+                " observation_interface_digest action_interface_digest transport_digest task_definition_digest"
+                " evaluator_digest runtime_digest embodiment_id policy_adapter_id task_id evaluator_id instruction"
+                " environment_id realization_id reset_id seed max_policy_steps max_episodes deadline_unix"
+                " minimum_successes max_prerequisite_steps",
+                text=True,
+            )
+        ),
+        episodes=[
+            PolicyEpisode(**fields(e, "binding_digest episode_id reset_id success"), seed=str(e.seed))
+            for e in value.episodes
+        ],
+    )
+
+
 def workflow_view(value):
     if value is None:
         return NotFound()
@@ -966,7 +1043,7 @@ def workflow_view(value):
     p = a.permission_observation
     totals = (
         "model_calls model_tokens cost_ceiling_usd runtime_allowance_seconds candidates revisions realizations steps"
-        " observations"
+        " observations policy_episodes policy_steps"
     )
     return Workflow(
         id=value.intent.run_id,
@@ -1043,6 +1120,7 @@ def workflow_view(value):
                     for c in value.scene.criteria
                 ],
                 limitations=list(value.scene.limitations),
+                policy_trial=policy_trial_view(value.scene.policy_trial),
                 **fields(
                     value.scene,
                     "acceptance assessment_status decision_id decision_identity_provenance action reason next_intent_id"

@@ -16,7 +16,7 @@ from .contracts import WorkflowContract
 from .evidence import CriterionRequirement
 
 
-def project_required_criteria(contract: WorkflowContract) -> tuple[CriterionRequirement, ...]:
+def project_required_criteria(contract: WorkflowContract, *, include_policy=False) -> tuple[CriterionRequirement, ...]:
     """Project required scene criteria; reject profiles this assessor cannot represent.
 
     All required criteria share one exact inclusive step window. Frame identities
@@ -29,7 +29,7 @@ def project_required_criteria(contract: WorkflowContract) -> tuple[CriterionRequ
         raise ValueError("unsupported required criterion count")
     requirements = []
     for criterion in contract.criteria:
-        if criterion.requirement != "required":
+        if criterion.requirement != "required" or (include_policy and criterion.kind == "policy"):
             continue
         profiles = {
             "structural": ("scene_graph", "structural"),

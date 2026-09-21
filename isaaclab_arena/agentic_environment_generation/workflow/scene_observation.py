@@ -437,7 +437,8 @@ def make_native_sampler(criteria, *, subject_names, contact_sensors=None):
             subject, destination = c.subjects
             sensor_name = sensors[c.subjects]
             sensor = native.scene[sensor_name]
-            force = sensor.data.force_matrix_w
+            # ProxyArray.shape excludes the vec3 components; validate the scalar view.
+            force = wp.to_torch(sensor.data.force_matrix_w)
             destination_path = native.scene[names[destination]].cfg.prim_path
             filters = list(sensor.cfg.filter_prim_paths_expr)
             if sensor.cfg.prim_path != native.scene[names[subject]].cfg.prim_path:
@@ -455,7 +456,7 @@ def make_native_sampler(criteria, *, subject_names, contact_sensors=None):
                 "filter_paths": filters,
                 "destination_path": destination_path,
                 "sensor_path": sensor.cfg.prim_path,
-                "force_w": wp.to_torch(force)[0, 0, 0].detach().cpu().tolist(),
+                "force_w": _vector(force[0, 0, 0].detach().cpu().tolist()),
             })
             result["diagnostic_predicates"][c.criterion_id] = bool(
                 object_on_destination(

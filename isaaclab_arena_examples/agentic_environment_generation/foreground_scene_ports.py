@@ -41,7 +41,7 @@ class ForegroundScenePorts(ScenePorts):
     def __init__(
         self, *, store, authority, lease, worker, principal, run_id, catalogue_sha256, artifact_root, ready, **options
     ):
-        self.store, self.authority, self.lease, self.worker = store, authority, lease, worker
+        self.store, self.authority, self.lease, self.worker = (store, authority, lease, worker)
         self.principal, self.run_id = principal, run_id
         self.catalogue_sha256, self.artifact_root = catalogue_sha256, artifact_root
         self._interlock = RLock()
@@ -97,7 +97,7 @@ class ForegroundScenePorts(ScenePorts):
                 raise ValueError("Frozen role accounting mismatch")
         return True
 
-    def prepare_worker(self, intent, candidate, original, contract):
+    def prepare_worker(self, intent, candidate, original, contract, **stage_args):
         """Latch exact claimed fence before spawn; never erase ambiguous preparation."""
         with self._interlock:
             if self._stopped:
@@ -121,20 +121,21 @@ class ForegroundScenePorts(ScenePorts):
                 previous = self._prepared_workers[self._previous]
                 self.lease.advance_scene(self.store, previous.registration, self._cleanups[self._previous], fence)
             try:
-                prepared = self.worker.prepare(
-                    fence,
-                    contract,
-                    timeout_s=min(
-                        intent.reservation.runtime_allowance_seconds, contract.budget.per_operation_timeout_seconds
-                    ),
-                )
+                prepared = self._prepare_child(intent, candidate, original, contract, **stage_args)
             except PrepareFailed as exc:
                 self._prepared_workers[intent.intent_id] = exc.prepared
                 raise
             self._prepared_workers[intent.intent_id] = prepared
             return prepared.registration
 
-    def execute(self, intent, candidate, original, contract):
+    def _prepare_child(self, intent, candidate, original, contract):
+        return self.worker.prepare(
+            intent.worker_fence,
+            contract,
+            timeout_s=min(intent.reservation.runtime_allowance_seconds, contract.budget.per_operation_timeout_seconds),
+        )
+
+    def execute(self, intent, candidate, original, contract, **stage_args):
         with self._interlock:
             prepared = self._prepared_workers.get(intent.intent_id)
             if (
@@ -146,7 +147,7 @@ class ForegroundScenePorts(ScenePorts):
                 raise ValueError("Exact prepared scene registration required")
             self._active = (intent, candidate, original, contract)
         try:
-            return super().execute(intent, candidate, original, contract)
+            return super().execute(intent, candidate, original, contract, **stage_args)
         finally:
             self._active = None
 

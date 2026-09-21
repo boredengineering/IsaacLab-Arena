@@ -885,6 +885,64 @@ def test_reserved_generation_reference_readiness_and_full_width(prepared):
     asyncio.run(scenario())
 
 
+def test_typed_policy_trial_projection_preserves_pins_and_episode_denominator():
+    """Actual Strawberry serialization, synthetic supplied receipt; not native execution."""
+    import strawberry
+
+    from isaaclab_arena.agentic_environment_generation.workflow.api.schema import PolicyTrial, policy_trial_view
+    from isaaclab_arena.agentic_environment_generation.workflow.policy_contracts import (
+        PolicyEpisode,
+        PolicyTrialReceipt,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_evidence import policy_binding
+
+    binding = policy_binding()
+    receipt = PolicyTrialReceipt(
+        intent_id="1" * 64,
+        episode_records_digest="2" * 64,
+        manifest_digest="3" * 64,
+        binding=binding,
+        policy_steps=10,
+        prerequisite_steps=4,
+        episodes=tuple(
+            PolicyEpisode(
+                binding_digest=binding.digest(),
+                episode_id=f"e{i}",
+                reset_id=f"reset-{i + 1}",
+                seed=binding.seed,
+                success=success,
+            )
+            for i, success in enumerate((True, False))
+        ),
+    )
+
+    @strawberry.type
+    class Projection:
+        @strawberry.field
+        def trial(self) -> PolicyTrial:
+            value = policy_trial_view(receipt)
+            assert value is not None
+            return value
+
+    result = strawberry.Schema(query=Projection).execute_sync("""{trial {
+        intentId manifestDigest episodeRecordsDigest policySteps prerequisiteSteps
+        binding {candidateDigest contractDigest policyArtifactDigest taskDefinitionDigest evaluatorDigest
+                 embodimentId taskId instruction seed maxEpisodes deadlineUnix}
+        episodes {episodeId resetId seed success bindingDigest}
+    }}""")
+    assert not result.errors
+    actual = result.data["trial"]
+    assert actual["intentId"] == receipt.intent_id and actual["manifestDigest"] == receipt.manifest_digest
+    assert actual["episodeRecordsDigest"] == receipt.episode_records_digest
+    assert actual["policySteps"] == "10" and actual["prerequisiteSteps"] == "4"
+    assert actual["binding"]["candidateDigest"] == binding.candidate_digest
+    assert actual["binding"]["policyArtifactDigest"] == binding.policy_artifact_digest
+    assert actual["binding"]["instruction"] == binding.instruction
+    assert actual["binding"]["maxEpisodes"] == "2"
+    assert [row["success"] for row in actual["episodes"]] == [True, False]
+    assert [row["resetId"] for row in actual["episodes"]] == ["reset-1", "reset-2"]
+
+
 def test_export_selected_schema_and_operation_documents():
     import hashlib
 
@@ -2110,7 +2168,8 @@ def test_selected_scene_candidate_criteria_and_limitations(prepared, stale, monk
     query = """query($id:ID!){workflow(id:$id){... on Workflow {retainedRevision scene {
         selectedCandidateReference {candidateId digest sourceId originalId parentId}
         acceptance assessmentStatus decisionId decisionIdentityProvenance action reason nextIntentId evidenceId assessmentId selectedAssessed
-        criteria {criterionId requirement verdict reportedVerdicts manifests} limitations }}}}"""
+        criteria {criterionId requirement verdict reportedVerdicts manifests} limitations
+        policyTrial {intentId manifestDigest episodeRecordsDigest} }}}}"""
 
     async def inspect(app, expected):
         before = retained_facts(store, driver)

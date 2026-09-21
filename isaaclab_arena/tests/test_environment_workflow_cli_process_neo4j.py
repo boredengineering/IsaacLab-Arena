@@ -15,7 +15,7 @@ from neo4j import GraphDatabase
 
 from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import Neo4jWorkflowStore
 from isaaclab_arena.tests.test_environment_workflow_scene_engines import configuration
-from isaaclab_arena.tests.test_environment_workflow_scene_producers import composed_fixture
+from isaaclab_arena.tests._workflow_scene_fixture import composed_fixture
 
 # Statically capture the fixed application composition; never instantiate it in this interpreter.
 from isaaclab_arena_examples.agentic_environment_generation import foreground_workflow_cli  # noqa: F401

@@ -107,8 +107,391 @@ PROVISION_PINS = {
 }
 
 
-def selected_runtime(discovery):
+GRAPHQL_PINS = {'cross-web': {'version': '0.6.0', 'filename': 'cross_web-0.6.0-py3-none-any.whl', 'sha256': 'bdebf0c08d02f3a48cf67b6904d3a6d8fd8cab2cd905592ab96ab00b259cd582'}, 'graphql-core': {'version': '3.2.6', 'filename': 'graphql_core-3.2.6-py3-none-any.whl', 'sha256': '78b016718c161a6fb20a7d97bbf107f331cd1afe53e45566c59f776ed7f0b45f'}, 'strawberry-graphql': {'version': '0.327.7', 'filename': 'strawberry_graphql-0.327.7-py3-none-any.whl', 'sha256': '0c653f16fe2a35b5a672fb5492cee5243a2f44f209247a946eddc1a6399b2284'}}
+GRAPHQL_FILES_SHA256 = '9d37bef3c9b7d9ad84de543401b6da1d65474efb4dc77c8236ffa9f5e39454e8'
+GRAPHQL_LABEL = 'arena.functional-v7.graphql-test-v1-recipe'
+GRAPHQL_RECIPE = '/opt/arena-f0/graphql-test-v1-recipe.json'
+GRAPHQL_PARENT = 'sha256:e20b3cc8258b793aaf1fe47c130f54e677fa9c0a6427991cfc1045b743162da5'
+GRAPHQL_ROOTS = frozenset(('strawberry', 'graphql', 'cross_web', 'strawberry_graphql-0.327.7.dist-info',
+                           'graphql_core-3.2.6.dist-info', 'cross_web-0.6.0.dist-info'))
+
+
+GRAPHQL_ARCHIVE = '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle'
+GRAPHQL_URDF = '/isaac-sim/exts/isaacsim.asset.importer.urdf/pip_prebundle'
+GRAPHQL_CIP = '/isaac-sim/extscache/omni.cip.pip-2.0.5+lx64.cp312/pip_prebundle'
+GRAPHQL_LANGCHAIN = '/isaac-sim/extscache/omni.ai.langchain.core-2.3.1+109.0.0.lx64.cp312/pip_core_prebundle'
+GRAPHQL_CLOSURE_SHA256 = '0b360d1a033cde87a76984848f6cfa57e6bf2c7abf61aa1f2b60e32f1463253d'
+# Observed fixed-parent module bytes plus independently verified metadata. No path search.
+GRAPHQL_IMPORT_BINDINGS = {'annotated-doc': ('annotated_doc',
+                   '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/annotated_doc/__init__.py',
+                   '/isaac-sim/extscache/omni.ai.langchain.core-2.3.1+109.0.0.lx64.cp312/pip_core_prebundle/annotated_doc/__init__.py',
+                   '56ecb1c547bcd247c4c969ceac2c7f064f21c9ba3768aa3a4580659010585bc9',
+                   '0.0.4',
+                   '/isaac-sim/extscache/omni.ai.langchain.core-2.3.1+109.0.0.lx64.cp312/pip_core_prebundle/annotated_doc-0.0.4.dist-info/METADATA',
+                   '22b9b9289b9adf7758daa28a02327e3a129a5415487f01467a3fdd49edd9d535'),
+ 'annotated-types': ('annotated_types',
+                     '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/annotated_types/__init__.py',
+                     '/isaac-sim/extscache/omni.ai.langchain.core-2.3.1+109.0.0.lx64.cp312/pip_core_prebundle/annotated_types/__init__.py',
+                     '4729cbb112941062342a2997c9d943d5f6447c4cd6c03a345289f7cce2a11b54',
+                     '0.7.0',
+                     '/isaac-sim/extscache/omni.ai.langchain.core-2.3.1+109.0.0.lx64.cp312/pip_core_prebundle/annotated_types-0.7.0.dist-info/METADATA',
+                     'ee5b6ac64b09274c026051813484025939564067801f485115d9cadc207cf791'),
+ 'anyio': ('anyio',
+           '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/anyio/__init__.py',
+           '/isaac-sim/extscache/omni.ai.langchain.core-2.3.1+109.0.0.lx64.cp312/pip_core_prebundle/anyio/__init__.py',
+           'ee20d5a8c529ad4b8a358f7516ea0aa9ac80851f8e635dfa6033c8e8fefc1c79',
+           '4.13.0',
+           '/isaac-sim/extscache/omni.ai.langchain.core-2.3.1+109.0.0.lx64.cp312/pip_core_prebundle/anyio-4.13.0.dist-info/METADATA',
+           '1741187e23e5993470989376264b4dc4983518d9e5d301e1cce5a6cfba45be33'),
+ 'certifi': ('certifi',
+             '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/certifi/__init__.py',
+             '/isaac-sim/extscache/omni.ai.langchain.core-2.3.1+109.0.0.lx64.cp312/pip_core_prebundle/certifi/__init__.py',
+             '8812585adc5118731a3b54bbde9598a459fdeb6590e257687f61a47cc4911093',
+             '2026.4.22',
+             '/isaac-sim/extscache/omni.ai.langchain.core-2.3.1+109.0.0.lx64.cp312/pip_core_prebundle/certifi-2026.4.22.dist-info/METADATA',
+             '4ed6ffe9ccbed05046ab7bff2024cd3ca717295b368bed1fe20a73e365bc415a'),
+ 'click': ('click',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/click/__init__.py',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/click/__init__.py',
+           '1487767d7092241df27960fe7b6b8e37e9818456b661cf4cbd71a61eef0e5c6d',
+           '8.4.2',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/click-8.4.2.dist-info/METADATA',
+           '194c9dd81d567f9081f026c7e401060fbafa7bc147c8e0a58b3668b40a64c031'),
+ 'cross-web': ('cross_web',
+               '/isaac-sim/kit/python/lib/python3.12/site-packages/cross_web/__init__.py',
+               '/isaac-sim/kit/python/lib/python3.12/site-packages/cross_web/__init__.py',
+               '2ea83dc27100c94d4a93aedd17b76553f666c90bcc26de4f8ac4c509e5c11b66',
+               '0.6.0',
+               '/isaac-sim/kit/python/lib/python3.12/site-packages/cross_web-0.6.0.dist-info/METADATA',
+               '01b2065fab9296a63400e07fbda77a30504ea77e7aa9bec831df3f7edeec1ba5'),
+ 'fastapi': ('fastapi',
+             '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/fastapi/__init__.py',
+             '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/fastapi/__init__.py',
+             'ca12fe54331fb6134c68bbdb23e41814668b8278c1bc4384f6bd1b5d6ec712b4',
+             '0.120.4',
+             '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/fastapi-0.120.4.dist-info/METADATA',
+             'a1dd127a7eb392206aabd1c193aba2762f833e0624323bd1c19106b670036e8c'),
+ 'graphql-core': ('graphql',
+                  '/isaac-sim/kit/python/lib/python3.12/site-packages/graphql/__init__.py',
+                  '/isaac-sim/kit/python/lib/python3.12/site-packages/graphql/__init__.py',
+                  '76310514cd898a782af162dbf9b9f8cc7ace58e25c774e553c3b42389ba09896',
+                  '3.2.6',
+                  '/isaac-sim/kit/python/lib/python3.12/site-packages/graphql_core-3.2.6.dist-info/METADATA',
+                  '8facd74087696305b3eb65824752359fa05a2b4abdc3a4900a06d20f85abfa26'),
+ 'h11': ('h11',
+         '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/h11/__init__.py',
+         '/isaac-sim/extscache/omni.ai.langchain.core-2.3.1+109.0.0.lx64.cp312/pip_core_prebundle/h11/__init__.py',
+         '88ed4ace448ee36c99e9f7e0f953206f1fd9553586518d349d16045a7facde46',
+         '0.16.0',
+         '/isaac-sim/extscache/omni.ai.langchain.core-2.3.1+109.0.0.lx64.cp312/pip_core_prebundle/h11-0.16.0.dist-info/METADATA',
+         '28f326098ac09fcba79b8f180f96087c841fe2456215cb7b872a9c7d5cd19d64'),
+ 'httpcore': ('httpcore',
+              '/isaac-sim/kit/python/lib/python3.12/site-packages/httpcore/__init__.py',
+              '/isaac-sim/kit/python/lib/python3.12/site-packages/httpcore/__init__.py',
+              'f644ff92a0a10822544c7c30db866647f7b371d6e94585a4b03fa060dce464ff',
+              '1.0.9',
+              '/isaac-sim/kit/python/lib/python3.12/site-packages/httpcore-1.0.9.dist-info/METADATA',
+              'fe2d4fda6199128978779e0cf27f3c045c531863fcdd987eacc74f3a18d41c21'),
+ 'httpx': ('httpx',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/httpx/__init__.py',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/httpx/__init__.py',
+           '0ac6997bac998f4ac783adf6d8058a587193315afdb718047c3e4fdff46bcfad',
+           '0.28.1',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/httpx-0.28.1.dist-info/METADATA',
+           'febb9b0f8f3e80d57c8199c304f35c4336e8581d1d18d7983c92766b82793b25'),
+ 'idna': ('idna',
+          '/isaac-sim/kit/python/lib/python3.12/site-packages/idna/__init__.py',
+          '/isaac-sim/kit/python/lib/python3.12/site-packages/idna/__init__.py',
+          '8514c3ed53136a3596ebdf512fa487bbdd7da5a99adcaed82e0363d2c306d3af',
+          '3.19',
+          '/isaac-sim/kit/python/lib/python3.12/site-packages/idna-3.19.dist-info/METADATA',
+          '4d113161aca8582e8d28fddf3ea50f19b607209c2b3e4364379a163454680084'),
+ 'packaging': ('packaging',
+               '/isaac-sim/kit/python/lib/python3.12/site-packages/packaging/__init__.py',
+               '/isaac-sim/kit/python/lib/python3.12/site-packages/packaging/__init__.py',
+               '12108cb824b3eb4220409f776ffe302720281e953d27eb9d746e1068c4f43eee',
+               '23.2',
+               '/isaac-sim/kit/python/lib/python3.12/site-packages/packaging-23.2.dist-info/METADATA',
+               'b3574943ce848d906e97f50291034674771b2edb3a660e3f9b10aa93ad17eb1b'),
+ 'pydantic': ('pydantic',
+              '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/pydantic/__init__.py',
+              '/isaac-sim/extscache/omni.cip.pip-2.0.5+lx64.cp312/pip_prebundle/pydantic/__init__.py',
+              '0f7ffed1a44fa00179107e13e093d53982cd11cf8379a09c0ede94cc88cffc3d',
+              '2.11.10',
+              '/isaac-sim/extscache/omni.cip.pip-2.0.5+lx64.cp312/pip_prebundle/pydantic-2.11.10.dist-info/METADATA',
+              'c817ba01e7d4ae7d0996e833d0722eaaeb3b26c69755631eccb80ca3be041128'),
+ 'pydantic-core': ('pydantic_core',
+                   '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/pydantic_core/__init__.py',
+                   '/isaac-sim/extscache/omni.cip.pip-2.0.5+lx64.cp312/pip_prebundle/pydantic_core/__init__.py',
+                   '4f3396b89320a5769970f892d988ddf0e52a8cf6ca3aea5dcd7a777598d60867',
+                   '2.33.2',
+                   '/isaac-sim/extscache/omni.cip.pip-2.0.5+lx64.cp312/pip_prebundle/pydantic_core-2.33.2.dist-info/METADATA',
+                   'efc941a0e673e0acdfcf3ff2308fea147305b36484dd58275a97863ed8f270ab'),
+ 'python-dateutil': ('dateutil',
+                     '/isaac-sim/exts/isaacsim.asset.importer.urdf/pip_prebundle/dateutil/__init__.py',
+                     '/isaac-sim/exts/isaacsim.asset.importer.urdf/pip_prebundle/dateutil/__init__.py',
+                     '32a6a6ebb58ef4891399417223aeaf4ba2284974e9f46dfcf0369d1f62c230b6',
+                     '2.9.0.post0',
+                     '/isaac-sim/exts/isaacsim.asset.importer.urdf/pip_prebundle/python_dateutil-2.9.0.post0.dist-info/METADATA',
+                     'a9d436da322be808332f98d88325998e87cb693a678a9969feb4cfad729a6e93'),
+ 'python-multipart': ('python_multipart',
+                      '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/python_multipart/__init__.py',
+                      '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/python_multipart/__init__.py',
+                      '1c3e9769e00baf386ed2b9826c3094e6ff94fbbe848eb82b1dda241af25bb762',
+                      '0.0.26',
+                      '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/python_multipart-0.0.26.dist-info/METADATA',
+                      'da2329774c7ec8d6739383843bb91c5d60e1e518f23a54350799dd12624b9d5d'),
+ 'six': ('six',
+         '/isaac-sim/exts/isaacsim.asset.importer.urdf/pip_prebundle/six.py',
+         '/isaac-sim/exts/isaacsim.asset.importer.urdf/pip_prebundle/six.py',
+         'c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df',
+         '1.17.0',
+         '/isaac-sim/exts/isaacsim.asset.importer.urdf/pip_prebundle/six-1.17.0.dist-info/METADATA',
+         '562042078c2752549f6d8a7c86dbc5dd708088a7be6d80672ec7b07100b72468'),
+ 'starlette': ('starlette',
+               '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/starlette/__init__.py',
+               '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/starlette/__init__.py',
+               'ba9d47533e35c4b11c34f124d9b06cdc188647c62658b929f5557653f47681d9',
+               '0.49.3',
+               '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/starlette-0.49.3.dist-info/METADATA',
+               '8f6f4e61ccf8e9510544010c954dfb0520d04aff39ab8af8fd3c43f8500213bd'),
+ 'strawberry-graphql': ('strawberry',
+                        '/isaac-sim/kit/python/lib/python3.12/site-packages/strawberry/__init__.py',
+                        '/isaac-sim/kit/python/lib/python3.12/site-packages/strawberry/__init__.py',
+                        '609c5a0ae4f5ea569ea3894a1fa5c610c5f02c651c7e4a9375649a86b1228346',
+                        '0.327.7',
+                        '/isaac-sim/kit/python/lib/python3.12/site-packages/strawberry_graphql-0.327.7.dist-info/METADATA',
+                        'f52830292aa3c0e63f449b541b7ada85b07880667332bb3afb2619009c2d354b'),
+ 'typing-extensions': ('typing_extensions',
+                       '/isaac-sim/kit/python/lib/python3.12/site-packages/typing_extensions.py',
+                       '/isaac-sim/kit/python/lib/python3.12/site-packages/typing_extensions.py',
+                       '4040ca1a1ecbee00d1385c12a93084d1c5bd46f0b774f07e5ae7e91c4f55e696',
+                       '4.16.0',
+                       '/isaac-sim/kit/python/lib/python3.12/site-packages/typing_extensions-4.16.0.dist-info/METADATA',
+                       'b05084ca1d50879865178d9fff9fabeab61bdfb1f361bfbde95421ffc8f9be46'),
+ 'typing-inspection': ('typing_inspection',
+                       '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/typing_inspection/__init__.py',
+                       '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/typing_inspection/__init__.py',
+                       'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+                       '0.4.2',
+                       '/isaac-sim/extscache/omni.ai.langchain.core-2.3.1+109.0.0.lx64.cp312/pip_core_prebundle/typing_inspection-0.4.2.dist-info/METADATA',
+                       '61096cd0bfe3c7040b6f98c22b02d190fe01936d0ff7616c5134fed02891953a'),
+ 'uvicorn': ('uvicorn',
+             '/isaac-sim/kit/python/lib/python3.12/site-packages/uvicorn/__init__.py',
+             '/isaac-sim/kit/python/lib/python3.12/site-packages/uvicorn/__init__.py',
+             'd47fc9857b620dc0302aa3d4fdb29639cdf52e7de836ad3143386fded24574cc',
+             '0.52.4',
+             '/isaac-sim/kit/python/lib/python3.12/site-packages/uvicorn-0.52.4.dist-info/METADATA',
+             '6cea83c70e4f2746374ca19af72a52406aa706ad8735b11d72fbd5fd82f7cbff')}
+
+
+# Observed opportunistic parent imports, NOT added wheels or enabled extras.
+GRAPHQL_INCIDENTAL = {'orjson': {'license': None,
+            'license_expression': 'MPL-2.0 AND (Apache-2.0 OR MIT)',
+            'name': 'orjson',
+            'path': '/isaac-sim/kit/python/lib/python3.12/site-packages/orjson-3.12.0.dist-info/METADATA',
+            'requires_dist': [],
+            'requires_python': '>=3.10',
+            'sha256': '3a04b81906c2ac8f535b0a4fb8371eea786718fbca08a75ff13f6c734f43b778',
+            'version': '3.12.0'},
+ 'pygments': {'license': None,
+              'license_expression': 'BSD-2-Clause',
+              'name': 'Pygments',
+              'path': '/isaac-sim/kit/python/lib/python3.12/site-packages/pygments-2.21.0.dist-info/METADATA',
+              'requires_dist': ["colorama>=0.4.6; extra == 'windows-terminal'"],
+              'requires_python': '>=3.9',
+              'sha256': '1dde075570136774c706bf0009183a793fe0ee262e4a5590cc6eff8453eedd43',
+              'version': '2.21.0'},
+ 'rich': {'license': 'MIT',
+          'license_expression': None,
+          'name': 'rich',
+          'path': '/isaac-sim/kit/python/lib/python3.12/site-packages/rich-14.3.4.dist-info/METADATA',
+          'requires_dist': ['ipywidgets (>=7.5.1,<9) ; extra == "jupyter"',
+                            'markdown-it-py (>=2.2.0)',
+                            'pygments (>=2.13.0,<3.0.0)'],
+          'requires_python': '>=3.8.0',
+          'sha256': 'efb5f04704b438de828e9e44d88b9f5ab91f6006acf55a7b40911ea43c230a41',
+          'version': '14.3.4'},
+ 'sniffio': {'license': 'MIT OR Apache-2.0',
+             'license_expression': None,
+             'name': 'sniffio',
+             'path': '/isaac-sim/kit/python/lib/python3.12/site-packages/sniffio-1.3.1.dist-info/METADATA',
+             'requires_dist': [],
+             'requires_python': '>=3.7',
+             'sha256': '0b318b57098edeccf585e60a889a6b6a7b5c4086f3a9aa62eff76a1d3cee12d9',
+             'version': '1.3.1'},
+ 'zstandard': {'license': None,
+               'license_expression': 'BSD-3-Clause',
+               'name': 'zstandard',
+               'path': '/isaac-sim/kit/python/lib/python3.12/site-packages/zstandard-0.25.0.dist-info/METADATA',
+               'requires_dist': ['cffi~=1.17; (platform_python_implementation != "PyPy" and python_version < "3.14") '
+                                 'and extra == "cffi"',
+                                 'cffi>=2.0.0b; (platform_python_implementation != "PyPy" and python_version >= '
+                                 '"3.14") and extra == "cffi"'],
+               'requires_python': '>=3.9',
+               'sha256': '03d37736b26b9ae48451dd17026d93dffbd252fb708c1a2a9ae1be0c0966de92',
+               'version': '0.25.0'}}
+GRAPHQL_INCIDENTAL_MODULES_SHA256 = 'd616d4c4b33c0e29a23a7ba0371991d8b9dba06c5f3f59201dcf71e76d15fa83'
+GRAPHQL_METADATA_FIELDS_SHA256 = '38db8b4ff7eee254ac05852c9a693adf0048f3cfbe8b8ed825b0cac1443d7a59'
+
+
+GRAPHQL_CORE_EXTENSION_SHA256 = '2711a346eff384909098ae5a1d1db8a8f741f2300c59c1fc651f39c370b8d0b4'
+
+
+def graphql_sys_path(purelib):
+    """The reviewed isolated interpreter order, with only two existing bundle roots."""
+    stdlib = str(PurePosixPath(purelib).parent)
+    return [str(PurePosixPath(stdlib).parent)+'/python312.zip', stdlib, stdlib+'/lib-dynload',
+            purelib, GRAPHQL_ARCHIVE, GRAPHQL_URDF]
+
+
+def graphql_import_contract(provision):
+    """Require actual imports, selected metadata and physical immutable origins."""
+    proof = provision['imports']
+    passed(proof, 1)
+    assert proof['image'] == provision['image'] and proof['recipe_sha256'] == provision['recipe_sha256']
+    assert proof['interpreter'] == '/isaac-sim/python.sh' and proof['executable'] == '/isaac-sim/kit/python/bin/python3'
+    assert proof['python_version'] == [3,12,13] and all(type(x) is int for x in proof['python_version'])
+    root = provision['recipe']['purelib']
+    paths = graphql_sys_path(root)
+    assert proof['sys_path'] == paths, 'GraphQL path binding'
+    assert type(proof['uid']) is int and proof['uid'] == 1000
+    assert type(proof['errno']) is int and proof['errno'] in (101,113,1,13)
+    assert proof['egress_denied'] is True and proof['before_package_imports'] is True
+    assert set(proof['forbidden']) == {'network','subprocess','blocked_import'}
+    assert all(type(n) is int and n == 0 for n in proof['forbidden'].values())
+    assert proof['constraints_passed'] is True
+    allowed = (root, GRAPHQL_ARCHIVE, GRAPHQL_URDF, GRAPHQL_CIP, GRAPHQL_LANGCHAIN)
+    def witness(value):
+        import posixpath
+        path = value['path']
+        for field in ('path','physical'):
+            assert any(value[field].startswith(r+'/') for r in allowed), 'Physical origin root'
+            assert posixpath.normpath(value[field]) == value[field]
+        digest(value['sha256'])
+        assert type(value['size']) is int and 0 <= value['size'] <= 33554432
+        assert type(value['links']) is list and len(value['links']) <= 16
+        for link in value['links']:
+            assert path == link['path'] or path.startswith(link['path']+'/'), 'Physical link chain'
+            target = link['target']
+            assert type(target) is str and target and len(target) <= 4096
+            resolved = posixpath.normpath(posixpath.join(posixpath.dirname(link['path']),target))
+            path = resolved + path[len(link['path']):]
+            assert any(path.startswith(r+'/') for r in allowed), 'Physical link target root'
+        assert path == value['physical'], 'Physical chain endpoint'
+    expected_modules = {b[0] for b in GRAPHQL_IMPORT_BINDINGS.values()} | {'strawberry.fastapi','pydantic_core._pydantic_core'}
+    assert set(proof['modules']) == expected_modules and set(proof['distributions']) == set(GRAPHQL_IMPORT_BINDINGS)
+    for name, binding in GRAPHQL_IMPORT_BINDINGS.items():
+        module, origin, physical, file_hash, version, meta_path, meta_hash = binding
+        row = proof['modules'][module]
+        assert row['origin'] == row['file'] == row['path'] == origin, 'Selected module origin'
+        assert row['physical'] == physical and row['sha256'] == file_hash, 'Immutable module bytes'
+        witness(row)
+        dist = proof['distributions'][name]
+        assert dist['version'] == version, 'Selected distribution version'
+        assert dist['metadata']['physical'] == meta_path and dist['metadata']['sha256'] == meta_hash, 'Selected metadata bytes'
+        witness(dist['metadata'])
+        assert dist['requires_python'] is None or type(dist['requires_python']) is str
+        assert type(dist['requires_dist']) is list and all(type(r) is str for r in dist['requires_dist'])
+    for module in expected_modules - {b[0] for b in GRAPHQL_IMPORT_BINDINGS.values()}:
+        row = proof['modules'][module]
+        origin = (root+'/strawberry/fastapi/__init__.py' if module == 'strawberry.fastapi' else
+                  GRAPHQL_ARCHIVE+'/pydantic_core/_pydantic_core.cpython-312-x86_64-linux-gnu.so')
+        assert row['origin'] == row['file'] == row['path'] == origin
+        if module == 'strawberry.fastapi':
+            assert row['sha256'] == 'a79aa0f4096462334e58a713e2e46279b22947aa486f51ea0cc8837c5e4eded8'
+        else:
+            assert row['physical'] == GRAPHQL_CIP+'/pydantic_core/_pydantic_core.cpython-312-x86_64-linux-gnu.so'
+            assert row['sha256'] == GRAPHQL_CORE_EXTENSION_SHA256, 'Immutable native core bytes'
+        witness(row)
+    canonical = lambda value: json.dumps(value,sort_keys=True,separators=(',',':'))
+    assert sha(canonical({n:{k:r[k] for k in ('version','requires_python','requires_dist')}
+                          for n,r in proof['distributions'].items()})) == GRAPHQL_METADATA_FIELDS_SHA256, 'Metadata fields'
+    incidental = proof['incidental_distributions']
+    assert set(incidental) == set(GRAPHQL_INCIDENTAL)
+    for name,expected in GRAPHQL_INCIDENTAL.items():
+        row = incidental[name]
+        assert all(row[k] == expected[k] for k in ('version','requires_python','requires_dist')), 'Incidental metadata fields'
+        assert row['metadata']['path'] == row['metadata']['physical'] == expected['path']
+        assert row['metadata']['sha256'] == expected['sha256']
+        witness(row['metadata'])
+    loaded = proof['loaded_modules']
+    extras = {n:r for n,r in loaded.items() if n.split('.')[0] not in {m.split('.')[0] for m in expected_modules}}
+    assert sha(canonical(extras)) == GRAPHQL_INCIDENTAL_MODULES_SHA256, 'Exact incidental import bytes'
+    assert expected_modules <= loaded.keys() and len(loaded) <= 1024
+    for name,row in loaded.items():
+        assert name.split('.')[0] in {n.split('.')[0] for n in expected_modules} | set(GRAPHQL_INCIDENTAL), 'Undeclared loaded dependency'
+        assert row['origin'] == row['file'] == row['path']
+        assert any(row['path'].startswith(r+'/') for r in (root,GRAPHQL_ARCHIVE,GRAPHQL_URDF))
+        witness(row)
+    assert all(loaded[n] == proof['modules'][n] for n in expected_modules)
+
+
+def graphql_runtime(discovery):
+    """Compose the fixed GraphQL child with an unchanged legacy parent proof."""
+    provision = discovery['provision']
+    passed(provision, 1)
+    assert provision['profile'] == 'graphql-test-v1'
+    parent_raw = provision['parent_manifest']
+    assert type(parent_raw) is str and len(parent_raw.encode()) <= 1048576
+    parent = parse(parent_raw)
+    selected_runtime(dict(runtime_image=discovery['runtime_image'], selected_runtime_image=GRAPHQL_PARENT, provision=parent))
+    recipe = provision['recipe']
+    assert type(recipe['schema_version']) is int and recipe['schema_version'] == 1
+    assert recipe['profile'] == 'graphql-test-v1' and recipe['pins'] == GRAPHQL_PINS, 'GraphQL pins'
+    assert recipe['closure_sha256'] == GRAPHQL_CLOSURE_SHA256
+    assert recipe['path_binding'] == 'isolated-sysconfig-kit-archive-urdf-v1'
+    assert recipe['parent_manifest_sha256'] == sha(parent_raw), 'Parent manifest hash'
+    assert recipe['parent_recipe_sha256'] == parent['recipe_sha256'], 'Parent recipe hash'
+    assert recipe['base_image'] == GRAPHQL_PARENT and recipe['recipe_path'] == GRAPHQL_RECIPE
+    assert recipe['build_policy'] == 'COPY-only; network=none; no RUN; no package execution'
+    assert recipe['purelib'] == parent['recipe']['purelib']
+    assert recipe['python_version'] == [3,12,13] and all(type(x) is int for x in recipe['python_version'])
+    digest(recipe['acquisition_sha256'])
+    files = recipe['files']
+    canonical = lambda x: json.dumps(x, sort_keys=True, separators=(',', ':'))
+    assert sha(canonical(files)) == GRAPHQL_FILES_SHA256, 'Exact reviewed wheel file map'
+    assert {n.split('/')[0] for n in files} == GRAPHQL_ROOTS
+    recipe_hash = sha(canonical(recipe))
+    assert provision['recipe_sha256'] == recipe_hash
+    image = discovery['selected_runtime_image']
+    assert re.fullmatch(r'sha256:[0-9a-f]{64}', image) and image not in (GRAPHQL_PARENT, discovery['runtime_image'])
+    assert provision['image'] == image
+    assert provision['base_projection'] == parent['image_projection']
+    child = provision['image_projection']
+    assert child['Id'] == image and not child['Volumes']
+    assert child['Recipe'] == parent['recipe_sha256'] and child['GraphQLRecipe'] == recipe_hash
+    config = provision['parent_config_projection']
+    assert {k:config[k] for k in parent['image_projection']} == parent['image_projection']
+    assert config['GraphQLRecipe'] is None and GRAPHQL_LABEL not in config['Labels']
+    assert child['Labels'] == {**config['Labels'],GRAPHQL_LABEL:recipe_hash}, 'Exact inherited and child labels'
+    assert child['User'] == '1000:1000', 'GraphQL image user'
+
+    assert child['Layers'][:-1] == parent['image_projection']['Layers'], 'GraphQL single COPY layer'
+    assert all(re.fullmatch(r'sha256:[0-9a-f]{64}', layer) for layer in child['Layers'])
+    absent = sorted([recipe['purelib']+'/'+r for r in GRAPHQL_ROOTS] + [GRAPHQL_RECIPE])
+    for key in ('no_overwrite', 'readback'):
+        value = provision[key]
+        passed(value, 1)
+        assert type(value['uid']) is int and value['uid'] == 1000
+        assert type(value['errno']) is int and value['errno'] in (101,113,1,13)
+        assert value['egress_denied'] is True and value['before_package_imports'] is True
+        assert value['parent_recipe_sha256'] == parent['recipe_sha256']
+    assert provision['no_overwrite']['absent'] == absent, 'No-overwrite targets'
+    readback = provision['readback']
+    assert readback['recipe_sha256'] == recipe_hash
+    assert type(readback['files_verified']) is int and readback['files_verified'] == len(files)
+    assert provision['cleanup_verified'] is True
+    assert not provision.get('evidence_errors') and not provision.get('cleanup_errors')
+    graphql_import_contract(provision)
+    return image
+
+
+def selected_runtime(discovery, *, profile=None):
     """Keep live discovery immutable; accept only a separately bound test image."""
+    assert profile in (None, 'graphql-test-v1'), 'Unknown provision profile'
+    if profile == 'graphql-test-v1':
+        return graphql_runtime(discovery)
     base = discovery["runtime_image"]
     assert re.fullmatch(r"sha256:[0-9a-f]{64}", base)
     if "selected_runtime_image" not in discovery:

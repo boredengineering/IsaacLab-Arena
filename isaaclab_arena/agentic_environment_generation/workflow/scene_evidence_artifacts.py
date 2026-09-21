@@ -16,8 +16,11 @@ from dataclasses import dataclass
 from .evidence import CandidateBinding, EvidenceCohort
 
 
-def canonical(value):
-    """Encode a bounded, finite JSON tree without type-coercive equality."""
+def canonical(value, *, max_bytes=2 * 1024 * 1024):
+    """Encode a finite JSON tree; query callers may supply their serialization bound.
+
+    Artifact callers retain the unchanged 2 MiB default and structural guards.
+    """
 
     def check(node, depth=0):
         if depth > 24:
@@ -37,17 +40,17 @@ def canonical(value):
 
     check(value)
     raw = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
-    if len(raw) > 2 * 1024 * 1024:
+    if len(raw) > max_bytes:
         raise ValueError("evidence byte bound")
     return raw
 
 
-def _protected(value, protect):
-    before = canonical(value)
+def _protected(value, protect, *, max_bytes=2 * 1024 * 1024):
+    before = canonical(value, max_bytes=max_bytes)
     returned = protect(value)
     try:
-        after = canonical(value)
-        if returned is not None and canonical(returned) != before:
+        after = canonical(value, max_bytes=max_bytes)
+        if returned is not None and canonical(returned, max_bytes=max_bytes) != before:
             raise ValueError("reject-only protection required")
     except (ValueError, TypeError, RecursionError):
         raise ValueError("reject-only protection required") from None

@@ -53,6 +53,179 @@ class ProofTests(unittest.TestCase):
         self.seal()
         return provision
 
+    def graphql_fixture(self):
+        """Synthetic chain; mocked file-map digest is never real acquisition evidence."""
+        parent = self.install_synthetic_provision()
+        discovery = self.get('run-proof.json')['discovery']
+        # Preserve the original legacy proof contract while using fixed reviewed identities.
+        base = 'sha256:9af2ecbd69523de79b06a3edb992cba569679ab45ca997adf0d179dbd01883e8'
+        image = 'sha256:e20b3cc8258b793aaf1fe47c130f54e677fa9c0a6427991cfc1045b743162da5'
+        parent['recipe']['base_image'] = parent['base_projection']['Id'] = base
+        parent['image'] = parent['image_projection']['Id'] = image
+        seal = lambda obj: sha(json.dumps(obj, sort_keys=True, separators=(',', ':')))
+        parent['recipe_sha256'] = parent['readback']['recipe_sha256'] = parent['image_projection']['Recipe'] = seal(parent['recipe'])
+        parent_raw = json.dumps(parent, sort_keys=True, separators=(',', ':'))
+        roots = ['strawberry', 'graphql', 'cross_web', 'strawberry_graphql-0.327.7.dist-info',
+                 'graphql_core-3.2.6.dist-info', 'cross_web-0.6.0.dist-info']
+        files = {r + ('/METADATA' if r.endswith('.dist-info') else '/__init__.py'): 'a' * 64 for r in roots}
+        recipe = dict(schema_version=1, profile='graphql-test-v1', base_image=image,
+                      purelib=parent['recipe']['purelib'], python_version=[3,12,13],
+                      pins=copy.deepcopy(checker.GRAPHQL_PINS), files=files,
+                      parent_manifest_sha256=sha(parent_raw), parent_recipe_sha256=parent['recipe_sha256'],
+                      acquisition_sha256='c'*64, recipe_path='/opt/arena-f0/graphql-test-v1-recipe.json',
+                      closure_sha256='0b360d1a033cde87a76984848f6cfa57e6bf2c7abf61aa1f2b60e32f1463253d',
+                      path_binding='isolated-sysconfig-kit-archive-urdf-v1',
+                      build_policy='COPY-only; network=none; no RUN; no package execution')
+        digest = seal(recipe)
+        absent = sorted([recipe['purelib']+'/'+r for r in roots] + [recipe['recipe_path']])
+        preflight = dict(schema_version=1, status='passed', uid=1000, errno=101, egress_denied=True,
+                         before_package_imports=True, absent=absent, parent_recipe_sha256=parent['recipe_sha256'])
+        child = 'sha256:' + 'c'*64
+        proof = dict(schema_version=1, status='passed', profile='graphql-test-v1', image=child, recipe=recipe,
+                     recipe_sha256=digest, parent_manifest=parent_raw, base_projection=parent['image_projection'],
+                     image_projection=dict(Id=child, Volumes=None, Layers=parent['image_projection']['Layers']+['sha256:'+'d'*64],
+                                           Recipe=parent['recipe_sha256'], GraphQLRecipe=digest),
+                     parent_config_projection=dict(parent['image_projection'],GraphQLRecipe=None,User='1000:1000',Labels={checker.PROVISION_LABEL:parent['recipe_sha256']}),
+                     no_overwrite=preflight,
+                     readback=dict(preflight, recipe_sha256=digest, files_verified=len(files)), cleanup_verified=True)
+        proof['image_projection'].update(User='1000:1000', Labels={checker.PROVISION_LABEL:parent['recipe_sha256'],checker.GRAPHQL_LABEL:digest})
+        return dict(runtime_image=base, selected_runtime_image=child, provision=proof), seal(files)
+
+    def test_explicit_graphql_chain_and_resealed_denials(self):
+        import inspect
+        from unittest import mock
+        self.assertIn('profile', inspect.signature(checker.selected_runtime).parameters,
+                      'Explicit GraphQL recipe-chain admission is missing')
+        discovery, file_digest = self.graphql_fixture()
+        with mock.patch.object(checker, 'GRAPHQL_FILES_SHA256', file_digest), mock.patch.object(checker, 'graphql_import_contract', create=True):
+            self.assertEqual(checker.selected_runtime(discovery, profile='graphql-test-v1'), discovery['selected_runtime_image'])
+            with self.assertRaises(AssertionError):
+                checker.selected_runtime(discovery)
+            with self.assertRaisesRegex(AssertionError, 'Unknown'):
+                checker.selected_runtime(discovery, profile='other')
+            for mutate in (
+                lambda p: p['recipe']['pins'].pop('cross-web'),
+                lambda p: p['recipe']['pins'].update(extra={}),
+                lambda p: p['recipe']['pins']['cross-web'].update(version='0.7.0'),
+                lambda p: p['recipe'].update(parent_manifest_sha256='e'*64),
+                lambda p: p['recipe'].update(closure_sha256='f'*64),
+                lambda p: p['recipe'].update(path_binding='prepend-all-roots'),
+                lambda p: p['recipe'].update(base_image='sha256:'+'e'*64),
+                lambda p: p['recipe'].update(recipe_path='/opt/arena-f0/provision-recipe.json'),
+                lambda p: p['image_projection'].update(Layers=['sha256:'+'e'*64]),
+                lambda p: p['image_projection'].update(Recipe='e'*64),
+                lambda p: p['image_projection']['Labels'].update(extra='bad'),
+                lambda p: p['image_projection'].update(User='0:0'),
+                lambda p: p['no_overwrite'].update(absent=[]),
+                lambda p: p['readback'].update(parent_recipe_sha256='e'*64),
+                lambda p: p['readback'].update(files_verified=True),
+                lambda p: p['recipe'].update(python_version=[True,12,13]),
+                lambda p: p.update(cleanup_verified=False),
+            ):
+                changed = copy.deepcopy(discovery)
+                p = changed['provision']
+                mutate(p)
+                digest = sha(json.dumps(p['recipe'], sort_keys=True, separators=(',', ':')))
+                p['recipe_sha256'] = p['image_projection']['GraphQLRecipe'] = p['readback']['recipe_sha256'] = digest
+                p['image_projection']['Labels'][checker.GRAPHQL_LABEL] = digest
+                with self.subTest(mutate=mutate), self.assertRaises((AssertionError, KeyError)):
+                    checker.selected_runtime(changed, profile='graphql-test-v1')
+
+    def test_graphql_import_contract_exact_origins_versions_and_types(self):
+        self.assertTrue(callable(getattr(checker, 'graphql_import_contract', None)), 'Actual import-origin contract missing')
+        root = '/isaac-sim/kit/python/lib/python3.12/site-packages'
+        image = 'sha256:'+'d'*64
+        proof = {'schema_version':1,'status':'passed','image':image,'recipe_sha256':'e'*64,
+                 'interpreter':'/isaac-sim/python.sh','executable':'/isaac-sim/kit/python/bin/python3',
+                 'python_version':[3,12,13],'sys_path':checker.graphql_sys_path(root),
+                 'uid':1000,'errno':101,'egress_denied':True,'before_package_imports':True,
+                 'forbidden':{'network':0,'subprocess':0,'blocked_import':0},
+                 'constraints_passed':True,'distributions':{},'modules':{},'loaded_modules':{}}
+        for name, binding in checker.GRAPHQL_IMPORT_BINDINGS.items():
+            module, origin, physical, digest, version, meta_path, meta_hash = binding
+            witness = dict(path=origin, physical=physical, sha256=digest, size=1,
+                           links=[] if origin == physical else [{'path':origin,'target':physical}])
+            proof['modules'][module] = dict(file=origin, origin=origin, **witness)
+            proof['distributions'][name] = dict(version=version, requires_python='>=3.6', requires_dist=[],
+                metadata=dict(path=meta_path, physical=meta_path, sha256=meta_hash, size=1, links=[]))
+        for name, origin in [('strawberry.fastapi',root+'/strawberry/fastapi/__init__.py'),
+                            ('pydantic_core._pydantic_core',checker.GRAPHQL_ARCHIVE+'/pydantic_core/_pydantic_core.cpython-312-x86_64-linux-gnu.so')]:
+            physical = origin if name == 'strawberry.fastapi' else origin.replace(checker.GRAPHQL_ARCHIVE, checker.GRAPHQL_CIP)
+            digest = 'a79aa0f4096462334e58a713e2e46279b22947aa486f51ea0cc8837c5e4eded8' if name == 'strawberry.fastapi' else getattr(checker,'GRAPHQL_CORE_EXTENSION_SHA256','a'*64)
+            proof['modules'][name] = dict(file=origin,origin=origin,path=origin,physical=physical,sha256=digest,size=1,
+                                         links=[] if origin == physical else [{'path':origin,'target':physical}])
+        proof['loaded_modules'] = copy.deepcopy(proof['modules'])
+        proof['incidental_distributions'] = {}
+        for name,spec in getattr(checker,'GRAPHQL_INCIDENTAL',{}).items():
+            proof['incidental_distributions'][name] = dict(version=spec['version'],requires_dist=spec['requires_dist'],
+                requires_python=spec['requires_python'],metadata=dict(path=spec['path'],physical=spec['path'],
+                    sha256=spec['sha256'],size=1,links=[]))
+            origin=root+'/'+name+'/__init__.py'
+            proof['loaded_modules'][name]=dict(path=origin,origin=origin,file=origin,physical=origin,sha256='a'*64,size=1,links=[])
+        provision = dict(image=image,recipe_sha256='e'*64,recipe={'purelib':root},imports=proof)
+        canonical = lambda value: json.dumps(value,sort_keys=True,separators=(',',':'))
+        extra_hash=sha(canonical({n:r for n,r in proof['loaded_modules'].items() if n not in proof['modules']}))
+        fields_hash=sha(canonical({n:{k:r[k] for k in ('version','requires_python','requires_dist')}
+                                  for n,r in proof['distributions'].items()}))
+        def validate(value):
+            from unittest import mock
+            with mock.patch.object(checker,'GRAPHQL_INCIDENTAL_MODULES_SHA256',extra_hash,create=True), \
+                    mock.patch.object(checker,'GRAPHQL_METADATA_FIELDS_SHA256',fields_hash,create=True):
+                checker.graphql_import_contract(value)
+        validate(provision)
+        for mutate in (
+            lambda p:p.pop('imports'),
+            lambda p:p['imports'].update(executable='/usr/bin/python3'),
+            lambda p:p['imports'].update(python_version=[True,12,13]),
+            lambda p:p['imports']['sys_path'].append('/home/user'),
+            lambda p:p['imports']['modules']['pydantic'].update(origin='/tmp/pydantic.py'),
+            lambda p:p['imports']['modules'].pop('strawberry.fastapi'),
+            lambda p:p['imports']['distributions']['pydantic'].update(version='2.13.3'),
+            lambda p:p['imports']['distributions']['pydantic']['metadata'].update(sha256='f'*64),
+            lambda p:p['imports']['forbidden'].update(subprocess=True),
+            lambda p:p['imports'].update(constraints_passed=False),
+            lambda p:p['imports']['modules']['pydantic'].update(physical='/tmp/pydantic.py'),
+            lambda p:[p['imports'][key]['pydantic_core._pydantic_core'].update(sha256='f'*64) for key in ('modules','loaded_modules')],
+            lambda p:p['imports']['incidental_distributions']['rich'].update(version='0.0.0'),
+            lambda p:p['imports']['loaded_modules']['sniffio'].update(sha256='f'*64),
+            lambda p:p['imports']['modules']['pydantic'].update(links=[]),
+        ):
+            changed=copy.deepcopy(provision);mutate(changed)
+            with self.subTest(mutate=mutate), self.assertRaises((AssertionError,KeyError)):
+                validate(changed)
+
+    def test_fixed_incidental_imports_are_not_arbitrary_extra_roots(self):
+        from unittest import mock
+        # Actual import RED found these installed optional imports, not new wheel additions.
+        # The existing exact-origin fixture is reused; suppress only its fixed incidental hash
+        # when exercising the minimal synthetic auxiliary witness.
+        self.assertTrue(hasattr(checker, 'GRAPHQL_INCIDENTAL'), 'Observed incidental parent imports are not bound')
+        self.assertEqual(set(checker.GRAPHQL_INCIDENTAL), {'rich','pygments','sniffio','orjson','zstandard'})
+        self.assertEqual(len(checker.GRAPHQL_INCIDENTAL_MODULES_SHA256), 64)
+
+    def test_graphql_selection_reads_exact_child_parent_original(self):
+        import inspect
+        from unittest import mock
+        from test_run import runner
+        self.assertIn('profile', inspect.signature(runner.select_runtime).parameters, 'GraphQL live admission missing')
+        discovery, file_digest = self.graphql_fixture()
+        proof = discovery['provision']
+        path = self.root/'graphql.json'
+        path.write_text(json.dumps(proof))
+        # runner imports the canonical checker module, not this test's private instance.
+        import check_proof
+        projections = {proof['image']:proof['image_projection'],
+                       proof['recipe']['base_image']:proof['base_projection'],
+                       discovery['runtime_image']:json.loads(proof['parent_manifest'])['base_projection']}
+        with mock.patch.object(check_proof, 'GRAPHQL_FILES_SHA256', file_digest), mock.patch.object(check_proof, 'graphql_import_contract', create=True), mock.patch.object(
+                runner, 'provision_image_metadata', side_effect=lambda image, **kw: proof['parent_config_projection'] if image == proof['recipe']['base_image'] and kw.get('profile') else projections[image]) as inspect_image:
+            selected = runner.select_runtime({'runtime_image':discovery['runtime_image']}, proof['image'], path, profile='graphql-test-v1')
+            self.assertEqual(selected['runtime_image'], discovery['runtime_image'])
+            self.assertEqual({c.args[0] for c in inspect_image.call_args_list}, set(projections))
+            projections[proof['image']] = dict(proof['image_projection'], GraphQLRecipe='e'*64)
+            with self.assertRaisesRegex(AssertionError, 'readback'):
+                runner.select_runtime({'runtime_image':discovery['runtime_image']}, proof['image'], path, profile='graphql-test-v1')
+
     def test_provisioned_runtime_is_distinct_and_bound_to_actual_donor_bytes(self):
         self.install_synthetic_provision()
         checker.check(self.root)

@@ -56,6 +56,7 @@ def test_fresh_default_module_run_status_and_dependency_denials():
         with driver.session(database=database) as session:
             for ddl in Neo4jWorkflowStore.schema_requirements():
                 session.run(ddl).consume()
+            session.run("CALL db.awaitIndexes(10)").consume()
         store = Neo4jWorkflowStore(
             driver,
             database=database,

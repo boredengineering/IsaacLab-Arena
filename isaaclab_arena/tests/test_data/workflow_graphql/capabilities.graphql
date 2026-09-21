@@ -1,0 +1,9 @@
+query Capabilities($id: ID!) {
+  capabilities { queryOnly supportedQueries unsupported configuredReadStore observedExecutionReadiness }
+  workflow(id: $id) {
+    ... on Workflow {
+      retainedRevision responseRevision availableActions
+      actions { cancelApplicable permission { cancel resume observedAt provenance } }
+    }
+  }
+}

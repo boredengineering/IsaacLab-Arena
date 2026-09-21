@@ -16,6 +16,253 @@ runner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(runner)
 
 
+class WorkflowGraphQLAdmissionTests(unittest.TestCase):
+    def test_optional_api_declaration_preserves_legacy_web_group(self):
+        import tomllib
+        groups = tomllib.loads(Path('/source/project-dependencies.toml').read_text())['project']['optional-dependencies']
+        self.assertEqual(groups['workflow-api'], ['strawberry-graphql[fastapi]==0.327.7', 'graphql-core==3.2.6', 'cross-web==0.6.0', 'fastapi>=0.120.4,<1'])
+        self.assertEqual(groups['web'], ['fastapi>=0.120.4,<1', 'uvicorn>=0.52.4,<0.53', 'httpx>=0.28.1,<0.29'])
+
+    def test_query_cohort_is_explicit_paired_and_not_a_process_mode(self):
+        import workflow_neo4j_runner as workflow
+        self.assertEqual(getattr(workflow, 'GRAPHQL_TEST', None),
+                         'isaaclab_arena/tests/test_environment_workflow_graphql_neo4j.py',
+                         'fixed query-only cohort missing')
+        self.assertNotIn('workflow-graphql', workflow.PROCESS_MODES)
+        self.assertIn('workflow-graphql', workflow.BOLT_MODES)
+        with self.assertRaisesRegex(AssertionError, 'paired'):
+            workflow.select_graphql_runtime({}, None, None)
+
+    def test_query_role_denies_sqlite_and_legacy_constructors(self):
+        import workflow_process_harness as harness
+        from types import SimpleNamespace
+        guard = harness.Guards('192.0.2.2', query_only=True)
+        with self.assertRaisesRegex(RuntimeError, 'denies legacy'):
+            guard.audit('sqlite3.connect', (':memory:',))
+        legacy = type('Journal', (), {})()
+        frame = SimpleNamespace(f_code=SimpleNamespace(co_name='__init__'),
+                                f_globals={'__name__':'legacy.journal'}, f_locals={'self':legacy})
+        with self.assertRaisesRegex(RuntimeError, 'denies legacy'):
+            guard.profile(frame, 'call', None)
+        self.assertEqual(guard.forbidden['legacy'], 2)
+        self.assertEqual(guard.allowed, {'bolt':0, 'child_launch':0})
+
+    def test_numeric_bolt_query_role_never_builds_child_permission(self):
+        import inspect
+        import workflow_process_harness as harness
+        self.assertIn('query_only', inspect.signature(harness.Guards).parameters,
+                      'numeric-Bolt query-only guard role missing')
+        guard = harness.Guards('192.0.2.2', query_only=True)
+        with mock.patch.object(harness.sys, 'addaudithook'), \
+                mock.patch.object(harness.sys, 'setprofile'), \
+                mock.patch.object(harness.threading, 'setprofile'), \
+                mock.patch.object(harness, 'spawn_spec', side_effect=AssertionError('child permission built')), \
+                mock.patch.object(harness.socket, 'getaddrinfo'), \
+                mock.patch.object(harness.socket.socket, 'listen'), \
+                mock.patch.object(harness.socket.socket, 'connect_ex'), \
+                mock.patch.object(harness.socket.socket, 'sendto'), \
+                mock.patch.object(harness.socket.socket, 'sendmsg'), \
+                mock.patch.object(harness.subprocess, 'Popen'):
+            guard.install()
+            self.assertIsNone(guard.fixed_spec)
+            with self.assertRaisesRegex(RuntimeError, 'denies subprocess'):
+                guard.popen([])
+        self.assertEqual(guard.allowed['child_launch'], 0)
+        self.assertEqual(guard.forbidden['subprocess'], 1)
+
+
+class GraphQLWheelTests(unittest.TestCase):
+    """Synthetic inert archives, not acquisition or runtime acceptance."""
+
+    def wheel(self, extra=(), directory=False, strawberry=False):
+        import base64
+        import hashlib
+        import io
+        import zipfile
+        files = {'cross_web/__init__.py': b'',
+                 'cross_web-0.6.0.dist-info/METADATA': b'Name: cross-web\nVersion: 0.6.0\n',
+                 'cross_web-0.6.0.dist-info/WHEEL': b'Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n'}
+        if strawberry:
+            files = {n.replace('cross_web-0.6.0', 'strawberry_graphql-0.327.7').replace('cross_web/', 'strawberry/'): b
+                     for n, b in files.items()}
+        record = ('strawberry_graphql-0.327.7' if strawberry else 'cross_web-0.6.0') + '.dist-info/RECORD'
+        files[record] = ''.join(f'{n},sha256={base64.urlsafe_b64encode(hashlib.sha256(b).digest()).decode().rstrip("=")},{len(b)}\n'
+                                for n, b in files.items()).encode() + f'{record},,\n'.encode()
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, 'w') as archive:
+            if directory:
+                archive.writestr('strawberry/' if strawberry else 'cross_web/', b'')
+            for name, body in (*files.items(), *extra):
+                archive.writestr(name, body)
+        return out.getvalue(), files
+
+    def test_reviewed_directories_and_archive_conflicts(self):
+        import io
+        import stat
+        import zipfile
+        payload, files = self.wheel(directory=True, strawberry=True)
+        self.assertEqual(runner.graphql_wheel_entries(payload, 'strawberry-graphql', '0.327.7'), files)
+        link = zipfile.ZipInfo('cross_web/link.py')
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        cases = [(('cross_web/../bad.py', b''), 'path denied'),
+                 (('cross_web/hook.pth', b''), 'unapproved data'),
+                 (('cross_web-0.6.0.dist-info/hook.py', b''), 'metadata path'),
+                 (('cross_web/__init__.py/child.py', b''), 'ancestor'),
+                 ((link, b'/tmp/x'), 'link/special'),
+                 (('cross_web/new.py', b''), 'unrecorded'),
+                 (('cross_web/', b''), 'directory')]
+        for extra, message in cases:
+            with self.subTest(message=message), self.assertRaisesRegex(AssertionError, message):
+                runner.graphql_wheel_entries(self.wheel(extra=(extra,))[0], 'cross-web', '0.6.0')
+        # Duplicate entries and tampered RECORD bytes retain the same valid roots.
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', UserWarning)
+            payload, _ = self.wheel(extra=(('cross_web/__init__.py', b'x'),))
+        with self.assertRaisesRegex(AssertionError, 'duplicate'):
+            runner.graphql_wheel_entries(payload, 'cross-web', '0.6.0')
+        payload, _ = self.wheel()
+        out = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(payload)) as source, zipfile.ZipFile(out, 'w') as target:
+            for entry in source.infolist():
+                body = source.read(entry)
+                target.writestr(entry, b'corrupt' if entry.filename.endswith('__init__.py') else body)
+        with self.assertRaisesRegex(AssertionError, 'RECORD mismatch'):
+            runner.graphql_wheel_entries(out.getvalue(), 'cross-web', '0.6.0')
+
+    def test_explicit_graphql_archive_and_legacy_closed(self):
+        payload, files = self.wheel()
+        validate = getattr(runner, 'graphql_wheel_entries', runner.wheel_entries)
+        self.assertEqual(validate(payload, 'cross-web', '0.6.0'), files)
+        with self.assertRaisesRegex(AssertionError, 'not approved'):
+            runner.wheel_entries(payload, 'cross-web', '0.6.0')
+
+
+class GraphQLProvisionTests(unittest.TestCase):
+    def test_explicit_cli_dispatch_and_official_acquisition_validation(self):
+        import provision_functional_runtime as provisioner
+        import sys
+        with mock.patch.object(sys, 'argv', ['provision-functional-runtime.py', 'build', '/tmp/acquired', '--profile', 'graphql-test-v1',
+                                             '--parent-manifest', '/tmp/parent.json']), \
+                mock.patch.object(provisioner, 'build_graphql', create=True) as build:
+            try:
+                provisioner.main()
+            except SystemExit as error:
+                self.fail('Explicit GraphQL CLI dispatch missing: ' + str(error))
+            build.assert_called_once_with(Path('/tmp/acquired'), Path('/tmp/parent.json'))
+        self.assertTrue(callable(getattr(provisioner, 'validate_graphql_acquisition', None)), 'Official acquisition validation missing')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            (path/'acquisition.json').write_text(json.dumps(dict(schema_version=1,status='passed',packages={})))
+            with self.assertRaisesRegex(AssertionError, 'packages'):
+                provisioner.validate_graphql_acquisition(path)
+
+    def test_immutable_origin_resolves_only_reviewed_physical_targets(self):
+        import provision_functional_runtime as provisioner
+        self.assertTrue(callable(getattr(provisioner, 'physical_file', None)), 'Physical origin-chain verifier missing')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/'target').write_bytes(b'immutable fixture')
+            (root/'link').symlink_to('target')
+            data, proof = provisioner.physical_file(str(root/'link'), [str(root)])
+            self.assertEqual(data, b'immutable fixture')
+            self.assertEqual(proof['physical'], str(root/'target'))
+            self.assertEqual(proof['links'], [{'path':str(root/'link'),'target':'target'}])
+            with self.assertRaisesRegex(AssertionError, 'root'):
+                provisioner.physical_file(str(root/'link'), [str(root/'other')])
+            (root/'link').unlink()
+            (root/'link').symlink_to('/etc/passwd')
+            with self.assertRaisesRegex(AssertionError, 'root'):
+                provisioner.physical_file(str(root/'link'), [str(root)])
+
+    def test_import_probe_binds_isolated_preflight_before_actual_imports(self):
+        import provision_functional_runtime as provisioner
+        self.assertTrue(callable(getattr(provisioner, 'graphql_import_code', None)), 'Actual import probe producer missing')
+        code = provisioner.graphql_import_code('/isaac-sim/kit/python/lib/python3.12/site-packages',
+                                               {'packages':{},'roots':[]}, 'sha256:'+'a'*64, 'b'*64)
+        compile(code, '<fixed-graphql-probe>', 'exec')
+        self.assertLess(code.index("probe.connect"), code.index('importlib.import_module'))
+        self.assertLess(code.index('sys.addaudithook'), code.index('importlib.import_module'))
+        self.assertIn('physical_file', code)
+        self.assertIn('strawberry.fastapi', code)
+        self.assertIn('pydantic_core._pydantic_core', code)
+
+    def test_resealed_acquisition_cannot_replace_official_metadata(self):
+        import provision_functional_runtime as provisioner
+        import confined_io
+        records = {}
+        blobs = {}
+        for name, pin in provisioner.GRAPHQL_PINS.items():
+            url = 'https://files.pythonhosted.org/packages/synthetic/' + pin['filename']
+            meta = {'info':{'name':name,'version':pin['version']},'urls':[dict(filename=pin['filename'],
+                    packagetype='bdist_wheel',yanked=False,digests={'sha256':pin['sha256']},url=url,size=0)]}
+            raw = json.dumps(meta).encode()
+            blobs[name+'-pypi.json'] = raw
+            blobs[pin['filename']] = b''
+            records[name] = dict(pin, metadata_sha256=provisioner.sha(raw),
+                metadata_url=f"https://pypi.org/pypi/{name}/{pin['version']}/json",wheel_url=url,size=0)
+        blobs['acquisition.json'] = json.dumps(dict(schema_version=1,status='passed',packages=records)).encode()
+        with mock.patch.object(confined_io,'read_confined',side_effect=lambda root,name:blobs[name]):
+            with self.assertRaisesRegex(AssertionError,'Reviewed official metadata'):
+                provisioner.validate_graphql_acquisition(Path('/synthetic'))
+
+    def test_graphql_acquisition_deadline_and_no_proxy_redirect(self):
+        import provision_functional_runtime as provisioner
+        import signal
+        import urllib.request
+        response=mock.MagicMock()
+        response.status=200
+        response.url='https://pypi.org/pypi/cross-web/0.6.0/json'
+        response.read.return_value=b'{}'
+        opener=mock.MagicMock()
+        opener.open.return_value.__enter__.return_value=response
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(urllib.request,'build_opener',return_value=opener) as factory, \
+                mock.patch.object(signal,'alarm') as alarm, mock.patch.object(signal,'signal'):
+            with self.assertRaisesRegex(AssertionError,'Reviewed official metadata'):
+                provisioner.acquire(Path(directory)/'fresh',profile='graphql-test-v1')
+            self.assertEqual(alarm.call_args_list,[mock.call(40),mock.call(0)])
+            self.assertEqual(factory.call_args.args[0].proxies,{})
+            with self.assertRaisesRegex(AssertionError,'redirects denied'):
+                factory.call_args.args[1].redirect_request()
+            response.read.assert_called_once_with(2097153)
+            opener.open.assert_called_once_with(response.url,timeout=30)
+
+    def test_fixed_profile_and_copy_context_preserve_legacy(self):
+        import provision_functional_runtime as provisioner
+        self.assertTrue(callable(getattr(provisioner, 'profile_pins', None)), 'Explicit provisioning profile missing')
+        self.assertEqual(set(provisioner.profile_pins(None)), {'neo4j', 'pytz'})
+        self.assertEqual(set(provisioner.profile_pins('graphql-test-v1')), {'cross-web','graphql-core','strawberry-graphql'})
+        with self.assertRaisesRegex(AssertionError, 'Unknown'):
+            provisioner.profile_pins('other')
+        recipe = dict(base_image='sha256:'+'a'*64, purelib='/isaac-sim/lib/site-packages', files={'graphql/x.py':'a'*64})
+        dockerfile, archive = provisioner.graphql_build_context(recipe, {'graphql/x.py':b'x'})
+        self.assertEqual(dockerfile.count(b'COPY '), 1)
+        self.assertNotIn(b'RUN ', dockerfile)
+        import io, tarfile
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            self.assertEqual(set(tar.getnames()), {'Dockerfile', 'payload/opt/arena-f0/graphql-test-v1-recipe.json',
+                                                   'payload/isaac-sim/lib/site-packages/graphql/x.py'})
+
+    def test_no_overwrite_including_symlink_and_ancestor(self):
+        import provision_functional_runtime as provisioner
+        self.assertTrue(callable(getattr(provisioner, 'assert_destinations_absent', None)), 'No-overwrite preflight missing')
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            target = root/'package'
+            self.assertEqual(provisioner.assert_destinations_absent([str(target)]), [str(target)])
+            for mode in ('file', 'dir', 'symlink'):
+                if mode == 'file': target.write_bytes(b'x')
+                elif mode == 'dir': target.mkdir()
+                else: target.symlink_to(root/'missing')
+                with self.assertRaisesRegex(AssertionError, 'overwrite'):
+                    provisioner.assert_destinations_absent([str(target)])
+                if mode == 'dir': target.rmdir()
+                else: target.unlink()
+            target.symlink_to(root, target_is_directory=True)
+            with self.assertRaises((OSError, AssertionError)):
+                provisioner.assert_destinations_absent([str(target/'new')])
+
+
 class FrontendDependencyTests(unittest.TestCase):
     cid = "d" * 64
     root = Path("/clone")

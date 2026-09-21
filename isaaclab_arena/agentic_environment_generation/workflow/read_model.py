@@ -17,6 +17,147 @@ from .scene_evidence_artifacts import _protected
 from .scene_loop import Observation, profile_digest
 
 
+def inspection_response_revision(value):
+    """Hash the whole response separately from its atomic retained revision."""
+    import hashlib
+
+    from .queries import RUN_INSPECTION_BYTES
+    from .scene_evidence_artifacts import canonical
+
+    raw = canonical(value.model_dump(mode="json", exclude={"response_revision"}), max_bytes=RUN_INSPECTION_BYTES)
+    result = value.model_copy(update={"response_revision": hashlib.sha256(raw).hexdigest()})
+    canonical(result.model_dump(mode="json"), max_bytes=RUN_INSPECTION_BYTES)
+    return result
+
+
+def inspection_budget(intent, reservations):
+    """Project exact cumulative allowances using the legacy ledger semantics."""
+    from .queries import InspectionBudget, ReservationTotals
+
+    b = intent.contract.budget
+    limits = dict(
+        model_calls=b.max_model_calls,
+        model_tokens=b.max_model_tokens,
+        cost_ceiling_usd=b.max_cost_usd,
+        runtime_allowance_seconds=b.max_runtime_seconds,
+        candidates=b.max_candidates,
+        revisions=b.max_revisions,
+        realizations=b.max_realizations,
+        steps=b.max_steps,
+        observations=b.max_observations,
+    )
+    # Inputs are the validated finite float Amount/Count ledger and budget,
+    # not arbitrary Decimal coefficients. Include limits in the aligned width
+    # so subtraction is exact too, plus row-count digits for addition carries.
+    from decimal import Context, ROUND_HALF_EVEN, localcontext
+
+    amounts = {key: [Decimal(str(row.get(key, 0))) for row in reservations] for key in limits}
+    ceilings = {key: Decimal(str(value)) for key, value in limits.items()}
+    operands = [Decimal(0), *ceilings.values(), *(value for values in amounts.values() for value in values)]
+    least = min(int(value.as_tuple().exponent) for value in operands)
+    most = max(value.adjusted() + 1 for value in operands)
+    most += len(str(len(reservations) + 1))
+    context = Context(
+        prec=most - least, Emin=least, Emax=most, rounding=ROUND_HALF_EVEN,
+        capitals=1, clamp=0, flags=[], traps=[],
+    )
+    with localcontext(context):
+        totals = {key: sum(values, Decimal(0)) for key, values in amounts.items()}
+        remaining = {key: max(Decimal(0), limit - totals[key]) for key, limit in ceilings.items()}
+    counts = set(limits) - {"cost_ceiling_usd", "runtime_allowance_seconds"}
+    reserved = {key: int(value) if key in counts else value for key, value in totals.items()}
+    remaining = {key: int(value) if key in counts else value for key, value in remaining.items()}
+    return InspectionBudget(
+        reserved=ReservationTotals(**reserved),
+        remaining=ReservationTotals(**remaining),
+        admitted_at=intent.submission.admitted_at,
+        deadline=intent.submission.admitted_at + b.total_deadline_seconds,
+        per_operation_ceiling_seconds=b.per_operation_timeout_seconds,
+    )
+
+
+def inspection_scene(contract, candidate, decision, evidence, assessment_id, decision_id, next_intent_id):
+    """Assess only an explicitly retained selected assessment, never raw claimed passes."""
+    from .queries import CandidateReference, CorruptRunInspection, CriterionInspection, SceneInspection
+
+    observation = evidence.observation if evidence is not None else None
+    selected = (
+        decision.assessment is not None
+        and assessment_id is not None
+        and evidence is not None
+        and evidence.candidate_id == candidate.candidate_id
+    )
+    limitations = ["retained_metadata_not_fresh_verification"]
+    try:
+        required = project_required_criteria(contract)
+    except ValueError:
+        required = ()
+        limitations.append("unsupported_criterion_projector")
+    binding = CandidateBinding(
+        candidate_digest=candidate.digest,
+        contract_digest=contract_digest(contract),
+        profile_digest=profile_digest(contract),
+    )
+    if selected and required:
+        aggregate = assess_scene_evidence(
+            required,
+            binding,
+            observation.evidence,
+            frozenset(observation.verified_manifest_digests),
+            selected_cohort=observation.cohort,
+        )
+        if aggregate != decision.assessment:
+            raise CorruptRunInspection()
+    requirements = {r.criterion_id: r for r in required}
+    criteria = []
+    for criterion in contract.criteria:
+        found = (
+            tuple(e for e in observation.evidence if e.criterion_id == criterion.criterion_id) if observation else ()
+        )
+        verdict = "not_assessed"
+        if criterion.requirement == "advisory":
+            verdict = "reported_only" if found else "not_assessed"
+        elif not required:
+            verdict = "unsupported"
+        elif selected:
+            single = assess_scene_evidence(
+                (requirements[criterion.criterion_id],),
+                binding,
+                observation.evidence,
+                frozenset(observation.verified_manifest_digests),
+                selected_cohort=observation.cohort,
+            )
+            verdict = {"established": "established", "not_established": "violated", "inconclusive": "inconclusive"}[
+                single.status
+            ]
+        criteria.append(
+            CriterionInspection(
+                criterion_id=criterion.criterion_id,
+                requirement=criterion.requirement,
+                verdict=verdict,
+                reported_verdicts=tuple(e.verdict for e in found),
+                manifests=tuple(sorted({e.manifest_digest for e in found})),
+            )
+        )
+    return SceneInspection(
+        candidate=CandidateReference(**candidate.model_dump(exclude={"run_id", "scene_json"})),
+        decision_id=decision_id,
+        decision_identity_provenance="latest_scene_event" if decision_id else "unavailable_retained_causality",
+        action=decision.action,
+        reason=decision.reason,
+        next_intent_id=next_intent_id,
+        evidence_id=evidence.evidence_id if evidence else None,
+        observation=observation,
+        assessment_id=assessment_id,
+        assessment=decision.assessment,
+        selected_assessed=selected,
+        assessment_status=decision.assessment.status if decision.assessment else "not_assessed",
+        acceptance="accepted" if decision.action == "accept" else "not_established",
+        criteria=tuple(criteria),
+        limitations=tuple(limitations),
+    )
+
+
 def workflow_result(store, run_id, *, protect):
     """Return screened durable identities, conservative budgets and recovery actions."""
     records = store.result_records(run_id)

@@ -30,18 +30,21 @@ ACTIVE = None
 MAX_CAPTURE_FILES = 320
 
 
-def verify_sources(*, scene=False):
+def verify_sources(*, scene=False, query_only=False, network=False):
     """Bind every staged byte to a read-only host-captured hash manifest."""
     root = Path("/source")
     assert os.statvfs(root).f_flag & os.ST_RDONLY
     manifest = json.loads((root / "source-manifest.json").read_text())
     assert {
         SELF,
-        ("isaaclab_arena/tests/test_environment_workflow_scene_worker_neo4j.py" if scene else TEST),
-        FIXTURE,
+        ("isaaclab_arena/tests/test_environment_workflow_graphql_network_neo4j.py" if network else
+         "isaaclab_arena/tests/test_environment_workflow_graphql_neo4j.py" if query_only else
+         "isaaclab_arena/tests/test_environment_workflow_scene_worker_neo4j.py" if scene else TEST),
         "closure.json",
     } <= set(manifest)
-    assert len(manifest) <= (384 if scene else MAX_CAPTURE_FILES) - 1
+    if not query_only:
+        assert FIXTURE in manifest
+    assert len(manifest) <= (96 if network else 128 if query_only else 384 if scene else MAX_CAPTURE_FILES) - 1
     total = 0
     for name, digest in manifest.items():
         parts = Path(name).parts
@@ -121,7 +124,9 @@ def driver_frame():
 class Guards:
     """Separate allowed transport/child counts from forbidden effects."""
 
-    def __init__(self, db_ip=None, *, scene=False, cli=False, control=False):
+    def __init__(self, db_ip=None, *, scene=False, cli=False, control=False, query_only=False):
+        assert type(query_only) is bool and not (query_only and (scene or cli or control))
+        self.query_only = query_only
         self.scene = scene
         self.cli = cli
         self.control = control
@@ -135,6 +140,8 @@ class Guards:
             self.control_identity = (info.st_dev, info.st_ino)
         self.db_ip = str(ipaddress.IPv4Address(db_ip)) if db_ip else None
         self.forbidden = dict.fromkeys(("network", "subprocess", "provider", "runtime", "graph"), 0)
+        if query_only:
+            self.forbidden.update(legacy=0, blocked_import=0)
         self.allowed = {"bolt": 0, "child_launch": 0}
         self.local = threading.local()
         self.native = subprocess.Popen
@@ -186,6 +193,14 @@ class Guards:
         return False
 
     def audit(self, event, args):
+        if self.query_only:
+            if event.startswith("sqlite3."):
+                self.deny("legacy")
+            if event == "import" and args[0].split(".")[0] in {
+                "sqlite3", "_sqlite3", "isaacsim", "omni", "carb", "pxr", "isaaclab", "torch",
+                "openai", "anthropic", "boto3",
+            }:
+                self.deny("blocked_import")
         if event in {"socket.bind", "socket.connect"} and self.control_allowed(*args):
             return
         if event == "socket.connect":
@@ -234,6 +249,8 @@ class Guards:
         module = frame.f_globals.get("__name__") or ""
         instance = frame.f_locals.get("self")
         owners = {base.__name__ for base in type(instance).__mro__} if name == "__init__" else set()
+        if self.query_only and name == "__init__" and owners & {"Journal", "ResearchStore", "ForegroundWorkflow", "ForegroundApplication"}:
+            self.deny("legacy")
         if name == "__init__" and owners & {
             "InferenceBackend",
             "EnvironmentGenerationAgent",
@@ -280,7 +297,7 @@ class Guards:
         guard = self
         self.fixed_spec = (
             (cli_spawn_spec() if self.cli else scene_spawn_spec() if self.scene else spawn_spec())
-            if self.db_ip
+            if self.db_ip and not self.query_only
             else None
         )
 
@@ -318,6 +335,8 @@ class Guards:
         subprocess.Popen = self.popen
 
     def popen(self, args, *positional, **kwargs):
+        if self.query_only:
+            self.deny("subprocess")
         expected_args, expected_kwargs = getattr(self, "fixed_spec", None) or spawn_spec()
         valid = (
             self.db_ip

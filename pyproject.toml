@@ -34,6 +34,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+workflow-api = [
+    "strawberry-graphql[fastapi]==0.327.7",
+    "graphql-core==3.2.6",
+    "cross-web==0.6.0",
+    "fastapi>=0.120.4,<1",
+]
 web = [
     "fastapi>=0.120.4,<1",
     "uvicorn>=0.52.4,<0.53",

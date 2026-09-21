@@ -18,11 +18,10 @@ from isaaclab_arena.agentic_environment_generation.inference_profiles import (
     ModelProfileUnavailable,
     freeze_configuration,
 )
+from isaaclab_arena.agentic_environment_generation.workflow.accounting import checked_workflow_accounting
 from isaaclab_arena.agentic_environment_generation.workflow.attempts import AuthorizationSnapshot
 from isaaclab_arena.agentic_environment_generation.workflow.contracts import canonical_json, contract_digest
-from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import checked_workflow_accounting
-
-from .web_api.provider_security import checked_config, reject_secret
+from isaaclab_arena.agentic_environment_generation.workflow.provider_configuration import checked_config, reject_secret
 
 
 def _locked(method):
@@ -189,9 +188,9 @@ class ForegroundAuthority:
             raise ValueError("Operational writes require permission")
         self.protect_public(contract.model_dump(mode="json"))
 
-    def _retained(self, principal, contract, run_id, operation_id=None):
+    def _retained(self, principal, contract, run_id, operation_id=None, *, retained_run=None):
         self.require_read(principal)
-        run = self.store.get_run(run_id)
+        run = self.store.get_run(run_id) if retained_run is None else retained_run
         if (
             run is None
             or run.run_id != run_id
@@ -296,12 +295,12 @@ class ForegroundAuthority:
         return roles
 
     @_locked
-    def bind_workflow_models(self, principal, contract, *, run_id):
+    def bind_workflow_models(self, principal, contract, *, run_id, retained_run=None):
         """Explicitly capture required extra roles after generation's retained binding.
 
         Return existing run metadata, never extra public bearer authority.
         """
-        snapshot = self.require_execute(principal, contract, run_id=run_id)
+        snapshot = self.require_execute(principal, contract, run_id=run_id, retained_run=retained_run)
         if run_id in self._workflow_bindings:
             raise ValueError("Explicit new workflow binding required")
         sources = self._workflow_sources(principal, contract)
@@ -311,9 +310,9 @@ class ForegroundAuthority:
         return snapshot
 
     @_locked
-    def require_scene_execute(self, principal, contract, *, run_id):
+    def require_scene_execute(self, principal, contract, *, run_id, retained_run=None):
         """Check all explicitly captured roles; retain the existing run snapshot."""
-        snapshot = self.require_execute(principal, contract, run_id=run_id)
+        snapshot = self.require_execute(principal, contract, run_id=run_id, retained_run=retained_run)
         roles = self._workflow_bindings.get(run_id)
         if roles is None:
             raise ValueError("Explicit workflow model binding required")
@@ -352,9 +351,9 @@ class ForegroundAuthority:
         return min(expiry, snapshot.expires_at, current_expiry, _deadline(self.require_read(principal)["expires_at"]))
 
     @_locked
-    def bind_run(self, principal, operation_id, contract, *, run_id, catalogue_sha256):
+    def bind_run(self, principal, operation_id, contract, *, run_id, catalogue_sha256, retained_run=None):
         """Explicitly capture a retained run; repeated binds never renew implicitly."""
-        self._retained(principal, contract, run_id, operation_id)
+        self._retained(principal, contract, run_id, operation_id, retained_run=retained_run)
         if (
             run_id in self._bindings
             or not isinstance(catalogue_sha256, str)
@@ -452,9 +451,87 @@ class ForegroundAuthority:
         return encoded
 
     @_locked
-    def renew_run(self, principal, contract, *, run_id):
+    def check_resume_eligibility(self, principal, contract, *, run, renew_authorization):
+        """Check frozen private sources and complete bindings without issuing grants or reading DB.
+
+        run is a trusted, freshly checked store snapshot, never request data.
+        Expired complete bindings can be explicitly renewed; partial bindings cannot.
+        """
+        if type(renew_authorization) is not bool:
+            raise TypeError("Explicit boolean renewal required")
+        try:
+            self._retained(principal, contract, run.run_id, retained_run=run)
+            sources = self._workflow_sources(principal, contract)
+            old = self._bindings.get(run.run_id)
+            roles = self._workflow_bindings.get(run.run_id)
+            if old is None and roles is None:
+                return "bind" if renew_authorization else "not_ready"
+            if old is None or roles is None or set(roles) != set(sources) - {"generation"}:
+                return "not_ready"
+            snapshot, binding, catalogue, profile = old
+            expected = _hash(
+                dict(
+                    version=1,
+                    scope=self.scope,
+                    operation=run.operation_id,
+                    run=run.run_id,
+                    contract=canonical_json(contract),
+                    catalogue=catalogue,
+                )
+            )
+            if (
+                snapshot.principal != principal
+                or snapshot.contract_digest != contract_digest(contract)
+                or binding != expected
+                or profile != sources["generation"][0]
+            ):
+                return "not_ready"
+            for role, (_, role_binding, role_profile, _) in roles.items():
+                if (
+                    role_binding != _hash(dict(version=1, run_binding=binding, role=role))
+                    or role_profile != sources[role][0]
+                ):
+                    return "not_ready"
+            if renew_authorization:
+                return "renew"
+            self.require_scene_execute(principal, contract, run_id=run.run_id, retained_run=run)
+            return "current"
+        except (ValueError, KeyError, TypeError):
+            return "not_ready"
+
+    @_locked
+    def apply_resume_authority(self, principal, contract, *, run, action, catalogue_sha256):
+        """Apply only the acknowledged action after the application's private delivery latch.
+
+        No database/lease/coordinator calls occur while this guard is held. The
+        application pins run before entry; the actual claim rechecks that pin.
+        Failure consumes that delivery and does not rewrite the admission receipt.
+        """
+        expected = {"none": "current", "bind": "bind", "renew": "renew"}.get(action)
+        if (
+            expected is None
+            or self.check_resume_eligibility(principal, contract, run=run, renew_authorization=action != "none")
+            != expected
+        ):
+            raise ValueError("Resume authority action changed")
+        if action == "bind":
+            self.bind_run(
+                principal,
+                run.operation_id,
+                contract,
+                run_id=run.run_id,
+                catalogue_sha256=catalogue_sha256,
+                retained_run=run,
+            )
+            self.bind_workflow_models(principal, contract, run_id=run.run_id, retained_run=run)
+        elif action == "renew":
+            self.renew_run(principal, contract, run_id=run.run_id, retained_run=run)
+        self.require_scene_execute(principal, contract, run_id=run.run_id, retained_run=run)
+
+    @_locked
+    def renew_run(self, principal, contract, *, run_id, retained_run=None):
         """Explicit credential renewal only within the same retained frozen intent."""
-        run = self._retained(principal, contract, run_id)
+        run = self._retained(principal, contract, run_id, retained_run=retained_run)
         old = self._bindings.get(run_id)
         if old is None or old[0].principal != principal or old[0].contract_digest != contract_digest(contract):
             raise ValueError("Exact original binding required")
@@ -462,9 +539,9 @@ class ForegroundAuthority:
         return self._issue(principal, contract, run_id, run.operation_id, old[2], workflow_sources=sources)
 
     @_locked
-    def require_execute(self, principal, contract, *, run_id, fence=None):
+    def require_execute(self, principal, contract, *, run_id, fence=None, retained_run=None):
         """Revalidate exact run, current source and optional retained attempt fence."""
-        run = self._retained(principal, contract, run_id)
+        run = self._retained(principal, contract, run_id, retained_run=retained_run)
         retained = self._bindings.get(run_id)
         if retained is None:
             raise ValueError("Explicit execution binding required")

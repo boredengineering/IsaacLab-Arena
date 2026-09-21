@@ -114,6 +114,11 @@ def main():
         with ConfinedRoot(here) as source:
             approved = (*UNIT_SOURCES, *(("browser.mjs", "request-correlation.test.mjs", "browser-manual-research.mjs", "manual-research.test.mjs") if options.node_units else ()))
             captured = {name: source.read(name) for name in approved}
+        with ConfinedRoot(root) as source:
+            captured["provision_functional_runtime.py"] = source.read("scripts/provision-functional-runtime.py")
+            captured["workflow_neo4j_runner.py"] = source.read("scripts/run-workflow-neo4j-checks.py")
+            captured["workflow_process_harness.py"] = source.read("scripts/workflow_process_harness.py")
+            captured["project-dependencies.toml"] = source.read("pyproject.toml")
         if options.node_units:
             captured["node-unit-bootstrap.mjs"] = NODE_UNITS.encode("utf-8")
         with new_destination(output / "source") as destination:

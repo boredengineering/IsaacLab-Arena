@@ -1,10 +1,42 @@
 # Plan 03 source-grounded review ledger
 
-Status: the bounded DDD/GraphQL review is complete for its recorded revision; subsequent user clarifications below amend the plan and are separately documentation-checked, not independently re-reviewed. These include general Physical AI scope, mandatory modeling-study inputs and local credential bootstrap. Implementation, native calibration and live acceptance remain unexecuted.
+Status: the bounded planning review passed, and the user subsequently authorized source implementation and admitted isolated tests. M0 modeling records have passed independent critique; implementation progress/evidence is owned by the linked handoff. Earlier verdicts below apply only to their recorded revisions. Native calibration and live acceptance remain unexecuted.
 
 Canonical plan: [event-mapping-refactoring_plan_03.md](event-mapping-refactoring_plan_03.md). Implementation status remains in the [existing handoff](dashboard_cli_workflow_parity/research-stack-implementation-handoff.md). This ledger records documentation review, not implementation approval or runtime acceptance.
 
 ## Baseline and scope
+
+### M0 modeling gate during authorized implementation
+
+The user activated the plan-03 implementation goal with source/isolated-test authority and explicit live/protected-change exclusions. The [current handoff](dashboard_cli_workflow_parity/research-stack-implementation-handoff.md) records that authorization, all R/G/T delivery mappings and actual implementation evidence; this ledger remains the design/modeling review record.
+
+`deleg_7f38ebf6` completed plan §7.4's M01–M15 records from the required original study and current source. Parent read back every record, verified all required modeling components/GWT cases and ran scoped documentation checks. Fresh critic `deleg_9acf4cb8` returned **PASS**: no concrete blocking contradiction in identity/authority/lifecycle/retention/actions, G01–G10 field-family coverage or the campaign map. In particular, cancel documents stop-before-DB/conflict-side delivery rather than promising impossible OS/DB rollback; resume separates recovery from continuation; historical cleanup, unsupported policy and readiness provenance remain explicit.
+
+Reviewed model-bearing plan SHA-256: `00b9a0c902a9202401196070042589a7e6a1a5a96cababe9de2e731d289357c0`. Local structural check: `outputs/workflow/plan03-implementation/m0-model-record-checks.json`. This closes the per-interaction modeling prerequisite for the described effect-free slices, **not** T20's later executable-schema/application tests, all M0 repository work, or V0. Actual producer/profile/calibration selections remain gates for affected execution. The first event `source_id` readback increment is partial G10 work, not completion of typed causation/history/revision obligations.
+
+### Latest review: complete development bootstrap and amended application contracts
+
+- User asks whether anything remains missing after the general Physical AI, mandatory event-modeling and local credential/bootstrap clarifications, including operation from inside the editor devcontainer. Review scope is a usable single-operator research bootstrap and coherent V0 → joined V1 → V2 delivery, not production hardening or runtime implementation.
+- Baseline: clean `dev/0.3.0-prerelease`, HEAD `8f40c55584c4998ac657128f433d4dd407a2905b`. Git comparison with `57a7d1f3fe67b1d2c3fa4a89a54f8ce5f8797b77` shows only the plan, ledger and reference-index changes. Starting plan SHA-256: `3e4c3a77c52bfac2a57760354f0e58bde2574e4af5d98ab649df0e6f95ca1ba3`. Public source/config fingerprint: `outputs/workflow/plan03-research/bootstrap-completeness-baseline.json`; inventory is not reviewed coverage.
+- Round 1 `deleg_60b9fb53`: three read-only reviewers checked bootstrap/container identity and clients, original DDD-to-schema/general-task semantics, and native/policy reuse/delivery. Supported one medium bootstrap handoff gap and one low camera-activation clarification; no additional architectural contradiction. Parent independently traced historical cleanup projection and recorded provisional findings at `outputs/workflow/plan03-research/bootstrap-parent-findings.json`.
+- Round 2 `deleg_4dde3eac`: two fresh challengers checked the proposed minimal bootstrap and attempted to disprove cleanup/camera/title concerns. Parent read decisive definitions/callers. No services, database queries, package execution, inference or real credential files were accessed.
+
+| ID | Classification / adjudication and strongest counterargument | Accepted correction / implementation verification |
+| --- | --- | --- |
+| BC01 | Medium onboarding gap; supported, not a networking or new-worker-topology defect. Existing host-network configuration, private reader and same-container clients are compatible, but §6 did not select the path from root editor to host storage and simulator identity. Both container scripts lack the Arena credential mount | §6.2 now selects host-owned directory initialization, opt-in mapped-UID editor setup, read-only runtime directory mount and simulator-local client authentication via fixed-target wrapper. Runtime account/groups/HOME/config paths are explicit. Detached API launch is independent of editor/client lifetime; it is not the old per-command foreground CLI. T21 covers the full synthetic journey, update/restart, editor rebuild and stale auth |
+| BC02 | Medium projection migration gap; narrowed, not missing cleanup evidence or unsafe takeover. `result_records` supplies the latest scope owner (`neo4j_store.py:1175,1872–1877`); `read_model.py:162–166` derives cleanup from its dirty flag. Exact worker cleanup/retired-owner records and historical recovery already exist (`foreground_recovery.py:143–176`) | §9.2 separates retained run/intent cleanup from current scope-owner activity/retirement. T10/T15 require cleaned run A to remain clean under a still-active owner or replacement B, while unresolved A never inherits unrelated cleanup. Reuse existing receipts/epochs rather than rebuilding ownership |
+| BC03 | Low native extraction clarification; narrowed because camera/evidence acceptance already exists. Legacy extraction calls `to_arena_env()` with camera default false; conversion preserves an explicit false override (`arena_env_graph_spec.py:218–226`, `arena_env_graph_conversion_utils.py:144–146`). Graph parameters can already enable cameras, so failure is not universal | Phase 3 explicitly binds frozen camera activation through Kit and graph conversion. T06 covers omitted/default, explicit true, conflicting explicit false and missing observation keys; preserve camera-free profiles/legacy defaults and never silently rewrite a candidate |
+| BC04 | Editorial clarification only; rejected as a substantive physics/simulator redesign defect. Existing text already reuses Arena and bounds repairs/calibration | Rename Phase 3 to connect existing Arena execution/capture and distinguish adapter wiring from tested hold/reset/window fixes. Explicitly forbid tuning physics or relaxing frozen criteria to manufacture acceptance. No new subsystem or test gate |
+
+BC01 challenge details retained: the current `.devcontainer/devcontainer.json:89` helper fallback must not swallow a credential-initializer rejection; opt-in private initialization is a separate mandatory step. The runtime account's supplementary simulation group/HOME comes from `docker/setup/entrypoint.sh:23–28,59–60`, not merely a numeric UID. A mounted regular file, root-owned pipe or FD 0 does not satisfy `foreground_workflow_cli.py:171–188`; construct/populate/close the private pipe under the selected runtime identity. These are concrete bootstrap compatibility requirements, not a new security platform. Editor root/Docker-socket access is trusted; simulator-local auth avoids copying but does not isolate secrets from a hostile editor.
+
+No additional correction is required for absent completed per-interaction modeling records: Phase 5/T20 already makes them an M0 prerequisite before each affected schema operation. Likewise, current policy-criterion rejection and synthetic-only factories are acknowledged implementation work, not proof the amended general architecture is contradictory. Existing engine reuse, Neo4j-only extraction, G01–G10 coverage and one joined V1 remain the selected direction. Calibration, installed dependency compatibility and positive native/provider/policy results remain release gates.
+
+Round 3 `deleg_890bb825`: a fresh verifier read the complete corrected plan and checked decisive public source; **PASS at planning level**, with no remaining blocking contradiction found. BC01–BC03 corrections preserve positive paths and existing guards; BC04 remains editorial. DDD/GraphQL traceability, general-task T19/T20, Neo4j-only persistence and joined V1/V2 remain coherent. Review stops here; this is not exhaustive proof or runtime acceptance.
+
+Verified plan SHA-256: `80668afec80649100d4dc79dc885eee1cc4782d4957ee95c72bc3e9731f6cb45`. Scoped pre-commit, `git diff --check`, relative links, balanced fences, unique R01–R16/T01–T21/G01–G10/BC01–BC04 definitions and proposed command shell syntax pass. Citation identity/evidence verification passes; unused research entries are informational warnings, not new factual coverage. Public source/config fingerprint remains unchanged. Exact local check record: `outputs/workflow/plan03-research/bootstrap-completeness-checks.json`.
+
+All added tests are implementation obligations, not tests executed in this review. Only this ledger and plan 03 changed in the repository; no protected container configuration, application source or real credential storage was changed. No services, package tests, database/provider/native work, deployment, staging or commit occurred. The next implementation step remains M0/V0's completed domain/event records and Neo4j/application/GraphQL foundation, followed by the joined live slice—not another infrastructure platform.
 
 ### Subsequent clarification: launcher-managed local credential bootstrap
 
@@ -24,7 +56,7 @@ The user clarified that the project targets general Physical AI, not the A2 exam
 
 This clarification changes the previously reviewed plan bytes. The prior independent verdict and digest below remain evidence for that earlier revision, not independent verification of this amendment. Scoped documentation and structural checks verify the amendment; runtime/generalization tests are implementation obligations, not executed results.
 
-### Current review: original DDD method → full GraphQL → live integration
+### Earlier review: original DDD method → full GraphQL → live integration
 
 - User asks whether plan 03 is the right next implementation step for live inference/native simulation and fully transitions the application to GraphQL according to the prior event-storming/DDD/event-mapping study. Neo4j-only persistence and no dashboard work remain explicit constraints.
 - Recovered original user statements: session `20260916_171442_92ddc8`, message `48723` requested a hypothetical step-by-step workflow to understand event modeling and document DDD for GraphQL information/API design; `48727` required command then modeling, without execution. Session `20260918_161956_6f5661`, message `54866` rejected local schemas without a coherent application model connecting research entities, workflow state, actions and retained state. The repository study records the five authority/identity/retention questions at `quick_notes/session_memory.md:25–61`.
@@ -102,7 +134,7 @@ Further user correction: “I do not want SQlite I want to enforce the architect
 | R02 | Live Graph-RAG using existing provenance machinery | Phase 2, §7–8 | T05 |
 | R03 | Native realization and capture, not synthetic relabelling | Phase 3, §8 | T06–T07/T14 |
 | R04 | Supported user-facing launch configuration | §5–6 | T02–T04, T09 |
-| R05 | Manipulation-level policy acceptance | Phase 4, §4, §11 | T08 |
+| R05 | Task-bound policy acceptance, with manipulation as a reference example | Phase 4, §4, §11 | T08/T19 |
 | R06 | Bottom-up DDD ownership/event-causation model and complete GraphQL contracts; dashboard deferred | Phase 5, M0/M4/M5, §7, §9 G01–G10 | T10–T12/T15–T16 |
 | R07 | Reuse engines/application rather than new controller/services | §2, §5, §8 | T01–T02 |
 | R08 | Separate isolated/native/live/deployed evidence and authorization | §1–2, §10–11 | All gates retain their scope |
@@ -113,6 +145,7 @@ Further user correction: “I do not want SQlite I want to enforce the architect
 | R13 | General Physical AI architecture; A2 is an example, not hardcoded task/embodiment/policy semantics | Phase 4, M3/V2, G09 | T08/T19 |
 | R14 | Original domain/event-modeling questions are mandatory implementation inputs, with explicit answers driving the schema | Phase 5 mandatory study, §7, §9 | T20 |
 | R15 | Launcher creates/stores/loads local credentials for a usable research bootstrap, not a production secret manager | §6.2–6.4, M1 | T21 |
+| R16 | Bootstrap works from the root editor devcontainer with explicit host persistence, mapped runtime identity and usable simulator-local clients | §6.1–6.4 selected topology | T21 and T09; protected mount changes remain separately approved |
 
 ## Parent findings and initial corrections
 

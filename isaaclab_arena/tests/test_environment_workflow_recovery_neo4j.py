@@ -99,6 +99,7 @@ def test_real_neo4j_owned_fixture_generation_and_fresh_object_recovery(tmp_path,
         with driver.session(database=database) as session:
             for ddl in Neo4jWorkflowStore.schema_requirements():
                 session.run(ddl).consume()
+            session.run("CALL db.awaitIndexes(10)").consume()
         store = Neo4jWorkflowStore(
             driver, database=database, deployment_id="process-fixture", workspace_id=uuid.uuid4().hex
         )

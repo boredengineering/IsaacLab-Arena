@@ -95,25 +95,31 @@ def image_metadata(image, command=None):
     return info
 
 
-def provision_image_metadata(image):
-    from check_proof import PROVISION_LABEL
+def provision_image_metadata(image, *, profile=None):
+    from check_proof import PROVISION_LABEL, GRAPHQL_LABEL
 
-    template = projection({
+    assert profile in (None, 'graphql-test-v1'), 'Unknown provision profile'
+    fields = {
         "Id": ".Id",
         "Volumes": '(index .Config "Volumes")',
         "Layers": ".RootFS.Layers",
         "Recipe": '(index .Config.Labels "' + PROVISION_LABEL + '")',
-    })
-    return json.loads(docker("image", "inspect", "--format", template, image))
+    }
+    if profile == 'graphql-test-v1':
+        fields['GraphQLRecipe'] = '(index .Config.Labels "' + GRAPHQL_LABEL + '")'
+        fields.update(Labels='.Config.Labels', User='.Config.User')
+    return json.loads(docker("image", "inspect", "--format", projection(fields), image))
 
 
-def select_runtime(discovered, image=None, manifest=None):
+def select_runtime(discovered, image=None, manifest=None, *, profile=None):
     """Select a provisioned test image without relabelling live discovery."""
     import re
 
     from check_proof import parse, selected_runtime
 
+    assert profile in (None, 'graphql-test-v1'), 'Unknown provision profile'
     if image is None and manifest is None:
+        assert profile is None, 'Explicit GraphQL image/manifest required'
         return discovered
     assert (
         image and manifest and re.fullmatch(r"sha256:[0-9a-f]{64}", image)
@@ -123,7 +129,14 @@ def select_runtime(discovered, image=None, manifest=None):
     path = Path(manifest).absolute()
     value = parse(read_confined(path.parent, path.name))
     selected = dict(discovered, selected_runtime_image=image, provision=value)
-    selected_runtime(selected)
+    selected_runtime(selected, profile=profile)
+    if profile == 'graphql-test-v1':
+        parent = parse(value['parent_manifest'])
+        assert provision_image_metadata(image, profile=profile) == value['image_projection'], 'GraphQL image readback mismatch'
+        assert provision_image_metadata(parent['image']) == value['base_projection'], 'GraphQL parent readback mismatch'
+        assert provision_image_metadata(parent['image'], profile=profile) == value['parent_config_projection'], 'GraphQL parent config readback mismatch'
+        assert provision_image_metadata(discovered['runtime_image']) == parent['base_projection'], 'GraphQL original readback mismatch'
+        return selected
     assert provision_image_metadata(image) == value["image_projection"], "Provisioned image readback mismatch"
     assert (
         provision_image_metadata(discovered["runtime_image"]) == value["base_projection"]
@@ -665,6 +678,77 @@ def wheel_entries(payload, package, version):
             expected = "sha256=" + base64.urlsafe_b64encode(hashlib.sha256(files[name]).digest()).decode().rstrip("=")
             assert digest == expected and size == str(len(files[name])), "Wheel RECORD mismatch"
     assert seen == set(files), "Wheel unrecorded file"
+    return files
+
+
+GRAPHQL_DIRECTORIES = frozenset(('strawberry', 'strawberry/aiohttp', 'strawberry/aiohttp/test', 'strawberry/asgi', 'strawberry/asgi/test', 'strawberry/chalice', 'strawberry/channels', 'strawberry/channels/handlers', 'strawberry/cli', 'strawberry/cli/commands', 'strawberry/cli/commands/upgrade', 'strawberry/cli/utils', 'strawberry/codegen', 'strawberry/codegen/plugins', 'strawberry/codemods', 'strawberry/django', 'strawberry/django/test', 'strawberry/exceptions', 'strawberry/exceptions/utils', 'strawberry/execution', 'strawberry/experimental', 'strawberry/experimental/pydantic', 'strawberry/ext', 'strawberry/ext/dataclasses', 'strawberry/extensions', 'strawberry/extensions/tracing', 'strawberry/fastapi', 'strawberry/federation', 'strawberry/field_extensions', 'strawberry/file_uploads', 'strawberry/flask', 'strawberry/http', 'strawberry/litestar', 'strawberry/printer', 'strawberry/quart', 'strawberry/relay', 'strawberry/sanic', 'strawberry/schema', 'strawberry/schema/types', 'strawberry/schema/validation_rules', 'strawberry/schema_codegen', 'strawberry/static', 'strawberry/subscriptions', 'strawberry/subscriptions/protocols', 'strawberry/subscriptions/protocols/graphql_transport_ws', 'strawberry/subscriptions/protocols/graphql_ws', 'strawberry/test', 'strawberry/tools', 'strawberry/types', 'strawberry/types/fields', 'strawberry/utils', 'strawberry_graphql-0.327.7.dist-info/licenses', 'strawberry_graphql-0.327.7.dist-info'))
+GRAPHQL_DATA = {'strawberry/ext/LICENSE': 'fe86344d98346ffb16d3efb44f8e1a313a72d9edb31752a2ca7f04d6a0e28afa', 'strawberry/ext/dataclasses/LICENSE': '599826df92bfdcd2702eac691072498bb096c55af04ee984cf90f70ed77b5a70', 'strawberry/ext/dataclasses/README.md': '584df9db7a3d8011a96b5f2292242180450dbae049591e6d30a9a389cacb3875', 'strawberry/static/apollo-sandbox.html': 'd97ce46c4d1daac147a9e844fa3ba5f7f27d4c53a9c00e9896b968d0a771ffdc', 'strawberry/static/graphiql.html': 'a7df1da2aa4dd7b5719aefbf903dc98d8d10a922a2a572587f88abf8f21192a6', 'strawberry/static/pathfinder.html': 'd033f1f40989d82fec26cb455e758ecfd939b5540778768aeea7556389409669'}
+
+
+def graphql_wheel_entries(payload, package, version):
+    """Validate the fixed GraphQL test additions, never widen legacy wheel admission."""
+    import base64
+    import csv
+    import io
+    import stat
+    import zipfile
+
+    roots = {'cross-web': ('cross_web', '0.6.0'), 'graphql-core': ('graphql', '3.2.6'),
+             'strawberry-graphql': ('strawberry', '0.327.7')}
+    assert package in roots and version == roots[package][1], 'GraphQL wheel pin'
+    root = roots[package][0]
+    metadata = package.replace('-', '_') + '-' + version + '.dist-info'
+    assert len(payload) <= 2 * 1024 * 1024, 'Wheel archive byte budget'
+    files, seen_paths, directories = {}, set(), set()
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        entries = archive.infolist()
+        assert 0 < len(entries) <= 4096, 'Wheel entry budget'
+        assert sum(row.file_size for row in entries) <= 16 * 1024 * 1024, 'Wheel expanded byte budget'
+        for row in entries:
+            name = row.filename[:-1] if row.is_dir() else row.filename
+            parts = name.split('/')
+            assert name not in seen_paths, 'Wheel duplicate path or file-directory conflict'
+            seen_paths.add(name)
+            if row.is_dir():
+                mode = row.external_attr >> 16
+                assert package == 'strawberry-graphql' and name in GRAPHQL_DIRECTORIES, 'Wheel unapproved directory'
+                assert row.file_size == 0 and stat.S_IFMT(mode) in (0, stat.S_IFDIR) and not mode & 0o7000, 'Wheel directory type'
+                assert not row.flag_bits & 1, 'Wheel encrypted directory'
+                directories.add(name)
+                continue
+            assert len(parts) >= 2 and all(p not in ('', '.', '..') for p in parts), 'Wheel path denied'
+            assert all(all(c.isalnum() or c in '_.+-' for c in part) for part in parts), 'Wheel path characters'
+            assert parts[0] in (root, metadata), 'Wheel unexpected root'
+            mode = row.external_attr >> 16
+            assert stat.S_IFMT(mode) in (0, stat.S_IFREG) and not mode & 0o7000, 'Wheel link/special entry denied'
+            assert not row.flag_bits & 1 and row.file_size <= 2 * 1024 * 1024, 'Wheel encrypted/oversize entry'
+            assert name not in files, 'Wheel duplicate path'
+            if parts[0] == root:
+                assert name.endswith('.py') or parts[-1] == 'py.typed' or name in GRAPHQL_DATA, 'Wheel hook/unapproved data'
+            else:
+                assert '/'.join(parts[1:]) in {'METADATA', 'WHEEL', 'RECORD', 'LICENSE', 'licenses/LICENSE', 'top_level.txt', 'entry_points.txt'}, 'Wheel metadata path'
+            content = archive.read(row)
+            if name in GRAPHQL_DATA:
+                assert hashlib.sha256(content).hexdigest() == GRAPHQL_DATA[name], 'Wheel reviewed data hash'
+            if name.endswith('/entry_points.txt'):
+                assert package == 'strawberry-graphql' and content == b'[console_scripts]\nstrawberry = strawberry.cli:run\n\n', 'Wheel entrypoint declaration'
+            assert len(content) == row.file_size, 'Wheel inconsistent length'
+            files[name] = content
+    for name in seen_paths:
+        assert not any('/'.join(name.split('/')[:i]) in files for i in range(1, len(name.split('/')))), 'Wheel file ancestor conflict'
+    assert all(any(f.startswith(d + '/') for f in files) for d in directories), 'Wheel empty directory'
+    record_name = metadata + '/RECORD'
+    assert root + '/__init__.py' in files and metadata + '/METADATA' in files and record_name in files, 'Wheel metadata absent'
+    seen = set()
+    for name, digest, size in csv.reader(io.StringIO(files[record_name].decode('utf-8'))):
+        assert name in files and name not in seen, 'Wheel RECORD coverage'
+        seen.add(name)
+        if name == record_name:
+            assert digest == size == '', 'Wheel RECORD self entry'
+        else:
+            expected = 'sha256=' + base64.urlsafe_b64encode(hashlib.sha256(files[name]).digest()).decode().rstrip('=')
+            assert digest == expected and size == str(len(files[name])), 'Wheel RECORD mismatch'
+    assert seen == set(files), 'Wheel unrecorded file'
     return files
 
 

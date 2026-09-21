@@ -123,6 +123,20 @@ def stop_local(app, principal, run_id):
     return _receipt("delivered")
 
 
+def stop_only(app, principal, run_id):
+    """Deliver the existing exact-target stop without any durable cancellation.
+
+    Current API/cancel authority is the caller's prerequisite. Frozen creator and
+    scope authentication, sticky fencing and exact owned cleanup stay unchanged.
+    """
+    from isaaclab_arena.agentic_environment_generation.workflow.commands import LocalStopObservation
+
+    delivery = stop_local(app, principal, run_id)
+    if delivery["delivery"] == "no_owner" and getattr(app, "_owner_control", True):
+        delivery = request_owner_stop(app.private_parent, run_id=run_id, principal=principal, scope=_scope(app))
+    return LocalStopObservation.model_validate(delivery)
+
+
 def cancel_workflow(app, principal, run_id):
     """Deliver local stop first; report authoritative cancellation independently."""
     delivery = stop_local(app, principal, run_id)

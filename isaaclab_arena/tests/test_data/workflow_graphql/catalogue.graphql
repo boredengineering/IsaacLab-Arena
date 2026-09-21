@@ -1,0 +1,11 @@
+query Catalogue {
+  workflowProfiles {
+    __typename
+    ... on WorkflowProfileList { profiles { id revision kind roles settingsDigest bodyDigest model endpoint billing
+      settings { model endpoint billing
+        inferencePolicy { id revision provider model endpoint origin support verification documentationUrls
+          requestPolicy { api temperatureMode tokenLimitParameter structuredOutput multimodalOutput store } }
+        workflowAccounting { version attested model endpoint maxTokens maxCostUsd }
+      } } }
+  }
+}

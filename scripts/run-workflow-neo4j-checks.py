@@ -48,11 +48,117 @@ SCENE_FIXTURE = "web/arena-workbench/tests/e2e/functional-v7/generation_worker_f
 CLI_TEST = "isaaclab_arena/tests/test_environment_workflow_cli_process_neo4j.py"
 PROCESS_MODES = ("workflow-process", "workflow-scene", "workflow-cli")
 SCENE_MODES = ("workflow-scene", "workflow-cli")
+GRAPHQL_TEST = "isaaclab_arena/tests/test_environment_workflow_graphql_neo4j.py"
+GRAPHQL_NETWORK_TEST = "isaaclab_arena/tests/test_environment_workflow_graphql_network_neo4j.py"
+GRAPHQL_MODES = ("workflow-graphql", "workflow-graphql-network")
+BOLT_MODES = (*PROCESS_MODES, *GRAPHQL_MODES)
+GRAPHQL_SOURCE_LIMIT = 128
+# Separately measured query network closure; no SDK/native imports.
+GRAPHQL_NETWORK_SOURCE_LIMIT = 96
+GRAPHQL_IMAGE = "sha256:b94e17024f1e123ac5a42759ab56651a18823fda7c701e765cba31f200154cdd"
+GRAPHQL_MANIFEST_SHA256 = "03764536ed54c1f59cbf46305c5bc4ba618e2dc1deeeac7ffdfb21a0dffbf810"
 PROCESS_SOURCE_LIMIT = 320
 # Reviewed scene closure: 341 files / 3.1 MiB (SDK/schema/registry plus fixed fixture imports).
 # Separate bound; ordinary and stdlib-child cohorts retain their existing limits.
 SCENE_SOURCE_LIMIT = 384
 FIXTURE = "isaaclab_arena/tests/test_data/minimal_maple_table_env_graph.yaml"
+
+
+def select_graphql_runtime(discovered, image, manifest):
+    """Validate the exact approved pair before any owned resource creation."""
+    from run import select_runtime
+    from confined_io import read_confined
+
+    assert image and manifest, "Explicit paired GraphQL image/manifest required"
+    assert image == GRAPHQL_IMAGE, "Unapproved query image"
+    path = Path(manifest).absolute()
+    raw = read_confined(path.parent, path.name)
+    assert hashlib.sha256(raw).hexdigest() == GRAPHQL_MANIFEST_SHA256, "Unapproved query manifest"
+    return select_runtime(discovered, image, path, profile="graphql-test-v1")
+
+
+def graphql_probe_source(root):
+    """Reuse the accepted verifier functions unchanged, with this cohort's preflight."""
+    import importlib.util
+    from check_proof import GRAPHQL_CLOSURE_SHA256
+    from confined_io import read_confined
+
+    spec = importlib.util.spec_from_file_location("query_provisioner", root / "scripts/provision-functional-runtime.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    raw = read_confined(root, "outputs/workflow/plan03-implementation/graphql-provisioning/discovery/closure-input.json")
+    assert hashlib.sha256(raw).hexdigest() == GRAPHQL_CLOSURE_SHA256
+    code = module.graphql_import_code("/isaac-sim/kit/python/lib/python3.12/site-packages", json.loads(raw), GRAPHQL_IMAGE, "unused")
+    tree = ast.parse(code)
+    nodes = []
+    constants = {"PATHS", "ALLOWED", "BINDINGS", "CLOSURE", "INCIDENTAL"}
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name in {"physical_file", "check_imports"}:
+            nodes.append(ast.get_source_segment(code, node))
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id in constants for t in node.targets):
+            nodes.append(ast.get_source_segment(code, node))
+    assert len(nodes) == 7
+    return ("import os, sys, json, hashlib\n" + "\n".join(nodes)).encode()
+
+
+_GRAPHQL_PROBE = None
+
+
+def graphql_imports(preimport, guard):
+    """Witness real framework imports before repository code under query denial."""
+    global _GRAPHQL_PROBE
+    namespace = {}
+    exec(compile(Path("/source/graphql-import-check.py").read_bytes(), "/source/graphql-import-check.py", "exec"), namespace)
+    paths = namespace["PATHS"]
+    assert sys.flags.isolated == sys.flags.no_site == sys.flags.ignore_environment == 1
+    assert sys.path == ["/source/scripts", *paths[:3]]
+    sys.path[:] = paths
+    sys.dont_write_bytecode = True
+    profile = json.loads(Path("/source/graphql-profile.json").read_text())
+    before = dict(guard.forbidden)
+    result = dict(schema_version=1, status="failed", image=GRAPHQL_IMAGE,
+                  scope="query cohort actual framework imports, not the application response",
+                  recipe_sha256=profile["recipe_sha256"], interpreter="/isaac-sim/python.sh",
+                  executable=sys.executable, python_version=list(sys.version_info[:3]),
+                  sys_path=list(sys.path), uid=os.getuid(), errno=preimport["kernel_denial"]["2"],
+                  egress_denied=True, before_package_imports=True, distributions={}, modules={}, loaded_modules={})
+    namespace["result"] = result
+    namespace["check_imports"]()
+    assert before == guard.forbidden
+    result["forbidden"] = {"network": guard.forbidden["network"], "subprocess": guard.forbidden["subprocess"],
+                           "blocked_import": guard.forbidden.get("blocked_import", 0)}
+    _GRAPHQL_PROBE = namespace
+    return result
+
+
+def graphql_runtime_modules():
+    """Record additional executed immutable files separately from the closed probe."""
+    rows = {}
+    for name, module in sorted(list(sys.modules.items())):
+        origin = getattr(getattr(module, "__spec__", None), "origin", None)
+        if not origin or origin in ("built-in", "frozen") or origin.startswith("/source/"):
+            continue
+        if any(origin.startswith(p + "/") for p in _GRAPHQL_PROBE["ALLOWED"]):
+            _, row = _GRAPHQL_PROBE["physical_file"](origin, _GRAPHQL_PROBE["ALLOWED"])
+            rows[name] = dict(row, origin=origin)
+        else:
+            assert any(origin.startswith(p + "/") for p in _GRAPHQL_PROBE["PATHS"][:3]), "Unrecorded runtime origin"
+    return rows
+
+
+def graphql_runtime_metadata(modules):
+    """Additional observed test/driver dependencies, not a new metadata closure claim."""
+    import importlib.metadata
+    baseline = _GRAPHQL_PROBE["result"]["loaded_modules"]
+    extras = sorted({n.split(".")[0] for n in modules} - {n.split(".")[0] for n in baseline})
+    names = {"_pytest": "pytest", "py": "pytest"}
+    result = {}
+    for root in extras:
+        name = names.get(root, root)
+        distribution = importlib.metadata.distribution(name)
+        _, witness = _GRAPHQL_PROBE["physical_file"](str(distribution._path) + "/METADATA", _GRAPHQL_PROBE["ALLOWED"])
+        result[root] = dict(distribution=name, version=distribution.version, metadata=witness)
+    return result
 
 
 def validate_process_network(net):
@@ -113,7 +219,7 @@ def validate_client_proof(proof, mode, junit=None, network_manifest=None):
 
     assert proof["status"] == "passed" and proof["mode"] == mode
     assert proof["database"] == DATABASE
-    expected_uri = ("bolt://" + network_manifest["ip"] + ":7687") if mode in PROCESS_MODES else URI
+    expected_uri = ("bolt://" + network_manifest["ip"] + ":7687") if mode in BOLT_MODES else URI
     assert proof["uri"] == expected_uri
     assert proof["driver_version"] == "6.2.0"
     assert proof["driver_file"] == "/isaac-sim/kit/python/lib/python3.12/site-packages/neo4j/__init__.py"
@@ -123,7 +229,7 @@ def validate_client_proof(proof, mode, junit=None, network_manifest=None):
     assert proof["return_one"] == 1 and proof["driver_closed"] is True
     assert re.fullmatch(r"[a-f0-9]{32}", proof["marker"]["token"])
     assert proof["marker"]["created_read_deleted"] is True and proof["marker"]["remaining"] == 0
-    assert proof["suite"] == (
+    assert proof["suite"] == (GRAPHQL_NETWORK_TEST if mode == "workflow-graphql-network" else GRAPHQL_TEST if mode == "workflow-graphql" else (
         CLI_TEST
         if mode == "workflow-cli"
         else (
@@ -132,6 +238,19 @@ def validate_client_proof(proof, mode, junit=None, network_manifest=None):
             else (PROCESS_TEST if mode == "workflow-process" else TEST if mode == "workflow" else None)
         )
     )
+    )
+    if mode == "workflow-graphql":
+        assert proof["network_manifest"] == network_manifest
+        assert proof["allowed"]["child_launch"] == 0 and proof["allowed"]["bolt"] > 0
+        assert not any(proof["forbidden"].values())
+        assert proof["preimport"]["before_package_imports"] is True
+        assert proof["no_children"] is True
+    if mode == "workflow-graphql-network":
+        assert proof["network_manifest"] == network_manifest
+        assert proof["children_verified"] is True and len(proof["network_processes"]) == 23 and len(proof["network_servers"]) == 3
+        assert not any(proof["forbidden"].values())
+        assert proof["allowed"]["child_launch"] == 23 and proof["allowed"]["bolt"] > 0
+        assert proof["preimport"]["before_package_imports"] is True
     if mode in PROCESS_MODES:
         assert proof["network_manifest"] == network_manifest
         assert proof["server"]["address"] == network_manifest["ip"] + ":7687"
@@ -184,12 +303,15 @@ def validate_client_proof(proof, mode, junit=None, network_manifest=None):
 
 def inside(mode):
     """Exercise genuine Bolt transport before optionally running the fixed suite."""
-    process = mode in PROCESS_MODES
+    process = mode in BOLT_MODES
+    query_only = mode in GRAPHQL_MODES
     selected_test = (
         CLI_TEST
         if mode == "workflow-cli"
         else (SCENE_TEST if mode == "workflow-scene" else PROCESS_TEST if process else TEST)
     )
+    if query_only:
+        selected_test = GRAPHQL_NETWORK_TEST if mode == "workflow-graphql-network" else GRAPHQL_TEST
     uri = URI
     guard = None
     proof = {
@@ -209,7 +331,7 @@ def inside(mode):
             import workflow_process_harness as harness
 
             proof["preimport"] = harness.preflight()
-            proof["source_sha256"] = harness.verify_sources(scene=mode in SCENE_MODES)
+            proof["source_sha256"] = harness.verify_sources(scene=mode in SCENE_MODES, query_only=query_only, network=mode == "workflow-graphql-network")
             assert os.statvfs("/network/manifest.json").f_flag & os.ST_RDONLY
             network_manifest = json.loads(Path("/network/manifest.json").read_text())
             assert set(network_manifest) == {"container_id", "network_id", "ip", "port"}
@@ -223,9 +345,16 @@ def inside(mode):
                 network_manifest["ip"],
                 scene=mode in SCENE_MODES,
                 cli=mode == "workflow-cli",
+                query_only=query_only,
             )
+            if mode == "workflow-graphql-network":
+                from workflow_graphql_network_harness import NetworkGuards
+
+                guard = NetworkGuards("harness", network_manifest["ip"])
             harness.ACTIVE = guard
             guard.install()
+            if query_only:
+                proof["imports"] = graphql_imports(proof["preimport"], guard)
             if mode in SCENE_MODES:
                 proof["metadata"] = harness.replay_scene_metadata(metadata, guard)
             import platform
@@ -348,6 +477,17 @@ def inside(mode):
                         " recovery object; no SDK/generation/runtime"
                     ),
                 )
+        if query_only:
+            assert guard.fixed_spec is None
+            if mode == "workflow-graphql-network":
+                from workflow_graphql_network_harness import verify_children
+
+                proof.update(verify_children(guard, proof["source_sha256"]))
+            else:
+                assert not guard.children
+                proof["no_children"] = True
+            proof["runtime_modules"] = graphql_runtime_modules()
+            proof["additional_runtime_metadata"] = graphql_runtime_metadata(proof["runtime_modules"])
         proof["status"] = "passed"
     except BaseException:
         proof["error"] = traceback.format_exc()
@@ -359,7 +499,7 @@ def inside(mode):
     return 0
 
 
-def stage_source(root, destination, mode):
+def stage_source(root, destination, mode, *, provision=None):
     """Capture only fixed entrypoints and their confined static Python closure."""
     from confined_io import ConfinedRoot
 
@@ -369,6 +509,11 @@ def stage_source(root, destination, mode):
         | {"isaaclab_arena"}
     )
     todo = [SELF] + ([TEST] if mode == "workflow" else [])
+    if mode in GRAPHQL_MODES:
+        todo += [GRAPHQL_NETWORK_TEST if mode == "workflow-graphql-network" else GRAPHQL_TEST, PROCESS_HELPER]
+        if mode == "workflow-graphql-network":
+            todo.append("scripts/workflow_graphql_network_harness.py")
+        todo += sorted(str(p.relative_to(root)) for p in (root / "isaaclab_arena/tests/test_data/workflow_graphql").glob("*.graphql"))
     if mode in PROCESS_MODES:
         todo += [
             (CLI_TEST if mode == "workflow-cli" else SCENE_TEST if mode == "workflow-scene" else PROCESS_TEST),
@@ -391,7 +536,7 @@ def stage_source(root, destination, mode):
             data = source.read(name)
             captured[name] = data
             assert len(captured) <= (
-                SCENE_SOURCE_LIMIT if mode in SCENE_MODES else PROCESS_SOURCE_LIMIT if mode in PROCESS_MODES else 128
+                SCENE_SOURCE_LIMIT if mode in SCENE_MODES else PROCESS_SOURCE_LIMIT if mode in PROCESS_MODES else GRAPHQL_NETWORK_SOURCE_LIMIT if mode == "workflow-graphql-network" else GRAPHQL_SOURCE_LIMIT if mode == "workflow-graphql" else 128
             )
             assert sum(map(len, captured.values())) <= 8 * 1024 * 1024
             if name == SELF or not name.endswith(".py"):
@@ -403,11 +548,16 @@ def stage_source(root, destination, mode):
                 if source.is_file(init):
                     todo.append(init)
             tree = ast.parse(data)
-            if mode in PROCESS_MODES:
+            if mode in BOLT_MODES:
                 # Runtime imports never execute TYPE_CHECKING branches. Keep the
                 # old cohort's deliberately conservative closure unchanged.
                 class RuntimeImports(ast.NodeTransformer):
                     def visit_FunctionDef(self, node):
+                        if mode in GRAPHQL_MODES and name == PROCESS_HELPER and node.name in {
+                            "child", "scene_child", "cli_child", "load_scene_metadata", "replay_scene_metadata",
+                            "verify_scene_children", "verify_cli_children"
+                        }:
+                            return []
                         omitted = {
                             PROCESS_HELPER: {"scene_child"},
                             "isaaclab_arena/assets/registries.py": {"ensure_assets_registered"},
@@ -445,8 +595,12 @@ def stage_source(root, destination, mode):
                             todo.append(candidate)
     from confined_io import new_destination
 
+    if mode in GRAPHQL_MODES:
+        assert provision is not None
+        captured["graphql-import-check.py"] = graphql_probe_source(root)
+        captured["graphql-profile.json"] = json.dumps({"recipe_sha256": provision["recipe_sha256"]}).encode()
     captured["closure.json"] = json.dumps({"files": sorted(captured), "namespaces": namespaces}).encode()
-    if mode in PROCESS_MODES:
+    if mode in BOLT_MODES:
         captured["source-manifest.json"] = json.dumps(
             {name: hashlib.sha256(data).hexdigest() for name, data in captured.items()}
         ).encode()
@@ -469,20 +623,27 @@ def main(argv=None):
             "workflow-process",
             "workflow-scene",
             "workflow-cli",
+            "workflow-graphql",
+            "workflow-graphql-network",
         ),
     )
+    parser.add_argument("--runtime-image")
+    parser.add_argument("--provision-manifest", type=Path)
     options = parser.parse_args(argv)
+    if options.mode not in GRAPHQL_MODES:
+        assert options.runtime_image is None and options.provision_manifest is None
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root / "web/arena-workbench/tests/e2e/functional-v7"))
     from confined_io import ConfinedRoot, new_destination, read_confined
     from run import LABEL, OWN_FORMAT, OwnedRun, discover, docker, projection
 
     token = "arena-neo4j-" + uuid.uuid4().hex
-    output = root / "web/arena-workbench/tests/e2e/functional-v7/.runs" / token
+    output = (root / "outputs/workflow/plan03-implementation/graphql-query-launch/implementation/runs" if options.mode == "workflow-graphql-network" else root / "outputs/workflow/plan03-implementation/graphql-query-api/runs" if options.mode == "workflow-graphql"
+              else root / "web/arena-workbench/tests/e2e/functional-v7/.runs") / token
     # Validate every ancestor before the first write; never resolve .runs links.
     with ConfinedRoot(output.parent.parent) as parent:
         try:
-            parent.validate_directory(".runs")
+            parent.validate_directory(output.parent.name)
         except FileNotFoundError:
             with new_destination(output.parent):
                 pass
@@ -517,10 +678,16 @@ def main(argv=None):
     })
     try:
         discovery = discover(root, False)
+        client_image = CLIENT_IMAGE
+        if options.mode in GRAPHQL_MODES:
+            discovery = select_graphql_runtime(discovery, options.runtime_image, options.provision_manifest)
+            client_image = discovery["selected_runtime_image"]
+            run.proof["graphql_provision_manifest_sha256"] = GRAPHQL_MANIFEST_SHA256
+            run.proof["invocation"] = [sys.executable, *sys.argv]
         run.proof["host_root"] = discovery["host_root"]
-        for image in (DB_IMAGE, CLIENT_IMAGE):
+        for image in (DB_IMAGE, client_image):
             assert docker("image", "inspect", "--format", "{{.Id}}", image) == image
-        manifest = stage_source(root, output / "source", options.mode)
+        manifest = stage_source(root, output / "source", options.mode, provision=discovery.get("provision"))
         run.proof["source_sha256"] = manifest
         host = discovery["host_root"] + "/" + output.relative_to(root).as_posix()
         run.save()
@@ -528,7 +695,7 @@ def main(argv=None):
         run.proof["create_attempts"][token] = "attempted"
         run.save()
         network_flags = (
-            ["--opt", "com.docker.network.bridge.gateway_mode_ipv4=isolated"] if options.mode in PROCESS_MODES else []
+            ["--opt", "com.docker.network.bridge.gateway_mode_ipv4=isolated"] if options.mode in BOLT_MODES else []
         )
         nid = docker(
             "network",
@@ -544,7 +711,7 @@ def main(argv=None):
         run.save()
         net = json.loads(docker("network", "inspect", "--format", net_format, nid))
         assert net["Id"] == nid and net["Internal"] and net["Labels"][LABEL] == token
-        if options.mode in PROCESS_MODES:
+        if options.mode in BOLT_MODES:
             detailed = json.loads(docker("network", "inspect", nid))[0]
             validate_process_network(detailed)
             run.proof["isolated_network"] = detailed
@@ -552,11 +719,12 @@ def main(argv=None):
         # Scene parent + SDK children reuse F0's 4 GiB / 256 PID resource cap.
         # The stdlib-child cap cannot hold two immutable Torch/SDK import trees.
         # CPU, egress, namespace, read-only, per-child alarm/deadlines stay pinned.
+        # Approved ordinary extended-cohort experiment: DB 4 GiB; other modes stay 1 GiB.
         for role, image, user, memory, pids in (
-            ("db", DB_IMAGE, "7474:7474", "1g", 128),
+            ("db", DB_IMAGE, "7474:7474", "4g" if options.mode == "workflow" else "1g", 128),
             (
                 "client",
-                CLIENT_IMAGE,
+                client_image,
                 "1000:1000",
                 "4g" if options.mode in SCENE_MODES else "768m",
                 256 if options.mode in SCENE_MODES else 128,
@@ -591,7 +759,7 @@ def main(argv=None):
                 "--env=CUDA_VISIBLE_DEVICES=",
             ]
             if role == "db":
-                if options.mode in PROCESS_MODES:
+                if options.mode in BOLT_MODES:
                     flags += [
                         "--read-only",
                         "--tmpfs=/tmp:rw,nosuid,nodev,exec,uid=7474,gid=7474,size=33554432",
@@ -620,7 +788,7 @@ def main(argv=None):
                     f"type=bind,src={host}/source,dst=/source,readonly",
                     f"type=bind,src={host}/evidence,dst=/evidence",
                 ]
-                if options.mode in PROCESS_MODES:
+                if options.mode in BOLT_MODES:
                     mounts.append(f"type=bind,src={host}/network,dst=/network,readonly")
                 flags += [
                     "--read-only",
@@ -642,6 +810,7 @@ def main(argv=None):
                     "NVIDIA_VISIBLE_DEVICES=void",
                     "CUDA_VISIBLE_DEVICES=",
                     "/isaac-sim/python.sh",
+                    *(["-I", "-S"] if options.mode in GRAPHQL_MODES else []),
                     "/source/" + SELF,
                     "--inside",
                     options.mode,
@@ -661,7 +830,9 @@ def main(argv=None):
             assert cfg["CapDrop"] == ["ALL"] and not cfg["CapAdd"]
             assert "no-new-privileges" in cfg["SecurityOpt"] and cfg["PidsLimit"] == pids
             assert cfg["Memory"] == (
-                1073741824 if role == "db" else 4294967296 if options.mode in SCENE_MODES else 805306368
+                (4294967296 if options.mode == "workflow" else 1073741824)
+                if role == "db"
+                else 4294967296 if options.mode in SCENE_MODES else 805306368
             )
             extra = json.loads(
                 docker(
@@ -678,13 +849,13 @@ def main(argv=None):
             assert extra["NanoCpus"] == 1000000000 and extra["MemorySwap"] == cfg["Memory"]
             assert set(extra["Networks"]) == {token}
             if role == "client":
-                assert cfg["ReadonlyRootfs"] and len(info["Mounts"]) == (3 if options.mode in PROCESS_MODES else 2)
+                assert cfg["ReadonlyRootfs"] and len(info["Mounts"]) == (3 if options.mode in BOLT_MODES else 2)
                 assert set(cfg["Tmpfs"]) == {"/tmp"}
                 binds = {m["Destination"]: m for m in info["Mounts"] if m["Type"] == "bind"}
                 assert set(binds) == (
-                    {"/source", "/evidence", "/network"} if options.mode in PROCESS_MODES else {"/source", "/evidence"}
+                    {"/source", "/evidence", "/network"} if options.mode in BOLT_MODES else {"/source", "/evidence"}
                 )
-                if options.mode in PROCESS_MODES:
+                if options.mode in BOLT_MODES:
                     assert binds["/network"]["Source"] == host + "/network" and not binds["/network"]["RW"]
                 assert binds["/source"]["Source"] == host + "/source" and not binds["/source"]["RW"]
                 assert binds["/evidence"]["Source"] == host + "/evidence" and binds["/evidence"]["RW"]
@@ -698,10 +869,10 @@ def main(argv=None):
                         "/var/lib/neo4j/conf",
                         "/var/lib/neo4j/run",
                     }
-                    if options.mode in PROCESS_MODES
+                    if options.mode in BOLT_MODES
                     else {"/data", "/logs"}
                 )
-                if options.mode in PROCESS_MODES:
+                if options.mode in BOLT_MODES:
                     assert cfg["ReadonlyRootfs"]
             run.proof["containers"].append({
                 "id": cid,
@@ -713,7 +884,7 @@ def main(argv=None):
             run.proof["verified_isolation"][name] = True
             run.save()
             docker("start", cid)
-            if role == "db" and options.mode in PROCESS_MODES:
+            if role == "db" and options.mode in BOLT_MODES:
                 import ipaddress
 
                 owned_net = json.loads(docker("inspect", "--format", "{{json .NetworkSettings.Networks}}", cid))
@@ -740,10 +911,37 @@ def main(argv=None):
             (read_confined(output, "evidence/pytest.xml") if options.mode != "self-check" else None),
             network_manifest=run.proof.get("network_manifest"),
         )
+        if options.mode == "workflow-graphql":
+            from check_proof import graphql_import_contract
+            graphql_import_contract(dict(discovery["provision"], imports=proof["imports"]))
+            run.proof["evidence_sha256"] = {
+                name: hashlib.sha256(read_confined(output / "evidence", name)).hexdigest()
+                for name in ("client-proof.json", "pytest.xml", "schema.graphql", "operation-coverage.json", "graphql-joined.json", "graphql-full-join.json")
+            }
+            run.proof["captured_source_files"] = len(manifest)
+            run.proof["captured_source_bytes"] = sum(len(read_confined(output / "source", name)) for name in manifest)
+        if options.mode == "workflow-graphql-network":
+            from check_proof import graphql_import_contract
+
+            graphql_import_contract(dict(discovery["provision"], imports=proof["imports"]))
+            run.proof["evidence_sha256"] = {}
+            for row in [*proof["network_processes"], *proof["network_servers"]]:
+                name = row["evidence_file"]
+                assert name == f"graphql-process-{row['pid']}.json"
+                raw = read_confined(output / "evidence", name)
+                assert hashlib.sha256(raw).hexdigest() == row["evidence_sha256"]
+                detail = json.loads(raw)
+                graphql_import_contract(dict(discovery["provision"], imports=detail["imports"]))
+                assert detail["source_sha256"] == proof["source_sha256"]
+                run.proof["evidence_sha256"][name] = row["evidence_sha256"]
+            for name in ("client-proof.json", "pytest.xml", "uvicorn-discovery.json", "network-retained-readback.json"):
+                run.proof["evidence_sha256"][name] = hashlib.sha256(read_confined(output / "evidence", name)).hexdigest()
+            run.proof["captured_source_files"] = len(manifest)
+            run.proof["captured_source_bytes"] = sum(len(read_confined(output / "source", name)) for name in manifest)
         run.proof.update(client=proof, status="passed")
     except BaseException:
         run.proof["error"] = traceback.format_exc()
-        if options.mode in PROCESS_MODES:
+        if options.mode in BOLT_MODES:
             run.proof["owned_logs"] = {}
             for name, identity in run.proof["created_ids"].items():
                 try:
@@ -788,6 +986,10 @@ def main(argv=None):
                     run.proof["network_cleanup_error"] = traceback.format_exc()
             for name, digest in run.proof.get("source_sha256", {}).items():
                 assert hashlib.sha256(read_confined(output / "source", name)).hexdigest() == digest
+                if options.mode in GRAPHQL_MODES and name not in {
+                    "closure.json", "source-manifest.json", "graphql-import-check.py", "graphql-profile.json"
+                }:
+                    assert hashlib.sha256(read_confined(root, name)).hexdigest() == digest, "Live query cohort source changed"
             if "network_manifest" in run.proof:
                 assert json.loads(read_confined(output, "network/manifest.json")) == run.proof["network_manifest"]
             ambiguous = [name for name, state in run.proof["create_attempts"].items() if state != "acknowledged"]
@@ -828,6 +1030,8 @@ if __name__ == "__main__":
             "workflow-process",
             "workflow-scene",
             "workflow-cli",
+            "workflow-graphql",
+            "workflow-graphql-network",
         )
         raise SystemExit(inside(sys.argv[2]))
     raise SystemExit(main())

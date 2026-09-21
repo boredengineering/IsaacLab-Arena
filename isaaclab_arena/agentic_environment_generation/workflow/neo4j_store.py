@@ -13,9 +13,42 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from types import MappingProxyType
+from typing import Literal
 
 from .attempts import AttemptFence, AuthorizationSnapshot, GenerationReservation, ReadinessReceipt, WorkerRegistration
+from .commands import (
+    COMMAND_BYTES,
+    CancelReceipt,
+    CommandConflict,
+    CorruptCancelReceipt,
+    CorruptResumeReceipt,
+    CorruptResumeSelection,
+    LocalStopObservation,
+    ResumeAdmission,
+    ResumePayload,
+    ResumeReceipt,
+    ResumeSelection,
+    command_digest,
+    command_json,
+    make_cancel_receipt,
+    make_resume_receipt,
+)
 from .contracts import contract_digest, parse_contract
+from .queries import (
+    HISTORICAL_CANDIDATE_BYTES,
+    CorruptCleanupRecord,
+    CorruptSceneRecord,
+    FrozenRunIntentView,
+    FrozenSubmissionInspection,
+    IntentCleanupView,
+    RunCleanupView,
+    RunInspection,
+    SceneAssessmentView,
+    SceneCandidateView,
+    SceneDecisionView,
+    SceneEvidenceView,
+    SceneReadScope,
+)
 from .readiness import required_dependencies
 from .results import AttemptView, CleanupEvidence, GenerationReceipt, OwnerView, ReconciliationReason
 
@@ -55,6 +88,10 @@ class WorkflowEvent:
     operation_id: str
     kind: str
     schema_version: int
+    source_id: str | None = None
+    """Stored source identity, or None when unavailable; not inferred causation."""
+    command_kind: Literal["CANCEL", "RESUME"] | None = None
+    command_operation_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -129,7 +166,45 @@ _VIEW = "r {.run_id, .operation_id, .request_json, .contract_json, .version, .st
 _SCOPE = "{deployment_id: $deployment_id, workspace_id: $workspace_id}"
 _CONTROL = "MATCH (c:ArenaWorkflowControl " + _SCOPE + ") "
 
+_HISTORY_FIELDS = {
+    "ArenaWorkflowCandidate": "record_id",
+    "ArenaWorkflowEvidence": "record_id",
+    "ArenaCriterionAssessment": "record_id",
+    "ArenaWorkflowDecision": "decision_id",
+    "ArenaWorkflowRun": "run_id",
+    "ArenaExecutionIntent": "intent_id",
+}
+# Bound payloads before transport, then enforce UTF-8 bytes before parsing. Never
+# return arbitrary node properties (notably private authorization snapshots).
+_HISTORY_VIEW = (
+    "n {"
+    + ", ".join(
+        f"{field}: CASE WHEN size(toStringOrNull(n.{field}))<={limit} THEN n.{field} "
+        f"WHEN n.{field} IS NULL THEN null ELSE [false] END"
+        for field, limit in (
+            ("deployment_id", 4096),
+            ("workspace_id", 4096),
+            ("run_id", 128),
+            ("record_id", 128),
+            ("decision_id", 128),
+            ("candidate_id", 128),
+            ("intent_id", 128),
+            ("evidence_id", 128),
+            ("kind", 128),
+        )
+    )
+    + ", payload: CASE WHEN size(toStringOrNull(n.payload))<=CASE WHEN n:ArenaWorkflowCandidate THEN "
+    + str(HISTORICAL_CANDIDATE_BYTES)
+    + " ELSE 2097152 END THEN n.payload ELSE null END, scene_json: CASE WHEN"
+    " size(toStringOrNull(n.scene_json))<=2097152 THEN n.scene_json ELSE null END, contract_json: CASE WHEN"
+    " size(toStringOrNull(n.contract_json))<=2097152 THEN n.contract_json ELSE null END} AS node, elementId(n) AS"
+    " key, labels(n) AS labels"
+)
+
+
 _KEYS = (
+    ("resume_command", "ArenaResumeReceipt", ("deployment_id", "workspace_id", "kind", "operation_id")),
+    ("cancel_command", "ArenaCancelReceipt", ("deployment_id", "workspace_id", "kind", "operation_id")),
     ("control", "ArenaWorkflowControl", ("deployment_id", "workspace_id")),
     (
         "operation",
@@ -138,6 +213,23 @@ _KEYS = (
     ),
     ("run", "ArenaWorkflowRun", ("deployment_id", "workspace_id", "run_id")),
     ("event", "ArenaWorkflowEvent", ("deployment_id", "workspace_id", "sequence")),
+    ("profile", "ArenaWorkflowProfile", ("deployment_id", "workspace_id", "profile_id")),
+    ("profile_revision", "ArenaWorkflowProfileRevision", ("deployment_id", "workspace_id", "profile_id", "revision")),
+)
+
+
+# Nonunique scoped lookups preserve LIMIT 2 corruption/duplicate detection.
+# Run lookup is already backed by _KEYS; no writer identity rules change.
+_HISTORY_INDEXES = (
+    ("candidate", "ArenaWorkflowCandidate", "record_id"),
+    ("evidence", "ArenaWorkflowEvidence", "record_id"),
+    ("assessment", "ArenaCriterionAssessment", "record_id"),
+    ("decision", "ArenaWorkflowDecision", "decision_id"),
+    ("selection", "ArenaWorkflowDecision", "evidence_id"),
+    ("intent", "ArenaExecutionIntent", "intent_id"),
+    ("run_intent", "ArenaExecutionIntent", "run_id"),
+    ("attempt", "ArenaExecutionAttempt", "attempt_id"),
+    ("retired_owner", "ArenaRetiredWorkflowOwner", "owner_id"),
 )
 
 
@@ -169,8 +261,9 @@ class Neo4jWorkflowStore:
         self.scope = dict(deployment_id=deployment_id, workspace_id=workspace_id)
 
     @contextmanager
-    def _transaction(self):
-        session = self.driver.session(database=self.database)
+    def _transaction(self, *, fetch_size=None):
+        options = {} if fetch_size is None else {"fetch_size": fetch_size}
+        session = self.driver.session(database=self.database, **options)
         tx = None
         try:
             tx = session.begin_transaction(timeout=5)
@@ -202,6 +295,40 @@ class Neo4jWorkflowStore:
             ):
                 raise SchemaMissing(label)
 
+        indexes = list(
+            tx.run("SHOW INDEXES YIELD entityType, type, state, labelsOrTypes, properties, owningConstraint RETURN *")
+        )
+        if not any(
+            r["entityType"] == "NODE"
+            and r["type"] == "RANGE"
+            and r["state"] == "ONLINE"
+            and r["labelsOrTypes"] == ["ArenaResumeReceipt"]
+            and r["properties"] == ["deployment_id", "workspace_id", "kind", "operation_id"]
+            for r in indexes
+        ):
+            raise SchemaMissing("online resume receipt index required")
+        lookup_indexes = [(label, ["deployment_id", "workspace_id", field]) for _, label, field in _HISTORY_INDEXES]
+        lookup_indexes.append(("ArenaWorkflowProfileRevision", ["deployment_id", "workspace_id"]))
+        lookup_indexes.append(("ArenaWorkflowEvent", ["deployment_id", "workspace_id", "run_id", "kind", "sequence"]))
+        lookup_indexes.append(
+            (
+                "ArenaWorkflowCandidate",
+                ["deployment_id", "workspace_id", "run_id", "record_id"],
+            )
+        )
+        lookup_indexes.append(("ArenaWorkflowDecision", ["deployment_id", "workspace_id", "run_id", "decision_id"]))
+        for label, fields in lookup_indexes:
+            if not any(
+                r["entityType"] == "NODE"
+                and r["type"] == "RANGE"
+                and r["state"] == "ONLINE"
+                and r["owningConstraint"] is None
+                and r["labelsOrTypes"] == [label]
+                and r["properties"] == fields
+                for r in indexes
+            ):
+                raise SchemaMissing("online historical lookup index required: " + label)
+
     def verify_schema(self):
         """Read schema without provisioning or repairing it."""
         with self._transaction() as tx:
@@ -227,18 +354,306 @@ class Neo4jWorkflowStore:
                 )
             )
 
-    def _lock(self, tx):
+    def _checked_scope_binding(self, binding):
+        from .scope_binding import ScopeBinding
+
+        value = ScopeBinding.model_validate_json(binding.model_dump_json())
+        if (value.database, value.deployment_id, value.workspace_id) != (
+            self.database,
+            self.scope["deployment_id"],
+            self.scope["workspace_id"],
+        ):
+            raise SubmissionConflict("Scope binding target differs")
+        return value
+
+    def _scope_binding(self, tx):
+        from .scope_binding import CorruptScopeBinding, ScopeMigrationRequired, decode_scope_binding
+
+        rows = list(
+            tx.run(
+                _CONTROL
+                + "RETURN "
+                "CASE WHEN size(toStringOrNull(c.scope_binding_json))<=4096 "
+                "THEN c.scope_binding_json ELSE null END AS body, "
+                "CASE WHEN size(toStringOrNull(c.scope_binding_sha256))<=64 "
+                "THEN c.scope_binding_sha256 ELSE null END AS digest, "
+                "c.scope_binding_json IS NOT NULL OR c.scope_binding_sha256 IS NOT NULL AS present LIMIT 2",
+                **self.scope,
+            )
+        )
+        if not rows:
+            return None
+        if len(rows) != 1:
+            raise CorruptScopeBinding("Ambiguous retained scope binding")
+        row = rows[0]
+        if not row["present"]:
+            raise ScopeMigrationRequired("Existing scope requires explicit migration")
+        binding = decode_scope_binding(row["body"], row["digest"])
+        if (binding.database, binding.deployment_id, binding.workspace_id) != (
+            self.database,
+            self.scope["deployment_id"],
+            self.scope["workspace_id"],
+        ):
+            raise CorruptScopeBinding("Retained scope binding target differs")
+        return binding
+
+    def initialize_bound_scope(self, binding, *, protect):
+        """Quiescent explicit initialization; exact replay never advances counters.
+
+        Schema must already be provisioned. The existing unique control key owns
+        binding and control atomically; legacy controls require separate migration.
+        No retry on unknown commit, concurrent initialization or cleanup failure.
+        """
+        from .scene_evidence_artifacts import _protected
+
+        binding = self._checked_scope_binding(binding)
+        if not callable(protect):
+            raise ValueError("public protection callback required")
+        _protected(binding.model_dump(mode="json"), protect, max_bytes=4096)
+        with self._transaction() as tx:
+            self._verify(tx)
+            retained = self._scope_binding(tx)
+            if retained is None:
+                orphan = list(
+                    tx.run(
+                        "MATCH (n " + _SCOPE + ") RETURN true AS present LIMIT 1",
+                        **self.scope,
+                    )
+                )
+                if orphan:
+                    raise ScopeMissing("Orphan scope requires explicit migration")
+                list(
+                    tx.run(
+                        "CREATE (c:ArenaWorkflowControl "
+                        + _SCOPE
+                        + ") "
+                        "SET c.revision=0, c.sequence=0, c.floor=0, "
+                        "c.scope_binding_json=$body, c.scope_binding_sha256=$digest RETURN c.workspace_id",
+                        **self.scope,
+                        body=binding.body_json,
+                        digest=binding.body_sha256,
+                    )
+                )
+                retained = self._scope_binding(tx)
+            if retained != binding:
+                raise SubmissionConflict("Scope binding differs")
+        _protected(retained.model_dump(mode="json"), protect, max_bytes=4096)
+        return retained
+
+    def verify_scope_binding(self, binding):
+        """Verify current schema and exact retained binding with MATCH/SHOW only."""
+        binding = self._checked_scope_binding(binding)
+        with self._transaction() as tx:
+            self._verify(tx)
+            retained = self._scope_binding(tx)
+            if retained is None:
+                raise ScopeMissing("Scope must be explicitly initialized")
+            if retained != binding:
+                raise SubmissionConflict("Scope binding differs")
+        return retained
+
+    def _lock(self, tx, *, bounded=False):
         # Constant SET takes the complete write lock before the dependent increment.
         rows = list(
             tx.run(
                 _CONTROL
-                + "SET c.lock_anchor=true SET c.revision=c.revision+1 RETURN c.floor AS floor, c.sequence AS ceiling",
+                + "SET c.lock_anchor=true SET c.revision=c.revision+1 RETURN "
+                + (
+                    "CASE WHEN size(toStringOrNull(c.floor))<=19 THEN c.floor ELSE null END AS floor, "
+                    "CASE WHEN size(toStringOrNull(c.sequence))<=19 THEN c.sequence ELSE null END AS ceiling"
+                    if bounded
+                    else "c.floor AS floor, c.sequence AS ceiling"
+                ),
                 **self.scope,
             )
         )
         if len(rows) != 1:
             raise ScopeMissing("scope must be explicitly initialized")
         return rows[0]
+
+    def _profile_scope(self):
+        from .profiles import ProfileScope
+
+        return ProfileScope(database=self.database, **self.scope)
+
+    def _profile_read_scope(self, tx):
+        rows = list(tx.run(_CONTROL + "RETURN c.workspace_id AS workspace_id LIMIT 2", **self.scope))
+        if len(rows) != 1:
+            raise ScopeMissing("scope must be explicitly initialized")
+
+    def _profile_rows(self, tx, profile_id=None, revision=None):
+        # Exact identity uses the full unique key; list/count use the scope index.
+        # Use fixed-key dynamic node access for the physical scalar. Both p.revision
+        # and properties(p).revision can reuse equality-index cache values (float
+        # 2.0 hydrated as integer predicate 2), bypassing strict type validation.
+        assert (profile_id is None) == (revision is None)
+        predicate = "" if profile_id is None else "WHERE p.profile_id=$profile_id AND p.revision=$revision "
+        params = {} if profile_id is None else dict(profile_id=profile_id, revision=revision)
+        rows = list(
+            tx.run(
+                "MATCH (p:ArenaWorkflowProfileRevision "
+                + _SCOPE
+                + ") "
+                + predicate
+                + "RETURN p {.profile_id, revision: p[$revision_property], .kind, .schema_version, "
+                ".body_sha256, .settings_sha256, "
+                "body_json: CASE WHEN size(p.body_json)<=16384 THEN p.body_json ELSE null END} AS profile "
+                "ORDER BY p.profile_id, p.revision LIMIT 65",
+                revision_property="revision",
+                **self.scope,
+                **params,
+            )
+        )
+        if len(rows) > 64:
+            raise ValueError("Retained profile capacity exceeded")
+        result = [self._profile_readback(row["profile"]) for row in rows]
+        if len({(value.profile_id, value.revision) for value in result}) != len(result):
+            raise ValueError("Ambiguous profile revision identity")
+        for value in result:
+            if self._profile_anchor(tx, value.profile_id) != value.registration.kind:
+                raise ValueError("Retained profile kind anchor differs")
+        return result
+
+    def _profile_anchor(self, tx, profile_id):
+        rows = list(
+            tx.run(
+                "MATCH (p:ArenaWorkflowProfile "
+                + _SCOPE
+                + ") WHERE p.profile_id=$profile_id RETURN p.kind AS kind LIMIT 2",
+                **self.scope,
+                profile_id=profile_id,
+            )
+        )
+        if len(rows) > 1:
+            raise ValueError("Ambiguous profile anchor")
+        return rows[0]["kind"] if rows else None
+
+    @staticmethod
+    def _profile_readback(row):
+        from .profiles import (
+            MAX_PROFILE_BYTES,
+            CorruptProfileRecord,
+            ProfileRegistration,
+            profile_body,
+            profile_revision,
+        )
+
+        # Only retained decoding/validation is sanitized, never transport or cleanup.
+        try:
+            if type(row.get("schema_version")) is not int or type(row.get("revision")) is not int:
+                raise ValueError("Invalid retained profile scalar types")
+            body = row["body_json"]
+            if type(body) is not str or len(body.encode("utf-8")) > MAX_PROFILE_BYTES:
+                raise ValueError("Invalid retained profile body")
+            value = json.loads(body)
+            if type(value) is not dict or set(value) != {"schema_version", "registration"}:
+                raise ValueError("Invalid retained profile envelope")
+            if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+                raise ValueError("Unsupported retained profile codec")
+            result = profile_revision(ProfileRegistration.model_validate(value["registration"]))
+            if body != profile_body(result.registration) or row != {
+                "profile_id": result.profile_id,
+                "revision": result.revision,
+                "kind": result.registration.kind,
+                "schema_version": result.schema_version,
+                "body_sha256": result.body_sha256,
+                "settings_sha256": result.settings_sha256,
+                "body_json": body,
+            }:
+                raise ValueError("Retained profile identity or digest differs")
+            return result
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptProfileRecord("Invalid retained profile record") from None
+
+    def register_profile(self, registration, *, protect):
+        """Register public immutable bytes under initialized scope; grants no execution."""
+        from ..inference_profiles import checked_inference_profile
+        from .profiles import MAX_PROFILE_REVISIONS, ProfileRegistration, profile_body, profile_revision
+        from .scene_evidence_artifacts import _protected
+
+        self._profile_scope()
+        registration = ProfileRegistration.model_validate_json(registration.model_dump_json())
+        result = profile_revision(registration)
+        if not callable(protect):
+            raise ValueError("public protection callback required")
+        _protected(result.model_dump(mode="json"), protect)
+        with self._transaction() as tx:
+            self._lock(tx)
+            self._verify(tx)
+            previous = self._profile_rows(tx, registration.profile_id, registration.revision)
+            if previous:
+                if previous != [result]:
+                    raise SubmissionConflict("profile revision differs")
+                return previous[0]
+            count = list(
+                tx.run(
+                    "MATCH (p:ArenaWorkflowProfileRevision " + _SCOPE + ") RETURN count(p) AS count",
+                    **self.scope,
+                )
+            )[0]["count"]
+            if count >= MAX_PROFILE_REVISIONS:
+                raise CapacityExceeded("profile revision capacity exhausted")
+            settings = registration.settings
+            checked_inference_profile(
+                settings.inference_policy.model_dump(mode="json"), model=settings.model, base_url=settings.endpoint
+            )
+            kind = self._profile_anchor(tx, registration.profile_id)
+            if kind is not None and kind != registration.kind:
+                raise SubmissionConflict("profile kind differs")
+            if kind is None:
+                list(
+                    tx.run(
+                        "CREATE (p:ArenaWorkflowProfile "
+                        + _SCOPE
+                        + ") SET p.profile_id=$profile_id, p.kind=$kind RETURN p.kind AS kind",
+                        **self.scope,
+                        profile_id=registration.profile_id,
+                        kind=registration.kind,
+                    )
+                )
+            rows = list(
+                tx.run(
+                    "CREATE (p:ArenaWorkflowProfileRevision "
+                    + _SCOPE
+                    + ") "
+                    "SET p.profile_id=$profile_id, p.revision=$revision, p.kind=$kind, "
+                    "p.schema_version=$schema_version, p.body_json=$body_json, "
+                    "p.body_sha256=$body_sha256, p.settings_sha256=$settings_sha256 RETURN p.profile_id AS id",
+                    **self.scope,
+                    profile_id=result.profile_id,
+                    revision=result.revision,
+                    kind=registration.kind,
+                    schema_version=result.schema_version,
+                    body_json=profile_body(registration),
+                    body_sha256=result.body_sha256,
+                    settings_sha256=result.settings_sha256,
+                )
+            )
+            if len(rows) != 1 or self._profile_rows(tx, result.profile_id, result.revision) != [result]:
+                raise ValueError("Profile creation readback differs")
+        return result
+
+    def get_profile(self, profile_id, revision):
+        """Read retained codec and digests only; no control lock or catalogue lookup."""
+        from .profiles import ProfileIdentity
+
+        self._profile_scope()
+        ProfileIdentity(profile_id=profile_id, revision=revision)
+        with self._transaction() as tx:
+            self._profile_read_scope(tx)
+            rows = self._profile_rows(tx, profile_id, revision)
+            if len(rows) > 1:
+                raise ValueError("Ambiguous profile identity")
+            result = rows[0] if rows else None
+        return result
+
+    def list_profiles(self):
+        """Read the bounded retained catalogue without probing or resolving defaults."""
+        self._profile_scope()
+        with self._transaction() as tx:
+            self._profile_read_scope(tx)
+            result = tuple(self._profile_rows(tx))
+        return result
 
     def _run(self, tx, field, value):
         assert field in ("operation_id", "run_id")
@@ -268,6 +683,438 @@ class Neo4jWorkflowStore:
         except _lookup_transport_errors() as exc:
             raise StoreUnavailable("workflow store unavailable") from exc
         return result
+
+    def _inspection_rows(self, tx, field, identity):
+        assert field in ("operation_id", "run_id")
+        # Exact predicates use the existing composite unique indexes. Bound each
+        # string before Bolt hydration; UTF-8 byte validation follows locally.
+        bounds = (
+            ("deployment_id", 4096),
+            ("workspace_id", 4096),
+            ("run_id", 128),
+            ("operation_id", 128),
+            ("request_json", 2097152),
+            ("contract_json", 2097152),
+            ("admitted_at", 64),
+        )
+        if field == "run_id":
+            bounds += (("version", 32), ("event_cursor", 32), ("state", 64), ("phase", 64))
+        # toStringOrNull guards corrupt arrays and non-string scalar properties
+        # without hydrating them or throwing input-bearing Cypher type errors.
+        # Return the physical value, not the string conversion: strict local
+        # validation must still distinguish boolean, float and integer counters.
+        projection = [
+            f"{key}: CASE WHEN size(toStringOrNull(r.{key}))<={limit} THEN r.{key} ELSE null END"
+            for key, limit in bounds
+        ]
+        for key in ("request_digest", "accepted_contract_digest", "digest_codec"):
+            projection.append(
+                f"{key}: CASE WHEN r.{key} IS NULL THEN null "
+                f"WHEN size(toStringOrNull(r.{key}))<=64 THEN r.{key} ELSE '' END"
+            )
+        return list(
+            tx.run(
+                "MATCH (r:ArenaWorkflowRun " + _SCOPE + ") WHERE r." + field + "=$identity "
+                "RETURN r {" + ", ".join(projection) + "} AS retained LIMIT 2",
+                **self.scope,
+                identity=identity,
+            )
+        )
+
+    def _submission_readback(self, row, field, identity):
+        from .queries import SUBMISSION_INSPECTION_BYTES
+        from .scene_evidence_artifacts import canonical
+
+        if row[field] != identity or any(row[key] != value for key, value in self.scope.items()):
+            raise ValueError("Retained identity differs")
+        validate_operation_id(row["operation_id"])
+        raw_identity = json.dumps(
+            [self.scope["deployment_id"], self.scope["workspace_id"], row["operation_id"]],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        if row["run_id"] != hashlib.sha256(raw_identity.encode("utf-8")).hexdigest():
+            raise ValueError("Retained admission identity differs")
+        digests = []
+        for key in ("request_json", "contract_json"):
+            body = row[key]
+            if type(body) is not str or len(body.encode("utf-8")) > 2 * 1024 * 1024:
+                raise ValueError("Retained body bound")
+            _canonical(body)
+            digests.append(hashlib.sha256(body.encode("utf-8")).hexdigest())
+        # Legacy writers retained no independent digest metadata. Compute from
+        # exact canonical bytes; if metadata exists, it must agree, never repair it.
+        for key, expected in zip(
+            ("request_digest", "accepted_contract_digest", "digest_codec"),
+            (*digests, "sha256-canonical-json-utf8-v1"),
+        ):
+            if row[key] is not None and row[key] != expected:
+                raise ValueError("Retained digest metadata differs")
+        result = FrozenSubmissionInspection(
+            scope=SceneReadScope(database=self.database, **self.scope),
+            kind="SUBMIT",
+            operation_id=row["operation_id"],
+            run_id=row["run_id"],
+            request_digest=digests[0],
+            accepted_contract_digest=digests[1],
+            digest_codec="sha256-canonical-json-utf8-v1",
+            admitted_at=row["admitted_at"],
+            disposition="retained_admission",
+            provenance="legacy_run_record",
+            receipt_version=None,
+            cause_id=None,
+        )
+        canonical(result.model_dump(mode="json"), max_bytes=SUBMISSION_INSPECTION_BYTES)
+        return result
+
+    def get_submission_inspection(self, operation_id) -> FrozenSubmissionInspection | None:
+        """Read bounded legacy admission facts without the original request or effects."""
+        from .queries import CorruptRunRecord
+
+        validate_operation_id(operation_id)
+        with self._transaction(fetch_size=2) as tx:
+            rows = self._inspection_rows(tx, "operation_id", operation_id)
+            # Query/transport and transaction cleanup stay outside this boundary.
+            try:
+                if len(rows) > 1:
+                    raise ValueError("Ambiguous retained admission")
+                result = self._submission_readback(rows[0]["retained"], "operation_id", operation_id) if rows else None
+            except (ValueError, TypeError, KeyError, RecursionError):
+                raise CorruptRunRecord() from None
+        return result
+
+    def get_run_intent(self, run_id) -> FrozenRunIntentView | None:
+        """Read the supported frozen contract and cooperative current lifecycle only."""
+        validate_operation_id(run_id)
+        with self._transaction(fetch_size=2) as tx:
+            result = self._run_intent(tx, run_id)
+        return result
+
+    def _run_intent(self, tx, run_id):
+        from .contracts import canonical_json
+        from .queries import RUN_INTENT_VIEW_BYTES, CorruptRunRecord
+        from .scene_evidence_artifacts import canonical
+
+        # Same cooperative lock as writers, but an absent scope/root is a
+        # query miss, not an invitation to initialize a control record.
+        anchors = list(
+            tx.run(
+                _CONTROL + "SET c.lock_anchor=true SET c.revision=c.revision+1 RETURN 1 AS present LIMIT 2",
+                **self.scope,
+            )
+        )
+        rows = self._inspection_rows(tx, "run_id", run_id)
+        try:
+            if len(anchors) > 1 or (rows and len(anchors) != 1):
+                raise ValueError("Retained run control binding differs")
+            if len(rows) > 1:
+                raise ValueError("Ambiguous retained run")
+            result = None
+            if rows:
+                row = rows[0]["retained"]
+                submission = self._submission_readback(row, "run_id", run_id)
+                contract = parse_contract(row["contract_json"])
+                # Defaults and coercions may be useful at admission, never
+                # when reconstructing the exact supported retained codec.
+                if canonical_json(contract) != row["contract_json"]:
+                    raise ValueError("Retained contract does not roundtrip")
+                result = FrozenRunIntentView(
+                    scope=submission.scope,
+                    run_id=submission.run_id,
+                    submission=submission,
+                    contract=contract,
+                    state=row["state"],
+                    phase=row["phase"],
+                    run_version=row["version"],
+                    event_cursor=row["event_cursor"],
+                    intent_projection_revision="0" * 64,
+                )
+                body = result.model_dump(mode="json", exclude={"intent_projection_revision"})
+                revision = hashlib.sha256(canonical(body, max_bytes=RUN_INTENT_VIEW_BYTES)).hexdigest()
+                result = result.model_copy(update={"intent_projection_revision": revision})
+                canonical(result.model_dump(mode="json"), max_bytes=RUN_INTENT_VIEW_BYTES)
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptRunRecord() from None
+        return result
+
+    def get_run_inspection(self, run_id) -> RunInspection | None:
+        """Join retained point-read dependencies under one cooperative transaction."""
+        from types import SimpleNamespace
+
+        from .contracts import canonical_json
+        from .queries import RUN_INSPECTION_BYTES, CorruptRunInspection, InspectionActions
+        from .read_model import inspection_budget, inspection_response_revision
+        from .scene_evidence_artifacts import canonical
+
+        validate_operation_id(run_id)
+        with self._transaction(fetch_size=1) as tx:
+            intent = self._run_intent(tx, run_id)
+            result = None
+            if intent is not None:
+                try:
+                    dependencies = []
+                    cleanup = self._run_cleanup(tx, run_id, dependencies=dependencies)
+                    reservations, readiness, attempts, outputs = self._inspection_ledger(
+                        tx, intent, cleanup, dependencies
+                    )
+                    run = SimpleNamespace(
+                        run_id=run_id,
+                        state=intent.state,
+                        phase=intent.phase,
+                        version=intent.run_version,
+                        contract_json=canonical_json(intent.contract),
+                    )
+                    preview = self._resume_preview(tx, run_id, retained_run=run, retained_attempts=attempts)
+                    scene = self._inspection_scene(tx, intent)
+                except (CorruptCleanupRecord, CorruptSceneRecord, CorruptResumeSelection):
+                    raise CorruptRunInspection() from None
+                # Only local decoding/projection errors are retained corruption.
+                try:
+                    result = RunInspection(
+                        intent=intent,
+                        cleanup=cleanup,
+                        budget=inspection_budget(intent, reservations),
+                        readiness=readiness,
+                        scene=scene,
+                        generation_outputs=outputs,
+                        actions=InspectionActions(
+                            cancel_applicable=intent.state
+                            in ("pending", "running", "cancel_requested", "reconciliation_required"),
+                            resume_branch=preview.selection.branch if preview.selection else None,
+                            resume_intent_id=preview.selection.intent_id if preview.selection else None,
+                        ),
+                        policy_outcome=(
+                            "not_requested" if intent.contract.execution.policy is None else "unsupported_or_unretained"
+                        ),
+                        publication_outcome="unknown" if intent.contract.effects.allow_publication else "not_permitted",
+                        retained_dependencies_revision=hashlib.sha256(
+                            canonical(dependencies, max_bytes=17 * 1024 * 1024)
+                        ).hexdigest(),
+                        retained_revision="0" * 64,
+                        response_revision="0" * 64,
+                    )
+                    raw = canonical(
+                        result.model_dump(mode="json", exclude={"retained_revision", "response_revision"}),
+                        max_bytes=RUN_INSPECTION_BYTES,
+                    )
+                    result = result.model_copy(update={"retained_revision": hashlib.sha256(raw).hexdigest()})
+                    result = inspection_response_revision(result)
+                except (ValueError, TypeError, KeyError, RecursionError):
+                    raise CorruptRunInspection() from None
+        return result
+
+    def _inspection_scene(self, tx, intent):
+        from .queries import CorruptRunInspection
+        from .read_model import inspection_scene
+        from .scene_loop import CandidateRecord, SceneDecision, SceneIntent
+
+        bounds = (
+            ("scene_candidate", HISTORICAL_CANDIDATE_BYTES),
+            ("scene_decision", 2097152),
+            ("scene_evidence", 128),
+            ("scene_intent", 128),
+        )
+        projection = [
+            f"{field}: CASE WHEN size(toStringOrNull(r.{field}))<={limit} THEN r.{field} "
+            f"WHEN r.{field} IS NULL THEN null ELSE [false] END"
+            for field, limit in bounds
+        ]
+        rows = list(
+            tx.run(
+                "MATCH (r:ArenaWorkflowRun "
+                + _SCOPE
+                + ") WHERE r.run_id=$run RETURN r {"
+                + ", ".join(projection)
+                + "} AS scene LIMIT 2",
+                **self.scope,
+                run=intent.run_id,
+            )
+        )
+        if len(rows) != 1:
+            raise CorruptRunInspection()
+        root = rows[0]["scene"]
+        if all(value is None for value in root.values()):
+            if intent.phase == "scene":
+                raise CorruptRunInspection()
+            return None
+        candidate = self._historical_payload({"node": {"payload": root["scene_candidate"]}}, CandidateRecord)
+        candidate_row = self._historical_node(tx, "ArenaWorkflowCandidate", candidate.candidate_id)
+        if candidate_row is None or self._historical_candidate(tx, candidate_row).candidate != candidate:
+            raise CorruptRunInspection()
+        if candidate.run_id != intent.run_id:
+            raise CorruptRunInspection()
+        decision = self._historical_payload({"node": {"payload": root["scene_decision"]}}, SceneDecision)
+        # Equality prefix plus sequence range uses the explicit nonunique admin index.
+        # Do not filter source_id: a latest legacy source-less event must stay latest.
+        events = list(
+            tx.run(
+                "MATCH (e:ArenaWorkflowEvent "
+                + _SCOPE
+                + ") "
+                "USING INDEX e:ArenaWorkflowEvent(deployment_id, workspace_id, run_id, kind, sequence) "
+                "WHERE e.run_id=$run AND e.kind='SceneDecisionRecorded' AND e.sequence>=0 "
+                "RETURN CASE WHEN size(toStringOrNull(e.source_id))<=128 THEN e.source_id "
+                "WHEN e.source_id IS NULL THEN null ELSE [false] END AS source, e.sequence AS sequence "
+                "ORDER BY e.sequence DESC LIMIT 1",
+                **self.scope,
+                run=intent.run_id,
+            )
+        )
+        decision_id = events[0]["source"] if events else None
+        if events and (type(events[0]["sequence"]) is not int or events[0]["sequence"] > intent.event_cursor):
+            raise CorruptRunInspection()
+        if decision_id is not None:
+            row = self._historical_node(tx, "ArenaWorkflowDecision", decision_id)
+            if row is None:
+                raise CorruptRunInspection()
+            historical = self._historical_decision(tx, row)
+            if (
+                historical is None
+                or historical.run_id != intent.run_id
+                or historical.decision != decision
+                or historical.candidate_id != candidate.candidate_id
+                or historical.evidence_id != root["scene_evidence"]
+                or historical.next_intent_id != root["scene_intent"]
+            ):
+                raise CorruptRunInspection()
+        if root["scene_intent"] is not None:
+            row = self._historical_node(tx, "ArenaExecutionIntent", root["scene_intent"])
+            if row is None:
+                raise CorruptRunInspection()
+            selected_intent = self._historical_payload(row, SceneIntent, "scene_json")
+            owner = self._historical_owner(tx, row, "HAS_SCENE_INTENT")
+            if (
+                owner["node"]["run_id"] != intent.run_id
+                or selected_intent.intent_id != root["scene_intent"]
+                or selected_intent.candidate_id != candidate.candidate_id
+                or selected_intent.action != decision.action
+            ):
+                raise CorruptRunInspection()
+        evidence, assessment_id = None, None
+        if root["scene_evidence"] is not None:
+            row = self._historical_node(tx, "ArenaWorkflowEvidence", root["scene_evidence"])
+            if row is None:
+                raise CorruptRunInspection()
+            evidence = self._historical_evidence(tx, row)
+            if evidence.run_id != intent.run_id or evidence.candidate_id not in (None, candidate.candidate_id):
+                raise CorruptRunInspection()
+            assessed = self._historical_link(
+                tx, row, "ASSESSES", "ArenaCriterionAssessment", incoming=True, required=False
+            )
+            if assessed is not None:
+                assessment = self._historical_assessment(tx, assessed)
+                if assessment.assessment != decision.assessment or assessment.candidate_id != candidate.candidate_id:
+                    raise CorruptRunInspection()
+                assessment_id = assessment.assessment_id
+        if decision.assessment is not None and assessment_id is None:
+            raise CorruptRunInspection()
+        try:
+            return inspection_scene(
+                intent.contract, candidate, decision, evidence, assessment_id, decision_id, root["scene_intent"]
+            )
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptRunInspection() from None
+
+    def _inspection_ledger(self, tx, intent, cleanup, dependencies):
+        from .queries import CorruptRunInspection, GenerationOutputReference, RetainedReadiness
+        from .scene_loop import SceneReservation
+
+        fields = ("intent_id", "reservation_json", "readiness_json")
+        query = (
+            "MATCH (i:ArenaExecutionIntent "
+            + _SCOPE
+            + ") WHERE i.run_id=$run OPTIONAL MATCH (i)-[:HAS_ATTEMPT]->(a) RETURN "
+            + self._cleanup_projection("i", fields)
+            + " AS intent, "
+            + self._cleanup_projection(
+                "a", ("attempt_id", "readiness_json", "registration_json", "receipt_disposition")
+            )
+            + " AS attempt, CASE WHEN size(toStringOrNull(a.receipt_json))<=401408 THEN a.receipt_json "
+            "WHEN a.receipt_json IS NULL THEN null ELSE [false] END AS receipt LIMIT 1001"
+        )
+        rows, size = [], 0
+        for record in tx.run(query, **self.scope, run=intent.run_id):
+            try:
+                row = dict(record)
+                size += len(json.dumps(row, allow_nan=False).encode())
+            except (ValueError, TypeError, KeyError, RecursionError):
+                raise CorruptRunInspection() from None
+            if len(rows) >= 1000 or size > 8 * 1024 * 1024:
+                raise CorruptRunInspection()
+            rows.append(row)
+        try:
+            dependencies.append(sorted(rows, key=lambda row: row["intent"]["intent_id"]))
+            obligations = {item.intent_id: item for item in cleanup.intents}
+            if len(rows) != len(obligations) or {row["intent"]["intent_id"] for row in rows} != set(obligations):
+                raise CorruptRunInspection()
+            reservations, readiness, attempts, outputs = [], [], {}, []
+            for row in sorted(rows, key=lambda row: row["intent"]["intent_id"]):
+                i, a = row["intent"], row["attempt"]
+                obligation = obligations[i["intent_id"]]
+                model = GenerationReservation if obligation.kind == "generation" else SceneReservation
+                allocation = self._cleanup_json(i["reservation_json"], model).model_dump(mode="json")
+                if obligation.kind == "generation":
+                    allocation["candidates"] = 1
+                reservations.append(allocation)
+                for source, data in (("intent.readiness_json", i), ("attempt.readiness_json", a)):
+                    if data is None or data["readiness_json"] is None:
+                        continue
+                    receipt = self._cleanup_json(data["readiness_json"], ReadinessReceipt)
+                    expected = {
+                        (r.dependency_id, r.profile_id, r.profile_sha256)
+                        for r in required_dependencies(intent.contract)
+                    }
+                    reported = {(p.role, p.profile_id, p.settings_sha256) for p in receipt.profiles}
+                    if (
+                        receipt.contract_digest != contract_digest(intent.contract)
+                        or reported != expected
+                        or len(receipt.profiles) != len(expected)
+                        or any(
+                            p.expected_instance_id is not None and p.expected_instance_id != p.observed_instance_id
+                            for p in receipt.profiles
+                        )
+                    ):
+                        raise CorruptRunInspection()
+                    readiness.append(
+                        RetainedReadiness(
+                            intent_id=i["intent_id"],
+                            attempt_id=a["attempt_id"] if source.startswith("attempt") else None,
+                            source=source,
+                            receipt=receipt,
+                        )
+                    )
+                if a is not None and a["attempt_id"] is not None:
+                    if obligation.fence is None or a["attempt_id"] != obligation.fence.attempt_id:
+                        raise CorruptRunInspection()
+                    attempts[a["attempt_id"]] = a
+                if row["receipt"] is not None:
+                    receipt = self._historical_payload({"node": {"payload": row["receipt"]}}, GenerationReceipt)
+                    if (
+                        obligation.kind != "generation"
+                        or receipt.fence != obligation.fence
+                        or receipt.registration.registration_id != obligation.registration_id
+                        or receipt.registration != self._cleanup_json(a["registration_json"], WorkerRegistration)
+                        or obligation.release_state != "released"
+                        or receipt.contract_digest != contract_digest(intent.contract)
+                        or receipt.generation_profile != intent.contract.execution.generation_model
+                    ):
+                        raise CorruptRunInspection()
+                    outputs.append(
+                        GenerationOutputReference(
+                            intent_id=i["intent_id"],
+                            attempt_id=receipt.fence.attempt_id,
+                            registration_id=receipt.registration.registration_id,
+                            contract_digest=receipt.contract_digest,
+                            candidate_yaml_sha256=receipt.candidate_yaml_sha256,
+                            candidate_json_sha256=receipt.candidate_json_sha256,
+                            provenance_sha256=receipt.provenance_sha256,
+                            manifest_sha256=receipt.manifest_sha256,
+                            disposition=a["receipt_disposition"],
+                        )
+                    )
+            return reservations, tuple(readiness), attempts, tuple(outputs)
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptRunInspection() from None
 
     def get_run(self, run_id):
         """Return the single canonical run view in this scope."""
@@ -309,20 +1156,13 @@ class Neo4jWorkflowStore:
                 run_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()
                 rows = list(
                     tx.run(
-                        _CONTROL
-                        + "SET c.sequence=c.sequence+1 CREATE (r:ArenaWorkflowRun "
-                        + _SCOPE
-                        + ") "
+                        _CONTROL + "SET c.sequence=c.sequence+1 CREATE (r:ArenaWorkflowRun " + _SCOPE + ") "
                         "SET r.run_id=$run_id, r.operation_id=$operation_id, r.request_json=$request_json, "
                         "r.contract_json=$contract_json, r.version=1, r.state=$state, r.event_cursor=c.sequence, "
-                        "r.admitted_at=$admitted_at, r.phase='dependency_readiness' "
-                        "CREATE (e:ArenaWorkflowEvent "
-                        + _SCOPE
-                        + ") "
+                        "r.admitted_at=$admitted_at, r.phase='dependency_readiness', r.decision_coverage=1 "
+                        "CREATE (e:ArenaWorkflowEvent " + _SCOPE + ") "
                         "SET e.sequence=c.sequence, e.run_id=$run_id, e.operation_id=$operation_id, "
-                        "e.kind=$kind, e.schema_version=1 RETURN "
-                        + _VIEW
-                        + " AS run",
+                        "e.kind=$kind, e.schema_version=1 RETURN " + _VIEW + " AS run",
                         **self.scope,
                         run_id=run_id,
                         operation_id=operation_id,
@@ -359,7 +1199,7 @@ class Neo4jWorkflowStore:
         ):
             raise ValueError("paid generation denied")
 
-    def _event(self, tx, run_id, kind, source_id):
+    def _event(self, tx, run_id, kind, source_id, *, command_operation_id=None, command_kind="CANCEL"):
         tx.run(
             _CONTROL
             + "MATCH (r:ArenaWorkflowRun "
@@ -370,11 +1210,14 @@ class Neo4jWorkflowStore:
             + _SCOPE
             + ") "
             "SET e.sequence=c.sequence, e.run_id=r.run_id, e.operation_id=r.operation_id, "
-            "e.kind=$kind, e.schema_version=1, e.source_id=$source_id",
+            "e.kind=$kind, e.schema_version=1, e.source_id=$source_id, "
+            "e.command_kind=$command_kind, e.command_operation_id=$command_operation_id",
             **self.scope,
             run_id=run_id,
             kind=kind,
             source_id=source_id,
+            command_kind=command_kind if command_operation_id is not None else None,
+            command_operation_id=command_operation_id,
         ).consume()
 
     def _readiness(self, contract, readiness, now):
@@ -491,7 +1334,9 @@ class Neo4jWorkflowStore:
                 "CREATE (d)-[:RESERVES]->(i) "
                 "SET i.intent_id=$id, i.run_id=$run_id, i.payload=$payload, i.status='reserved', "
                 "i.reservation_json=$reservation, i.authorization_json=$authorization, i.readiness_json=$readiness, "
-                "d.decision_id=$decision, d.intent_id=$id, d.payload=$payload, r.state='running', r.phase='generation'",
+                "d.decision_id=$decision, d.intent_id=$id, d.payload=$payload, "
+                "d.run_id=$run_id, d.record_kind='generation_reservation', d.membership_codec=1, "
+                "r.state='running', r.phase='generation'",
                 **self.scope,
                 run_id=run_id,
                 id=intent_id,
@@ -528,7 +1373,7 @@ class Neo4jWorkflowStore:
             raise ValueError("unknown or ambiguous scoped intent")
         return rows[0]["intent"]
 
-    def claim_intent(self, intent_id, owner_id, owner_epoch):
+    def claim_intent(self, intent_id, owner_id, owner_epoch, *, resume_operation_id=None):
         """Claim one stable attempt; replay unreleased ownership only, never retry.
 
         Local owner lease is a composition prerequisite. Neither this metadata nor
@@ -541,6 +1386,8 @@ class Neo4jWorkflowStore:
             self._owner(tx, owner_id, owner_epoch)
             intent = self._intent(tx, intent_id)
             run = self._run(tx, "run_id", intent["run_id"])
+            if resume_operation_id is not None:
+                self._resume_claim_guard(tx, resume_operation_id, run.run_id, intent_id, "generation")
             if run.state != "running" or intent["status"] not in (
                 "reserved",
                 "claimed",
@@ -996,87 +1843,870 @@ class Neo4jWorkflowStore:
             raise ValueError("positive expected version required")
         with self._transaction() as tx:
             self._lock(tx)
-            run = self._run(tx, "run_id", run_id)
-            if run is None:
-                raise ValueError("unknown run")
-            row = tx.run(
+            result = self._request_cancel(tx, run_id, expected_version)
+        return result
+
+    def _request_cancel(self, tx, run_id, expected_version, *, command_operation_id=None):
+        run = self._run(tx, "run_id", run_id)
+        if run is None:
+            raise ValueError("unknown run")
+        row = tx.run(
+            "MATCH (r:ArenaWorkflowRun "
+            + _SCOPE
+            + ") WHERE r.run_id=$id "
+            "OPTIONAL MATCH (r)-[:HAS_INTENT]->(i:ArenaExecutionIntent) "
+            "OPTIONAL MATCH (i)-[:HAS_ATTEMPT]->(a:ArenaExecutionAttempt) "
+            "RETURN r.cancel_from_version AS version, count(i) AS intents, count(a) AS attempts",
+            **self.scope,
+            id=run_id,
+        ).single()
+        if run.state in ("cancel_requested", "cancelled") and row["version"] == expected_version:
+            return run
+        if run.version != expected_version or run.state not in (
+            "pending",
+            "running",
+            "reconciliation_required",
+        ):
+            raise ValueError("stale cancellation version or inactive run")
+        tx.run(
+            "MATCH (r:ArenaWorkflowRun "
+            + _SCOPE
+            + ") WHERE r.run_id=$id SET r.state=$state, r.cancel_from_version=$version",
+            **self.scope,
+            id=run_id,
+            version=expected_version,
+            state=(
+                "cancelled"
+                if run.state == "pending" and row["intents"] == 0 and row["attempts"] == 0
+                else "cancel_requested"
+            ),
+        ).consume()
+        tx.run(
+            "MATCH (r:ArenaWorkflowRun "
+            + _SCOPE
+            + ")-[:HAS_INTENT]->(:ArenaExecutionIntent)-[:HAS_ATTEMPT]->(a:ArenaExecutionAttempt) "
+            "WHERE r.run_id=$id AND a.receipt_json IS NOT NULL SET a.receipt_disposition='diagnostic'",
+            **self.scope,
+            id=run_id,
+        ).consume()
+        cleaned = list(
+            tx.run(
                 "MATCH (r:ArenaWorkflowRun "
                 + _SCOPE
-                + ") WHERE r.run_id=$id "
-                "OPTIONAL MATCH (r)-[:HAS_INTENT]->(i:ArenaExecutionIntent) "
-                "OPTIONAL MATCH (i)-[:HAS_ATTEMPT]->(a:ArenaExecutionAttempt) "
-                "RETURN r.cancel_from_version AS version, count(i) AS intents, count(a) AS attempts",
+                + ")-[:HAS_INTENT]->(i:ArenaExecutionIntent) "
+                "WHERE r.run_id=$id AND i.cleanup_json IS NOT NULL RETURN i.fence_json AS fence",
                 **self.scope,
                 id=run_id,
-            ).single()
-            if run.state in ("cancel_requested", "cancelled") and row["version"] == expected_version:
-                return run
-            if run.version != expected_version or run.state not in (
-                "pending",
-                "running",
-                "reconciliation_required",
+            )
+        )
+        for row in cleaned:
+            fence = AttemptFence.model_validate_json(row["fence"])
+            _, attempt = self._retained_attempt(tx, fence)
+            self._complete_generation(tx, fence, attempt, self._run(tx, "run_id", run_id))
+        # Generation cleanup cannot certify a subsequently released scene effect.
+        from .scene_loop import SceneIntent
+
+        scene_rows = tx.run(
+            "MATCH (i:ArenaExecutionIntent "
+            + _SCOPE
+            + ") WHERE i.run_id=$id AND i.kind='scene' RETURN i.scene_json AS scene",
+            **self.scope,
+            id=run_id,
+        )
+        scenes = [SceneIntent.model_validate_json(row["scene"]) for row in scene_rows]
+        unresolved_scene = any(
+            (i.worker_fence is not None and i.worker_cleanup is None)
+            or (i.worker_fence is None and i.status in ("released", "reconciliation_required"))
+            for i in scenes
+        )
+        if unresolved_scene:
+            tx.run(
+                "MATCH (r:ArenaWorkflowRun " + _SCOPE + ") WHERE r.run_id=$id SET r.state='cancel_requested'",
+                **self.scope,
+                id=run_id,
+            ).consume()
+        self._event(tx, run_id, "CancellationRequested", run_id, command_operation_id=command_operation_id)
+        result = self._run(tx, "run_id", run_id)
+        return result
+
+    def _resume_receipt(self, tx, operation_id):
+        rows = list(
+            tx.run(
+                "MATCH (c:ArenaResumeReceipt "
+                + _SCOPE
+                + ") "
+                "WHERE c.kind=$kind AND c.operation_id=$key "
+                "RETURN CASE WHEN size(toStringOrNull(c.receipt_json))<=16384 "
+                "THEN c.receipt_json ELSE null END AS receipt LIMIT 2",
+                **self.scope,
+                kind="RESUME",
+                key=operation_id,
+            )
+        )
+        if not rows:
+            return None
+        try:
+            if len(rows) != 1 or type(rows[0]["receipt"]) is not str:
+                raise ValueError
+            raw = rows[0]["receipt"]
+            if len(raw.encode("utf-8")) > COMMAND_BYTES:
+                raise ValueError
+            value = ResumeReceipt.model_validate_json(raw)
+            if (
+                command_json(value.model_dump(mode="json")) != raw
+                or value.operation_id != operation_id
+                or value.scope.model_dump() != dict(database=self.database, **self.scope)
             ):
-                raise ValueError("stale cancellation version or inactive run")
-            tx.run(
-                "MATCH (r:ArenaWorkflowRun "
-                + _SCOPE
-                + ") WHERE r.run_id=$id SET r.state=$state, r.cancel_from_version=$version",
-                **self.scope,
-                id=run_id,
-                version=expected_version,
-                state=(
-                    "cancelled"
-                    if run.state == "pending" and row["intents"] == 0 and row["attempts"] == 0
-                    else "cancel_requested"
-                ),
-            ).consume()
-            tx.run(
-                "MATCH (r:ArenaWorkflowRun "
-                + _SCOPE
-                + ")-[:HAS_INTENT]->(:ArenaExecutionIntent)-[:HAS_ATTEMPT]->(a:ArenaExecutionAttempt) "
-                "WHERE r.run_id=$id AND a.receipt_json IS NOT NULL SET a.receipt_disposition='diagnostic'",
-                **self.scope,
-                id=run_id,
-            ).consume()
-            cleaned = list(
+                raise ValueError
+            return value
+        except (ValueError, TypeError, KeyError):
+            raise CorruptResumeReceipt() from None
+
+    def get_resume_receipt(self, operation_id):
+        """Exact MATCH-only immutable receipt lookup; no stop or control lock."""
+        validate_operation_id(operation_id)
+        with self._transaction(fetch_size=2) as tx:
+            result = self._resume_receipt(tx, operation_id)
+        return result
+
+    def _resume_json(self, raw, model):
+        """Decode selected metadata locally; never translate driver failures."""
+        try:
+            return self._cleanup_json(raw, model)
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptResumeSelection() from None
+
+    def _resume_preview(self, tx, run_id, *, retained_run=None, retained_attempts=None):
+        from types import SimpleNamespace
+
+        run = retained_run if retained_run is not None else self._run(tx, "run_id", run_id)
+        if run is not None and run.phase in ("generation", "scene"):
+            try:
+                parse_contract(run.contract_json)
+            except (ValueError, TypeError, KeyError, RecursionError):
+                raise CorruptResumeSelection() from None
+        if run is not None and run.phase == "scene":
+            # Read only the selected ownership record, not the legacy full scene
+            # snapshot. Missing writer-emitted nulls cannot prove never claimed.
+            rows = list(
                 tx.run(
                     "MATCH (r:ArenaWorkflowRun "
                     + _SCOPE
-                    + ")-[:HAS_INTENT]->(i:ArenaExecutionIntent) "
-                    "WHERE r.run_id=$id AND i.cleanup_json IS NOT NULL RETURN i.fence_json AS fence",
+                    + ") WHERE r.run_id=$run OPTIONAL MATCH (i:ArenaExecutionIntent "
+                    + _SCOPE
+                    + ") WHERE i.intent_id=r.scene_intent "
+                    "RETURN CASE WHEN size(toStringOrNull(r.scene_profile))<=65536 THEN r.scene_profile "
+                    "ELSE [false] END AS profile, "
+                    "CASE WHEN size(toStringOrNull(i.scene_json))<=65536 THEN i.scene_json "
+                    "ELSE [false] END AS scene, "
+                    "CASE WHEN size(toStringOrNull(i.intent_id))<=128 THEN i.intent_id "
+                    "WHEN i.intent_id IS NULL THEN null ELSE [false] END AS id, "
+                    "CASE WHEN size(toStringOrNull(i.run_id))<=128 THEN i.run_id "
+                    "WHEN i.run_id IS NULL THEN null ELSE [false] END AS run, "
+                    "CASE WHEN size(toStringOrNull(i.status))<=64 THEN i.status "
+                    "WHEN i.status IS NULL THEN null ELSE [false] END AS status LIMIT 2",
                     **self.scope,
-                    id=run_id,
+                    run=run_id,
                 )
             )
-            for row in cleaned:
-                fence = AttemptFence.model_validate_json(row["fence"])
-                _, attempt = self._retained_attempt(tx, fence)
-                self._complete_generation(tx, fence, attempt, self._run(tx, "run_id", run_id))
-            # Generation cleanup cannot certify a subsequently released scene effect.
-            from .scene_loop import SceneIntent
+            if len(rows) != 1:
+                raise CorruptResumeSelection()
+            row = rows[0]
+            from .scene_loop import SceneIntent, ScenePortProfile
 
-            scene_rows = tx.run(
+            scene = None
+            if row["id"] is not None:
+                scene = SimpleNamespace(
+                    intent=self._resume_json(row["scene"], SceneIntent),
+                    profile=self._resume_json(row["profile"], ScenePortProfile),
+                )
+                raw = json.loads(row["scene"])
+                fields = ("worker_fence", "worker_registration", "worker_cleanup", "released_at")
+                if type(raw) is not dict or not set(fields) <= raw.keys():
+                    raise CorruptResumeSelection()
+                if (
+                    scene.profile.owned_worker
+                    and raw["worker_fence"] is None
+                    and any(raw[k] is not None for k in fields[1:])
+                ):
+                    raise CorruptResumeSelection()
+                if row["run"] != run_id or row["id"] != scene.intent.intent_id or row["status"] != scene.intent.status:
+                    raise CorruptResumeSelection()
+            selected = None
+            if (
+                run.state == "running"
+                and scene is not None
+                and scene.intent is not None
+                and scene.intent.status == "reserved"
+                and scene.intent.worker_fence is None
+                and scene.profile.owned_worker
+            ):
+                selected = ResumeSelection(
+                    run_id=run_id,
+                    version=run.version,
+                    contract_digest=command_digest(run.contract_json),
+                    branch="scene",
+                    intent_id=scene.intent.intent_id,
+                )
+            return SimpleNamespace(run=run, selection=selected)
+        rows = list(
+            tx.run(
                 "MATCH (i:ArenaExecutionIntent "
                 + _SCOPE
-                + ") WHERE i.run_id=$id AND i.kind='scene' RETURN i.scene_json AS scene",
+                + ") WHERE i.run_id=$run "
+                "OPTIONAL MATCH (i)-[:HAS_ATTEMPT]->(a:ArenaExecutionAttempt) "
+                "RETURN CASE WHEN size(toStringOrNull(i.intent_id))<=128 THEN i.intent_id ELSE [false] END AS id, "
+                "CASE WHEN size(toStringOrNull(i.status))<=64 THEN i.status ELSE [false] END AS status, "
+                "CASE WHEN size(toStringOrNull(i.fence_json))<=65536 THEN i.fence_json "
+                "WHEN i.fence_json IS NULL THEN null ELSE [false] END AS fence, "
+                "i.registration_json IS NOT NULL OR i.cleanup_json IS NOT NULL "
+                "OR i.released_at IS NOT NULL AS ownership, "
+                "a IS NOT NULL AS attempted LIMIT 2",
                 **self.scope,
-                id=run_id,
+                run=run_id,
             )
-            scenes = [SceneIntent.model_validate_json(row["scene"]) for row in scene_rows]
-            unresolved_scene = any(
-                (i.worker_fence is not None and i.worker_cleanup is None)
-                or (i.worker_fence is None and i.status in ("released", "reconciliation_required"))
-                for i in scenes
+        )
+        selection = None
+        if len(rows) == 1 and rows[0]["fence"] is None and rows[0]["ownership"]:
+            raise CorruptResumeSelection()
+        if (
+            run is not None
+            and (run.state, run.phase) == ("running", "generation")
+            and len(rows) == 1
+            and rows[0]["status"] == "reserved"
+            and rows[0]["fence"] is None
+            and not rows[0]["attempted"]
+        ):
+            selection = ResumeSelection(
+                run_id=run_id,
+                version=run.version,
+                contract_digest=command_digest(run.contract_json),
+                branch="generation",
+                intent_id=rows[0]["id"],
             )
-            if unresolved_scene:
-                tx.run(
-                    "MATCH (r:ArenaWorkflowRun " + _SCOPE + ") WHERE r.run_id=$id SET r.state='cancel_requested'",
-                    **self.scope,
-                    id=run_id,
-                ).consume()
-            self._event(tx, run_id, "CancellationRequested", run_id)
-            result = self._run(tx, "run_id", run_id)
+        elif (
+            run is not None
+            and run.phase == "generation"
+            and run.state in ("running", "reconciliation_required")
+            and len(rows) == 1
+            and rows[0]["fence"] is not None
+            and rows[0]["attempted"]
+        ):
+            fence = self._resume_json(rows[0]["fence"], AttemptFence)
+            if fence.run_id != run_id or fence.intent_id != rows[0]["id"]:
+                raise CorruptResumeSelection()
+            if retained_attempts is None:
+                _, attempt = self._retained_attempt(tx, fence)
+            else:
+                attempt = retained_attempts[fence.attempt_id]
+            if attempt.get("registration_json") is not None:
+                registration = self._resume_json(attempt["registration_json"], WorkerRegistration)
+                if registration.fence != fence:
+                    raise CorruptResumeSelection()
+                selection = ResumeSelection(
+                    run_id=run_id,
+                    version=run.version,
+                    contract_digest=command_digest(run.contract_json),
+                    branch="reconciliation",
+                    intent_id=fence.intent_id,
+                    fence=fence,
+                )
+        return SimpleNamespace(run=run, selection=selection)
+
+    def preview_resume(self, run_id):
+        """Read bounded retained selection; never read private configuration or bytes."""
+        validate_operation_id(run_id)
+        with self._transaction(fetch_size=2) as tx:
+            result = self._resume_preview(tx, run_id)
         return result
+
+    def admit_resume(self, operation_id, payload, *, selection, eligibility, protect):
+        """Internal admission only; callbacks never run under the database lock.
+
+        Failure after commit, including response screening or cleanup, confers no
+        fresh result. Recover by read-authorized lookup, never automatic execution.
+        """
+        from .scene_evidence_artifacts import _protected
+
+        validate_operation_id(operation_id)
+        payload = ResumePayload.model_validate(payload)
+        if not callable(protect):
+            raise ValueError("public protection callback required")
+        _protected(
+            dict(operation_id=operation_id, payload=payload.model_dump(mode="json")), protect, max_bytes=COMMAND_BYTES
+        )
+        with self._transaction(fetch_size=2) as tx:
+            result = self._admit_resume(tx, operation_id, payload, selection, eligibility)
+        _protected(result.model_dump(mode="json"), protect, max_bytes=COMMAND_BYTES)
+        return result
+
+    def _admit_resume(self, tx, operation_id, payload, selection, eligibility):
+        raw_payload = command_json(payload.model_dump(mode="json"))
+        self._lock(tx)
+        retained = self._resume_receipt(tx, operation_id)
+        if retained is not None:
+            if retained.payload_json != raw_payload:
+                raise CommandConflict("Resume key binds different input")
+            return ResumeAdmission(fresh=False, receipt=retained)
+        preview = self._resume_preview(tx, payload.runId)
+        reason = None
+        if preview.run is None:
+            reason = "target_not_found"
+        elif preview.run.version != payload.expectedVersion:
+            reason = "stale_version"
+        elif preview.run.state not in ("pending", "running", "reconciliation_required"):
+            reason = "inactive_run"
+        elif preview.selection is None:
+            reason = "unsafe_scene" if preview.run.phase == "scene" else "unsupported_branch"
+        elif preview.selection != selection:
+            reason = "selection_changed"
+        elif preview.selection.branch == "reconciliation":
+            if payload.renewAuthorization:
+                reason = "renewal_not_applicable"
+        elif eligibility not in (("bind", "renew") if payload.renewAuthorization else ("current",)):
+            reason = "private_eligibility_not_ready"
+        selection = preview.selection
+        after = preview.run
+        rows = []
+        if reason is None:
+            self._event(
+                tx,
+                payload.runId,
+                "ResumeAdmitted",
+                selection.intent_id,
+                command_operation_id=operation_id,
+                command_kind="RESUME",
+            )
+            after = self._run(tx, "run_id", payload.runId)
+            rows = list(
+                tx.run(
+                    "MATCH (e:ArenaWorkflowEvent "
+                    + _SCOPE
+                    + ") WHERE e.sequence=$sequence AND e.run_id=$run "
+                    "AND e.command_kind='RESUME' AND e.command_operation_id=$key "
+                    "AND e.kind='ResumeAdmitted' AND e.source_id=$source "
+                    "RETURN e {.sequence, .kind, .source_id} AS event LIMIT 2",
+                    **self.scope,
+                    sequence=after.event_cursor,
+                    run=payload.runId,
+                    key=operation_id,
+                    source=selection.intent_id,
+                )
+            )
+            if len(rows) != 1:
+                raise CorruptResumeReceipt()
+        result = make_resume_receipt(
+            scope=dict(database=self.database, **self.scope),
+            operation_id=operation_id,
+            run_id=payload.runId,
+            payload_json=raw_payload,
+            payload_digest=command_digest(raw_payload),
+            before_version=None if preview.run is None else preview.run.version,
+            after_version=None if after is None else after.version,
+            selection=None if selection is None else selection.model_dump(mode="json"),
+            contract_digest=None if preview.run is None else command_digest(preview.run.contract_json),
+            disposition=(
+                "refused"
+                if reason is not None
+                else "reconciliation_admitted" if selection.branch == "reconciliation" else "continuation_admitted"
+            ),
+            reason=reason,
+            authorization_action=(
+                None
+                if reason is not None or selection.branch == "reconciliation"
+                else "none" if eligibility == "current" else eligibility
+            ),
+            events=[dict(r["event"]) for r in rows],
+        )
+        raw = command_json(result.model_dump(mode="json"))
+        if len(raw.encode("utf-8")) > COMMAND_BYTES:
+            raise ValueError("Resume receipt byte bound exceeded")
+        tx.run(
+            "CREATE (c:ArenaResumeReceipt "
+            + _SCOPE
+            + ") SET c.kind='RESUME', c.operation_id=$key, c.receipt_json=$raw",
+            **self.scope,
+            key=operation_id,
+            raw=raw,
+        ).consume()
+        if result.events:
+            linked = tx.run(
+                "MATCH (c:ArenaResumeReceipt "
+                + _SCOPE
+                + ") WHERE c.kind='RESUME' AND c.operation_id=$key MATCH (e:ArenaWorkflowEvent "
+                + _SCOPE
+                + ") WHERE e.sequence=$sequence AND e.run_id=$run "
+                "AND e.command_kind='RESUME' AND e.command_operation_id=$key "
+                "AND e.kind='ResumeAdmitted' AND e.source_id=$source "
+                "CREATE (c)-[:CAUSED]->(e) RETURN count(e) AS count",
+                **self.scope,
+                key=operation_id,
+                sequence=after.event_cursor,
+                run=payload.runId,
+                source=selection.intent_id,
+            ).single(strict=True)
+            if linked["count"] != 1:
+                raise CorruptResumeReceipt()
+        return ResumeAdmission(fresh=True, receipt=result)
+
+    def _resume_claim_guard(self, tx, operation_id, run_id, intent_id, branch):
+        """Validate the immutable admission under the very same claim write lock."""
+        validate_operation_id(operation_id)
+        receipt = self._resume_receipt(tx, operation_id)
+        if (
+            receipt is None
+            or receipt.disposition != "continuation_admitted"
+            or receipt.run_id != run_id
+            or receipt.selection.branch != branch
+            or receipt.selection.intent_id != intent_id
+        ):
+            raise ValueError("Resume claim selection mismatch")
+        preview = self._resume_preview(tx, run_id)
+        expected = receipt.selection.model_copy(update={"version": receipt.after_version})
+        if preview.selection != expected or preview.run.version != receipt.after_version:
+            raise ValueError("Resume claim selection changed")
+
+    def _cancel_receipt(self, tx, operation_id):
+        rows = list(
+            tx.run(
+                "MATCH (c:ArenaCancelReceipt "
+                + _SCOPE
+                + ") "
+                "WHERE c.kind=$kind AND c.operation_id=$key "
+                "RETURN CASE WHEN size(toStringOrNull(c.receipt_json))<=16384 "
+                "THEN c.receipt_json ELSE null END AS receipt LIMIT 2",
+                **self.scope,
+                kind="CANCEL",
+                key=operation_id,
+            )
+        )
+        if not rows:
+            return None
+        try:
+            if len(rows) != 1 or type(rows[0]["receipt"]) is not str:
+                raise ValueError
+            raw = rows[0]["receipt"]
+            if len(raw.encode("utf-8")) > COMMAND_BYTES:
+                raise ValueError
+            value = CancelReceipt.model_validate_json(raw)
+            if (
+                command_json(value.model_dump(mode="json")) != raw
+                or value.operation_id != operation_id
+                or value.scope.model_dump() != dict(database=self.database, **self.scope)
+            ):
+                raise ValueError
+            return value
+        except (ValueError, TypeError, KeyError):
+            raise CorruptCancelReceipt() from None
+
+    def get_cancel_receipt(self, operation_id):
+        """Exact MATCH-only immutable receipt lookup; no stop or control lock."""
+        validate_operation_id(operation_id)
+        with self._transaction(fetch_size=2) as tx:
+            result = self._cancel_receipt(tx, operation_id)
+        return result
+
+    def cancel_command(self, operation_id, run_id, local_stop, *, protect):
+        """Atomically bind exact CANCEL input, transition and immutable receipt."""
+        from .scene_evidence_artifacts import _protected
+
+        validate_operation_id(operation_id)
+        validate_operation_id(run_id)
+        if not callable(protect):
+            raise ValueError("public protection callback required")
+        local_stop = LocalStopObservation.model_validate_json(local_stop.model_dump_json())
+        payload = command_json({"runId": run_id})
+        _protected(dict(operation_id=operation_id, runId=run_id), protect, max_bytes=COMMAND_BYTES)
+        with self._transaction(fetch_size=2) as tx:
+            self._lock(tx)
+            retained = self._cancel_receipt(tx, operation_id)
+            if retained is not None:
+                if retained.payload_json != payload or retained.payload_digest != command_digest(payload):
+                    raise CommandConflict("Cancellation key binds different input")
+                _protected(retained.model_dump(mode="json"), protect, max_bytes=COMMAND_BYTES)
+                return retained
+            before = self._run(tx, "run_id", run_id)
+            after, reason = before, None
+            if before is None:
+                disposition, reason = "refused", "target_not_found"
+            elif before.state in ("cancel_requested", "cancelled"):
+                disposition = "already_requested" if before.state == "cancel_requested" else "already_cancelled"
+            elif before.state not in ("pending", "running", "reconciliation_required"):
+                disposition, reason = "refused", "inactive_run"
+            else:
+                disposition = "cancellation_requested"
+                after = self._request_cancel(tx, run_id, before.version, command_operation_id=operation_id)
+            rows = []
+            if disposition == "cancellation_requested":
+                rows = list(
+                    tx.run(
+                        "MATCH (e:ArenaWorkflowEvent "
+                        + _SCOPE
+                        + ") WHERE e.sequence=$sequence AND e.run_id=$run "
+                        "AND e.command_kind='CANCEL' AND e.command_operation_id=$key "
+                        "AND e.kind='CancellationRequested' AND e.source_id=$run "
+                        "RETURN e {.sequence, .kind, .source_id} AS event LIMIT 2",
+                        **self.scope,
+                        sequence=after.event_cursor,
+                        run=run_id,
+                        key=operation_id,
+                    )
+                )
+                if len(rows) != 1:
+                    raise CorruptCancelReceipt()
+            result = make_cancel_receipt(
+                scope=dict(database=self.database, **self.scope),
+                operation_id=operation_id,
+                run_id=run_id,
+                payload_json=payload,
+                payload_digest=command_digest(payload),
+                before_version=None if before is None else before.version,
+                after_version=None if after is None else after.version,
+                disposition=disposition,
+                reason=reason,
+                first_local_stop=local_stop.model_dump(mode="json"),
+                events=[dict(row["event"]) for row in rows],
+            )
+            raw = _protected(result.model_dump(mode="json"), protect, max_bytes=COMMAND_BYTES).decode("utf-8")
+            tx.run(
+                "CREATE (c:ArenaCancelReceipt "
+                + _SCOPE
+                + ") SET c.kind='CANCEL', c.operation_id=$key, c.receipt_json=$raw",
+                **self.scope,
+                key=operation_id,
+                raw=raw,
+            ).consume()
+            if result.events:
+                linked = tx.run(
+                    "MATCH (c:ArenaCancelReceipt "
+                    + _SCOPE
+                    + ") WHERE c.kind='CANCEL' AND c.operation_id=$key MATCH (e:ArenaWorkflowEvent "
+                    + _SCOPE
+                    + ") WHERE e.sequence=$sequence AND e.run_id=$run "
+                    "AND e.command_kind='CANCEL' AND e.command_operation_id=$key "
+                    "AND e.kind='CancellationRequested' AND e.source_id=$run "
+                    "CREATE (c)-[:CAUSED]->(e) RETURN count(e) AS count",
+                    **self.scope,
+                    key=operation_id,
+                    sequence=after.event_cursor,
+                    run=run_id,
+                ).single(strict=True)
+                if linked["count"] != 1:
+                    raise CorruptCancelReceipt()
+        return result
+
+    def _historical_node(self, tx, label, record_id):
+        field = _HISTORY_FIELDS[label]
+        try:
+            validate_operation_id(record_id)
+        except (ValueError, TypeError):
+            raise CorruptSceneRecord("invalid retained scene identity") from None
+        rows = list(
+            tx.run(
+                "MATCH (n:" + label + " " + _SCOPE + ") WHERE n." + field + "=$id RETURN " + _HISTORY_VIEW + " LIMIT 2",
+                **self.scope,
+                id=record_id,
+            )
+        )
+        if len(rows) > 1:
+            raise CorruptSceneRecord("ambiguous retained scene identity")
+        return rows[0] if rows else None
+
+    def _historical_link(self, tx, row, relation, label, *, incoming=False, required=True):
+        assert relation in {
+            "HAS_SCENE_RECORD",
+            "HAS_DECISION",
+            "HAS_SCENE_INTENT",
+            "DERIVED_FROM",
+            "ORIGINAL",
+            "ASSESSES",
+            "FOR_CANDIDATE",
+        }
+        pattern = "(root)<-[:" + relation + "]-(n)" if incoming else "(root)-[:" + relation + "]->(n)"
+        rows = list(
+            tx.run(
+                "MATCH " + pattern + " WHERE elementId(root)=$key RETURN " + _HISTORY_VIEW + " LIMIT 2",
+                key=row["key"],
+            )
+        )
+        if not rows and not required:
+            return None
+        if len(rows) != 1:
+            raise CorruptSceneRecord("missing or ambiguous retained scene relationship")
+        target = rows[0]
+        if label not in target["labels"] or any(target["node"].get(k) != v for k, v in self.scope.items()):
+            raise CorruptSceneRecord("retained scene relationship scope or type mismatch")
+        exact = self._historical_node(tx, label, target["node"].get(_HISTORY_FIELDS[label]))
+        if exact is None or exact["key"] != target["key"]:
+            raise CorruptSceneRecord("retained scene relationship identity mismatch")
+        return target
+
+    def _historical_owner(self, tx, row, relation="HAS_SCENE_RECORD"):
+        owner = self._historical_link(tx, row, relation, "ArenaWorkflowRun", incoming=True)
+        run_id = owner["node"]["run_id"]
+        retained_run = row["node"].get("run_id")
+        if retained_run != run_id and not (relation == "HAS_DECISION" and retained_run is None):
+            raise CorruptSceneRecord("retained scene run mismatch")
+        return owner
+
+    @staticmethod
+    def _historical_payload(row, model, field="payload"):
+        from .scene_loop import CandidateRecord
+
+        raw = row["node"].get(field)
+        limit = HISTORICAL_CANDIDATE_BYTES if model is CandidateRecord else 2 * 1024 * 1024
+        if type(raw) is not str or len(raw.encode("utf-8")) > limit:
+            raise CorruptSceneRecord("invalid or excessive retained scene payload")
+        try:
+            return model.model_validate_json(raw)
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptSceneRecord("invalid retained scene payload") from None
+
+    def _historical_candidate_value(self, tx, row, run_id):
+        from .scene_loop import CandidateRecord, candidate_record
+
+        candidate = self._historical_payload(row, CandidateRecord)
+        owner = self._historical_owner(tx, row)
+        if (
+            candidate.candidate_id != row["node"]["record_id"]
+            or candidate.run_id != run_id
+            or owner["node"]["run_id"] != run_id
+        ):
+            raise CorruptSceneRecord("retained candidate identity or run mismatch")
+        try:
+            rebuilt = candidate_record(
+                run_id,
+                json.loads(candidate.scene_json),
+                source_id=candidate.source_id,
+                original_id=candidate.original_id,
+                parent_id=candidate.parent_id,
+            )
+            if rebuilt != candidate:
+                raise CorruptSceneRecord("retained candidate digest mismatch")
+            return candidate
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptSceneRecord("invalid retained candidate") from None
+
+    def _historical_candidate(self, tx, row):
+        run_id = row["node"]["run_id"]
+        candidate = self._historical_candidate_value(tx, row, run_id)
+        parent = self._historical_link(tx, row, "DERIVED_FROM", "ArenaWorkflowCandidate", required=False)
+        original = self._historical_link(tx, row, "ORIGINAL", "ArenaWorkflowCandidate", required=False)
+        if candidate.parent_id is None:
+            if candidate.original_id != candidate.candidate_id or parent is not None or original is not None:
+                raise CorruptSceneRecord("retained original lineage mismatch")
+        else:
+            if parent is None or original is None:
+                raise CorruptSceneRecord("missing retained candidate lineage")
+            p = self._historical_candidate_value(tx, parent, run_id)
+            o = self._historical_candidate_value(tx, original, run_id)
+            if (
+                p.candidate_id != candidate.parent_id
+                or o.candidate_id != candidate.original_id
+                or p.original_id != o.candidate_id
+                or o.original_id != o.candidate_id
+                or o.parent_id is not None
+                or p.candidate_id == candidate.candidate_id
+            ):
+                raise CorruptSceneRecord("retained candidate lineage mismatch")
+        try:
+            return SceneCandidateView(scope=self._scene_read_scope(), run_id=run_id, candidate=candidate)
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptSceneRecord("invalid retained scene record") from None
+
+    def _scene_read_scope(self):
+        return SceneReadScope(database=self.database, **self.scope)
+
+    def _historical_selection(self, tx, evidence_id, run_id, candidate_id):
+        from .scene_loop import SceneDecision
+
+        selected = list(
+            tx.run(
+                "MATCH (n:ArenaWorkflowDecision "
+                + _SCOPE
+                + ") WHERE n.evidence_id=$id RETURN "
+                + _HISTORY_VIEW
+                + " LIMIT 2",
+                **self.scope,
+                id=evidence_id,
+            )
+        )
+        if len(selected) > 1:
+            raise CorruptSceneRecord("ambiguous retained assessment selection")
+        if not selected:
+            return None
+        row = selected[0]
+        exact = self._historical_node(tx, "ArenaWorkflowDecision", row["node"]["decision_id"])
+        owner = self._historical_owner(tx, row, "HAS_DECISION")
+        decision = self._historical_payload(row, SceneDecision)
+        if (
+            exact is None
+            or exact["key"] != row["key"]
+            or owner["node"]["run_id"] != run_id
+            or (candidate_id is not None and row["node"].get("candidate_id") != candidate_id)
+            or (candidate_id is None and decision.assessment is not None)
+        ):
+            raise CorruptSceneRecord("retained evidence selection mismatch")
+        return decision
+
+    def _historical_evidence(self, tx, row):
+        from .scene_loop import Observation, profile_digest
+
+        owner = self._historical_owner(tx, row)
+        run_id = owner["node"]["run_id"]
+        observation = self._historical_payload(row, Observation)
+        raw = owner["node"].get("contract_json")
+        if type(raw) is not str:
+            raise CorruptSceneRecord("missing retained scene contract")
+        try:
+            contract = parse_contract(raw)
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptSceneRecord("invalid retained scene contract") from None
+        if observation.cohort.contract_digest != contract_digest(
+            contract
+        ) or observation.cohort.profile_digest != profile_digest(contract):
+            raise CorruptSceneRecord("retained evidence contract mismatch")
+        linked = self._historical_link(tx, row, "FOR_CANDIDATE", "ArenaWorkflowCandidate", required=False)
+        candidate_id = None
+        if linked is not None:
+            candidate = self._historical_candidate(tx, linked).candidate
+            if candidate.run_id != run_id:
+                raise CorruptSceneRecord("retained evidence candidate run mismatch")
+            candidate_id = candidate.candidate_id
+        self._historical_selection(tx, row["node"]["record_id"], run_id, candidate_id)
+        try:
+            return SceneEvidenceView(
+                scope=self._scene_read_scope(),
+                run_id=run_id,
+                evidence_id=row["node"]["record_id"],
+                candidate_id=candidate_id,
+                observation=observation,
+            )
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptSceneRecord("invalid retained scene record") from None
+
+    def _historical_assessment(self, tx, row):
+        from .evidence import SceneEvidenceAssessment
+
+        owner = self._historical_owner(tx, row)
+        assessment = self._historical_payload(row, SceneEvidenceAssessment)
+        evidence_row = self._historical_link(tx, row, "ASSESSES", "ArenaWorkflowEvidence")
+        evidence = self._historical_evidence(tx, evidence_row)
+        if evidence.run_id != owner["node"]["run_id"] or evidence.candidate_id is None:
+            raise CorruptSceneRecord("retained assessment evidence mismatch")
+        decision = self._historical_selection(tx, evidence.evidence_id, evidence.run_id, evidence.candidate_id)
+        if decision is not None and decision.assessment != assessment:
+            raise CorruptSceneRecord("retained assessment selection mismatch")
+        try:
+            return SceneAssessmentView(
+                scope=self._scene_read_scope(),
+                run_id=evidence.run_id,
+                assessment_id=row["node"]["record_id"],
+                evidence_id=evidence.evidence_id,
+                candidate_id=evidence.candidate_id,
+                assessment=assessment,
+            )
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptSceneRecord("invalid retained scene record") from None
+
+    def _historical_decision(self, tx, row):
+        from .scene_loop import SceneDecision, SceneIntent, identity
+
+        owner = self._historical_owner(tx, row, "HAS_DECISION")
+        run_id, node = owner["node"]["run_id"], row["node"]
+        # The shared label also holds generation reservations with a list codec.
+        # They are explicitly outside this scene-only query capability.
+        if node.get("candidate_id") is None and type(node.get("payload")) is str and node["payload"].startswith("["):
+            return None
+        decision = self._historical_payload(row, SceneDecision)
+        candidate_row = self._historical_node(tx, "ArenaWorkflowCandidate", node.get("candidate_id"))
+        if candidate_row is None or self._historical_candidate(tx, candidate_row).run_id != run_id:
+            raise CorruptSceneRecord("retained decision candidate mismatch")
+        assessment_id = None
+        evidence_id = node.get("evidence_id")
+        if evidence_id is not None:
+            evidence_row = self._historical_node(tx, "ArenaWorkflowEvidence", evidence_id)
+            if evidence_row is None:
+                raise CorruptSceneRecord("missing retained decision evidence")
+            evidence = self._historical_evidence(tx, evidence_row)
+            if evidence.run_id != run_id or evidence.candidate_id not in (None, node["candidate_id"]):
+                raise CorruptSceneRecord("retained decision evidence mismatch")
+            assessment_row = self._historical_link(
+                tx,
+                evidence_row,
+                "ASSESSES",
+                "ArenaCriterionAssessment",
+                incoming=True,
+                required=False,
+            )
+            if assessment_row is not None:
+                assessment = self._historical_assessment(tx, assessment_row)
+                if assessment.assessment != decision.assessment or assessment.candidate_id != node["candidate_id"]:
+                    raise CorruptSceneRecord("retained decision assessment mismatch")
+                assessment_id = assessment.assessment_id
+            elif decision.assessment is not None:
+                raise CorruptSceneRecord("missing selected retained assessment")
+        next_intent_id = node.get("intent_id")
+        if next_intent_id is not None:
+            if next_intent_id != identity(node["decision_id"], "intent"):
+                raise CorruptSceneRecord("retained next intent cause mismatch")
+            intent_row = self._historical_node(tx, "ArenaExecutionIntent", next_intent_id)
+            if intent_row is None:
+                raise CorruptSceneRecord("missing retained next intent")
+            intent = self._historical_payload(intent_row, SceneIntent, "scene_json")
+            intent_owner = self._historical_owner(tx, intent_row, "HAS_SCENE_INTENT")
+            if (
+                intent_owner["node"]["run_id"] != run_id
+                or intent.intent_id != next_intent_id
+                or intent.candidate_id != node["candidate_id"]
+                or intent.action != decision.action
+            ):
+                raise CorruptSceneRecord("retained next intent mismatch")
+        try:
+            return SceneDecisionView(
+                scope=self._scene_read_scope(),
+                run_id=run_id,
+                decision_id=node["decision_id"],
+                candidate_id=node["candidate_id"],
+                decision=decision,
+                next_intent_id=next_intent_id,
+                evidence_id=evidence_id,
+                selected_assessment_id=assessment_id,
+            )
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptSceneRecord("invalid retained scene record") from None
+
+    def _get_historical_scene(self, label, record_id, project):
+        validate_operation_id(record_id)
+        # Immutable scene records need no control SET, grant, readiness check or
+        # latest snapshot. Cooperative writers commit each binding atomically;
+        # this is not snapshot isolation against external graph mutation.
+        with self._transaction() as tx:
+            row = self._historical_node(tx, label, record_id)
+            try:
+                return None if row is None else project(tx, row)
+            except CorruptSceneRecord:
+                raise
+            except (ValueError, TypeError, KeyError, RecursionError):
+                # Retained JSON, nested candidate reconstruction and final typed
+                # views may include raw input in decoder/validation exceptions.
+                raise CorruptSceneRecord("invalid retained scene record") from None
+
+    def get_scene_candidate(self, candidate_id) -> SceneCandidateView | None:
+        """Read exact scoped candidate and verify bounded immediate parent/original bindings."""
+        return self._get_historical_scene("ArenaWorkflowCandidate", candidate_id, self._historical_candidate)
+
+    def get_scene_decision(self, decision_id) -> SceneDecisionView | None:
+        """Read exact scoped scene decision; never decode generation reservations as scene decisions."""
+        return self._get_historical_scene("ArenaWorkflowDecision", decision_id, self._historical_decision)
+
+    def get_scene_assessment(self, assessment_id) -> SceneAssessmentView | None:
+        """Read exact scoped assessment with its retained evidence and candidate."""
+        return self._get_historical_scene("ArenaCriterionAssessment", assessment_id, self._historical_assessment)
+
+    def get_scene_evidence(self, evidence_id) -> SceneEvidenceView | None:
+        """Read exact scoped observation, retaining unavailable legacy candidate linkage as None."""
+        return self._get_historical_scene("ArenaWorkflowEvidence", evidence_id, self._historical_evidence)
 
     def _scene_node(self, tx, label, record_id, payload, run_id):
         assert label in (
@@ -1130,6 +2760,394 @@ class Neo4jWorkflowStore:
             intent,
             ScenePortProfile.model_validate_json(r["scene_profile"]),
         )
+
+    def get_run_cleanup(self, run_id) -> RunCleanupView | None:
+        """Read retained obligations consistently; lock revision is not a domain fact."""
+        validate_operation_id(run_id)
+        with self._transaction(fetch_size=1) as tx:
+            self._lock(tx)
+            result = self._run_cleanup(tx, run_id)
+        return result
+
+    def _run_cleanup(self, tx, run_id, *, dependencies=None):
+        roots = list(
+            tx.run(
+                "MATCH (r:ArenaWorkflowRun "
+                + _SCOPE
+                + ") WHERE r.run_id=$run RETURN "
+                + self._cleanup_projection("r", ("version", "scene_profile"))
+                + " AS run, elementId(r) AS key LIMIT 2",
+                **self.scope,
+                run=run_id,
+            )
+        )
+        if not roots:
+            return None
+        if len(roots) != 1:
+            raise CorruptCleanupRecord()
+        root = roots[0]
+        owner_data = tx.run(
+            _CONTROL
+            + "RETURN "
+            + self._cleanup_projection("c", ("owner_id", "owner_epoch", "owner_dirty"))
+            + " AS owner",
+            **self.scope,
+        ).single(strict=True)["owner"]
+        try:
+            owner_row = dict(
+                owner_id=owner_data["owner_id"],
+                owner_epoch=owner_data["owner_epoch"],
+                dirty=owner_data["owner_dirty"],
+            )
+            owner = None
+            if owner_row["owner_id"] is not None:
+                if type(owner_row["dirty"]) is not bool:
+                    raise CorruptCleanupRecord()
+                owner = OwnerView(**owner_row)
+            elif any(owner_row[k] is not None for k in ("owner_epoch", "dirty")):
+                raise CorruptCleanupRecord()
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptCleanupRecord() from None
+        if owner is not None:
+            retired_epoch = self._cleanup_retired_epoch(tx, owner.owner_id)
+            if (not owner.dirty and (type(retired_epoch) is not int or retired_epoch != owner.owner_epoch)) or (
+                owner.dirty and retired_epoch is not None
+            ):
+                raise CorruptCleanupRecord()
+        rows = self._cleanup_rows(tx, run_id, root)
+        items = tuple(self._cleanup_obligation(tx, run_id, row, owner) for row in rows)
+        try:
+            if dependencies is not None:
+                dependencies.extend([
+                    root["run"],
+                    owner_data,
+                    sorted(
+                        [
+                            {k: row[k] for k in ("intent", "attempt", "release_authorized", "receipt_present")}
+                            for row in rows
+                        ],
+                        key=lambda row: row["intent"]["intent_id"],
+                    ),
+                ])
+            items = tuple(sorted(items, key=lambda item: item.intent_id))
+            if len({item.intent_id for item in items}) != len(items):
+                raise CorruptCleanupRecord()
+            payload = dict(
+                scope=SceneReadScope(database=self.database, **self.scope),
+                run_id=run_id,
+                run_version=root["run"]["version"],
+                current_scope_owner=owner,
+                intents=items,
+            )
+            value = RunCleanupView(**payload, projection_revision="0" * 64)
+            raw = json.dumps(
+                value.model_dump(mode="json", exclude={"projection_revision"}),
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            if len(raw.encode()) > 2 * 1024 * 1024:
+                raise CorruptCleanupRecord()
+            return value.model_copy(update={"projection_revision": hashlib.sha256(raw.encode()).hexdigest()})
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptCleanupRecord() from None
+
+    @staticmethod
+    def _cleanup_projection(alias, fields):
+        # Fixed call-site fields only. Bound values before Bolt, including malformed
+        # scalars; [False] is invalid for every selected field, never absence.
+        parts = []
+        for field in fields:
+            prop = f"{alias}.{field}"
+            parts.append(
+                f"{field}: CASE WHEN size(toStringOrNull({prop}))<=65536 THEN {prop} "
+                f"WHEN {prop} IS NULL THEN null ELSE [false] END"
+            )
+        return alias + " {" + ", ".join(parts) + "}"
+
+    @staticmethod
+    def _cleanup_json(raw, model):
+        def unique(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise CorruptCleanupRecord()
+                result[key] = value
+            return result
+
+        if type(raw) is not str or len(raw.encode("utf-8")) > 65536:
+            raise CorruptCleanupRecord()
+        try:
+            json.loads(raw, object_pairs_hook=unique)
+            return model.model_validate_json(raw)
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptCleanupRecord() from None
+
+    def _cleanup_exact(self, tx, label, field, value, key):
+        rows = list(
+            tx.run(
+                "MATCH (n:" + label + " " + _SCOPE + ") WHERE n." + field + "=$id RETURN elementId(n) AS key LIMIT 2",
+                **self.scope,
+                id=value,
+            )
+        )
+        if len(rows) != 1 or rows[0]["key"] != key:
+            raise CorruptCleanupRecord()
+
+    @staticmethod
+    def _cleanup_parent(tx, key, parent, relation):
+        # Do not filter the incoming end by label/scope: foreign and duplicate
+        # links must remain visible rather than disappearing from validation.
+        rows = list(
+            tx.run(
+                "MATCH (n)<-[link:"
+                + relation
+                + "]-(p) WHERE elementId(n)=$key RETURN elementId(p) AS key, type(link) AS relation LIMIT 2",
+                key=key,
+            )
+        )
+        if len(rows) != 1 or rows[0]["key"] != parent:
+            raise CorruptCleanupRecord()
+        return rows[0]["relation"]
+
+    def _cleanup_rows(self, tx, run_id, root):
+        count = tx.run(
+            "MATCH (i:ArenaExecutionIntent " + _SCOPE + ") WHERE i.run_id=$run RETURN count(i) AS n",
+            **self.scope,
+            run=run_id,
+        ).single(strict=True)["n"]
+        if count > 1000:
+            raise CorruptCleanupRecord()
+        fields = (
+            "deployment_id",
+            "workspace_id",
+            "run_id",
+            "intent_id",
+            "kind",
+            "status",
+            "fence_json",
+            "registration_json",
+            "cleanup_json",
+            "scene_json",
+            "released_at",
+        )
+        query = (
+            "MATCH (r:ArenaWorkflowRun "
+            + _SCOPE
+            + ")-[:HAS_INTENT|HAS_SCENE_INTENT]->(i) WHERE r.run_id=$run OPTIONAL MATCH (i)-[:HAS_ATTEMPT]->(a) RETURN "
+            + self._cleanup_projection("i", fields)
+            + " AS intent, "
+            + self._cleanup_projection("a", fields + ("attempt_id",))
+            + " AS attempt, "
+            "elementId(i) AS ikey, elementId(a) AS akey, i:ArenaExecutionIntent AS ityped, "
+            "a:ArenaExecutionAttempt AS atyped, "
+            "a.release_authorization_json IS NOT NULL AS release_authorized, "
+            "a.receipt_json IS NOT NULL AS receipt_present LIMIT 1001"
+        )
+        rows, total = [], 0
+        for record in tx.run(query, **self.scope, run=run_id):
+            try:
+                row = dict(record)
+                total += len(json.dumps(row, allow_nan=False).encode("utf-8"))
+            except (ValueError, TypeError, KeyError, RecursionError):
+                raise CorruptCleanupRecord() from None
+            if len(rows) >= 1000 or total > 8 * 1024 * 1024:
+                raise CorruptCleanupRecord()
+            rows.append(row)
+        if len(rows) != count:
+            raise CorruptCleanupRecord()
+        # Finish the byte-checked outer stream before issuing validation queries:
+        # pending Bolt batches can otherwise be hydrated by nested tx.run calls.
+        # This bounds selected serialized rows, not total RSS: one bounded row/
+        # fetch batch plus protocol and Python object overhead remain additional.
+        for row in rows:
+            intent, attempt = row["intent"], row["attempt"]
+            if row["ityped"] is not True or any(intent.get(k) != v for k, v in self.scope.items()):
+                raise CorruptCleanupRecord()
+            self._cleanup_exact(tx, "ArenaExecutionIntent", "intent_id", intent["intent_id"], row["ikey"])
+            relation = self._cleanup_parent(tx, row["ikey"], root["key"], "HAS_INTENT|HAS_SCENE_INTENT")
+            if relation != ("HAS_SCENE_INTENT" if intent.get("kind") == "scene" else "HAS_INTENT"):
+                raise CorruptCleanupRecord()
+            if attempt is not None:
+                if row["atyped"] is not True or any(attempt.get(k) != v for k, v in self.scope.items()):
+                    raise CorruptCleanupRecord()
+                self._cleanup_exact(tx, "ArenaExecutionAttempt", "attempt_id", attempt["attempt_id"], row["akey"])
+                self._cleanup_parent(tx, row["akey"], row["ikey"], "HAS_ATTEMPT")
+            row["profile"] = root["run"]["scene_profile"]
+        return rows
+
+    def _cleanup_obligation(self, tx, run_id, row, owner):
+        from .scene_loop import SceneIntent, ScenePortProfile
+
+        node = row["intent"]
+        if node.get("kind") != "scene":
+            return self._cleanup_generation(tx, run_id, row, owner)
+        profile = self._cleanup_json(row["profile"], ScenePortProfile)
+        if type(json.loads(row["profile"]).get("owned_worker")) is not bool:
+            raise CorruptCleanupRecord()
+        intent = self._cleanup_json(node["scene_json"], SceneIntent)
+        raw_intent = json.loads(node["scene_json"])
+        # Writer-emitted nulls mean unclaimed; missing members do not.
+        if (
+            type(raw_intent) is not dict
+            or not {"worker_fence", "worker_registration", "worker_cleanup", "released_at"} <= raw_intent.keys()
+        ):
+            raise CorruptCleanupRecord()
+        if (
+            node["run_id"] != run_id
+            or node["intent_id"] != intent.intent_id
+            or node["status"] != intent.status
+            or row["attempt"] is not None
+        ):
+            raise CorruptCleanupRecord()
+        fence, registration, cleanup = intent.worker_fence, intent.worker_registration, intent.worker_cleanup
+        if any(node[k] is not None for k in ("fence_json", "registration_json", "cleanup_json", "released_at")):
+            raise CorruptCleanupRecord()
+        raw_release = json.loads(node["scene_json"]).get("released_at")
+        if raw_release is not None and (
+            type(raw_release) not in (int, float) or not math.isfinite(raw_release) or raw_release < 0
+        ):
+            raise CorruptCleanupRecord()
+        if fence is not None and (fence.run_id != run_id or fence.intent_id != intent.intent_id):
+            raise CorruptCleanupRecord()
+        if not profile.owned_worker and any(v is not None for v in (fence, registration, cleanup)):
+            raise CorruptCleanupRecord()
+        released = intent.released_at is not None
+        if (
+            (intent.status == "reserved" and released)
+            or (intent.status in ("released", "produced") and not released)
+            or (profile.owned_worker and fence is None and intent.status != "reserved")
+        ):
+            raise CorruptCleanupRecord()
+        value = self._cleanup_item(
+            tx,
+            owner,
+            intent.intent_id,
+            "scene",
+            fence,
+            registration,
+            cleanup,
+            released if profile.owned_worker else False,
+        )
+        if not profile.owned_worker:
+            value = value.model_copy(
+                update={
+                    "cleanup_state": "not_applicable",
+                    "release_state": "released" if released else "known_unreleased",
+                }
+            )
+        return value
+
+    def _cleanup_generation(self, tx, run_id, row, owner):
+        intent, attempt = row["intent"], row["attempt"]
+        if intent.get("kind") not in (None, "generation") or intent["run_id"] != run_id:
+            raise CorruptCleanupRecord()
+        if intent["scene_json"] is not None or intent["released_at"] is not None:
+            raise CorruptCleanupRecord()
+        fence = self._cleanup_json(intent["fence_json"], AttemptFence) if intent["fence_json"] is not None else None
+        if fence is None:
+            if attempt is not None or intent["status"] != "reserved":
+                raise CorruptCleanupRecord()
+        else:
+            if fence.run_id != run_id or fence.intent_id != intent["intent_id"] or attempt is None:
+                raise CorruptCleanupRecord()
+            if attempt["attempt_id"] != fence.attempt_id:
+                raise CorruptCleanupRecord()
+            for key in ("fence_json", "registration_json", "cleanup_json", "status"):
+                if intent.get(key) != attempt.get(key):
+                    raise CorruptCleanupRecord()
+        registration = (
+            self._cleanup_json(intent["registration_json"], WorkerRegistration)
+            if intent["registration_json"] is not None
+            else None
+        )
+        cleanup = (
+            self._cleanup_json(intent["cleanup_json"], CleanupEvidence) if intent["cleanup_json"] is not None else None
+        )
+        released = attempt is not None and attempt["released_at"] is not None
+        if not released and (row["release_authorized"] or row["receipt_present"]):
+            raise CorruptCleanupRecord()
+        if released and (
+            type(attempt["released_at"]) not in (int, float)
+            or not math.isfinite(attempt["released_at"])
+            or attempt["released_at"] < 0
+        ):
+            raise CorruptCleanupRecord()
+        if intent["status"] not in (
+            "reserved",
+            "claimed",
+            "registered",
+            "released",
+            "produced",
+            "cancelled",
+            "reconciliation_required",
+        ):
+            raise CorruptCleanupRecord()
+        status = intent["status"]
+        if (
+            (status == "reserved" and fence is not None)
+            or (status == "claimed" and (registration is not None or released))
+            or (status == "registered" and (registration is None or released))
+            or (status in ("released", "produced", "reconciliation_required") and not released)
+        ):
+            raise CorruptCleanupRecord()
+        return self._cleanup_item(tx, owner, intent["intent_id"], "generation", fence, registration, cleanup, released)
+
+    def _cleanup_retired_epoch(self, tx, owner_id):
+        rows = list(
+            tx.run(
+                "MATCH (o:ArenaRetiredWorkflowOwner "
+                + _SCOPE
+                + ") WHERE o.owner_id=$owner RETURN "
+                + self._cleanup_projection("o", ("owner_epoch",))
+                + " AS owner LIMIT 2",
+                **self.scope,
+                owner=owner_id,
+            )
+        )
+        if len(rows) > 1:
+            raise CorruptCleanupRecord()
+        if not rows:
+            return None
+        epoch = rows[0]["owner"]["owner_epoch"]
+        if type(epoch) is not int or epoch < 1:
+            raise CorruptCleanupRecord()
+        return epoch
+
+    def _cleanup_item(self, tx, owner, intent_id, kind, fence, registration, cleanup, released):
+        if (
+            (registration is not None and registration.fence != fence)
+            or (cleanup is not None and cleanup.registration != registration)
+            or (released and registration is None)
+        ):
+            raise CorruptCleanupRecord()
+        retired = None
+        if fence is not None:
+            epoch = self._cleanup_retired_epoch(tx, fence.owner_id)
+            if epoch is not None:
+                if type(epoch) is not int or epoch != fence.owner_epoch:
+                    raise CorruptCleanupRecord()
+                retired = OwnerView(owner_id=fence.owner_id, owner_epoch=epoch, dirty=False)
+            if owner is None or (
+                retired is None
+                and (owner.owner_id != fence.owner_id or owner.owner_epoch != fence.owner_epoch or not owner.dirty)
+            ):
+                raise CorruptCleanupRecord()
+        try:
+            return IntentCleanupView(
+                intent_id=intent_id,
+                kind=kind,
+                fence=fence,
+                registration_id=None if registration is None else registration.registration_id,
+                release_state="released" if released else "known_unreleased",
+                cleanup_state="recorded" if cleanup else "unknown" if fence else "not_started",
+                cleanup_evidence_ref=None if cleanup is None else cleanup.evidence_ref,
+                cleanup_observation=None if cleanup is None else cleanup.observation,
+                remote_effects=None if cleanup is None else cleanup.remote_effects,
+                retired_owner=retired,
+            )
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise CorruptCleanupRecord() from None
 
     def result_records(self, run_id):
         """Read one consistent bounded public result source without effects or grants."""
@@ -1292,6 +3310,7 @@ class Neo4jWorkflowStore:
             + _SCOPE
             + ") "
             "SET d.decision_id=$id, d.payload=$decision, d.candidate_id=$candidate, d.intent_id=$intent, "
+            "d.run_id=$run, d.record_kind='scene_decision', d.membership_codec=1, "
             "r.scene_decision=$decision, r.scene_candidate=$record, r.scene_intent=$intent, "
             "r.scene_evidence=$evidence, d.evidence_id=$evidence, "
             "r.state=$state, r.phase='scene', r.stop_reason=$reason",
@@ -1425,13 +3444,15 @@ class Neo4jWorkflowStore:
             status=intent.status,
         ).consume()
 
-    def claim_scene_worker(self, run_id, intent_id, owner_id, owner_epoch):
+    def claim_scene_worker(self, run_id, intent_id, owner_id, owner_epoch, *, resume_operation_id=None):
         """Persist the prepare fence before any worker creation; never infer no process."""
         from .scene_loop import identity
 
         with self._transaction() as tx:
             self._lock(tx)
             self._owner(tx, owner_id, owner_epoch)
+            if resume_operation_id is not None:
+                self._resume_claim_guard(tx, resume_operation_id, run_id, intent_id, "scene")
             s = self._scene_snapshot(tx, run_id)
             if (
                 s is None
@@ -1659,9 +3680,7 @@ class Neo4jWorkflowStore:
                 id=intent_id,
                 scene=intent.model_dump_json(),
                 state=(
-                    "cancel_requested"
-                    if s.run.state in ("cancelled", "cancel_requested")
-                    else "reconciliation_required"
+                    s.run.state if s.run.state in ("cancelled", "cancel_requested") else "reconciliation_required"
                 ),
             ).consume()
             self._event(tx, run_id, "SceneReconciliationRequired", intent_id)
@@ -2044,6 +4063,483 @@ class Neo4jWorkflowStore:
             ).consume()
         return epoch
 
+    def _page_boundary(self, tx, expected, *, candidates=False, decisions=False):
+        from .paging import CorruptPage, physical_counter
+
+        boundary = self._lock(tx, bounded=True)
+        retained = self._scope_binding(tx)
+        if retained != expected:
+            raise SubmissionConflict("Scope binding differs")
+        floor = physical_counter(boundary["floor"])
+        ceiling = physical_counter(boundary["ceiling"])
+        if int(floor) > int(ceiling):
+            raise CorruptPage()
+        # Existing unique RANGE backing indexes suffice. No DDL or waiting.
+        indexes = list(
+            tx.run("SHOW INDEXES YIELD entityType, type, state, labelsOrTypes, properties, owningConstraint RETURN *")
+        )
+        for label, key in (("ArenaWorkflowRun", "run_id"), ("ArenaWorkflowEvent", "sequence")):
+            if not any(
+                r["entityType"] == "NODE"
+                and r["type"] == "RANGE"
+                and r["state"] == "ONLINE"
+                and r["owningConstraint"] is not None
+                and r["labelsOrTypes"] == [label]
+                and r["properties"] == ["deployment_id", "workspace_id", key]
+                for r in indexes
+            ):
+                raise SchemaMissing("Online unique page index required")
+        if candidates:
+            for keys in (("record_id",), ("run_id", "record_id")):
+                if not any(
+                    r["entityType"] == "NODE"
+                    and r["type"] == "RANGE"
+                    and r["state"] == "ONLINE"
+                    and r["owningConstraint"] is None
+                    and r["labelsOrTypes"] == ["ArenaWorkflowCandidate"]
+                    and r["properties"] == ["deployment_id", "workspace_id", *keys]
+                    for r in indexes
+                ):
+                    raise SchemaMissing(
+                        "Online nonunique candidate page index required"
+                    )
+        if decisions and not any(
+            r["entityType"] == "NODE"
+            and r["type"] == "RANGE"
+            and r["state"] == "ONLINE"
+            and r["owningConstraint"] is None
+            and r["labelsOrTypes"] == ["ArenaWorkflowDecision"]
+            and r["properties"] == ["deployment_id", "workspace_id", "run_id", "decision_id"]
+            for r in indexes
+        ):
+            raise SchemaMissing("Online nonunique decision page index required")
+        return retained, floor, ceiling
+
+    def list_runs_window(self, binding, *, first=100, after=None):
+        """Read one verified live run window including one validated lookahead."""
+        from .paging import CorruptPage, RunPosition, RunSummary, RunWindow, physical_counter, validate_first
+
+        binding = self._checked_scope_binding(binding)
+        validate_first(first)
+        if after is not None:
+            after = RunPosition.model_validate_json(after.model_dump_json())
+        with self._transaction(fetch_size=first + 1) as tx:
+            retained, floor, ceiling = self._page_boundary(tx, binding)
+            predicate = "r.run_id >= ''" if after is None else "r.run_id > $after"
+            fields = (
+                ("run_id", 64),
+                ("operation_id", 128),
+                ("state", 32),
+                ("phase", 32),
+                ("version", 19),
+                ("event_cursor", 19),
+            )
+            projection = ", ".join(
+                f"{key}: CASE WHEN size(toStringOrNull(r.{key}))<={cap} THEN r.{key} ELSE null END"
+                for key, cap in fields
+            )
+            stream = tx.run(
+                "MATCH (r:ArenaWorkflowRun "
+                + _SCOPE
+                + ") USING INDEX r:ArenaWorkflowRun(deployment_id, workspace_id, run_id) WHERE "
+                + predicate
+                + " WITH r ORDER BY r.deployment_id, r.workspace_id, r.run_id ASC LIMIT $limit RETURN {"
+                + projection
+                + "} AS row",
+                **self.scope,
+                after=None if after is None else after.position,
+                limit=first + 1,
+            )
+            # Include the constant scope prefix in ORDER BY: Neo4j's composite
+            # unique index otherwise uses an unbounded Top over the scoped range.
+            rows = []
+            previous = "" if after is None else after.position
+            for record in stream:
+                # Query execution and advancement deliberately stay outside decoding catches.
+                try:
+                    raw = dict(record["row"])
+                    raw["run_version"] = physical_counter(raw.pop("version"), positive=True)
+                    raw["event_cursor"] = physical_counter(raw["event_cursor"])
+                    row = RunSummary.model_validate(raw)
+                    identity = json.dumps(
+                        [retained.deployment_id, retained.workspace_id, row.operation_id],
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                    if (
+                        hashlib.sha256(identity.encode("utf-8")).hexdigest() != row.run_id
+                        or row.run_id <= previous
+                        or int(row.event_cursor) > int(ceiling)
+                        or len(rows) >= first + 1
+                    ):
+                        raise ValueError()
+                except (ValueError, TypeError, KeyError, RecursionError):
+                    raise CorruptPage() from None
+                rows.append(row)
+                previous = row.run_id
+            result = RunWindow(binding=retained, floor=floor, ceiling=ceiling, runs=tuple(rows))
+        return result
+
+    def list_scene_candidates_window(self, binding, run_id, *, first=100, after=None):
+        """Read compact run-owned identities; historical point reads validate payloads."""
+        from .paging import (
+            CandidateItem,
+            CandidatePosition,
+            CandidateWindow,
+            CorruptPage,
+            CursorQueryMismatch,
+            RunPosition,
+            RunSummary,
+            physical_counter,
+            validate_first,
+        )
+
+        binding = self._checked_scope_binding(binding)
+        validate_first(first)
+        RunPosition(position=run_id)
+        if after is not None:
+            after = CandidatePosition.model_validate_json(after.model_dump_json())
+            if after.run_id != run_id:
+                raise CursorQueryMismatch()
+        with self._transaction(fetch_size=first + 1) as tx:
+            retained, floor, ceiling = self._page_boundary(tx, binding, candidates=True)
+            fields = (
+                ("run_id", 64),
+                ("operation_id", 128),
+                ("state", 32),
+                ("phase", 32),
+                ("version", 19),
+                ("event_cursor", 19),
+            )
+            projection = ", ".join(
+                f"{key}: CASE WHEN size(toStringOrNull(r.{key}))<={cap} THEN r.{key} ELSE null END"
+                for key, cap in fields
+            )
+            parents = list(
+                tx.run(
+                    "MATCH (r:ArenaWorkflowRun " + _SCOPE + ") "
+                    "USING INDEX r:ArenaWorkflowRun(deployment_id, workspace_id, run_id) "
+                    "WHERE r.run_id=$run RETURN elementId(r) AS key, {"
+                    + projection
+                    + "} AS parent LIMIT 2",
+                    **self.scope,
+                    run=run_id,
+                )
+            )
+            if not parents:
+                return None
+            if len(parents) != 1:
+                raise CorruptPage()
+            try:
+                raw = dict(parents[0]["parent"])
+                raw["run_version"] = physical_counter(raw.pop("version"), positive=True)
+                raw["event_cursor"] = physical_counter(raw["event_cursor"])
+                parent = RunSummary.model_validate(raw)
+                identity = json.dumps(
+                    [
+                        retained.deployment_id,
+                        retained.workspace_id,
+                        parent.operation_id,
+                    ],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                if (
+                    parent.run_id != run_id
+                    or hashlib.sha256(identity.encode("utf-8")).hexdigest() != run_id
+                    or int(parent.event_cursor) > int(ceiling)
+                ):
+                    raise ValueError()
+            except (ValueError, TypeError, KeyError, RecursionError):
+                raise CorruptPage() from None
+            predicate = "n.record_id >= ''" if after is None else "n.record_id > $after"
+            stream = tx.run(
+                "MATCH (n:ArenaWorkflowCandidate " + _SCOPE + ") "
+                "USING INDEX n:ArenaWorkflowCandidate(deployment_id, workspace_id, run_id, record_id) "
+                "WHERE n.run_id=$run AND "
+                + predicate
+                + " WITH n ORDER BY n.deployment_id, n.workspace_id, n.run_id, n.record_id ASC LIMIT $limit "
+                "RETURN {candidate_id: CASE WHEN size(toStringOrNull(n.record_id))<=64 THEN n.record_id ELSE null END, "
+                "run_id: CASE WHEN size(toStringOrNull(n.run_id))<=64 THEN n.run_id ELSE null END} AS row",
+                **self.scope,
+                run=run_id,
+                after=None if after is None else after.position,
+                limit=first + 1,
+            )
+            rows = []
+            previous = "" if after is None else after.position
+            for record in stream:
+                try:
+                    row = CandidateItem.model_validate(dict(record["row"]))
+                    if (
+                        row.run_id != run_id
+                        or row.candidate_id <= previous
+                        or len(rows) >= first + 1
+                    ):
+                        raise ValueError()
+                except (ValueError, TypeError, KeyError, RecursionError):
+                    raise CorruptPage() from None
+                rows.append(row)
+                previous = row.candidate_id
+            # Drain the bounded selected stream before nested queries: the driver
+            # otherwise implicitly buffers pending Bolt batches on tx.run().
+            for row in rows:
+                identities = list(
+                    tx.run(
+                        "MATCH (n:ArenaWorkflowCandidate " + _SCOPE + ") "
+                        "USING INDEX n:ArenaWorkflowCandidate(deployment_id, workspace_id, record_id) "
+                        "WHERE n.record_id=$id RETURN elementId(n) AS key LIMIT 2",
+                        **self.scope,
+                        id=row.candidate_id,
+                    )
+                )
+                if len(identities) != 1:
+                    raise CorruptPage()
+                owners = list(
+                    tx.run(
+                        "MATCH (n)<-[:HAS_SCENE_RECORD]-(r) WHERE elementId(n)=$key "
+                        "RETURN elementId(r)=$parent AND r:ArenaWorkflowRun AS valid LIMIT 2",
+                        key=identities[0]["key"],
+                        parent=parents[0]["key"],
+                    )
+                )
+                if len(owners) != 1 or owners[0]["valid"] is not True:
+                    raise CorruptPage()
+            result = CandidateWindow(
+                binding=retained,
+                run_id=run_id,
+                floor=floor,
+                ceiling=ceiling,
+                candidates=tuple(rows),
+            )
+        return result
+
+    def list_decisions_window(self, binding, run_id, *, first=100, after=None):
+        """Read live decision references; not payloads, chronology or a graph audit."""
+        from .paging import (
+            DecisionItem,
+            DecisionPosition,
+            DecisionWindow,
+            DecisionCoverageUnavailable,
+            UnsupportedDecisionCoverage,
+            CorruptPage,
+            CursorQueryMismatch,
+            RunPosition,
+            RunSummary,
+            physical_counter,
+            validate_first,
+        )
+
+        binding = self._checked_scope_binding(binding)
+        validate_first(first)
+        RunPosition(position=run_id)
+        if after is not None:
+            after = DecisionPosition.model_validate_json(after.model_dump_json())
+            if after.run_id != run_id:
+                raise CursorQueryMismatch()
+        with self._transaction(fetch_size=first + 1) as tx:
+            retained, floor, ceiling = self._page_boundary(tx, binding, decisions=True)
+            fields = (
+                ("run_id", 64),
+                ("operation_id", 128),
+                ("state", 32),
+                ("phase", 32),
+                ("version", 19),
+                ("event_cursor", 19),
+            )
+            projection = ", ".join(
+                f"{key}: CASE WHEN size(toStringOrNull(r.{key}))<={cap} THEN r.{key} ELSE null END"
+                for key, cap in fields
+            )
+            parents = list(
+                tx.run(
+                    "MATCH (r:ArenaWorkflowRun " + _SCOPE + ") "
+                    "USING INDEX r:ArenaWorkflowRun(deployment_id, workspace_id, run_id) "
+                    "WHERE r.run_id=$run RETURN elementId(r) AS key, {"
+                    + projection
+                    + "} AS parent, r.decision_coverage IS NOT NULL AS coverage_present, "
+                    "CASE WHEN size(toStringOrNull(r.decision_coverage))<=20 "
+                    "THEN r.decision_coverage ELSE null END AS coverage LIMIT 2",
+                    **self.scope,
+                    run=run_id,
+                )
+            )
+            if not parents:
+                return None
+            if len(parents) != 1:
+                raise CorruptPage()
+            try:
+                raw = dict(parents[0]["parent"])
+                raw["run_version"] = physical_counter(raw.pop("version"), positive=True)
+                raw["event_cursor"] = physical_counter(raw["event_cursor"])
+                parent = RunSummary.model_validate(raw)
+                identity = json.dumps(
+                    [
+                        retained.deployment_id,
+                        retained.workspace_id,
+                        parent.operation_id,
+                    ],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                if (
+                    parent.run_id != run_id
+                    or hashlib.sha256(identity.encode("utf-8")).hexdigest() != run_id
+                    or int(parent.event_cursor) > int(ceiling)
+                ):
+                    raise ValueError()
+            except (ValueError, TypeError, KeyError, RecursionError):
+                raise CorruptPage() from None
+            if parents[0]["coverage_present"] is False:
+                return DecisionCoverageUnavailable(binding=retained, run_id=run_id, floor=floor, ceiling=ceiling)
+            coverage = parents[0]["coverage"]
+            if parents[0]["coverage_present"] is not True or type(coverage) is not int:
+                raise CorruptPage()
+            if coverage != 1:
+                raise UnsupportedDecisionCoverage()
+            predicate = "n.decision_id >= ''" if after is None else "n.decision_id > $after"
+            stream = tx.run(
+                "MATCH (n:ArenaWorkflowDecision " + _SCOPE + ") "
+                "USING INDEX n:ArenaWorkflowDecision(deployment_id, workspace_id, run_id, decision_id) "
+                "WHERE n.run_id=$run AND "
+                + predicate
+                + " WITH n ORDER BY n.deployment_id, n.workspace_id, n.run_id, n.decision_id ASC LIMIT $limit "
+                "RETURN {decision_id: CASE WHEN size(toStringOrNull(n.decision_id))<=128 THEN n.decision_id ELSE null END, "
+                "run_id: CASE WHEN size(toStringOrNull(n.run_id))<=64 THEN n.run_id ELSE null END, "
+                "record_kind: CASE WHEN size(toStringOrNull(n.record_kind))<=32 THEN n.record_kind ELSE null END, "
+                "membership_codec: CASE WHEN size(toStringOrNull(n.membership_codec))<=20 "
+                "THEN n.membership_codec ELSE null END} AS row",
+                **self.scope,
+                run=run_id,
+                after=None if after is None else after.position,
+                limit=first + 1,
+            )
+            rows = []
+            previous = "" if after is None else after.position
+            for record in stream:
+                try:
+                    raw = dict(record["row"])
+                    codec = raw.pop("membership_codec")
+                    if type(codec) is not int or codec != 1:
+                        raise ValueError()
+                    row = DecisionItem.model_validate(raw)
+                    if row.run_id != run_id or row.decision_id <= previous or len(rows) >= first + 1:
+                        raise ValueError()
+                except (ValueError, TypeError, KeyError, RecursionError):
+                    raise CorruptPage() from None
+                rows.append(row)
+                previous = row.decision_id
+            # Drain the bounded selected stream before nested queries: the driver
+            # otherwise implicitly buffers pending Bolt batches on tx.run().
+            for row in rows:
+                identities = list(
+                    tx.run(
+                        "MATCH (n:ArenaWorkflowDecision " + _SCOPE + ") "
+                        "USING INDEX n:ArenaWorkflowDecision(deployment_id, workspace_id, run_id, decision_id) "
+                        "WHERE n.run_id=$run AND n.decision_id=$id RETURN elementId(n) AS key LIMIT 2",
+                        **self.scope,
+                        id=row.decision_id,
+                        run=run_id,
+                    )
+                )
+                if len(identities) != 1:
+                    raise CorruptPage()
+                owners = list(
+                    tx.run(
+                        "MATCH (n)<-[:HAS_DECISION]-(r) WHERE elementId(n)=$key "
+                        "RETURN elementId(r)=$parent AND r:ArenaWorkflowRun AS valid LIMIT 2",
+                        key=identities[0]["key"],
+                        parent=parents[0]["key"],
+                    )
+                )
+                if len(owners) != 1 or owners[0]["valid"] is not True:
+                    raise CorruptPage()
+            result = DecisionWindow(
+                binding=retained,
+                run_id=run_id,
+                floor=floor,
+                ceiling=ceiling,
+                decisions=tuple(rows),
+            )
+        return result
+
+    def read_scope_events_window(self, binding, *, first=100, after=None):
+        """Read current retained bounds and at most first+1 physical event rows."""
+        from .paging import (
+            CorruptPage,
+            EventPosition,
+            EventWindow,
+            FutureCursor,
+            ScopeEvent,
+            physical_counter,
+            validate_first,
+        )
+
+        binding = self._checked_scope_binding(binding)
+        validate_first(first)
+        if after is not None:
+            after = EventPosition.model_validate_json(after.model_dump_json())
+        with self._transaction(fetch_size=first + 1) as tx:
+            retained, floor, ceiling = self._page_boundary(tx, binding)
+            position = floor if after is None else after.position
+            if int(position) < int(floor):
+                raise ReplayGap("Page cursor precedes retained floor")
+            if int(position) > int(ceiling):
+                raise FutureCursor()
+            fields = (
+                ("sequence", 19),
+                ("run_id", 64),
+                ("operation_id", 128),
+                ("kind", 128),
+                ("schema_version", 19),
+                ("source_id", 128),
+                ("command_kind", 128),
+                ("command_operation_id", 128),
+            )
+            projection = ", ".join(
+                f"{key}: CASE WHEN size(toStringOrNull(e.{key}))<={cap} THEN e.{key} "
+                f"WHEN e.{key} IS NULL THEN null ELSE [false] END"
+                for key, cap in fields
+            )
+            stream = tx.run(
+                "MATCH (e:ArenaWorkflowEvent "
+                + _SCOPE
+                + ") "
+                "USING INDEX e:ArenaWorkflowEvent(deployment_id, workspace_id, sequence) "
+                "WHERE e.sequence > $after AND e.sequence <= $ceiling "
+                "WITH e ORDER BY e.deployment_id, e.workspace_id, e.sequence ASC LIMIT $limit RETURN {"
+                + projection
+                + "} AS row",
+                **self.scope,
+                after=int(position),
+                ceiling=int(ceiling),
+                limit=first + 1,
+            )
+            rows = []
+            previous = int(position)
+            for record in stream:
+                try:
+                    raw = dict(record["row"])
+                    raw["sequence"] = physical_counter(raw["sequence"])
+                    row = ScopeEvent.model_validate(raw)
+                    identity = json.dumps(
+                        [retained.deployment_id, retained.workspace_id, row.operation_id],
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                    if (
+                        hashlib.sha256(identity.encode("utf-8")).hexdigest() != row.run_id
+                        or not previous < int(row.sequence) <= int(ceiling)
+                        or len(rows) >= first + 1
+                    ):
+                        raise ValueError()
+                except (ValueError, TypeError, KeyError, RecursionError):
+                    raise CorruptPage() from None
+                rows.append(row)
+                previous = int(row.sequence)
+            result = EventWindow(binding=retained, floor=floor, ceiling=ceiling, position=position, events=tuple(rows))
+        return result
+
     def snapshot(self):
         """Read canonical runs and committed cursor under the shared control lock."""
         with self._transaction() as tx:
@@ -2073,7 +4569,8 @@ class Neo4jWorkflowStore:
                     + _SCOPE
                     + ") "
                     "WHERE e.sequence>$cursor AND e.sequence<=$ceiling "
-                    "RETURN e {.sequence, .run_id, .operation_id, .kind, .schema_version} AS event "
+                    "RETURN e {.sequence, .run_id, .operation_id, .kind, .schema_version, .source_id, "
+                    ".command_kind, .command_operation_id} AS event "
                     "ORDER BY e.sequence LIMIT $limit",
                     **self.scope,
                     cursor=cursor,
@@ -2091,9 +4588,38 @@ class Neo4jWorkflowStore:
 
     @staticmethod
     def schema_requirements():
-        """Return administrator-only DDL; never execute it at runtime."""
-        return tuple(
-            f"CREATE CONSTRAINT arena_workflow_{name} IF NOT EXISTS FOR (n:{label}) "
-            f"REQUIRE ({', '.join('n.' + field for field in fields)}) IS UNIQUE"
-            for name, label, fields in _KEYS
+        """Return administrator-only DDL; await indexes online before verify/open.
+
+        Provision at the explicit quiescent admin gate, then CALL db.awaitIndexes
+        with an operator-selected bounded timeout. Runtime never provisions or waits.
+        """
+        return (
+            tuple(
+                f"CREATE CONSTRAINT arena_workflow_{name} IF NOT EXISTS FOR (n:{label}) "
+                f"REQUIRE ({', '.join('n.' + field for field in fields)}) IS UNIQUE"
+                for name, label, fields in _KEYS
+            )
+            + tuple(
+                f"CREATE INDEX arena_workflow_history_{name} IF NOT EXISTS FOR (n:{label}) "
+                f"ON (n.deployment_id, n.workspace_id, n.{field})"
+                for name, label, field in _HISTORY_INDEXES
+            )
+            + (
+                (
+                    "CREATE INDEX arena_workflow_decision_run_id IF NOT EXISTS FOR"
+                    " (n:ArenaWorkflowDecision) ON (n.deployment_id, n.workspace_id, n.run_id, n.decision_id)"
+                ),
+                (
+                    "CREATE INDEX arena_workflow_candidate_run_record IF NOT EXISTS FOR"
+                    " (n:ArenaWorkflowCandidate) ON (n.deployment_id, n.workspace_id, n.run_id, n.record_id)"
+                ),
+                (
+                    "CREATE INDEX arena_workflow_profile_revision_scope IF NOT EXISTS FOR"
+                    " (n:ArenaWorkflowProfileRevision) ON (n.deployment_id, n.workspace_id)"
+                ),
+                (
+                    "CREATE INDEX arena_workflow_event_run_kind_sequence IF NOT EXISTS FOR"
+                    " (n:ArenaWorkflowEvent) ON (n.deployment_id, n.workspace_id, n.run_id, n.kind, n.sequence)"
+                ),
+            )
         )

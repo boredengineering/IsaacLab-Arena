@@ -221,10 +221,14 @@ class GenerationCoordinator:
         )
         return durable_readiness(request, requirements, report, mapping=self._clock)
 
-    def dispatch(self, principal, *, expected_version, decision_id, reservation, pending_intent=None):
+    def dispatch(
+        self, principal, *, expected_version, decision_id, reservation, pending_intent=None, resume_operation_id=None
+    ):
         """Release once and return locally; retries never construct another worker."""
         self._authenticate(principal)
-        key = (expected_version, decision_id, reservation, pending_intent)
+        if resume_operation_id is not None and pending_intent is None:
+            raise ValueError("Keyed dispatch requires an existing intent")
+        key = (expected_version, decision_id, reservation, pending_intent, resume_operation_id)
         with self._lock:
             if self._handle is not None:
                 if key != self._key:
@@ -269,7 +273,8 @@ class GenerationCoordinator:
                 self._handle.intent_id = intent
                 epoch = self._store.begin_owner(self._handle.owner_id)
                 self._handle.owner_epoch = epoch
-                fence = self._store.claim_intent(intent, self._handle.owner_id, epoch)
+                claim_args = {} if resume_operation_id is None else dict(resume_operation_id=resume_operation_id)
+                fence = self._store.claim_intent(intent, self._handle.owner_id, epoch, **claim_args)
                 self._handle.fence = fence
                 self._lease.mark_prepared(fence)
                 self._preparing = True

@@ -13,6 +13,528 @@ from isaaclab_arena.agentic_environment_generation.workflow.contracts import par
 from isaaclab_arena.agentic_environment_generation.workflow.readiness import DependencyGate, DependencyResult
 
 
+@pytest.mark.parametrize("operation", ["initialize_scope", "initialize_artifacts", "verify_current_resources"])
+@pytest.mark.parametrize("denial", ["admin", "read_only", "missing_protect", "mutating_protect", "veto"])
+def test_scope_admin_authorization_and_public_screen_before_io(operation, denial, tmp_path):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.admin import WorkflowScopeAdmin
+    from isaaclab_arena.agentic_environment_generation.workflow.scope_binding import ScopeBinding
+    from isaaclab_arena.tests.test_environment_workflow_store import scope_binding_body
+
+    calls = []
+
+    class NoIO:
+        def __getattr__(self, name):
+            pytest.fail("admin denial reached IO: " + name)
+
+    def authorize(principal):
+        calls.append(("admin", principal))
+        if denial == "admin":
+            raise PermissionError("admin denied")
+
+    def protect(body):
+        calls.append("protect")
+        if denial == "mutating_protect":
+            body["authority_id"] = "changed"
+        elif denial == "veto":
+            raise PermissionError("public veto")
+
+    authority = (
+        SimpleNamespace(require_read=lambda _: None)
+        if denial == "read_only"
+        else SimpleNamespace(require_admin=authorize)
+    )
+    admin = WorkflowScopeAdmin(NoIO(), authority)
+    kwargs = dict(protect=None if denial == "missing_protect" else protect)
+    if operation != "initialize_scope":
+        kwargs["root"] = tmp_path / "untouched"
+        if operation == "initialize_artifacts":
+            kwargs["create"] = True
+        else:
+            kwargs["required_profiles"] = ()
+    error = AttributeError if denial == "read_only" else PermissionError if denial in ("admin", "veto") else ValueError
+    with pytest.raises(error):
+        getattr(admin, operation)("operator", ScopeBinding.model_validate(scope_binding_body()), **kwargs)
+    assert not (tmp_path / "untouched").exists()
+    assert calls == (
+        []
+        if denial == "read_only"
+        else [("admin", "operator")] + ([] if denial in ("admin", "missing_protect") else ["protect"])
+    )
+
+
+@pytest.mark.parametrize("case", ["denied", "invalid_id", "missing_protection", "invalid_permission", "missing"])
+def test_joined_inspection_service_denial_precedes_store_and_effects(case):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    calls = []
+
+    def authorize(principal):
+        calls.append("read")
+        if case == "denied":
+            raise PermissionError("private-read-authority-sentinel")
+
+    def lookup(run_id):
+        calls.append("lookup")
+        return None
+
+    service = WorkflowService(
+        SimpleNamespace(get_run_inspection=lookup), SimpleNamespace(require_read=authorize), None, validate_support=None
+    )
+    kwargs = dict(
+        protect=None if case == "missing_protection" else lambda v: calls.append(("protect", v)),
+        check_action_permission=1 if case == "invalid_permission" else None,
+    )
+    if case == "missing":
+        assert service.read_run_inspection("reader", "missing", **kwargs) is None
+        assert calls == ["read", "lookup", ("protect", None)]
+    else:
+        with pytest.raises(PermissionError if case == "denied" else ValueError) as caught:
+            service.read_run_inspection("reader", "bad id" if case == "invalid_id" else "missing", **kwargs)
+        import traceback
+
+        assert "private-read-authority-sentinel" not in "".join(
+            traceback.format_exception(caught.type, caught.value, caught.tb)
+        )
+        assert calls == ["read"]
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "read_denied",
+        "missing_permission",
+        "permission_denied",
+        "absent_eligibility",
+        "malformed",
+        "unknown_read",
+        "query_read",
+    ],
+)
+def test_resume_service_fails_closed_before_callbacks_or_admission(case):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import OutcomeUnknown
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    calls = []
+
+    def read(principal):
+        calls.append("read")
+        if case == "read_denied":
+            raise PermissionError("read denied")
+
+    def lookup(key):
+        calls.append("lookup")
+        if case == "unknown_read":
+            raise OutcomeUnknown("unknown")
+        if case == "query_read":
+            raise ValueError("query error")
+
+    def permission(*args):
+        calls.append("permission")
+        if case == "permission_denied":
+            raise PermissionError("resume denied")
+
+    def preview(run_id):
+        calls.append("preview")
+        return SimpleNamespace(
+            selection=SimpleNamespace(branch="generation"),
+            run=SimpleNamespace(version=1, contract_json=contract().model_dump_json()),
+        )
+
+    service = WorkflowService(
+        SimpleNamespace(get_resume_receipt=lookup, preview_resume=preview),
+        SimpleNamespace(require_read=read),
+        None,
+        validate_support=None,
+    )
+    with pytest.raises(
+        OutcomeUnknown
+        if case == "unknown_read"
+        else PermissionError if case in {"read_denied", "permission_denied"} else ValueError
+    ):
+        service.admit_resume(
+            "reader",
+            "key",
+            dict(runId="run", expectedVersion=True if case == "malformed" else 1, renewAuthorization=False),
+            check_resume=None if case == "missing_permission" else permission,
+            check_eligibility=None,
+            protect=lambda v: None,
+        )
+    expected = ["read"]
+    if case not in {"read_denied", "malformed"}:
+        expected.append("lookup")
+    if case in {"permission_denied", "absent_eligibility"}:
+        expected.extend(["preview", "permission"])
+    assert calls == expected
+
+
+@pytest.mark.parametrize("raw", ['"private-contract-sentinel"', '{"private-contract-sentinel":', 17])
+def test_resume_service_retained_contract_decode_is_static(raw):
+    import traceback
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    calls = []
+    service = WorkflowService(
+        SimpleNamespace(
+            get_resume_receipt=lambda key: None,
+            preview_resume=lambda run: SimpleNamespace(
+                run=SimpleNamespace(version=1, contract_json=raw),
+                selection=SimpleNamespace(branch="generation"),
+            ),
+        ),
+        SimpleNamespace(require_read=lambda p: None),
+        None,
+        validate_support=None,
+    )
+    with pytest.raises(ValueError) as caught:
+        service.admit_resume(
+            "reader",
+            "resume",
+            dict(runId="run", expectedVersion=1, renewAuthorization=False),
+            check_resume=lambda *a: calls.append("permission"),
+            check_eligibility=lambda *a, **kw: calls.append("eligibility"),
+            protect=lambda v: None,
+        )
+    assert str(caught.value) == "Invalid retained resume selection"
+    assert "private-contract-sentinel" not in "".join(traceback.format_exception(caught.type, caught.value, caught.tb))
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "damage", ["false_codec", "float_version", "missing_event", "wrong_source", "refusal_event", "version_jump"]
+)
+def test_cancel_receipt_rejects_rehashed_structural_damage(damage):
+    from isaaclab_arena.agentic_environment_generation.workflow.commands import (
+        CancelReceipt,
+        command_digest,
+        command_json,
+        make_cancel_receipt,
+    )
+
+    payload = command_json({"runId": "run"})
+    valid = make_cancel_receipt(
+        scope=dict(database="db", deployment_id="d", workspace_id="w"),
+        operation_id="key",
+        run_id="run",
+        payload_json=payload,
+        payload_digest=command_digest(payload),
+        before_version=2**40,
+        after_version=2**40 + 1,
+        disposition="cancellation_requested",
+        reason=None,
+        first_local_stop=dict(delivery="delivered", remote_effects="unknown", durable_cancellation="unconfirmed"),
+        events=[dict(sequence=2**40, kind="CancellationRequested", source_id="run")],
+    )
+    body = valid.model_dump(mode="json")
+    if damage == "false_codec":
+        body["codec_version"] = True
+    elif damage == "float_version":
+        body["receipt_version"] = 1.0
+    elif damage == "missing_event":
+        body["events"] = []
+    elif damage == "wrong_source":
+        body["events"][0]["source_id"] = "other"
+    elif damage == "refusal_event":
+        body.update(disposition="refused", reason="inactive_run")
+    else:
+        body["after_version"] += 1
+    body["receipt_digest"] = command_digest(command_json({k: v for k, v in body.items() if k != "receipt_digest"}))
+    with pytest.raises(ValueError):
+        CancelReceipt.model_validate(body)
+
+
+@pytest.mark.parametrize("kind", ["submission", "run_intent"])
+@pytest.mark.parametrize("case", ["missing", "denied", "bad_id", "absent", "replace", "transport", "unknown", "query_error"])
+def test_admission_intent_service_authenticates_before_io_and_screens_none(kind, case):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import OutcomeUnknown
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    calls = []
+    failure = {"transport": OSError("transport"), "unknown": OutcomeUnknown("unknown"),
+               "query_error": ValueError("query error")}.get(case)
+
+    def auth(principal):
+        assert principal == "reader"
+        calls.append("auth")
+        if case == "denied":
+            raise PermissionError("denied")
+
+    def read(identity):
+        assert identity == "literal.Id:1"
+        calls.append("io")
+        if failure is not None:
+            raise failure
+
+    def protect(value):
+        assert value is None
+        calls.append("screen")
+        return {} if case == "replace" else None
+
+    store = SimpleNamespace(get_submission_inspection=read, get_run_intent=read)
+    service = WorkflowService(store, SimpleNamespace(require_read=auth), None, validate_support=None)
+    method = getattr(service, "read_" + kind)
+    if case == "missing":
+        assert method("reader", "literal.Id:1", protect=protect) is None
+        assert calls == ["auth", "io", "screen"]
+    else:
+        error = PermissionError if case == "denied" else type(failure) if failure is not None else ValueError
+        with pytest.raises(error) as caught:
+            method("reader", " literal.Id:1" if case == "bad_id" else "literal.Id:1",
+                   protect=None if case == "absent" else protect)
+        if failure is not None:
+            assert caught.value is failure
+        assert calls == (["auth"] if case in {"denied", "bad_id", "absent"} else
+                         ["auth", "io", "screen"] if case == "replace" else ["auth", "io"])
+
+
+@pytest.mark.parametrize("kind", ["submission", "run_intent"])
+@pytest.mark.parametrize("screen", ["allow", "mutate", "replace", "deny", "oversize"])
+def test_admission_intent_service_detaches_freezes_and_screens_whole_view(kind, screen):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.queries import FrozenRunIntentView, FrozenSubmissionInspection, SceneReadScope
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    scope = SceneReadScope(database="db", deployment_id="d", workspace_id="w")
+    admission = FrozenSubmissionInspection(
+        scope=scope, kind="SUBMIT", operation_id="key", run_id="a" * 64,
+        request_digest="b" * 64, accepted_contract_digest="c" * 64,
+        digest_codec="sha256-canonical-json-utf8-v1", admitted_at=0.0,
+        disposition="retained_admission", provenance="legacy_run_record", receipt_version=None, cause_id=None,
+    )
+    retained = admission if kind == "submission" else FrozenRunIntentView(
+        scope=scope, run_id=admission.run_id, submission=admission, contract=contract(),
+        state="pending", phase="dependency_readiness", run_version=1, event_cursor=0,
+        intent_projection_revision="d" * 64,
+    )
+    if screen == "oversize":
+        retained = retained.model_copy(update={"scope": SceneReadScope(database="界" * 800000, deployment_id="d", workspace_id="w")})
+    calls = []
+
+    def protect(value):
+        calls.append(value)
+        assert value == retained.model_dump(mode="json")
+        if screen == "mutate":
+            value["scope"]["workspace_id"] = "foreign"
+        if screen == "replace":
+            return {"redacted": True}
+        if screen == "deny":
+            raise PermissionError("denied")
+
+    service = WorkflowService(SimpleNamespace(get_submission_inspection=lambda i: retained, get_run_intent=lambda i: retained),
+                              SimpleNamespace(require_read=lambda p: None), None, validate_support=None)
+    method = getattr(service, "read_" + kind)
+    if screen == "allow":
+        result = method("reader", "key", protect=protect)
+        assert result == retained and result is not retained and result.scope is not retained.scope
+        with pytest.raises(ValueError):
+            result.scope.workspace_id = "foreign"
+    else:
+        with pytest.raises(PermissionError if screen == "deny" else ValueError):
+            method("reader", "key", protect=protect)
+    assert retained.scope.workspace_id == "w"
+    assert len(calls) == (0 if screen == "oversize" else 1)
+
+
+@pytest.mark.parametrize("case", ["missing", "denied", "absent", "replace", "unavailable"])
+def test_cleanup_read_authorizes_and_screens_absence(case):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import StoreUnavailable
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    calls = []
+
+    def authorize(p):
+        calls.append("authorize")
+        if case == "denied":
+            raise PermissionError("denied")
+
+    def read(run_id):
+        calls.append("io")
+        if case == "unavailable":
+            raise StoreUnavailable("unavailable")
+
+    def protect(value):
+        assert value is None
+        calls.append("screen")
+        if case == "replace":
+            return {}
+        return None
+
+    service = WorkflowService(
+        SimpleNamespace(get_run_cleanup=read), SimpleNamespace(require_read=authorize), None, validate_support=None
+    )
+    assert hasattr(service, "read_run_cleanup"), "authenticated cleanup read missing"
+    if case == "missing":
+        assert service.read_run_cleanup("reader", "run", protect=protect) is None
+        assert calls == ["authorize", "io", "screen"]
+    else:
+        error = PermissionError if case == "denied" else StoreUnavailable if case == "unavailable" else ValueError
+        with pytest.raises(error):
+            service.read_run_cleanup("reader", "run", protect=None if case == "absent" else protect)
+        assert calls[0] == "authorize"
+        if case in ("denied", "absent"):
+            assert calls == ["authorize"]
+
+
+@pytest.mark.parametrize("screen", ["allow", "mutate", "replace", "deny"])
+def test_cleanup_read_screens_detached_whole_frozen_view(screen):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.queries import RunCleanupView, SceneReadScope
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    retained = RunCleanupView(
+        scope=SceneReadScope(database="db", deployment_id="d", workspace_id="w"),
+        run_id="run",
+        run_version=1,
+        current_scope_owner=None,
+        intents=(),
+        projection_revision="a" * 64,
+    )
+    calls = []
+
+    def read(run_id):
+        assert run_id == "run" and calls == ["auth"]
+        calls.append("io")
+        return retained
+
+    def protect(value):
+        calls.append("screen")
+        assert value == retained.model_dump(mode="json")
+        if screen == "mutate":
+            value["scope"]["workspace_id"] = "foreign"
+        elif screen == "replace":
+            return {"redacted": True}
+        elif screen == "deny":
+            raise PermissionError("denied public data")
+
+    service = WorkflowService(
+        SimpleNamespace(get_run_cleanup=read),
+        SimpleNamespace(require_read=lambda p: calls.append("auth")),
+        None,
+        validate_support=None,
+    )
+    if screen == "allow":
+        value = service.read_run_cleanup("reader", "run", protect=protect)
+        assert value == retained and value is not retained
+        with pytest.raises(ValueError):
+            value.scope.workspace_id = "foreign"
+    else:
+        with pytest.raises(PermissionError if screen == "deny" else ValueError):
+            service.read_run_cleanup("reader", "run", protect=protect)
+    assert retained.scope.workspace_id == "w" and calls == ["auth", "io", "screen"]
+
+
+@pytest.mark.parametrize("operation", ["register", "get", "list"])
+@pytest.mark.parametrize("denied", [False, True])
+def test_profile_admin_and_reads_authorize_before_io_and_screen(operation, denied):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow import service as api
+    from isaaclab_arena.agentic_environment_generation.workflow.profiles import (
+        ProfileRegistration, profile_revision,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_store import profile_registration
+
+    assert hasattr(api, "WorkflowProfileAdmin"), "explicit profile administration is missing"
+    calls = []
+    registration = ProfileRegistration.model_validate(profile_registration())
+    retained = profile_revision(registration)
+
+    def authorize(principal):
+        assert principal == "operator"
+        calls.append("authorize")
+        if denied:
+            raise PermissionError("denied")
+
+    def protect(value):
+        calls.append("screen")
+
+    def register(value, *, protect):
+        calls.append("io")
+        assert value == registration
+        protect(retained.model_dump(mode="json"))
+        return retained
+
+    def read(*args):
+        calls.append("io")
+        return (retained,) if operation == "list" else retained
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("profile metadata cannot resolve credentials, probe, or release")
+
+    store = SimpleNamespace(register_profile=register, get_profile=read, list_profiles=read)
+    authority = SimpleNamespace(require_admin=authorize, require_read=authorize, require_execute=forbidden)
+    admin = api.WorkflowProfileAdmin(store, authority)
+    service = api.WorkflowService(store, authority, SimpleNamespace(check=forbidden), validate_support=forbidden)
+    assert calls == []
+
+    def invoke():
+        if operation == "register":
+            return admin.register_profile("operator", registration, protect=protect)
+        if operation == "get":
+            return service.read_profile("operator", registration.profile_id, registration.revision, protect=protect)
+        return service.list_profiles("operator", protect=protect)
+
+    if denied:
+        with pytest.raises(PermissionError):
+            invoke()
+        assert calls == ["authorize"]
+    else:
+        result = invoke()
+        assert result == ((retained,) if operation == "list" else retained)
+        assert calls[0:2] == ["authorize", "io"] and "screen" in calls[2:]
+        with pytest.raises(ValueError):
+            retained.registration.revision = 3
+
+
+@pytest.mark.parametrize("operation", ["get", "list"])
+@pytest.mark.parametrize("screen", ["absent", "mutate", "replace", "deny"])
+def test_profile_read_protection_is_mandatory_reject_only(operation, screen):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+    from isaaclab_arena.agentic_environment_generation.workflow.profiles import ProfileRegistration, profile_revision
+    from isaaclab_arena.tests.test_environment_workflow_store import profile_registration
+
+    retained = profile_revision(ProfileRegistration.model_validate(profile_registration()))
+    calls = []
+
+    def read(*args):
+        calls.append("io")
+        return (retained,) if operation == "list" else retained
+
+    def protect(value):
+        if screen == "mutate":
+            (value[0] if operation == "list" else value)["schema_version"] = 2
+        if screen == "replace":
+            return {"redacted": True}
+        if screen == "deny":
+            raise ValueError("private-data rejected")
+
+    service = WorkflowService(SimpleNamespace(get_profile=read, list_profiles=read),
+                              SimpleNamespace(require_read=lambda p: None), None, validate_support=None)
+    with pytest.raises(ValueError):
+        if operation == "get":
+            service.read_profile("reader", "public-model", 2, protect=None if screen == "absent" else protect)
+        else:
+            service.list_profiles("reader", protect=None if screen == "absent" else protect)
+    if screen == "absent":
+        assert calls == []
+    assert retained.schema_version == 1
+
+
 @pytest.mark.parametrize(
     "case", ["valid", "denied", "missing_attempt", "foreign_run", "foreign_principal", "changed_contract"]
 )
@@ -56,6 +578,221 @@ def test_recovery_read_is_authenticated_and_never_resolves_execution(case):
         with pytest.raises(PermissionError if case == "denied" else ValueError):
             service.read_generation_recovery("creator", "run")
         assert calls == (["read_authority"] if case == "denied" else ["read_authority", "run", "attempt"])
+
+
+@pytest.mark.parametrize("kind", ["candidate", "decision", "assessment", "evidence"])
+def test_historical_scene_query_denial_precedes_store_io(kind):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    calls = []
+
+    def deny(principal):
+        calls.append("read")
+        raise PermissionError("read denied")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("denied query performed IO or public projection")
+
+    service = WorkflowService(
+        SimpleNamespace(**{"get_scene_" + kind: forbidden}),
+        SimpleNamespace(require_read=deny, require_execute=forbidden),
+        SimpleNamespace(check=forbidden),
+        validate_support=forbidden,
+    )
+    with pytest.raises(PermissionError, match="read denied"):
+        getattr(service, "read_scene_" + kind)("reader", "a" * 64, protect=forbidden)
+    assert calls == ["read"]
+
+
+def historical_scene_views():
+    from isaaclab_arena.agentic_environment_generation.workflow.evidence import EvidenceCohort, SceneEvidenceAssessment
+    from isaaclab_arena.agentic_environment_generation.workflow.queries import (
+        SceneAssessmentView,
+        SceneCandidateView,
+        SceneDecisionView,
+        SceneEvidenceView,
+        SceneReadScope,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import (
+        Observation,
+        SceneDecision,
+        candidate_record,
+    )
+
+    common = dict(scope=SceneReadScope(database="db", deployment_id="dep", workspace_id="ws"), run_id="run")
+    candidate = candidate_record("run", {"text": "private-sentinel"}, source_id="source")
+    assessment = SceneEvidenceAssessment(status="not_established", failed_ids=("visible",))
+    observation = Observation(
+        cohort=EvidenceCohort(
+            realization_id="r",
+            reset_id="reset",
+            environment_id="env",
+            window_id="w",
+            frame_id="f",
+            contract_digest="c" * 64,
+            profile_digest="d" * 64,
+        ),
+        evidence=(),
+        verified_manifest_digests=(),
+    )
+    return {
+        "candidate": (candidate.candidate_id, SceneCandidateView(**common, candidate=candidate)),
+        "decision": (
+            "a" * 64,
+            SceneDecisionView(
+                **common,
+                decision_id="a" * 64,
+                candidate_id=candidate.candidate_id,
+                decision=SceneDecision(action="stop", reason="private-sentinel", assessment=assessment),
+                next_intent_id=None,
+                evidence_id="b" * 64,
+                selected_assessment_id="e" * 64,
+            ),
+        ),
+        "assessment": (
+            "e" * 64,
+            SceneAssessmentView(
+                **common,
+                assessment_id="e" * 64,
+                evidence_id="b" * 64,
+                candidate_id=candidate.candidate_id,
+                assessment=assessment,
+            ),
+        ),
+        "evidence": (
+            "b" * 64,
+            SceneEvidenceView(
+                **common, evidence_id="b" * 64, candidate_id=candidate.candidate_id, observation=observation
+            ),
+        ),
+    }
+
+
+@pytest.mark.parametrize("kind", ["candidate", "decision", "assessment", "evidence"])
+@pytest.mark.parametrize("policy", ["allow", "deny", "mutate", "replace", "missing", "unavailable", "absent"])
+def test_historical_query_public_protection_is_distinct_from_read_authority(kind, policy):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    record_id, view = historical_scene_views()[kind]
+    calls = []
+
+    def read(principal):
+        assert principal == "reader"
+        calls.append("read")
+
+    def retained(identity):
+        assert identity == record_id
+        calls.append("store")
+        if policy == "unavailable":
+            raise OSError("store unavailable")
+        return None if policy == "absent" else view
+
+    def protect(value):
+        calls.append("protect")
+        if policy == "absent":
+            assert value is None
+        else:
+            assert value == view.model_dump(mode="json")
+        if policy == "deny":
+            raise PermissionError("public data denied")
+        if policy == "mutate":
+            value["run_id"] = "changed"
+        if policy == "replace":
+            return {"redacted": True}
+        return None
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("query resolved execution authority/readiness")
+
+    service = WorkflowService(
+        SimpleNamespace(**{"get_scene_" + kind: retained}),
+        SimpleNamespace(require_read=read, require_execute=forbidden, require_submit=forbidden),
+        SimpleNamespace(check=forbidden),
+        validate_support=forbidden,
+    )
+    query = getattr(service, "read_scene_" + kind)
+    if policy in ("allow", "absent"):
+        assert query("reader", record_id, protect=protect) == (None if policy == "absent" else view)
+    else:
+        error = PermissionError if policy == "deny" else OSError if policy == "unavailable" else ValueError
+        with pytest.raises(error):
+            query("reader", record_id, protect=None if policy == "missing" else protect)
+    expected = ["read"] if policy == "missing" else ["read", "store"]
+    if policy not in ("missing", "unavailable"):
+        expected.append("protect")
+    assert calls == expected
+    assert view.run_id == "run"
+
+
+@pytest.mark.parametrize("policy", ["allow", "deny", "mutate", "replace"])
+def test_escape_heavy_candidate_screens_one_complete_typed_response(policy):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import candidate_record
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import _protected, canonical
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    _, small = historical_scene_views()["candidate"]
+    candidate = candidate_record("run", {"x": "\\" * ((1048576 - 8) // 2)}, source_id="source")
+    view = small.model_copy(update={"candidate": candidate})
+    calls = []
+
+    def protect(value):
+        calls.append(value)
+        assert value == view.model_dump(mode="json")  # Full envelope, not chunks.
+        if policy == "deny":
+            raise PermissionError("denied")
+        if policy == "mutate":
+            value["candidate"]["source_id"] = "changed"
+        if policy == "replace":
+            return {"redacted": True}
+
+    service = WorkflowService(
+        SimpleNamespace(get_scene_candidate=lambda _: view),
+        SimpleNamespace(require_read=lambda _: None), None, validate_support=None,
+    )
+    # Legacy artifact/default protection ceiling is unchanged and precedes policy.
+    for screen in (lambda: canonical(view.model_dump(mode="json")),
+                   lambda: _protected(view.model_dump(mode="json"), calls.append)):
+        with pytest.raises(ValueError, match="byte bound"):
+            screen()
+    assert calls == []
+    if policy == "allow":
+        assert service.read_scene_candidate("reader", candidate.candidate_id, protect=protect) == view
+    else:
+        with pytest.raises(PermissionError if policy == "deny" else ValueError):
+            service.read_scene_candidate("reader", candidate.candidate_id, protect=protect)
+    assert len(calls) == 1
+    assert view.candidate.source_id == "source"
+
+
+def test_query_size_extension_is_finite_and_legacy_default_is_unchanged():
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.queries import HISTORICAL_CANDIDATE_VIEW_BYTES
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import _protected
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    calls = []
+    boundary = "x" * (2 * 1024 * 1024 - 2)  # JSON string adds two quote bytes.
+    assert len(_protected(boundary, lambda _: None)) == 2 * 1024 * 1024
+    with pytest.raises(ValueError, match="byte bound"):
+        _protected(boundary + "x", calls.append)
+    record_id, view = historical_scene_views()["candidate"]
+    oversized = view.model_copy(update={
+        "scope": view.scope.model_copy(update={"database": "x" * HISTORICAL_CANDIDATE_VIEW_BYTES})
+    })
+    service = WorkflowService(
+        SimpleNamespace(get_scene_candidate=lambda _: oversized),
+        SimpleNamespace(require_read=lambda _: None), None, validate_support=None,
+    )
+    with pytest.raises(ValueError, match="byte bound"):
+        service.read_scene_candidate("reader", record_id, protect=calls.append)
+    assert not calls
 
 
 def contract(*, policy=False, existing=False):
@@ -699,6 +1436,260 @@ def coordinator_fixture():
     )
 
 
+@pytest.mark.parametrize("claim_changed", [False, True])
+def test_keyed_generation_dispatch_pins_actual_first_claim(claim_changed):
+    import inspect
+
+    from isaaclab_arena.agentic_environment_generation.workflow.attempts import GenerationReservation
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import DispatchIncomplete
+
+    f = coordinator_fixture()
+    assert "resume_operation_id" in inspect.signature(f.coordinator.dispatch).parameters
+    reservation = GenerationReservation(
+        model_calls=2, model_tokens=100, cost_ceiling_usd=0, runtime_allowance_seconds=5
+    )
+    f.store.pending_generation = lambda run: dict(intent_id="intent", reservation=reservation)
+    claims, marks = [], []
+
+    def claim(intent, owner, epoch, *, resume_operation_id=None):
+        claims.append((intent, owner, epoch, resume_operation_id))
+        if claim_changed:
+            raise ValueError("Resume selection changed")
+        f.calls.append("claim")
+        return f.prepared.registration.fence
+
+    f.store.claim_intent = claim
+    f.coordinator._lease.mark_prepared = marks.append
+    kwargs = dict(
+        expected_version=1,
+        decision_id="decision",
+        reservation=reservation,
+        pending_intent="intent",
+        resume_operation_id="resume-key",
+    )
+    if claim_changed:
+        with pytest.raises(DispatchIncomplete):
+            f.coordinator.dispatch("creator", **kwargs)
+        assert marks == [] and "prepare" not in f.calls and "send" not in f.calls
+    else:
+        handle = f.coordinator.dispatch("creator", **kwargs)
+        assert f.coordinator.dispatch("creator", **kwargs) is handle
+        assert f.calls.count("prepare") == f.calls.count("send") == 1
+        with pytest.raises(ValueError, match="conflicting local dispatch"):
+            f.coordinator.dispatch("creator", **(kwargs | {"resume_operation_id": None}))
+    assert claims == [("intent", "owner", 1, "resume-key")]
+    assert "reserve" not in f.calls
+
+
+def test_keyed_dispatch_without_existing_intent_never_reserves_or_prepares():
+    from isaaclab_arena.agentic_environment_generation.workflow.attempts import GenerationReservation
+
+    f = coordinator_fixture()
+    with pytest.raises(ValueError, match="Keyed dispatch requires an existing intent"):
+        f.coordinator.dispatch(
+            "creator",
+            expected_version=1,
+            decision_id="decision",
+            reservation=GenerationReservation(
+                model_calls=2, model_tokens=100, cost_ceiling_usd=0, runtime_allowance_seconds=5
+            ),
+            resume_operation_id="resume",
+        )
+    assert "reserve" not in f.calls and "prepare" not in f.calls and "owner" not in f.calls
+
+
+def keyed_scene_fixture():
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.commands import (
+        ResumeSelection,
+        command_digest,
+        command_json,
+        make_resume_receipt,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import contract_digest
+    from isaaclab_arena.agentic_environment_generation.workflow.results import CleanupEvidence
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import SceneIntent, ScenePortProfile
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    f = coordinator_fixture()
+    calls, claims = [], []
+    reservation = dict(model_calls=1, model_tokens=1, cost_ceiling_usd=0, runtime_allowance_seconds=1)
+    profile = ScenePortProfile(
+        port_id="synthetic",
+        assurance="synthetic",
+        owned_worker=True,
+        producer_ids=("scene.visible",),
+        observe=reservation,
+        repair=reservation,
+    )
+    run = f.store.get_run("run")
+    run.version, run.state = 2, "running"
+    intent = SceneIntent(
+        intent_id="a" * 64, candidate_id="c" * 64, action="repair", status="reserved", reservation=reservation
+    )
+    snapshot = SimpleNamespace(run=run, profile=profile, intent=intent, candidate=None, original=None)
+    state = SimpleNamespace(claim_error=False, replace=False)
+    selection = ResumeSelection(
+        run_id="run", version=1, contract_digest=contract_digest(contract()), branch="scene", intent_id=intent.intent_id
+    )
+    text = command_json(dict(runId="run", expectedVersion=1, renewAuthorization=False))
+    receipt = make_resume_receipt(
+        scope=dict(database="neo4j", deployment_id="dep", workspace_id="ws"),
+        operation_id="scene-resume",
+        run_id="run",
+        payload_json=text,
+        payload_digest=command_digest(text),
+        before_version=1,
+        after_version=2,
+        selection=selection.model_dump(mode="json"),
+        contract_digest=selection.contract_digest,
+        disposition="continuation_admitted",
+        reason=None,
+        authorization_action="none",
+        events=[dict(sequence=2, kind="ResumeAdmitted", source_id=intent.intent_id)],
+    )
+
+    def claim(run_id, intent_id, owner, epoch, *, resume_operation_id=None):
+        claims.append((intent_id, resume_operation_id))
+        if state.replace:
+            snapshot.intent = intent.model_copy(update={"intent_id": "b" * 64})
+            raise ValueError("Resume selection changed")
+        fence = f.prepared.registration.fence.model_copy(update={"intent_id": intent_id})
+        snapshot.intent = snapshot.intent.model_copy(update={"worker_fence": fence})
+        if state.claim_error:
+            from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import OutcomeUnknown
+
+            raise OutcomeUnknown("claim ACK unknown")
+        return fence
+
+    def prepare(intent, *args):
+        calls.append("prepare")
+        return f.prepared.registration.model_copy(update={"fence": intent.worker_fence})
+
+    def register(fence, registration):
+        snapshot.intent = snapshot.intent.model_copy(update={"worker_registration": registration})
+
+    def release(*args, **kwargs):
+        snapshot.intent = snapshot.intent.model_copy(update={"status": "released"})
+        return True
+
+    def finish(*args):
+        calls.append("finish")
+        run.version += 1
+        if len(claims) == 2:
+            run.state = "stopped"
+        else:
+            snapshot.intent = intent.model_copy(update={"intent_id": "b" * 64})
+
+    def cleanup(intent):
+        calls.append("cleanup")
+        return CleanupEvidence(
+            registration=intent.worker_registration,
+            evidence_ref="stopped",
+            observation="owned_process_group_stopped",
+            remote_effects="unknown",
+        )
+
+    ports = SimpleNamespace(
+        profile=profile,
+        authorize=lambda *a: calls.append("authorize"),
+        ready=lambda *a: calls.append("ready"),
+        require_bounded_capability=lambda *a: True,
+        require_held_owner=lambda: SimpleNamespace(owner_id="owner", owner_epoch=1),
+        prepare_worker=prepare,
+        cleanup_worker=cleanup,
+        execute=lambda *a: {"synthetic": True},
+        validate_candidate=lambda *a: None,
+    )
+    store = SimpleNamespace(
+        scene_snapshot=lambda r: snapshot,
+        claim_scene_worker=claim,
+        register_scene_worker=register,
+        release_scene=release,
+        check_scene_release=lambda *a, **kw: snapshot.intent,
+        get_run=lambda r: run,
+        finish_scene=finish,
+        acknowledge_scene_cleanup=lambda *a: None,
+        mark_scene_unknown=lambda *a: calls.append("unknown"),
+    )
+    service = WorkflowService(store, f.coordinator._authority, None, validate_support=None)
+    return SimpleNamespace(
+        service=service,
+        store=store,
+        ports=ports,
+        receipt=receipt,
+        snapshot=snapshot,
+        state=state,
+        calls=calls,
+        claims=claims,
+    )
+
+
+@pytest.mark.parametrize("fault", [None, "stale", "replacement", "claim_unknown"])
+def test_keyed_scene_first_claim_only_and_stale_pin_never_marks_replacement_unknown(fault):
+    import inspect
+
+    t = keyed_scene_fixture()
+    assert "resume_receipt" in inspect.signature(t.service.run_scene).parameters
+    if fault == "stale":
+        t.snapshot.run.version += 1
+    t.state.replace = fault == "replacement"
+    t.state.claim_error = fault == "claim_unknown"
+    if fault:
+        with pytest.raises(Exception):
+            t.service.run_scene("creator", "run", ports=t.ports, resume_receipt=t.receipt)
+        assert "prepare" not in t.calls and "unknown" not in t.calls
+        if fault == "stale":
+            assert t.claims == [] and t.calls == []
+        if fault == "claim_unknown":
+            assert t.snapshot.intent.worker_fence is not None, "ambiguous claimed ACK retains the fence obligation"
+        if fault == "replacement":
+            assert t.snapshot.intent.intent_id == "b" * 64 and t.snapshot.intent.worker_fence is None
+    else:
+        result = t.service.run_scene("creator", "run", ports=t.ports, resume_receipt=t.receipt)
+        assert result.run.state == "stopped"
+        assert t.claims == [("a" * 64, "scene-resume"), ("b" * 64, None)]
+        assert t.calls.count("prepare") == t.calls.count("cleanup") == 2
+
+
+@pytest.mark.parametrize("changed", [False, True])
+def test_generation_recovery_read_pins_full_fence_without_execution(changed):
+    import inspect
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    f = coordinator_fixture()
+    fence = f.prepared.registration.fence
+    requested = fence.model_copy(update={"owner_epoch": 2}) if changed else fence
+    calls = []
+    run = f.store.get_run("run")
+    attempt = SimpleNamespace(
+        fence=fence,
+        authorization=SimpleNamespace(principal="creator"),
+        registration=f.prepared.registration,
+        contract_json=run.contract_json,
+    )
+
+    def exact(expected):
+        calls.append(expected)
+        return attempt
+
+    f.store.get_attempt = exact
+    f.store.get_generation_attempt = lambda *a: pytest.fail("must not reselect by run")
+    f.store.get_owner = lambda: None
+    service = WorkflowService(f.store, f.coordinator._authority, None, validate_support=None)
+    assert "expected_fence" in inspect.signature(service.read_generation_recovery).parameters
+    if changed:
+        with pytest.raises(ValueError, match="Original generation recovery binding required"):
+            service.read_generation_recovery("creator", "run", expected_fence=requested)
+    else:
+        assert service.read_generation_recovery("creator", "run", expected_fence=requested)[1] is attempt
+    assert calls == [requested]
+    assert "execute_auth" not in f.calls
+
+
 def test_owned_receiver_failure_does_not_require_read_or_cancel_user():
     f = coordinator_fixture()
     handle = f.dispatch()
@@ -1051,3 +2042,409 @@ def test_generation_stop_failure_retains_exact_cleanup_obligation():
     assert handle.cleanup_pending and handle.prepared is f.prepared
     assert "cancel_db" not in f.calls
     assert f.dispatch() is handle and f.calls.count("send") == 1
+
+
+@pytest.mark.parametrize("case", ["denied", "malformed", "missing", "transport", "unknown", "query", "none", "mutate"])
+def test_command_lookup_auth_validation_and_transport_separation(case):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import OutcomeUnknown
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    calls = []
+    errors = dict(transport=OSError("transport"), unknown=OutcomeUnknown("unknown"), query=ValueError("query"))
+
+    def read(principal):
+        calls.append("auth")
+        if case == "denied":
+            raise PermissionError("denied")
+
+    def lookup(key):
+        calls.append("io")
+        if case in errors:
+            raise errors[case]
+
+    service = WorkflowService(
+        SimpleNamespace(get_cancel_receipt=lookup), SimpleNamespace(require_read=read), None, validate_support=None
+    )
+    protect = None if case == "missing" else lambda value: {} if case == "mutate" else None
+    if case == "none":
+        assert service.read_command("reader", "CANCEL", "key", protect=protect) is None
+    else:
+        with pytest.raises((ValueError, PermissionError, OSError, OutcomeUnknown)) as caught:
+            service.read_command("reader", "CANCEL", "bad key" if case == "malformed" else "key", protect=protect)
+        if case in errors:
+            assert caught.value is errors[case]
+    assert calls == (["auth"] if case in {"denied", "malformed", "missing"} else ["auth", "io"])
+
+
+@pytest.mark.parametrize("method", ["list_runs", "read_scope_events"])
+@pytest.mark.parametrize("case", ["denied", "unbound", "protect", "zero", "large", "bool", "float", "string", "cursor"])
+def test_page_auth_and_static_rejections_precede_all_io(method, case):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.scope_binding import ScopeBinding
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+    from isaaclab_arena.tests.test_environment_workflow_store import scope_binding_body
+
+    calls = []
+
+    class NoIO:
+        def __getattr__(self, name):
+            pytest.fail("page reached IO: " + name)
+
+    def read(principal):
+        calls.append(principal)
+        if case == "denied":
+            raise PermissionError("revoked")
+
+    service = WorkflowService(
+        NoIO(),
+        SimpleNamespace(require_read=read),
+        NoIO(),
+        validate_support=NoIO(),
+        read_scope=None if case == "unbound" else ScopeBinding.model_validate(scope_binding_body()),
+    )
+    assert calls == []
+    kwargs = dict(
+        first={"zero": 0, "large": 1001, "bool": True, "float": 1.0, "string": "1"}.get(case, 1),
+        after="" if case in ("denied", "cursor") else None,
+        protect=None if case in ("denied", "protect") else lambda _: None,
+    )
+    with pytest.raises(PermissionError if case == "denied" else ValueError):
+        getattr(service, method)("reader", **kwargs)
+    assert calls == ["reader"]
+
+
+def test_page_envelope_two_mib_rejects_instead_of_silently_dropping_rows():
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.paging import MAX_PAGE_BYTES, RunSummary, RunWindow
+    from isaaclab_arena.agentic_environment_generation.workflow.scope_binding import ScopeBinding
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+    from isaaclab_arena.tests.test_environment_workflow_store import scope_binding_body
+
+    binding = ScopeBinding.model_validate(scope_binding_body())
+    # Deliberately hostile trusted-port fixture, not accepted retained Neo4j data.
+    row = RunSummary.model_construct(
+        run_id="a" * 64,
+        operation_id="x" * MAX_PAGE_BYTES,
+        state="pending",
+        phase="generation",
+        run_version="1",
+        event_cursor="1",
+    )
+    window = RunWindow.model_construct(binding=binding, floor="0", ceiling="1", runs=(row,))
+    service = WorkflowService(
+        SimpleNamespace(list_runs_window=lambda *a, **k: window),
+        SimpleNamespace(require_read=lambda _: None),
+        None,
+        validate_support=None,
+        read_scope=binding,
+    )
+    with pytest.raises(ValueError):
+        service.list_runs("reader", protect=lambda _: pytest.fail("oversize escaped"))
+
+
+def test_candidate_parent_query_and_scope_cursor_mismatches_precede_store_io():
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.paging import (
+        CandidatePosition,
+        CursorBindingMismatch,
+        CursorQueryMismatch,
+        RunPosition,
+        encode_cursor,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.scope_binding import (
+        ScopeBinding,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.service import (
+        WorkflowService,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_store import scope_binding_body
+
+    binding = ScopeBinding.model_validate(scope_binding_body())
+    called = []
+
+    class NoIO:
+        def __getattr__(self, name):
+            pytest.fail("unexpected IO " + name)
+
+    service = WorkflowService(
+        NoIO(),
+        SimpleNamespace(require_read=called.append),
+        None,
+        validate_support=None,
+        read_scope=binding,
+    )
+    for token, error in (
+        (
+            encode_cursor(
+                binding, CandidatePosition(run_id="b" * 64, position="c" * 64)
+            ),
+            CursorQueryMismatch,
+        ),
+        (encode_cursor(binding, RunPosition(position="c" * 64)), CursorQueryMismatch),
+        (
+            encode_cursor(
+                binding.model_copy(update={"authority_id": "other"}),
+                CandidatePosition(run_id="a" * 64, position="c" * 64),
+            ),
+            CursorBindingMismatch,
+        ),
+    ):
+        with pytest.raises(error):
+            service.list_scene_candidates(
+                "reader", "a" * 64, after=token, protect=lambda _: None
+            )
+    assert called == ["reader"] * 3
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "denied",
+        "unbound",
+        "protect",
+        "zero",
+        "large",
+        "bool",
+        "float",
+        "string",
+        "cursor",
+        "oversize_cursor",
+        "run_id",
+    ],
+)
+def test_candidate_auth_and_invalid_request_precede_all_io(case):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.scope_binding import (
+        ScopeBinding,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.service import (
+        WorkflowService,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_store import scope_binding_body
+
+    calls = []
+
+    class NoIO:
+        def __getattr__(self, name):
+            pytest.fail("candidate page reached IO: " + name)
+
+    def read(principal):
+        calls.append(principal)
+        if case == "denied":
+            raise PermissionError("revoked")
+
+    service = WorkflowService(
+        NoIO(),
+        SimpleNamespace(require_read=read),
+        NoIO(),
+        validate_support=NoIO(),
+        read_scope=(
+            None
+            if case == "unbound"
+            else ScopeBinding.model_validate(scope_binding_body())
+        ),
+    )
+    with pytest.raises(PermissionError if case == "denied" else ValueError):
+        service.list_scene_candidates(
+            "reader",
+            True if case in ("denied", "run_id") else "a" * 64,
+            first={
+                "zero": 0,
+                "large": 1001,
+                "bool": True,
+                "float": 1.0,
+                "string": "1",
+            }.get(case, 100),
+            after=(
+                ""
+                if case in ("denied", "cursor")
+                else "x" * 4097 if case == "oversize_cursor" else None
+            ),
+            protect=None if case in ("denied", "protect") else lambda _: None,
+        )
+    assert calls == ["reader"]
+
+
+def test_candidate_page_envelope_size_is_reject_only():
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.paging import (
+        CandidateItem,
+        CandidateWindow,
+        MAX_PAGE_BYTES,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.scope_binding import (
+        ScopeBinding,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.service import (
+        WorkflowService,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_store import scope_binding_body
+
+    binding = ScopeBinding.model_validate(scope_binding_body())
+    row = CandidateItem.model_construct(
+        candidate_id="b" * 64, run_id="x" * MAX_PAGE_BYTES
+    )
+    window = CandidateWindow.model_construct(
+        binding=binding, run_id="a" * 64, floor="0", ceiling="1", candidates=(row,)
+    )
+    service = WorkflowService(
+        SimpleNamespace(list_scene_candidates_window=lambda *a, **k: window),
+        SimpleNamespace(require_read=lambda _: None),
+        None,
+        validate_support=None,
+        read_scope=binding,
+    )
+    with pytest.raises(ValueError):
+        service.list_scene_candidates(
+            "reader", "a" * 64, protect=lambda _: pytest.fail("oversize escaped")
+        )
+
+
+def test_decision_parent_query_and_scope_cursor_mismatches_precede_store_io():
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.paging import (
+        DecisionPosition,
+        CursorBindingMismatch,
+        CursorQueryMismatch,
+        RunPosition,
+        encode_cursor,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.scope_binding import (
+        ScopeBinding,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.service import (
+        WorkflowService,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_store import scope_binding_body
+
+    binding = ScopeBinding.model_validate(scope_binding_body())
+    called = []
+
+    class NoIO:
+        def __getattr__(self, name):
+            pytest.fail("unexpected IO " + name)
+
+    service = WorkflowService(
+        NoIO(),
+        SimpleNamespace(require_read=called.append),
+        None,
+        validate_support=None,
+        read_scope=binding,
+    )
+    for token, error in (
+        (
+            encode_cursor(binding, DecisionPosition(run_id="b" * 64, position="c" * 64)),
+            CursorQueryMismatch,
+        ),
+        (encode_cursor(binding, RunPosition(position="c" * 64)), CursorQueryMismatch),
+        (
+            encode_cursor(
+                binding.model_copy(update={"authority_id": "other"}),
+                DecisionPosition(run_id="a" * 64, position="c" * 64),
+            ),
+            CursorBindingMismatch,
+        ),
+    ):
+        with pytest.raises(error):
+            service.list_decisions("reader", "a" * 64, after=token, protect=lambda _: None)
+    assert called == ["reader"] * 3
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "denied",
+        "unbound",
+        "protect",
+        "zero",
+        "large",
+        "bool",
+        "float",
+        "string",
+        "cursor",
+        "oversize_cursor",
+        "run_id",
+    ],
+)
+def test_decision_auth_and_invalid_request_precede_all_io(case):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.scope_binding import (
+        ScopeBinding,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.service import (
+        WorkflowService,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_store import scope_binding_body
+
+    calls = []
+
+    class NoIO:
+        def __getattr__(self, name):
+            pytest.fail("decision page reached IO: " + name)
+
+    def read(principal):
+        calls.append(principal)
+        if case == "denied":
+            raise PermissionError("revoked")
+
+    service = WorkflowService(
+        NoIO(),
+        SimpleNamespace(require_read=read),
+        NoIO(),
+        validate_support=NoIO(),
+        read_scope=(None if case == "unbound" else ScopeBinding.model_validate(scope_binding_body())),
+    )
+    with pytest.raises(PermissionError if case == "denied" else ValueError):
+        service.list_decisions(
+            "reader",
+            True if case in ("denied", "run_id") else "a" * 64,
+            first={
+                "zero": 0,
+                "large": 1001,
+                "bool": True,
+                "float": 1.0,
+                "string": "1",
+            }.get(case, 100),
+            after=("" if case in ("denied", "cursor") else "x" * 4097 if case == "oversize_cursor" else None),
+            protect=None if case in ("denied", "protect") else lambda _: None,
+        )
+    assert calls == ["reader"]
+
+
+def test_decision_page_envelope_size_is_reject_only():
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.paging import (
+        DecisionItem,
+        DecisionWindow,
+        MAX_PAGE_BYTES,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.scope_binding import (
+        ScopeBinding,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.service import (
+        WorkflowService,
+    )
+    from isaaclab_arena.tests.test_environment_workflow_store import scope_binding_body
+
+    binding = ScopeBinding.model_validate(scope_binding_body())
+    row = DecisionItem.model_construct(decision_id="b" * 64, run_id="x" * MAX_PAGE_BYTES, record_kind="scene_decision")
+    window = DecisionWindow.model_construct(binding=binding, run_id="a" * 64, floor="0", ceiling="1", decisions=(row,))
+    service = WorkflowService(
+        SimpleNamespace(list_decisions_window=lambda *a, **k: window),
+        SimpleNamespace(require_read=lambda _: None),
+        None,
+        validate_support=None,
+        read_scope=binding,
+    )
+    with pytest.raises(ValueError):
+        service.list_decisions("reader", "a" * 64, protect=lambda _: pytest.fail("oversize escaped"))

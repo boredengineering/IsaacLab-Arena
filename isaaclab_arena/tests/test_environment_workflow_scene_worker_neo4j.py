@@ -35,8 +35,251 @@ from isaaclab_arena_examples.agentic_environment_generation.foreground_scene imp
 from isaaclab_arena_examples.agentic_environment_generation.web_api.scene_worker import retain_request
 
 
-def test_foreground_application_api_exists():
+def _check_keyed_recovery_inert_ports(mode):
+    """Actual recovery code, inert cleanup/artifact ports; no additional child."""
     import inspect
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.commands import (
+        ResumeSelection,
+        command_digest,
+        command_json,
+        make_resume_receipt,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import contract_digest
+    from isaaclab_arena.tests.test_environment_workflow_service import contract, coordinator_fixture
+    from isaaclab_arena_examples.agentic_environment_generation.foreground_recovery import ForegroundGenerationRecovery
+
+    assert "resume_receipt" in inspect.signature(ForegroundGenerationRecovery.recover).parameters
+    f = coordinator_fixture()
+    fence, registration = f.prepared.registration.fence, f.prepared.registration
+    run = f.store.get_run("run")
+    run.version, run.state = (3 if mode == "stale" else 2), "running"
+    run.phase = "validation" if mode in {"settled", "historical"} else "generation"
+    cleanup = CleanupEvidence(
+        registration=registration,
+        evidence_ref="inert-cleanup",
+        observation="owned_process_group_stopped",
+        remote_effects="unknown",
+    )
+    output = object()
+    attempt = SimpleNamespace(
+        fence=fence,
+        registration=registration,
+        contract_json=run.contract_json,
+        authorization=SimpleNamespace(principal="creator"),
+        cleanup=cleanup if mode in {"settled", "historical"} else None,
+        receipt=output if mode in {"settled", "historical"} else None,
+    )
+    owner = SimpleNamespace(
+        owner_id="replacement" if mode == "historical" else fence.owner_id, owner_epoch=fence.owner_epoch, dirty=True
+    )
+    pins, effects = [], []
+
+    def exact(expected):
+        pins.append(expected)
+        assert expected == fence
+        return attempt
+
+    def ack(expected, value):
+        assert expected == fence and value.registration == registration
+        effects.append("cleanup_ack")
+        attempt.cleanup = value
+        run.version += 1
+
+    store = SimpleNamespace(
+        get_run=lambda r: run,
+        get_attempt=exact,
+        get_owner=lambda: owner,
+        get_generation_attempt=lambda r: pytest.fail("reselection forbidden"),
+        get_retired_owner=lambda o: SimpleNamespace(
+            owner_id=fence.owner_id, owner_epoch=fence.owner_epoch, dirty=False
+        ),
+        acknowledge_cleanup=ack,
+    )
+    service = WorkflowService(store, f.coordinator._authority, None, validate_support=None)
+    service.prepare_generation_adoption = lambda *a, **kw: output
+
+    def adopt(*args, **kw):
+        attempt.receipt = output
+        run.phase = "validation"
+        run.version += 1
+        effects.append("adopt")
+
+    service.adopt_generation = adopt
+    recovery = ForegroundGenerationRecovery.__new__(ForegroundGenerationRecovery)
+    recovery._service, recovery._principal, recovery._run_id = service, "creator", "run"
+    recovery._protect = lambda v: None
+    recovery._ownership = SimpleNamespace(load=lambda r: effects.append("ownership"))
+    recovery._group = SimpleNamespace(stop=lambda **kw: effects.append("stop"), cleaned=True)
+    recovery._observed = None
+    if mode == "cached_mismatch":
+        recovery._resume_binding = (fence.model_copy(update={"owner_epoch": 2}), registration)
+    recovery._artifacts = SimpleNamespace(load_receipt=lambda *a, **kw: output)
+    recovery.lease = SimpleNamespace(
+        require_held=lambda *a: None,
+        mark_recovery=lambda f: effects.append("mark"),
+        retire_and_release=lambda *a: effects.append("retire"),
+        release_never_prepared=lambda: effects.append("historical_release"),
+        release_after_cleanup=lambda *a: effects.append("release"),
+    )
+    selection = ResumeSelection(
+        run_id="run",
+        version=1,
+        contract_digest=contract_digest(contract()),
+        branch="reconciliation",
+        intent_id=fence.intent_id,
+        fence=fence,
+    )
+    text = command_json(dict(runId="run", expectedVersion=1, renewAuthorization=False))
+    receipt = make_resume_receipt(
+        scope=dict(database="neo4j", deployment_id="dep", workspace_id="ws"),
+        operation_id="recover",
+        run_id="run",
+        payload_json=text,
+        payload_digest=command_digest(text),
+        before_version=1,
+        after_version=2,
+        selection=selection.model_dump(mode="json"),
+        contract_digest=selection.contract_digest,
+        disposition="reconciliation_admitted",
+        reason=None,
+        authorization_action=None,
+        events=[dict(sequence=2, kind="ResumeAdmitted", source_id=fence.intent_id)],
+    )
+    if mode in {"stale", "cached_mismatch"}:
+        with pytest.raises(ValueError, match="Resume recovery (selection|binding) changed"):
+            recovery.recover(resume_receipt=receipt)
+        assert effects == []
+    else:
+        result = recovery.recover(resume_receipt=receipt)
+        assert result.disposition == "validation" and result.attempt.fence == fence
+        assert len(pins) >= 2
+    assert "execute_auth" not in f.calls
+    return SimpleNamespace(service=service, run=run, receipt=receipt, fence=fence)
+
+
+def _check_keyed_recovery_real_unlatched_lease(tmp_path, mode):
+    """Real constructor/flock, inert retained store; no worker or owner retirement."""
+    import fcntl
+
+    from isaaclab_arena.agentic_environment_generation.workflow.application import ForegroundWorkflow
+    from isaaclab_arena_examples.agentic_environment_generation.foreground_recovery import (
+        ForegroundGenerationRecovery,
+        OwnershipArtifacts,
+    )
+
+    t = _check_keyed_recovery_inert_ports("stale")
+    t.run.version, t.run.state = 2, "running"
+    app = ForegroundWorkflow.__new__(ForegroundWorkflow)
+    app.service, app._recoveries = t.service, {}
+    root = tmp_path / mode
+    root.mkdir(mode=0o700)
+    private = root / "owner"
+    private.mkdir(mode=0o700)
+    app.private_parent = private
+    app.authority = t.service._authority
+    app.authority.protect_public = lambda value: None
+    created, release_attempts = [], []
+
+    with ArtifactArea.create(root / "artifacts", store_id="recovery", registry_id="recovery") as area:
+        app.ownership = OwnershipArtifacts(area)
+        app.artifacts = GenerationArtifacts(area)
+
+        def unavailable(*a, **kw):
+            raise ValueError("inert ownership unavailable after latch")
+
+        # An exact concrete object with an inert artifact read fails only AFTER
+        # the real recovery latch. No process-group construction is reached.
+        app.ownership.load = unavailable
+
+        def construct(*args, **kwargs):
+            recovery = ForegroundGenerationRecovery(*args, **kwargs)
+            created.append(recovery)
+            original_release = recovery.lease.release_never_prepared
+
+            def release():
+                release_attempts.append(mode)
+                if mode == "release_fault":
+                    raise OSError("inert unlock uncertainty")
+                return original_release()
+
+            recovery.lease.release_never_prepared = release
+            if mode == "prepared":
+                recovery.lease.mark_prepared(object())
+            if mode != "latched":
+                # Cancellation changes the pin AFTER the actual constructor
+                # acquires flock and BEFORE recover's first retained read.
+                t.run.version, t.run.state = 3, "cancelled"
+            return recovery
+
+        app._recovery_factory = construct
+        if mode == "cached":
+            recovery = construct(
+                private,
+                run_id="run",
+                principal="creator",
+                service=t.service,
+                ownership_artifacts=app.ownership,
+                artifacts=app.artifacts,
+                protect=app.authority.protect_public,
+            )
+            app._recoveries["run"] = recovery
+            t.run.version, t.run.state = 2, "running"
+            original_recover = recovery.recover
+
+            def stale_cached(**kwargs):
+                t.run.version, t.run.state = 3, "cancelled"
+                return original_recover(**kwargs)
+
+            recovery.recover = stale_cached
+
+        try:
+            with pytest.raises(
+                ValueError, match=("inert ownership" if mode == "latched" else "Resume recovery selection changed")
+            ):
+                app._resume_reconcile("creator", t.receipt, None)
+            assert len(created) == 1
+            recovery = created[0]
+            assert recovery._observed is None and recovery._group is None
+            # Independent descriptor, actual kernel flock; cache observations
+            # alone cannot establish scope availability or retained ownership.
+            with (private / "foreground.lock").open("r+b") as contender:
+                try:
+                    fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    blocked = True
+                else:
+                    blocked = False
+                    fcntl.flock(contender, fcntl.LOCK_UN)
+            if mode == "fresh":
+                assert not blocked, "new never-latched recovery leaked actual scope flock"
+                assert "run" not in app._recoveries, "new never-latched recovery retained in cache"
+                assert recovery.lease._released is True
+                assert release_attempts == [mode]
+            else:
+                assert blocked, "uncertain/cached recovery lost actual scope flock"
+                assert app._recoveries["run"] is recovery, "uncertain/cached recovery must remain retained"
+                assert recovery.lease._released is False
+                recovery.lease.require_held("run", "creator")
+                if mode == "cached":
+                    assert release_attempts == [], "cached lease is not newly acquired by this delivery"
+            assert t.receipt.after_version == 2 and t.receipt.disposition == "reconciliation_admitted"
+        finally:
+            # Fixture disposal only: no worker was ever created. Do not forge
+            # durable retirement or a cleanup receipt for deliberately latched tests.
+            for recovery in created:
+                if not recovery.lease._released:
+                    recovery.lease._lease.__exit__(None, None, None)
+
+
+def test_foreground_application_api_exists(tmp_path):
+    import inspect
+
+    for mode in ("adopt", "settled", "historical", "stale", "cached_mismatch"):
+        _check_keyed_recovery_inert_ports(mode)
+    for mode in ("cached", "latched", "prepared", "release_fault", "fresh"):
+        _check_keyed_recovery_real_unlatched_lease(tmp_path, mode)
 
     from isaaclab_arena_examples.agentic_environment_generation.foreground_workflow import (
         ForegroundWorkflow,
@@ -175,6 +418,7 @@ def test_foreground_application_full_outcome(tmp_path, missing):
         with driver.session(database=database) as session:
             for ddl in Neo4jWorkflowStore.schema_requirements():
                 session.run(ddl).consume()
+            session.run("CALL db.awaitIndexes(10)").consume()
         store = Neo4jWorkflowStore(
             driver,
             database=database,
@@ -416,6 +660,37 @@ def test_foreground_application_full_outcome(tmp_path, missing):
                 cancelled = app.cancel("creator", pending.run_id)
                 assert cancelled["state"] == "cancelled"
                 assert app.resume("creator", pending.run_id) == cancelled
+                if missing == "runtime":
+                    from isaaclab_arena_examples.agentic_environment_generation import foreground_cancellation
+
+                    assert hasattr(foreground_cancellation, "stop_only"), "trusted stop-only wrapper missing"
+                    keyed = store.admit("keyed-pending", canonical_json(request), canonical_json(request), 1)
+                    authority_calls = []
+                    original_config = auth.current_config
+                    auth.current_config = lambda p: (_ for _ in ()).throw(AssertionError("cancel resolved config"))
+                    try:
+                        response = app.cancel_keyed(
+                            "creator",
+                            "keyed-stop",
+                            keyed.run_id,
+                            authorize_cancel=lambda p, r: authority_calls.append((p, r)),
+                        )
+                        assert (
+                            response.durable == "recorded" and response.receipt.disposition == "cancellation_requested"
+                        )
+                        assert response.local_stop.delivery == "no_owner"
+                        assert response.cleanup.run_id == keyed.run_id
+                        assert store.get_run(keyed.run_id).state == "cancelled"
+                        assert (
+                            app.cancel_keyed(
+                                "creator", "keyed-stop", keyed.run_id, authorize_cancel=lambda p, r: None
+                            ).receipt
+                            == response.receipt
+                        )
+                        assert authority_calls == [("creator", keyed.run_id)]
+                        Path("/evidence/keyed-pending-adapter.json").write_text(response.model_dump_json())
+                    finally:
+                        auth.current_config = original_config
                 from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import StoreUnavailable
 
                 original_read = store.result_records
@@ -552,6 +827,7 @@ def test_real_scene_refine_committed_fences_and_proposal_guard(tmp_path):
         with driver.session(database=database) as session:
             for ddl in Neo4jWorkflowStore.schema_requirements():
                 session.run(ddl).consume()
+            session.run("CALL db.awaitIndexes(10)").consume()
         store = Neo4jWorkflowStore(
             driver,
             database=database,

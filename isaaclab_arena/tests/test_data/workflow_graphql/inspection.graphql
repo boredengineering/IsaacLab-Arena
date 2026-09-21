@@ -1,0 +1,54 @@
+query Inspection($id: ID!, $operation: ID!) {
+  workflow(id: $id) {
+    __typename
+    ... on Workflow {
+      id operationId version eventCounter state phase retainedRevision responseRevision retainedDependenciesRevision
+      policyOutcome publicationOutcome experimentOutcome availableActions
+      frozenIntent {
+        schemaVersion
+        source { __typename ... on NewSource { prompt } ... on ExistingSource { identity content } }
+        execution {
+          generationModel { profileId settingsDigest billing }
+          assessmentModel { profileId settingsDigest billing }
+          runtime { profileId settingsDigest billing }
+          database { profileId settingsDigest billing }
+          policy { profileId settingsDigest billing }
+          capture { profileId settingsDigest billing }
+          seed timestepSeconds decimation dcrg
+        }
+        criteria { id kind requirement producer evaluatorVersion modalities frames subjects rubric startStep endStep limit { operator value unit } }
+        preserved { subjectId schemaPath mode description }
+        allowedInterventions { subjectId schemaPath operation coordinateFrame units maxTotalDisplacementM description }
+        budget { maxCandidates maxRevisions maxRuntimeSeconds maxModelCalls maxModelTokens maxCostUsd maxRealizations maxSteps maxObservations maxPolicyEpisodes maxPolicySteps perOperationTimeoutSeconds totalDeadlineSeconds }
+        effects { allowPaidModels allowRuntime allowDatabaseReads allowPublication allowDcrg allowOperationalWrites }
+      }
+      budget {
+        actualConsumption accounting runtimeAccounting admittedAt deadline perOperationCeilingSeconds
+        reserved { modelCalls modelTokens costCeilingUsd runtimeAllowanceSeconds candidates revisions realizations steps observations }
+        remaining { modelCalls modelTokens costCeilingUsd runtimeAllowanceSeconds candidates revisions realizations steps observations }
+      }
+      cleanup {
+        projectionRevision currentScopeOwner { id epoch dirty }
+        intents {
+          intentId kind registrationId cleanupState releaseState cleanupEvidenceRef cleanupObservation remoteEffects
+          fence { runId intentId attemptId generation ownerId ownerEpoch }
+          retiredOwner { id epoch dirty }
+        }
+      }
+      actions { cancelApplicable resumeBranch resumeIntentId commandRequirements permission { cancel resume observedAt provenance } }
+      scene {
+        selectedCandidateReference { candidateId digest sourceId originalId parentId }
+        acceptance assessmentStatus decisionId decisionIdentityProvenance action reason nextIntentId evidenceId assessmentId selectedAssessed detailCoverage
+        criteria { criterionId requirement verdict reportedVerdicts manifests } limitations
+      }
+      generationOutputs { intentId attemptId registrationId contractDigest candidateYamlSha256 candidateJsonSha256 provenanceSha256 manifestSha256 disposition freshArtifactVerification }
+      readiness { intentId attemptId source contractDigest checkedAt currentReadiness ttlSeconds profiles { role profileId settingsDigest expectedInstanceId observedInstanceId } }
+    }
+    ... on NotFound { code }
+    ... on QueryFailure { code }
+  }
+  workflowSubmission(operationId: $operation) {
+    __typename
+    ... on SubmissionReceipt { kind operationId runId requestDigest acceptedContractDigest digestCodec admittedAt disposition provenance receiptVersion causeId }
+  }
+}

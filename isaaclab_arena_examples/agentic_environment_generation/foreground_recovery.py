@@ -140,7 +140,7 @@ class ForegroundGenerationRecovery:
             and self._group.cleaned
         )
 
-    def _historical_replay(self, run, attempt, *, release_lease):
+    def _historical_replay(self, run, attempt, *, release_lease, expected_fence=None):
         """Observe a settled retired predecessor without touching replacement ownership."""
         fence = attempt.fence
         lookup = getattr(self._service.bound_store, "get_retired_owner", None)
@@ -158,7 +158,11 @@ class ForegroundGenerationRecovery:
                 self._principal, fence, attempt.receipt, artifacts=self._artifacts, protect=self._protect
             )
         # Current cancellation may have won while artifact protection was running.
-        run, retained, _ = self._service.read_generation_recovery(self._principal, self._run_id)
+        run, retained, _ = self._service.read_generation_recovery(
+            self._principal,
+            self._run_id,
+            **({} if expected_fence is None else dict(expected_fence=expected_fence)),
+        )
         if (
             retained.fence != fence
             or retained.registration != attempt.registration
@@ -175,14 +179,37 @@ class ForegroundGenerationRecovery:
             self.lease.release_never_prepared()
         return CompletionResult(disposition, run, retained)
 
-    def recover(self, *, release_lease=True):
+    def recover(self, *, release_lease=True, resume_receipt=None):
         self.lease.require_held(self._run_id, self._principal)
-        run, attempt, owner = self._service.read_generation_recovery(self._principal, self._run_id)
+        read_args = {}
+        if resume_receipt is not None:
+            from isaaclab_arena.agentic_environment_generation.workflow.commands import ResumeReceipt
+
+            resume_receipt = ResumeReceipt.model_validate_json(resume_receipt.model_dump_json())
+            if resume_receipt.disposition != "reconciliation_admitted" or resume_receipt.run_id != self._run_id:
+                raise ValueError("Resume recovery selection changed")
+            read_args = dict(expected_fence=resume_receipt.selection.fence)
+        run, attempt, owner = self._service.read_generation_recovery(self._principal, self._run_id, **read_args)
+        if resume_receipt is not None:
+            from isaaclab_arena.agentic_environment_generation.workflow.contracts import contract_digest
+
+            if (
+                run.version != resume_receipt.after_version
+                or contract_digest(parse_contract(run.contract_json)) != resume_receipt.contract_digest
+            ):
+                raise ValueError("Resume recovery selection changed")
         fence, registration = attempt.fence, attempt.registration
         if registration is None or registration.fence != fence or owner is None:
             raise ValueError("Original registered owner required; reconciliation blocked")
+        if resume_receipt is not None:
+            binding = (fence, registration)
+            if getattr(self, "_resume_binding", binding) != binding:
+                raise ValueError("Resume recovery binding changed")
+            if self._observed is not None and self._observed[0] != registration:
+                raise ValueError("Resume recovery binding changed")
+            self._resume_binding = binding
         if (owner.owner_id, owner.owner_epoch) != (fence.owner_id, fence.owner_epoch):
-            return self._historical_replay(run, attempt, release_lease=release_lease)
+            return self._historical_replay(run, attempt, release_lease=release_lease, **read_args)
         self.lease.mark_recovery(fence)
         identity = self._ownership.load(registration)
         if self._group is None:
@@ -211,7 +238,9 @@ class ForegroundGenerationRecovery:
                 self._service.prepare_generation_adoption(
                     self._principal, fence, attempt.receipt, artifacts=self._artifacts, protect=self._protect
                 )
-            run, current, observed_owner = self._service.read_generation_recovery(self._principal, self._run_id)
+            run, current, observed_owner = self._service.read_generation_recovery(
+                self._principal, self._run_id, **read_args
+            )
             if (
                 current.fence != fence
                 or current.registration != registration
@@ -247,7 +276,7 @@ class ForegroundGenerationRecovery:
             )
         except ArtifactError:
             # Cancellation may settle after actual cleanup without a candidate.
-            run, _, _ = self._service.read_generation_recovery(self._principal, self._run_id)
+            run, _, _ = self._service.read_generation_recovery(self._principal, self._run_id, **read_args)
             if run.state not in ("cancel_requested", "cancelled"):
                 store.mark_reconciliation_required(fence, ReconciliationReason.RELEASED_WITHOUT_RECEIPT)
                 raise RuntimeError("Generation artifact unresolved; reconciliation required") from None
@@ -261,7 +290,7 @@ class ForegroundGenerationRecovery:
             store.acknowledge_cleanup(fence, evidence)
             return CompletionResult("reconciliation_required", store.get_run(self._run_id), store.get_attempt(fence))
         store.acknowledge_cleanup(fence, evidence)
-        run, attempt, owner = self._service.read_generation_recovery(self._principal, self._run_id)
+        run, attempt, owner = self._service.read_generation_recovery(self._principal, self._run_id, **read_args)
         if attempt.cleanup != evidence or (receipt is not None and attempt.receipt != receipt):
             raise ValueError("Recovery readback mismatch")
         disposition = "cancelled" if run.state == "cancelled" else "validation"

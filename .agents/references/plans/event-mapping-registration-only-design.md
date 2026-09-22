@@ -1,10 +1,12 @@
 # Registration-only design under strict no-CUDA limits
 
-Status: source-grounded design proposal, not implementation or execution authorization. The user chose “Keep strict no-CUDA limits; investigate a registration-only design.” No package imports, tests, containers, native initialization or production-source changes were performed in this investigation. Plan 04 and its review ledger remain the governing requirements; the canonical implementation handoff owns status.
+Status: source-grounded design proposal, not implementation or execution authorization. The user chose “Keep strict no-CUDA limits; investigate a registration-only design” and subsequently requested consolidation into Plan 04 **with further debate before proceeding**. No package imports, tests, containers, native initialization or production-source changes were performed in this design investigation. [Plan 04](event-mapping-refactoring_plan_04.md) P1/G04-13/A04-17 and its [review ledger](event-mapping-refactoring_plan_04-review.md) govern this prerequisite; the [canonical implementation handoff](dashboard_cli_workflow_parity/research-stack-implementation-handoff.md) owns status. The contract below is frozen as a discussion baseline, not an approved implementation contract.
 
 ## Decision summary
 
-Recommend an explicitly selected immutable registration-metadata view, shared by catalogue construction and the existing graph-schema validators, with runtime class resolution kept separate. Built-in metadata should become a canonical declaration consumed by both that view and real runtime bindings—not an independently maintained catalogue, fake class registry or historical digest substitute.
+**Latest discussion supersedes this as the sole proposed route:** Plan 04 P1 now compares S1 (this metadata/bootstrap separation), S2 (runtime-faithful isolated initialization), S3 (owned-process boundary) and S4 (complementary dependency-injected contract tests). The user supports workflow/database isolation, not a requirement to eliminate every native initializer at any architectural cost. No solution has been selected; current admission is unchanged and no implementation/probes are authorized. This document preserves S1's candidate contract and proof obligations only. Do not make S1's manifest/context redesign a prerequisite for evaluating S2/S3.
+
+If S1 is selected, use an explicitly selected immutable registration-metadata view, shared by catalogue construction and the existing graph-schema validators, with runtime class resolution kept separate. Built-in metadata should become a canonical declaration consumed by both that view and real runtime bindings—not an independently maintained catalogue, fake class registry or historical digest substitute.
 
 This can support a bounded first-party proposal/validation path without importing simulator class modules. It is not a transparent replacement for arbitrary mutable Python registries. Keep legacy registry APIs/default behavior intact during migration. Do not globally change `get_all_keys()`, `is_registered()` or class getters merely to make E1 pass.
 
@@ -94,7 +96,7 @@ Public request fields do not supply authority. Composition chooses the view, and
 
 Preserve the existing execution-catalogue digest for the exact prompt vocabulary projection. It omits hidden assets and non-agent-ready tasks and therefore is not a complete schema identity.
 
-Bind the complete descriptor/validation source revision separately in the managed execution selection and exact worker/adoption contract. The precise backward-compatible placement must be selected before implementation; do not casually add fields to immutable V1 receipts or claim current wire formats already carry it. A versioned optional binding for the new mode is preferable to silently changing the legacy digest payload.
+Bind the complete descriptor/validation source revision separately in the managed execution selection and exact worker/adoption contract. The discussion baseline below selects a new opt-in versioned request/worker binding, not a mutation of immutable V1 receipts. Exact existing codec insertion points and limits still require a source-backed propagation map before implementation; do not claim current wire formats already carry this identity.
 
 Replay must return retained identities without rebuilding a newer default view. Changed metadata/order must not rewrite old receipts or candidate bytes. New incompatible selections require new explicit identity/versioning.
 
@@ -112,15 +114,16 @@ Keep the real proposal-only contract and its existing warning: schema validity i
 
 ## First implementation contract to approve
 
-Recommended choices for the initial mode:
+The following is the **fixed S1 candidate discussion baseline**, not authority to implement or a requirement on other routes. First choose the strategy under Plan 04 P1. If S1 is chosen, these policies make its contract concrete without inventing an enumerated manifest, final bytes or proven compatibility. Changing a row requires an explicit design revision and review; unanswered details block S1 implementation rather than trigger more implicit probing.
 
-1. Opt-in first-party immutable registration view; legacy default registries unchanged.
-2. Explicit ordered declaration set; no automatic plugin discovery or arbitrary aliases/mutation in this mode. Extensions require a pure declaration contribution or return unsupported.
-3. Real existing schema and proposal-only model methods, with explicit metadata-context propagation and no fallback.
-4. Existing vocabulary hash semantics plus separate complete metadata/source binding.
-5. No claim of historical digest or full runtime-class parity until measured. If exact old order cannot be established without native loading, choose a visibly versioned new selection; never call an alphabetical guess historical parity.
+| Decision | Proposed first-mode contract | Still to debate/verify before implementation |
+| --- | --- | --- |
+| Ordering/version | First-party immutable selection with a versioned descriptor schema and content-addressed declaration revision. Asset/relation enumeration uses explicit ordered declaration lists; task projection retains sorted keys, tag/required-parameter sequences retain their semantic order, prompt formatting keeps its existing independent sorting. No discovery-based or guessed alphabetical replacement for registry insertion order. Every membership/order/semantic change changes full metadata identity; incompatible schema/validation semantics require a new version. | Agree the selected built-in membership and explicit ordered lists. They have not been enumerated/frozen as an executable manifest. Where historical order cannot be established within authority, require an explicitly named new selection; never claim historical digest equality. |
+| Extensions/mutation | First mode is closed to undeclared plugins, aliases, duplicate keys and post-freeze metadata mutation. Known first-party aliases must be explicit declarations. Unsupported extensions reject before model initialization, never disappear silently. Legacy class registries preserve first-wins decorator behavior and raw-register uniqueness. A later extension requires a pure, reviewed contribution and a new selection identity, not runtime discovery. | Confirm that this opt-in capability boundary is acceptable for the first installed mode; review concrete legacy extension/alias callers. No arbitrary extension equivalence is promised. |
+| Metadata identity/wire | Keep the existing ordered vocabulary projection/digest untouched in meaning. Add a separate versioned full-metadata binding to **new-mode accepted request identity, immutable generation/refinement worker packet, result receipt and parent adoption checks**. Bind descriptor schema/selection/revision, canonical complete descriptors including order and hidden members, and validation-source/codec revision. Composition chooses the trusted view; server/worker must agree before model initialization. Absence is allowed only on the unchanged legacy path. No V1 receipt rewrite or reinterpretation. | Identify exact existing versioned codecs/fields and size limits in one source-backed map. Define canonical byte encoding and digest coverage before code; the conceptual binding is not an existing symbol or observed wire format. Decide eventual runtime worker verification without bypassing runtime ancestry/constructor validation. |
+| Validation context | Keep the real schema. Pass the verified immutable view explicitly through root/nested model validation, `from_dict`/JSON helpers, SpecInference parsing and repair, generate/refine initial/returned specs, worker receipts and parent adoption. Managed mode requires context at every seam; missing context fails before legacy fallback. Ordinary legacy calls retain their behavior. No process-global registry replacement or thread-local implicit selection. Preserve trace-only checks, coercion/default/normalization and cross-reference semantics. | Freeze the complete call-site map, including `scene_engines.py:130,212` revalidations and `spec_inference.py:87,151` task tracing. Decide safe adapters for convenience constructors that cannot forward context and prove concurrent views remain separate. |
 
-These choices constrain a future implementation; this document does not approve it. In particular, arbitrary extension/mutation equivalence and exact historic ordering remain open.
+Required artifact before implementation approval: one bounded contract listing the chosen order/membership, codec/context call-site map, owned files, exact permitted tests/resource envelope and unresolved runtime-parity gate. Source-only mapping must stay inside Plan 04's architectural investigation budget; mapping a design does not authorize native class imports. The user may revise any proposed row during the current debate.
 
 ## File-owned implementation slices, after approval
 
@@ -136,7 +139,7 @@ Built-in migration potentially touches the background/object libraries, embodime
 
 ## Required tests and honest limits
 
-Before claiming isolated completion:
+For S1, before claiming isolated completion:
 
 - Cold import AND actual real-schema construction under unchanged native/Warp/CUDA/USD/provider denials; no fake runtime module/registry injection.
 - Complete membership positives for `NoTask` and hidden assets; unknown keys; unary/binary reference rules; existing normalization and cross-references.
@@ -153,8 +156,8 @@ Separately gated: real class identity/constructor/ancestry/metadata parity, nati
 
 Independent analyses: `deleg_42c38c89` task 1 (candidate ownership/design) and task 2 (compatibility challenge). Both were read-only. Parent accepted the separation and counterexamples, but narrowed the proposal to opt-in metadata instead of global registry-enumeration changes, and distinguished E1 proposal-only generation from generic native grounding.
 
-Open before implementation: selected built-in order/version policy; extension/mutation compatibility contract; complete metadata-binding wire placement; strategy and authority for eventual runtime parity. The recommended first-party opt-in choices above are a concrete starting contract, not observed acceptance.
+Open before implementation: user agreement on the discussion baseline; concrete built-in ordered manifest; exact canonical identity encoding and backward-compatible codec/context map; strategy and authority for eventual runtime parity. Policies are now explicit above, but these artifacts and acceptance evidence do not yet exist. Consolidation into Plan 04 is not observed acceptance or permission to resume.
 
 Final fresh source challenge `deleg_b369d6f0`: **PASS limited to the design proposal**, with no concrete blocking contradiction found. It verified the selected proposal-only early returns, string-only affordance discovery, remaining import/validation-context obligations, registry compatibility counterexamples and separate metadata identity. This is neither implementation approval nor no-CUDA runtime proof. Scoped documentation hooks and `git diff --check` passed; no application tests were run in this design phase. Input/source hashes and final document identity are retained in `outputs/workflow/plan04-implementation/installed-execution/registration-only-design-verification.json`.
 
-Canonical status remains: E1/P1 incomplete, strict no-CUDA stop in force for native registration, existing software and failed evidence preserved. No application source changes or runtime execution were performed for this design.
+Canonical status remains: E1/P1 incomplete, strict no-CUDA stop in force for native registration, existing software and failed evidence preserved. No application source changes or runtime execution were performed for this design. The earlier review/hash is a historical design snapshot; the five-document consolidation has separate documentation-only verification at `outputs/workflow/plan04-planning/registration-consolidation/`. Plan 04 §8 supplies the prospective chain-wide investigation limit; this document does not create a separate goal or budget.

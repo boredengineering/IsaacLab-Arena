@@ -26,8 +26,12 @@ Required cameras must be enabled in both Kit and graph conversion. An explicit
 false graph override conflicts with a camera-requiring profile; the candidate is
 not silently rewritten.
 
-``initialize_and_settle`` resets once, constructs a measured DROID posture hold,
-and consumes the entire frozen settle allocation. For every selected subject,
+By default, ``initialize_and_settle`` resets once, constructs a measured DROID
+posture hold, and consumes the entire frozen settle allocation. Supplying
+``initialized_observation`` explicitly skips that reset and uses the same hold,
+charging and rejection logic for the caller's freshly reset cohort. The caller
+owns observation freshness and reset identity; this seam does not attest them or
+implement the policy prerequisite producer. For every selected subject,
 the final consecutive window must satisfy unrounded linear speed strictly below
 ``1e-3 m/s`` and the selected angular-speed threshold. Equality, nonfinite or
 missing measurements, termination and truncation reject settling. Every control

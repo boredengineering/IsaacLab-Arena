@@ -165,6 +165,44 @@ class ForegroundWorkflow:
         return durable_readiness(contract, requirements, report, mapping=mapping)
 
     def run(self, principal, operation_id, raw_contract):
+        """Preserve synchronous admission notification followed by fresh execution."""
+        result, drive = self.admit(principal, operation_id, raw_contract)
+        return result if drive is None else drive()
+
+    def admit(self, principal, operation_id, raw_contract):
+        """Return a public result and an owner-only, parameterless one-shot drive.
+
+        Only acknowledged fresh admission returns a callable. Replay recovers the
+        retained status with None, never another delivery. The callable captures
+        this root, principal, immutable run/contract and already-issued bindings;
+        it is not a serializable ticket or execution-by-run-id API. The trusted
+        single in-process owner must retain it independently of client response
+        delivery. Dropping it, losing submit ACK, callback failure or process loss
+        requires explicit recovery, never submission replay to execute again.
+
+        The owner must route submissions through this root/authority interlock;
+        independent submitters or roots with independent authorities are not an
+        exactly-once queue. Keep composition ports stable for the root lifetime.
+        Call drive outside authority/application locks, on the owner's thread or
+        offload, never inside an admission/authority callback. It consumes before
+        checks/effects, including failures or stale/cancelled work, and expires
+        with this root. Guarded reentry is refused without consumption. Neither
+        drive nor replay renews grants or resets Neo4j's original admitted_at /
+        total deadline; release retains the existing fenced authority checks.
+        This seam provides no scheduler, restart recovery or API execution mode.
+
+        Returns:
+            (public_result, drive_or_none). Only public_result belongs on a wire.
+        """
+        if getattr(_resume_authority_context, "active", False):
+            raise RuntimeError("Guarded admission reentry unavailable")
+        _resume_authority_context.active = True
+        try:
+            return self._admit(principal, operation_id, raw_contract)
+        finally:
+            _resume_authority_context.active = False
+
+    def _admit(self, principal, operation_id, raw_contract):
         self._check(principal)
         validate_operation_id(operation_id)
         contract = parse_contract(raw_contract)
@@ -172,50 +210,89 @@ class ForegroundWorkflow:
         try:
             retained = self.store.lookup_submission(operation_id, canonical_json(contract))
         except StoreUnavailable:
-            return self._unknown(None)
+            return self._unknown(None), None
         if retained is not None:
-            return self.status(principal, retained.run_id)
+            return self.status(principal, retained.run_id), None
         with self.authority.mutation_guard():
+            # A same-owner admission may have won while this call waited.
+            try:
+                retained = self.store.lookup_submission(operation_id, canonical_json(contract))
+            except StoreUnavailable:
+                return self._unknown(None), None
+            if retained is not None:
+                return self.status(principal, retained.run_id), None
             self.authority.protect_workflow_contract(principal, contract, operation_id=operation_id)
             self._preflight(principal, contract)
             submitted = self.service.submit(principal, operation_id, raw_contract)
             if submitted.disposition == "dependencies_not_ready":
-                return self._public(
-                    dict(
-                        disposition="dependencies_not_ready",
-                        run_id=None,
-                        blockers=list(submitted.readiness.blockers),
-                        available_actions=[],
-                    )
+                return (
+                    self._public(
+                        dict(
+                            disposition="dependencies_not_ready",
+                            run_id=None,
+                            blockers=list(submitted.readiness.blockers),
+                            available_actions=[],
+                        )
+                    ),
+                    None,
                 )
             if submitted.disposition == "retained":
-                return self.status(principal, submitted.run.run_id)
+                return self.status(principal, submitted.run.run_id), None
             run = submitted.run
             self._start_control(principal, run.run_id)
-            if self._admission_listener is not None:
-                handle = self._public(
-                    dict(
-                        schema_version=1,
-                        disposition="admitted",
-                        run_id=run.run_id,
-                        operation_id=run.operation_id,
-                        state=run.state,
-                        version=run.version,
-                        event_cursor=run.event_cursor,
-                    )
+            handle = self._public(
+                dict(
+                    schema_version=1,
+                    disposition="admitted",
+                    run_id=run.run_id,
+                    operation_id=run.operation_id,
+                    state=run.state,
+                    version=run.version,
+                    event_cursor=run.event_cursor,
                 )
-                self._admission_listener(handle)
+            )
+            if self._admission_listener is not None:
+                self._admission_listener(dict(handle))
             if self._cancellation.stop_requested(self, run.run_id):
-                return self.status(principal, run.run_id)
+                return self.status(principal, run.run_id), None
             self.authority.bind_run(
                 principal,
                 operation_id,
                 contract,
                 run_id=run.run_id,
                 catalogue_sha256=self.catalogue_sha256,
+                retained_run=run,
             )
-            self.authority.bind_workflow_models(principal, contract, run_id=run.run_id)
-        return self._generate(principal, run, contract)
+            self.authority.bind_workflow_models(principal, contract, run_id=run.run_id, retained_run=run)
+        return handle, self._admitted_drive(principal, run, contract)
+
+    def _admitted_drive(self, principal, run, contract):
+        consumed = False
+
+        def drive():
+            nonlocal consumed
+            if getattr(_resume_authority_context, "active", False):
+                raise RuntimeError("Guarded admission drive unavailable")
+            with self._lock:
+                if consumed:
+                    raise ValueError("Admission drive consumed")
+                consumed = True
+            self._check(principal)
+            if self._cancellation.stop_requested(self, run.run_id):
+                return self.status(principal, run.run_id)
+            if self.store.get_run(run.run_id) != run:
+                return self.status(principal, run.run_id)
+            _resume_authority_context.active = True
+            try:
+                with self.authority.mutation_guard():
+                    self.authority.require_scene_execute(principal, contract, run_id=run.run_id, retained_run=run)
+            finally:
+                _resume_authority_context.active = False
+            if self.store.get_run(run.run_id) != run:
+                return self.status(principal, run.run_id)
+            return self._generate(principal, run, contract)
+
+        return drive
 
     def _generate(self, principal, run, contract, *, pending=None, resume_receipt=None):
         if self._cancellation.stop_requested(self, run.run_id):
@@ -477,7 +554,12 @@ class ForegroundWorkflow:
         receipt, durable = None, "unknown"
         cleanup, cleanup_status = None, "not_requested"
         try:
-            value = self.store.cancel_command(operation_id, run_id, local_stop, protect=protect)
+            # Admission takes authority before the Neo4j control lock. Keep
+            # that order here: cancel_command screens the exact receipt before
+            # commit under that DB lock. Local stop above and physical cleanup
+            # below must remain outside authority (they may wait on workers).
+            with self.authority.mutation_guard():
+                value = self.store.cancel_command(operation_id, run_id, local_stop, protect=protect)
             receipt = CancelReceipt.model_validate_json(value.model_dump_json())
             durable = "recorded"
         except CommandConflict:
@@ -821,6 +903,8 @@ class ForegroundWorkflow:
                     self.authority.renew_run(principal, contract, run_id=run.run_id)
 
     def resume(self, principal, run_id, *, renew_authorization=False):
+        if getattr(_resume_authority_context, "active", False):
+            raise RuntimeError("Guarded resume reentry unavailable")
         if type(renew_authorization) is not bool:
             raise TypeError("Explicit boolean renewal required")
         current = self.status(principal, run_id)

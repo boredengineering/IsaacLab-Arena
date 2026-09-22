@@ -1,10 +1,14 @@
-# Copyright (c) 2026, The Isaac Lab Arena Project Developers.
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
 # SPDX-License-Identifier: Apache-2.0
-"""Trusted query-only ASGI composition with open-only owned resource lifetime."""
 
+"""Open-only query ASGI lifetime with an explicit trusted execution opt-in."""
+
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from fastapi import FastAPI
 
@@ -45,30 +49,61 @@ class Composition:
     read_principal: str
     protect: Callable[[object], None]
     tokens: TokenRegistry
+    execution_factory: Callable | None = None
 
 
 def create_app(*, settings: Settings, composition: Composition) -> FastAPI:
     """Open exact existing resources; administrative setup is a separate operation."""
     from contextlib import asynccontextmanager
     from dataclasses import replace
+    from threading import Event, Lock
 
     from fastapi import Request
 
     from ..admin import WorkflowScopeAdmin
     from ..service import WorkflowService
     from .resolvers import OwnedOffload, QueryContext, finish_cleanup
-    from .schema import schema
+    from .schema import schema as query_schema
     from .security import BearerBoundary
 
+    schema = query_schema
+    if composition.execution_factory is not None:
+        import importlib
+
+        # Fixed opt-in loaders, never config/plugin names. Execution cohorts must
+        # explicitly root both modules; legacy static query closures stay exact.
+        schema = importlib.import_module(
+            "isaaclab_arena.agentic_environment_generation.workflow.api.execution_schema"
+        ).schema
+        execution_context = importlib.import_module(
+            "isaaclab_arena.agentic_environment_generation.workflow.api.execution_owner"
+        ).ExecutionContext
+
     assert composition.tokens.binding == settings.binding
+    stop_requested, owner_lock = Event(), Lock()
+    owner_slot = [None]
+
+    def request_execution_stop():
+        """Latch refusal and revoke before any request, query or admission drain."""
+        stop_requested.set()
+        composition.tokens.rotate()
+        with owner_lock:
+            app.state.ready = False
+            current = owner_slot[0]
+        if current is not None:
+            try:
+                current.request_stop()
+            except Exception:
+                app.state.cleanup_unknown = True
 
     @asynccontextmanager
     async def lifespan(app):
         executor = OwnedOffload()
         driver = None
+        owner = None
 
         def boot():
-            nonlocal driver
+            nonlocal driver, owner
             driver = composition.create_driver()
             store = composition.create_store(driver)
             resources = WorkflowScopeAdmin(store, composition.authority).verify_current_resources(
@@ -85,6 +120,12 @@ def create_app(*, settings: Settings, composition: Composition) -> FastAPI:
                 validate_support=None,
                 read_scope=settings.binding,
             )
+            if composition.execution_factory is not None:
+                owner = composition.execution_factory(store, resources, composition.protect)
+                with owner_lock:
+                    owner_slot[0] = owner
+                if stop_requested.is_set():
+                    owner.request_stop()
             return resources, service
 
         try:
@@ -94,7 +135,9 @@ def create_app(*, settings: Settings, composition: Composition) -> FastAPI:
                 raise ValueError("Workflow API not ready") from None
             app.state.resources = resources
             app.state.query_context = QueryContext(service, composition, executor)
-            app.state.ready = True
+            app.state.execution_owner = owner
+            with owner_lock:
+                app.state.ready = not stop_requested.is_set()
             yield
         finally:
             app.state.ready = False
@@ -104,13 +147,40 @@ def create_app(*, settings: Settings, composition: Composition) -> FastAPI:
                 if driver is not None:
                     driver.close()
 
+            async def cleanup():
+                if composition.execution_factory is not None:
+                    request_execution_stop()
+                await executor.drain()
+                if app.state.cleanup_unknown:
+                    import asyncio
+
+                    await asyncio.Future()
+                if owner is not None:
+                    try:
+                        await owner.close()
+                    except Exception:
+                        # Unconfirmed cleanup is not a stopped instance. Keep the
+                        # listener teardown/lifespan and lifetime lease unresolved;
+                        # only external operator termination can end this state.
+                        import asyncio
+
+                        app.state.cleanup_unknown = True
+                        await asyncio.Future()
+                if app.state.cleanup_unknown:
+                    import asyncio
+
+                    await asyncio.Future()
+                await executor.close(close_driver)
+
             try:
-                await finish_cleanup(executor.close(close_driver))
+                await finish_cleanup(cleanup())
             except Exception:
                 raise ValueError("Workflow API resource close failed") from None
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.ready = False
+    app.state.cleanup_unknown = False
+    app.state.request_execution_stop = request_execution_stop
 
     app.add_middleware(BearerBoundary, registry=composition.tokens)
 
@@ -126,18 +196,22 @@ def create_app(*, settings: Settings, composition: Composition) -> FastAPI:
             return Response(content=b"", status_code=503)
         status = 200
         try:
-            body = validate_document(await bounded_body(request), schema)
+            executing = composition.execution_factory is not None
+            body = validate_document(await bounded_body(request, execution=executing), schema, execution=executing)
         except Exception:
             body = None
             status = 400
         value = {"errors": [{"message": "Query rejected"}]}
         if body is not None:
             try:
+                context = replace(app.state.query_context, auth=request.scope["workflow_auth"])
+                if app.state.execution_owner is not None:
+                    context = execution_context(context, app.state.execution_owner)
                 result = await schema.execute(
                     body["query"],
                     variable_values=body.get("variables"),
                     operation_name=body.get("operationName"),
-                    context_value=replace(app.state.query_context, auth=request.scope["workflow_auth"]),
+                    context_value=context,
                 )
                 if not result.errors:
                     value = {"data": result.data}

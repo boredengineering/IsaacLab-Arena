@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Pure contract inspection; execution belongs to the examples composition CLI."""
+"""Offline inspection and explicit installed HTTP workflow operations."""
 
 import argparse
 import json
@@ -40,6 +40,8 @@ def _read_contract(path):
 
 def _add_installed_arguments(commands):
     """Declare installed commands without importing any optional API dependencies."""
+    readiness = commands.add_parser("setup-readiness", help="Report offline public setup blockers", allow_abbrev=False)
+    readiness.add_argument("--selection", help="Explicit public selection JSON; no credentials or checks")
     setup = commands.add_parser("setup", help="Create explicit private query configuration state", allow_abbrev=False)
     setup.add_argument("--config", required=True)
     setup.add_argument("--create", action="store_true", required=True)
@@ -49,6 +51,15 @@ def _add_installed_arguments(commands):
         credentials.add_argument("--config", required=True)
         if name == "credentials-update":
             credentials.add_argument("--credentials-fd", type=int, required=True)
+    submit = commands.add_parser("submit", help="Submit to the installed execution owner", allow_abbrev=False)
+    submit.add_argument("--client", required=True)
+    submit.add_argument("--operation-id", required=True)
+    submit.add_argument("--contract", required=True)
+    result = commands.add_parser("result", help="Read an exact bounded terminal result over HTTP", allow_abbrev=False)
+    result.add_argument("identifier")
+    result.add_argument("--client", required=True)
+    result.add_argument("--operation-id", required=True)
+    result.add_argument("--wait-terminal-seconds", type=int, required=True)
     profiles = commands.add_parser("profiles", help="Query retained profiles over HTTP", allow_abbrev=False)
     profiles.add_argument("--client", required=True)
     for name in ("profile", "status", "submission", "receipt", "runs", "events"):
@@ -83,6 +94,58 @@ def _add_installed_arguments(commands):
 
 def _run_installed(options):
     """Execute only the explicitly selected installed operation with static errors."""
+    if options.command == "setup-readiness":
+        from .setup_readiness import MAX_SELECTION_BYTES, setup_readiness
+
+        try:
+            raw = None
+            if options.selection is not None:
+                # Same regular-file/no-follow discipline as contract inspection.
+                fd = os.open(options.selection, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                try:
+                    metadata = os.fstat(fd)
+                    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > MAX_SELECTION_BYTES:
+                        raise ValueError("invalid file")
+                    with os.fdopen(fd, "rb", closefd=False) as stream:
+                        raw = stream.read(MAX_SELECTION_BYTES + 1)
+                finally:
+                    os.close(fd)
+            report = setup_readiness(raw)
+        except (OSError, ValueError, RecursionError, AttributeError):
+            print("setup-readiness: invalid selection file", file=sys.stderr)
+            return 2
+        print(json.dumps(report, sort_keys=True, separators=(",", ":")))
+        return 0
+    if options.command in {"submit", "result"}:
+        try:
+            from .api.client import query
+            from .api.client import result as read_result
+            from .contracts import canonical_json
+
+            if options.command == "submit":
+                contract = _read_contract(options.contract)
+                result = query(
+                    options.client, "submit", identifier=options.operation_id, raw_contract=canonical_json(contract)
+                )
+                receipt = result["data"].get("submitWorkflow", {})
+                if (
+                    receipt.get("__typename") != "SubmissionReceipt"
+                    or receipt.get("operationId") != options.operation_id
+                    or receipt.get("acceptedContractDigest") != contract_digest(contract)
+                ):
+                    raise ValueError("Submission unavailable")
+            else:
+                result = read_result(
+                    options.client,
+                    options.identifier,
+                    operation_id=options.operation_id,
+                    wait_terminal_seconds=options.wait_terminal_seconds,
+                )
+        except Exception:
+            print("workflow: command rejected or result unavailable", file=sys.stderr)
+            return 2
+        print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+        return 0
     if options.command in {"profiles", "profile", "status", "submission", "receipt", "runs", "events"}:
         try:
             from .api.client import query
@@ -99,8 +162,8 @@ def _run_installed(options):
         return 0
     if options.command.startswith("api-"):
         try:
-            from .api.instance import instance_id, launch, observe
             from .api.installed_config import load
+            from .api.instance import instance_id, launch, observe
 
             selected = instance_id(options.instance)
             config = load(options.config)

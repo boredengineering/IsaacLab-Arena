@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "outcome": "scene-only",
+  "roles": {
+    "generation": {
+      "provider": "openai",
+      "model": "gpt-4.1",
+      "endpoint": "https://api.openai.com/v1",
+      "inference_profile": null,
+      "credential": {
+        "alias": "cloud-example",
+        "source": "private_file",
+        "source_role": "models.generation",
+        "public_id": "public-project-example"
+      }
+    },
+    "assessment": {
+      "provider": "openai",
+      "model": "gpt-4.1",
+      "endpoint": "https://api.openai.com/v1",
+      "inference_profile": null,
+      "credential": {
+        "alias": "cloud-example",
+        "source": "private_file",
+        "source_role": "models.assessment",
+        "public_id": "public-project-example"
+      }
+    },
+    "repair": null,
+    "local_policy": null,
+    "prior_read": {
+      "provider": "neo4j",
+      "endpoint": "neo4j+s://research.example.invalid:7687",
+      "database": "research-example",
+      "authentication": "basic",
+      "tls": "system_ca",
+      "credential": {
+        "alias": "prior-reader-example",
+        "source": "private_file",
+        "source_role": "databases.prior_read"
+      }
+    },
+    "operational_db": {
+      "provider": "neo4j",
+      "endpoint": "bolt://192.0.2.10:7687",
+      "database": "pilot-example",
+      "authentication": "basic",
+      "tls": "none",
+      "credential": {
+        "alias": "operational-example",
+        "source": "private_file",
+        "source_role": "databases.operational"
+      }
+    }
+  }
+}

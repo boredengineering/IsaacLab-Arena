@@ -16,8 +16,8 @@ import time
 from contextlib import contextmanager
 from decimal import Decimal
 
-
 from .accounting import _usd_units, checked_workflow_accounting
+from .request_envelope import RequestEnvelope
 
 
 class CallAllowance:
@@ -112,7 +112,13 @@ def managed_inference_active(backend=None):
 
 
 @contextmanager
-def bounded_client(config, *, allowance: CallAllowance, strict_model_binding: bool = True):
+def bounded_client(
+    config,
+    *,
+    allowance: CallAllowance,
+    strict_model_binding: bool = True,
+    request_envelope=None,
+):
     """Install bounded transport before backend construction in an isolated worker.
 
     Args:
@@ -120,10 +126,17 @@ def bounded_client(config, *, allowance: CallAllowance, strict_model_binding: bo
         allowance: Caller-owned shared allowance, never reset or refunded on exit.
         strict_model_binding: Reject mismatches; only the legacy wrapper disables this
             to preserve its historical configured-model override.
+        request_envelope: Optional frozen v1 callable contract. This is not a
+            persisted profile/grant binding or verification of provider prices.
 
     Overlapping global factory patches are rejected rather than queued. The
     caller must disable backend dotenv loading and pass its explicit profile.
     Backend semantic retries are unchanged; SDK transport retries are zero.
+    With an envelope, public copy/with_options cloning is unsupported, including
+    default and same-transport clones; without one the legacy SDK API is unchanged.
+    This guards the adapter's callable surface, not arbitrary Python execution:
+    deliberate guard replacement, unbound SDK calls or separately constructed
+    clients are outside the contract. It is not a credential or process sandbox.
     """
     global _managed_active
     if not isinstance(allowance, CallAllowance):
@@ -135,18 +148,79 @@ def bounded_client(config, *, allowance: CallAllowance, strict_model_binding: bo
         if not strict_model_binding:
             raise ValueError("Workflow accounting requires strict model binding")
         checked_workflow_accounting(allowance._bound, model=model, endpoint=base_url)
+    if request_envelope is not None:
+        if type(request_envelope) is not RequestEnvelope:
+            raise ValueError("frozen request envelope required")
+        request_envelope.check_binding(model=model, endpoint=base_url, accounting=allowance._bound)
     if not _patch_lock.acquire(blocking=False):
         raise RuntimeError("Overlapping bounded client contexts are forbidden")
     try:
         _managed_active = bool(strict_model_binding)
-        from openai import DefaultHttpxClient, OpenAI
+        from openai import DefaultHttpxClient, OpenAI, OpenAIError
 
         from isaaclab_arena.agentic_environment_generation import inference_backend
 
         # Some runtimes vendor HTTPX under a different module name.
         with DefaultHttpxClient(follow_redirects=False, trust_env=False, timeout=45) as transport:
-            with OpenAI(api_key=api_key, base_url=base_url, http_client=transport, timeout=45, max_retries=0) as client:
+            with OpenAI(
+                api_key=api_key,
+                base_url=base_url,
+                http_client=transport,
+                timeout=45,
+                max_retries=0,
+            ) as client:
                 client._arena_workflow_managed = _managed_active
+                if request_envelope is not None:
+                    # Public SDK clones do not inherit these instance-local guards.
+                    # Reject both aliases, even for default/same-transport copies.
+                    def reject_clone(*args, **kwargs):
+                        raise ValueError("request envelope client cloning is unsupported")
+
+                    client.copy = reject_clone
+                    client.with_options = reject_clone
+                    # SDK build merges extra JSON/headers and serializes actual bytes.
+                    # HTTPX request hooks run after SDK preparation/auth, immediately
+                    # before transport. Validate both, and allow one physical send
+                    # per charged create even if an SDK auth/retry path changes.
+                    build_request = client._build_request
+                    pending = threading.local()
+
+                    def build(*args, **kwargs):
+                        if not getattr(pending, "admitted", False):
+                            raise ValueError("request envelope requires guarded completion")
+                        request = build_request(*args, **kwargs)
+                        request_envelope.check_http(request, api_key=api_key)
+                        pending.request, pending.stream, pending.raw = (
+                            request,
+                            request.stream,
+                            request.content,
+                        )
+                        return request
+
+                    client._build_request = build
+
+                    def before_send(request):
+                        try:
+                            if not getattr(pending, "admitted", False):
+                                raise ValueError("request envelope unadmitted send")
+                            request_envelope.check_binding(
+                                model=model,
+                                endpoint=base_url,
+                                accounting=allowance._bound,
+                            )
+                            if (
+                                request is not pending.request
+                                or request.stream is not pending.stream
+                                or request.content != pending.raw
+                                or list(request.stream) != [pending.raw]
+                            ):
+                                raise ValueError("request envelope serialized bytes changed")
+                            request_envelope.check_http(request, api_key=api_key)
+                            pending.admitted = False
+                        except ValueError:
+                            raise OpenAIError("request envelope rejected before transport") from None
+
+                    transport.event_hooks["request"].append(before_send)
                 completion = client.chat.completions.create
 
                 def complete(*args, **kwargs):
@@ -154,8 +228,18 @@ def bounded_client(config, *, allowance: CallAllowance, strict_model_binding: bo
                     if strict_model_binding and kwargs.get("model", model) != model:
                         raise ValueError("Bounded client model binding mismatch")
                     kwargs["model"] = model
+                    if request_envelope is not None:
+                        request_envelope.check_binding(model=model, endpoint=base_url, accounting=allowance._bound)
+                        kwargs = request_envelope.copy_arguments(args, kwargs)
+                        request_envelope.check_body(kwargs)
                     allowance.charge()
-                    return completion(*args, **kwargs)
+                    if request_envelope is None:
+                        return completion(*args, **kwargs)
+                    pending.admitted = True
+                    try:
+                        return completion(**kwargs)
+                    finally:
+                        pending.admitted = False
 
                 client.chat.completions.create = complete
                 original = inference_backend.OpenAI

@@ -16,6 +16,7 @@ from typing import Any
 from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
 
 LINEAR_SPEED_LIMIT = 1e-3
+_RESET_AT_ENTRY = object()
 
 
 @dataclass(frozen=True)
@@ -168,8 +169,9 @@ def initialize_and_settle(
     charge_step,
     sample_velocities=sample_native_velocities,
     hold_action_factory=build_droid_posture_hold,
+    initialized_observation: Any = _RESET_AT_ENTRY,
 ) -> InitializedScene:
-    """Reset once and hold for the entire frozen allocation, then block unless settled.
+    """Hold for the entire frozen allocation, resetting once unless already initialized.
 
     Args:
         env: Wrapped single environment, owned by the caller.
@@ -177,7 +179,10 @@ def initialize_and_settle(
         charge_step: Trusted accounting/cancellation callback before each control step.
         sample_velocities: Trusted callback(env, subjects) returning exact subject maps
             with raw world linear_velocity_w and angular_velocity_w 3-vectors.
-        hold_action_factory: Embodiment adapter called once after reset, before stepping.
+        hold_action_factory: Embodiment adapter called once on entry, before stepping.
+        initialized_observation: Observation of the caller's freshly reset cohort.
+            If supplied, never call reset; if omitted, retain the legacy single reset.
+            The caller owns reset identity and must supply the current reset observation.
 
     Returns:
         The final observation and absolute offset for initialized capture or rollout.
@@ -214,7 +219,10 @@ def initialize_and_settle(
             raise ValueError("Nonfinite velocity norm")
         return result
 
-    obs, _ = env.reset()
+    if initialized_observation is _RESET_AT_ENTRY:
+        obs, _ = env.reset()
+    else:
+        obs = initialized_observation
     cameras_available(obs)
     action = hold_action_factory(env)
     consecutive = 0

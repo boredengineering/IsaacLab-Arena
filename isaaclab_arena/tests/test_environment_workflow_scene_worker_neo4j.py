@@ -280,6 +280,9 @@ def test_foreground_application_api_exists(tmp_path):
         _check_keyed_recovery_inert_ports(mode)
     for mode in ("cached", "latched", "prepared", "release_fault", "fresh"):
         _check_keyed_recovery_real_unlatched_lease(tmp_path, mode)
+    # Extend the admitted case, retaining the exact fixed case/child cohort.
+    for mode in ("fresh", "replay", "denied"):
+        _check_actual_admission_cancel_authority_control_lock_order(mode)
 
     from isaaclab_arena_examples.agentic_environment_generation.foreground_workflow import (
         ForegroundWorkflow,
@@ -775,6 +778,185 @@ def test_foreground_application_full_outcome(tmp_path, missing):
         finally:
             app.close()
             f.area.close()
+
+
+def _check_actual_admission_cancel_authority_control_lock_order(mode):
+    """Real DB transaction/control lock and authority; no worker/SDK launches."""
+    from contextlib import contextmanager
+    from threading import Event, RLock, Thread, current_thread, local
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.application import ForegroundWorkflow
+    from isaaclab_arena.agentic_environment_generation.workflow.commands import LocalStopObservation
+    from isaaclab_arena_examples.agentic_environment_generation.foreground_authorization import ForegroundAuthority
+
+    database = os.environ["ARENA_WORKFLOW_NEO4J_DATABASE"]
+    with GraphDatabase.driver(
+        os.environ["ARENA_WORKFLOW_NEO4J_URI"], auth=None, connection_timeout=2,
+        connection_acquisition_timeout=3, max_transaction_retry_time=0,
+    ) as driver:
+        with driver.session(database=database) as session:
+            for ddl in Neo4jWorkflowStore.schema_requirements():
+                session.run(ddl).consume()
+            session.run("CALL db.awaitIndexes(10)").consume()
+        store = Neo4jWorkflowStore(
+            driver, database=database, deployment_id="authority-control-race", workspace_id=uuid.uuid4().hex,
+        )
+        store.initialize_scope()
+        raw = canonical_json(scene_contract())
+        pending = store.admit("cancel-target", raw, raw, 2)
+        scope = dict(database=database, **store.scope)
+        auth = ForegroundAuthority(
+            **scope, store=store, clock=time.time,
+            principal_lookup=lambda p: dict(principal=p, **scope, expires_at=time.time() + 60, revoked=False),
+            profiles={}, current_config=lambda p: pytest.fail("race resolved execution credentials"),
+            grants=SimpleNamespace(protect_public=lambda value: None),
+        )
+        first_stop = LocalStopObservation(delivery="no_owner")
+        retained = None
+        if mode == "replay":
+            with auth.mutation_guard():
+                retained = store.cancel_command("cancel", pending.run_id, first_stop, protect=auth.protect_public)
+        before_run = store.get_run(pending.run_id)
+        before_children = set(Path("/evidence").glob("workflow-child-*.json"))
+        outer_read, control_held, guard_attempt, guarded_lookup = (Event() for _ in range(4))
+        trace, errors, results = [], [], []
+        context = local()
+        original_guard, original_protect = auth.mutation_guard, auth.protect_public
+        original_lookup, original_lock, original_transaction = store.lookup_submission, store._lock, store._transaction
+
+        @contextmanager
+        def guard():
+            if current_thread().name == "race-admission":
+                trace.append("admission_guard_attempt")
+                guard_attempt.set()
+            with original_guard():
+                yield
+
+        @contextmanager
+        def transaction(**kwargs):
+            with original_transaction(**kwargs) as tx:
+                context.tx = tx
+                try:
+                    yield tx
+                finally:
+                    context.tx = None
+            if current_thread().name == "race-cancel":
+                trace.append("cancel_transaction_closed")
+
+        def control_lock(tx, **kwargs):
+            if current_thread().name == "race-admission" and auth._lock._is_owned():
+                trace.append("guarded_lookup_control_requested")
+                guarded_lookup.set()
+            value = original_lock(tx, **kwargs)
+            if current_thread().name == "race-cancel":
+                assert "local_stop" in trace
+                trace.append("cancel_control_acquired")
+                control_held.set()
+            return value
+
+        def lookup(*args):
+            value = original_lookup(*args)
+            if current_thread().name == "race-admission" and not auth._lock._is_owned():
+                trace.append("outer_lookup_closed")
+                outer_read.set()
+                assert control_held.wait(3)
+            return value
+
+        def protect(value):
+            if current_thread().name == "race-cancel" and getattr(context, "tx", None) is not None:
+                assert "receipt_digest" in value and control_held.is_set()
+                assert guard_attempt.wait(3)
+                if not auth._lock._is_owned():
+                    assert guarded_lookup.wait(3)
+                # Fail before the real callback's unbounded RLock acquisition;
+                # rollback releases the DB lock so RED cannot hang the cohort.
+                acquired = auth._lock.acquire(timeout=0.5)
+                assert acquired, "authority/control lock inversion at actual precommit screen"
+                try:
+                    original_protect(value)
+                    trace.append("precommit_screen")
+                    if mode == "denied":
+                        raise ValueError("test precommit denial")
+                finally:
+                    auth._lock.release()
+            else:
+                original_protect(value)
+
+        def stop(*args):
+            assert not auth._lock._is_owned() and getattr(context, "tx", None) is None
+            trace.append("local_stop")
+            return LocalStopObservation(delivery="unconfirmed" if mode == "replay" else "no_owner")
+
+        class AdmissionObserved(Exception):
+            pass
+
+        def preflight(*args):
+            raise AdmissionObserved()
+
+        app = ForegroundWorkflow.__new__(ForegroundWorkflow)
+        app._closed, app._lock, app._local = False, RLock(), {pending.run_id: object()}
+        app.authority, app.store = auth, store
+        app._preflight = preflight
+
+        def finish(*args):
+            assert not auth._lock._is_owned() and getattr(context, "tx", None) is None
+            assert "cancel_transaction_closed" in trace
+            trace.append("physical_cleanup_outside_authority")
+
+        app._cancellation = SimpleNamespace(stop_only=stop, finish_cancelled=finish)
+        auth.mutation_guard, auth.protect_public = guard, protect
+        auth.protect_workflow_contract = lambda *a, **kw: None
+        store.lookup_submission, store._lock, store._transaction = lookup, control_lock, transaction
+
+        def submit():
+            try:
+                app.admit("creator", "new-submission", raw)
+            except AdmissionObserved:
+                trace.append("admission_observed")
+            except BaseException as exc:
+                errors.append(exc)
+
+        def cancel():
+            try:
+                assert outer_read.wait(3)
+                results.append(app.cancel_keyed("creator", "cancel", pending.run_id, authorize_cancel=lambda *a: None))
+            except BaseException as exc:
+                errors.append(exc)
+
+        threads = [Thread(target=submit, name="race-admission", daemon=True),
+                   Thread(target=cancel, name="race-cancel", daemon=True)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(8)
+        assert not any(thread.is_alive() for thread in threads), "bounded actual race failed to unwind"
+        store.lookup_submission, store._lock, store._transaction = original_lookup, original_lock, original_transaction
+        auth.mutation_guard, auth.protect_public = original_guard, original_protect
+        after_run, receipt = store.get_run(pending.run_id), store.get_cancel_receipt("cancel")
+        assert set(Path("/evidence").glob("workflow-child-*.json")) == before_children
+        Path("/evidence/authority-control-race-" + mode + ".json").write_text(json.dumps(dict(
+            mode=mode, trace=trace, errors=[str(error) for error in errors],
+            before_state=before_run.state, after_state=after_run.state,
+            receipt_present=receipt is not None, extra_children=0,
+        ), sort_keys=True))
+        if mode == "denied":
+            assert len(errors) == 1 and type(errors[0]) is ValueError, [str(error) for error in errors]
+            assert str(errors[0]) == "test precommit denial" and results == []
+            assert after_run == before_run and receipt is None
+        else:
+            assert errors == [], [str(error) for error in errors]
+            assert results[0].durable == "recorded" and results[0].receipt == receipt
+            assert after_run.state == "cancelled" and "physical_cleanup_outside_authority" in trace
+            if mode == "replay":
+                assert receipt == retained and after_run == before_run
+                assert results[0].local_stop.delivery == "unconfirmed"
+                assert receipt.first_local_stop.delivery == "no_owner"
+            else:
+                assert receipt.before_version == before_run.version and receipt.after_version == after_run.version
+        assert trace.index("local_stop") < trace.index("cancel_control_acquired") < trace.index("precommit_screen")
+        assert trace.index("precommit_screen") < trace.index("guarded_lookup_control_requested")
+        assert "admission_observed" in trace and auth._bindings == {} and auth._workflow_bindings == {}
 
 
 def fixture_registration(fence):

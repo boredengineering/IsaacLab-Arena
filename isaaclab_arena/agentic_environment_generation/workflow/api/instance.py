@@ -1,5 +1,8 @@
-# Copyright (c) 2026, The Isaac Lab Arena Project Developers.
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
 # SPDX-License-Identifier: Apache-2.0
+
 """Exact local instance lifetime, not workflow ownership or a process supervisor."""
 
 import fcntl
@@ -65,7 +68,19 @@ def instance_path(config, selected):
 
 def state(config, selected):
     with Directory(instance_path(config, selected)) as directory:
-        result = fields(decode(directory.read("state.json", 16384), 16384), " ".join(PUBLIC) + " identity")
+        value = decode(directory.read("state.json", 16384), 16384)
+        extra = (
+            " capabilities"
+            if config.value["mode"] == "isolated-synthetic-execution-v1" and "capabilities" in value
+            else ""
+        )
+        result = fields(value, " ".join(PUBLIC) + " identity" + extra)
+        if extra and result["capabilities"] != {
+            "mode": "isolated-synthetic-execution-v1",
+            "submit": True,
+            "required_policy": False,
+        }:
+            raise ValueError("Execution capability binding differs")
     if (
         type(result["schema_version"]) is not int
         or result["schema_version"] != 1
@@ -77,7 +92,10 @@ def state(config, selected):
         or result["generation"] != 1
         or result["state"] not in STATES
         or result["code"]
-        not in {"launch_pending", "ready", "stop_requested", "drained", "startup_failed", "exited_unclean"}
+        not in (
+            {"launch_pending", "ready", "stop_requested", "drained", "startup_failed", "exited_unclean"}
+            | ({"cleanup_unknown"} if config.value["mode"] == "isolated-synthetic-execution-v1" else set())
+        )
     ):
         raise ValueError("Instance binding differs")
     return result
@@ -97,6 +115,8 @@ def save_state(config, selected, value):
 
 def receipt(value, *, code=None):
     result = {key: value[key] for key in PUBLIC}
+    if "capabilities" in value:
+        result["capabilities"] = dict(value["capabilities"])
     if code is not None:
         result["code"] = code
     return result
@@ -161,7 +181,11 @@ def control(config, selected, operation, known):
                 or answer["v"] != 1
                 or answer["instance"] != selected
                 or answer["state"] not in STATES
-                or answer["code"] not in {"ready", "launch_pending", "stop_requested"}
+                or answer["code"]
+                not in (
+                    {"ready", "launch_pending", "stop_requested"}
+                    | ({"cleanup_unknown"} if config.value["mode"] == "isolated-synthetic-execution-v1" else set())
+                )
             ):
                 raise ValueError("Control response rejected")
             return answer
@@ -189,11 +213,15 @@ def observe(config, selected, *, stop=False, reconcile=False):
     except (OSError, ValueError):
         return receipt(known, code="unknown"), 3
     known.update(state=answer["state"], code=answer["code"])
+    if known["code"] == "cleanup_unknown":
+        return receipt(known), 3
     if not stop:
         return receipt(known), 0 if known["state"] == "ready" else 3
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         known = state(config, selected)
+        if known["code"] == "cleanup_unknown":
+            return receipt(known), 3
         if not same_process(known["identity"]) and released(config):
             return receipt(known), 0 if known["state"] == "stopped" and known["code"] == "drained" else 3
         time.sleep(0.05)

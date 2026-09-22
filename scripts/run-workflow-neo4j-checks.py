@@ -18,6 +18,10 @@ interpreter repeats kernel/source/preimport checks. No inherited ACTIVE singleto
 application factory injection, native/GPU/live-provider/research-DB access. The
 owner-private artifact scope exists until all commands finish, then owned Docker
 resources are removed and their exact absence is verified.
+The explicit workflow-graphql-execution E0 slice admits only two installed
+configuration setup interpreters; it deliberately grants no owner/SDK effects.
+Read its captured installed-execution/admission.md before independent review
+and first invocation. Configuration acceptance is not workflow execution.
 Workflow mode admits only tests/test_environment_workflow_neo4j.py and its
 statically discovered local Python imports. No installs, credentials or shell args.
 Tests receive ARENA_WORKFLOW_NEO4J_URI and ARENA_WORKFLOW_NEO4J_DATABASE;
@@ -51,7 +55,41 @@ SCENE_MODES = ("workflow-scene", "workflow-cli")
 GRAPHQL_TEST = "isaaclab_arena/tests/test_environment_workflow_graphql_neo4j.py"
 GRAPHQL_NETWORK_TEST = "isaaclab_arena/tests/test_environment_workflow_graphql_network_neo4j.py"
 GRAPHQL_MODES = ("workflow-graphql", "workflow-graphql-network")
-BOLT_MODES = (*PROCESS_MODES, *GRAPHQL_MODES)
+EXECUTION_MODE = "workflow-graphql-execution"
+EXECUTION_TEST = "isaaclab_arena/tests/test_environment_workflow_graphql_execution_neo4j.py"
+EXECUTION_HELPER = "scripts/workflow_graphql_execution_harness.py"
+EXECUTION_SPEC = "outputs/workflow/plan04-implementation/installed-execution/admission.md"
+EXECUTION_SOURCE_LIMIT = 96
+JOIN_MODE = "workflow-graphql-execution-joined"
+JOIN_HELPER = "scripts/workflow_graphql_execution_join_harness.py"
+JOIN_TEST = "isaaclab_arena/tests/test_environment_workflow_graphql_execution_joined_neo4j.py"
+JOIN_INVENTORY = "outputs/workflow/plan04-implementation/installed-execution/join-source-files.json"
+JOIN_SOURCE_LIMIT = 383
+LIFECYCLE_MODE = "workflow-graphql-execution-lifecycle"
+LIFECYCLE_HELPER = "scripts/workflow_graphql_execution_lifecycle_harness.py"
+LIFECYCLE_TEST = "isaaclab_arena/tests/test_environment_workflow_execution_lifecycle.py"
+LIFECYCLE_SPEC = "outputs/workflow/plan04-implementation/installed-execution/lifecycle-spec.md"
+LIFECYCLE_INVENTORY = "outputs/workflow/plan04-implementation/installed-execution/lifecycle-source-files.json"
+LIFECYCLE_ARCHIVE = "outputs/workflow/plan04-implementation/installed-execution/correction-round1-preimage/execution_owner.py"
+LIFECYCLE_ARCHIVE_SHA256 = "3d1ff06c7ee5ff08df5430cee4784ba9f753375fc1fe17bb366929d98fa31e67"
+LIFECYCLE_SOURCE_LIMIT = 339  # 335 measured repository leaves + four generated.
+LIFECYCLE_ROOTS = (
+    SELF, PROCESS_HELPER, LIFECYCLE_HELPER, LIFECYCLE_TEST, LIFECYCLE_SPEC,
+    LIFECYCLE_INVENTORY, LIFECYCLE_ARCHIVE,
+    "isaaclab_arena/agentic_environment_generation/workflow/api/execution_owner.py",
+    "isaaclab_arena/agentic_environment_generation/workflow/api/execution_schema.py",
+)
+LIFECYCLE_CASES = (
+    "test_execution_server_observation_does_not_cancel_unresolved_cleanup[timeout]",
+    "test_execution_server_observation_does_not_cancel_unresolved_cleanup[cleanup_error]",
+    "test_execution_stop_precedes_blocked_admission_drain",
+    "test_historical_owner_fails_stop_before_blocked_admission_drain",
+    "test_execution_cleanup_timeout_is_sticky_and_retains_area",
+    "test_execution_stop_while_authenticated_body_and_query_are_pending",
+    "test_execution_cleanup_error_is_observable_and_never_releases_area",
+)
+GRAPHQL_BOOTSTRAP_MODES = (*GRAPHQL_MODES, EXECUTION_MODE, JOIN_MODE, LIFECYCLE_MODE)
+BOLT_MODES = (*PROCESS_MODES, *GRAPHQL_BOOTSTRAP_MODES)
 GRAPHQL_SOURCE_LIMIT = 128
 # Separately measured query network closure; no SDK/native imports.
 GRAPHQL_NETWORK_SOURCE_LIMIT = 96
@@ -75,6 +113,32 @@ def select_graphql_runtime(discovered, image, manifest):
     raw = read_confined(path.parent, path.name)
     assert hashlib.sha256(raw).hexdigest() == GRAPHQL_MANIFEST_SHA256, "Unapproved query manifest"
     return select_runtime(discovered, image, path, profile="graphql-test-v1")
+
+
+def validate_join_historical_metadata(root):
+    """Bind E1's fixed replay to actual historical bytes, never a fresh probe."""
+    from confined_io import read_confined
+
+    fixture = "outputs/workflow/plan04-implementation/installed-execution/join-git-metadata.json"
+    historical = "outputs/workflow/plan03-implementation/application-extraction/workflow-scene/client-proof.json"
+    expected = "47c532a8fb9fad1b3c847432e8d5415d0b6a0a39632204bfc25c7065345aa2a0"
+    raw = read_confined(root, fixture)
+    assert len(raw) <= 4096
+    value = json.loads(raw)
+    assert set(value) == {"source", "source_sha256", "stdout", "returncode", "scope"}
+    assert value["source"] == historical and value["source_sha256"] == expected
+    assert value["scope"] == "historical actual immutable-image Git metadata replay, not a fresh E1 Git version probe"
+    original = read_confined(root, historical)
+    assert len(original) <= 4 * 1024 * 1024
+    assert hashlib.sha256(original).hexdigest() == expected, "Historical Git evidence changed"
+    metadata = json.loads(original)["metadata"]
+    assert type(value["returncode"]) is type(metadata["returncode"]) is int
+    assert value["returncode"] == metadata["returncode"] == 0
+    assert type(value["stdout"]) is str and value["stdout"] == metadata["stdout"]
+    assert value["stdout"] == "git version 2.43.0\n"
+    return dict(fixture=fixture, fixture_sha256=hashlib.sha256(raw).hexdigest(),
+                source=historical, source_sha256=expected, projection_verified=True,
+                scope="historical metadata compatibility only; not fresh executable version attestation")
 
 
 def graphql_probe_source(root):
@@ -229,7 +293,7 @@ def validate_client_proof(proof, mode, junit=None, network_manifest=None):
     assert proof["return_one"] == 1 and proof["driver_closed"] is True
     assert re.fullmatch(r"[a-f0-9]{32}", proof["marker"]["token"])
     assert proof["marker"]["created_read_deleted"] is True and proof["marker"]["remaining"] == 0
-    assert proof["suite"] == (GRAPHQL_NETWORK_TEST if mode == "workflow-graphql-network" else GRAPHQL_TEST if mode == "workflow-graphql" else (
+    assert proof["suite"] == (LIFECYCLE_TEST if mode == LIFECYCLE_MODE else JOIN_TEST if mode == JOIN_MODE else EXECUTION_TEST if mode == EXECUTION_MODE else GRAPHQL_NETWORK_TEST if mode == "workflow-graphql-network" else GRAPHQL_TEST if mode == "workflow-graphql" else (
         CLI_TEST
         if mode == "workflow-cli"
         else (
@@ -239,12 +303,42 @@ def validate_client_proof(proof, mode, junit=None, network_manifest=None):
         )
     )
     )
-    if mode == "workflow-graphql":
+    if mode == JOIN_MODE:
+        assert proof["network_manifest"] == network_manifest
+        assert proof["children_verified"] is True and not proof["missing_process_witnesses"]
+        assert len(proof["joined_processes"]) == 17
+        assert proof["allowed"]["child_launch"] == 12 and proof["allowed"]["bolt"] > 0
+        assert not any(proof["forbidden"].values())
+        assert proof["preimport"]["before_package_imports"] is True
+    if mode in ("workflow-graphql", LIFECYCLE_MODE):
         assert proof["network_manifest"] == network_manifest
         assert proof["allowed"]["child_launch"] == 0 and proof["allowed"]["bolt"] > 0
         assert not any(proof["forbidden"].values())
         assert proof["preimport"]["before_package_imports"] is True
         assert proof["no_children"] is True
+    if mode == LIFECYCLE_MODE:
+        assert network_manifest is not None
+        assert set(proof["preimport"]["kernel_denial"]) == {"2", "10"}
+        assert proof["server"]["address"] == network_manifest["ip"] + ":7687"
+        detail = proof["lifecycle"]
+        assert detail["historical_owner_sha256"] == LIFECYCLE_ARCHIVE_SHA256
+        assert detail["test_effects_denied"] is True
+        assert detail["installed_active_worker_shutdown_proven"] is False
+        assert set(detail["blocked_admission"]) == {"current", "historical"}
+        for kind, observation in detail["blocked_admission"].items():
+            assert set(observation) == {"admission_entered", "close_pending", "refused", "area_retained", "stop_before_release", "closed_after_release"}
+            assert all(value is True for name, value in observation.items() if name != "stop_before_release")
+            assert observation["stop_before_release"] is (kind == "current")
+    if mode == EXECUTION_MODE:
+        assert proof["network_manifest"] == network_manifest
+        assert proof["children_verified"] is True
+        assert len(proof["execution_admission_processes"]) == 2
+        assert all(row["returncode"] == 0 for row in proof["execution_admission_processes"])
+        assert all(row["loader_events"] == [{"event": "call"}, {"event": "return", "accepted": True}]
+                   for row in proof["execution_admission_processes"])
+        assert proof["allowed"]["child_launch"] == 2 and proof["allowed"]["bolt"] > 0
+        assert not any(proof["forbidden"].values())
+        assert proof["preimport"]["before_package_imports"] is True
     if mode == "workflow-graphql-network":
         assert proof["network_manifest"] == network_manifest
         assert proof["children_verified"] is True and len(proof["network_processes"]) == 23 and len(proof["network_servers"]) == 3
@@ -268,6 +362,13 @@ def validate_client_proof(proof, mode, junit=None, network_manifest=None):
         assert cases and len(cases) == proof["tests"], "Empty or inconsistent workflow JUnit"
         assert not any(list(case) for case in cases), "Skipped/failed workflow JUnit"
         assert not any(node.tag in ("error", "failure", "skipped") for node in tree.iter())
+        if mode == LIFECYCLE_MODE:
+            assert len(cases) == len(LIFECYCLE_CASES)
+            assert {case.attrib["name"] for case in cases} == set(LIFECYCLE_CASES)
+        if mode == JOIN_MODE:
+            assert len(cases) == 1 and cases[0].attrib["name"] == "test_installed_execution_survives_submit_exit"
+        if mode == EXECUTION_MODE:
+            assert len(cases) == 1 and cases[0].attrib["name"] == "test_fresh_installed_execution_configuration_admission"
         if mode == "workflow-cli":
             assert {case.attrib["name"] for case in cases} == {
                 "test_fresh_default_module_run_status_and_dependency_denials"
@@ -304,7 +405,7 @@ def validate_client_proof(proof, mode, junit=None, network_manifest=None):
 def inside(mode):
     """Exercise genuine Bolt transport before optionally running the fixed suite."""
     process = mode in BOLT_MODES
-    query_only = mode in GRAPHQL_MODES
+    query_only = mode in GRAPHQL_BOOTSTRAP_MODES
     selected_test = (
         CLI_TEST
         if mode == "workflow-cli"
@@ -312,6 +413,12 @@ def inside(mode):
     )
     if query_only:
         selected_test = GRAPHQL_NETWORK_TEST if mode == "workflow-graphql-network" else GRAPHQL_TEST
+    if mode == EXECUTION_MODE:
+        selected_test = EXECUTION_TEST
+    if mode == JOIN_MODE:
+        selected_test = JOIN_TEST
+    if mode == LIFECYCLE_MODE:
+        selected_test = LIFECYCLE_TEST
     uri = URI
     guard = None
     proof = {
@@ -331,7 +438,20 @@ def inside(mode):
             import workflow_process_harness as harness
 
             proof["preimport"] = harness.preflight()
-            proof["source_sha256"] = harness.verify_sources(scene=mode in SCENE_MODES, query_only=query_only, network=mode == "workflow-graphql-network")
+            if mode == LIFECYCLE_MODE:
+                import workflow_graphql_execution_lifecycle_harness as lifecycle
+
+                proof["source_sha256"] = lifecycle.verify_sources()
+            elif mode == EXECUTION_MODE:
+                import workflow_graphql_execution_harness as execution_harness
+
+                proof["source_sha256"] = execution_harness.verify_sources()
+            elif mode == JOIN_MODE:
+                import workflow_graphql_execution_join_harness as joined
+
+                proof["source_sha256"] = joined.verify_sources()
+            else:
+                proof["source_sha256"] = harness.verify_sources(scene=mode in SCENE_MODES, query_only=query_only, network=mode == "workflow-graphql-network")
             assert os.statvfs("/network/manifest.json").f_flag & os.ST_RDONLY
             network_manifest = json.loads(Path("/network/manifest.json").read_text())
             assert set(network_manifest) == {"container_id", "network_id", "ip", "port"}
@@ -351,10 +471,17 @@ def inside(mode):
                 from workflow_graphql_network_harness import NetworkGuards
 
                 guard = NetworkGuards("harness", network_manifest["ip"])
+            if mode == EXECUTION_MODE:
+                guard = execution_harness.ExecutionAdmissionGuards("harness", network_manifest["ip"])
+            if mode == JOIN_MODE:
+                guard = joined.JoinGuards("harness", network_manifest["ip"])
+                joined.ACTIVE = guard
             harness.ACTIVE = guard
             guard.install()
             if query_only:
                 proof["imports"] = graphql_imports(proof["preimport"], guard)
+            if mode == JOIN_MODE:
+                sys.path.insert(0, "/source/scripts")
             if mode in SCENE_MODES:
                 proof["metadata"] = harness.replay_scene_metadata(metadata, guard)
             import platform
@@ -419,6 +546,8 @@ def inside(mode):
                     "remaining": 0,
                 }
         proof["driver_closed"] = True
+        if mode == LIFECYCLE_MODE:
+            lifecycle_before = lifecycle.begin_tests(guard)
         if mode != "self-check":
             os.environ["ARENA_WORKFLOW_NEO4J_URI"] = uri
             os.environ["ARENA_WORKFLOW_NEO4J_DATABASE"] = DATABASE
@@ -440,7 +569,14 @@ def inside(mode):
                 "--junitxml=/evidence/pytest.xml",
                 "/source/" + selected_test,
             ])
+            if mode == EXECUTION_MODE:
+                # Retain completed interpreter evidence even on application assertion RED.
+                proof.update(execution_harness.verify_children(guard, proof["source_sha256"]))
+            if mode == JOIN_MODE:
+                proof.update(joined.verify_children(guard, proof["source_sha256"], positive=result == 0))
             assert result == 0, "Workflow integration suite failed"
+            if mode == LIFECYCLE_MODE:
+                proof.update(lifecycle.finish_tests(guard, lifecycle_before, proof["source_sha256"]))
             import xml.etree.ElementTree as ET
 
             cases = list(ET.parse("/evidence/pytest.xml").getroot().iter("testcase"))
@@ -449,6 +585,8 @@ def inside(mode):
                 scope="exact workflow integration suite against disposable Neo4j",
                 tests=len(cases),
             )
+            if mode == LIFECYCLE_MODE:
+                proof["scope"] = "in-process real-owner/ASGI lifecycle with inert external ports; Bolt self-check only"
             if mode == "workflow-cli":
                 proof.update(harness.verify_cli_children(guard, proof["source_sha256"]))
             if mode == "workflow-scene":
@@ -483,7 +621,7 @@ def inside(mode):
                 from workflow_graphql_network_harness import verify_children
 
                 proof.update(verify_children(guard, proof["source_sha256"]))
-            else:
+            elif mode not in (EXECUTION_MODE, JOIN_MODE):
                 assert not guard.children
                 proof["no_children"] = True
             proof["runtime_modules"] = graphql_runtime_modules()
@@ -509,6 +647,19 @@ def stage_source(root, destination, mode, *, provision=None):
         | {"isaaclab_arena"}
     )
     todo = [SELF] + ([TEST] if mode == "workflow" else [])
+    if mode == LIFECYCLE_MODE:
+        from confined_io import read_confined
+
+        inventory = json.loads(read_confined(root, LIFECYCLE_INVENTORY))
+        assert type(inventory) is list and len(inventory) == len(set(inventory)) == LIFECYCLE_SOURCE_LIMIT - 4
+        todo += LIFECYCLE_ROOTS
+    if mode == EXECUTION_MODE:
+        todo += [EXECUTION_TEST, EXECUTION_HELPER, EXECUTION_SPEC, PROCESS_HELPER,
+                 "isaaclab_arena/agentic_environment_generation/workflow/cli.py"]
+    if mode == JOIN_MODE:
+        inventory = json.loads((root / JOIN_INVENTORY).read_text())
+        assert type(inventory) is list and len(inventory) == len(set(inventory)) == JOIN_SOURCE_LIMIT - 4
+        todo += inventory
     if mode in GRAPHQL_MODES:
         todo += [GRAPHQL_NETWORK_TEST if mode == "workflow-graphql-network" else GRAPHQL_TEST, PROCESS_HELPER]
         if mode == "workflow-graphql-network":
@@ -536,13 +687,17 @@ def stage_source(root, destination, mode, *, provision=None):
             data = source.read(name)
             captured[name] = data
             assert len(captured) <= (
-                SCENE_SOURCE_LIMIT if mode in SCENE_MODES else PROCESS_SOURCE_LIMIT if mode in PROCESS_MODES else GRAPHQL_NETWORK_SOURCE_LIMIT if mode == "workflow-graphql-network" else GRAPHQL_SOURCE_LIMIT if mode == "workflow-graphql" else 128
+                LIFECYCLE_SOURCE_LIMIT if mode == LIFECYCLE_MODE else JOIN_SOURCE_LIMIT if mode == JOIN_MODE else EXECUTION_SOURCE_LIMIT if mode == EXECUTION_MODE else SCENE_SOURCE_LIMIT if mode in SCENE_MODES else PROCESS_SOURCE_LIMIT if mode in PROCESS_MODES else GRAPHQL_NETWORK_SOURCE_LIMIT if mode == "workflow-graphql-network" else GRAPHQL_SOURCE_LIMIT if mode == "workflow-graphql" else 128
             )
             assert sum(map(len, captured.values())) <= 8 * 1024 * 1024
             if name == SELF or not name.endswith(".py"):
                 continue
             path = Path(name)
             package = list(path.parent.parts)
+            if mode == LIFECYCLE_MODE and name == LIFECYCLE_ARCHIVE:
+                assert hashlib.sha256(data).hexdigest() == LIFECYCLE_ARCHIVE_SHA256
+                # Resolve the fixed loader's actual relative imports, not outputs/.
+                package = "isaaclab_arena/agentic_environment_generation/workflow/api".split("/")
             for i in range(1, len(package) + 1):
                 init = "/".join(package[:i]) + "/__init__.py"
                 if source.is_file(init):
@@ -553,7 +708,7 @@ def stage_source(root, destination, mode, *, provision=None):
                 # old cohort's deliberately conservative closure unchanged.
                 class RuntimeImports(ast.NodeTransformer):
                     def visit_FunctionDef(self, node):
-                        if mode in GRAPHQL_MODES and name == PROCESS_HELPER and node.name in {
+                        if mode in GRAPHQL_BOOTSTRAP_MODES and name == PROCESS_HELPER and node.name in {
                             "child", "scene_child", "cli_child", "load_scene_metadata", "replay_scene_metadata",
                             "verify_scene_children", "verify_cli_children"
                         }:
@@ -595,7 +750,20 @@ def stage_source(root, destination, mode, *, provision=None):
                             todo.append(candidate)
     from confined_io import new_destination
 
-    if mode in GRAPHQL_MODES:
+    if mode == EXECUTION_MODE:
+        literals = [node.value for node in ast.parse(captured[EXECUTION_HELPER]).body
+                    if isinstance(node, ast.Assign)
+                    and any(isinstance(target, ast.Name) and target.id == "SOURCE_FILES" for target in node.targets)]
+        assert len(literals) == 1
+        exact_files = ast.literal_eval(literals[0])
+        assert type(exact_files) is tuple and all(type(name) is str for name in exact_files)
+        assert len(exact_files) == len(set(exact_files))
+        assert set(captured) == set(exact_files), "E0 source inventory changed; fresh admission review required"
+    if mode == JOIN_MODE:
+        assert set(captured) == set(inventory), "E1 source closure changed; fresh exact inventory review required"
+    if mode == LIFECYCLE_MODE:
+        assert set(captured) == set(inventory), "Lifecycle source closure changed; fresh exact inventory review required"
+    if mode in GRAPHQL_BOOTSTRAP_MODES:
         assert provision is not None
         captured["graphql-import-check.py"] = graphql_probe_source(root)
         captured["graphql-profile.json"] = json.dumps({"recipe_sha256": provision["recipe_sha256"]}).encode()
@@ -606,6 +774,17 @@ def stage_source(root, destination, mode, *, provision=None):
         ).encode()
     if mode in PROCESS_MODES:
         assert len(captured) <= (SCENE_SOURCE_LIMIT if mode in SCENE_MODES else PROCESS_SOURCE_LIMIT)
+        assert sum(map(len, captured.values())) <= 8 * 1024 * 1024
+    if mode == EXECUTION_MODE:
+        assert len(captured) <= EXECUTION_SOURCE_LIMIT
+        assert sum(map(len, captured.values())) <= 8 * 1024 * 1024
+    if mode == JOIN_MODE:
+        assert len(captured) == JOIN_SOURCE_LIMIT
+        assert len(captured["source-manifest.json"]) <= 65536
+        assert sum(map(len, captured.values())) <= 8 * 1024 * 1024
+    if mode == LIFECYCLE_MODE:
+        assert len(captured) == LIFECYCLE_SOURCE_LIMIT
+        assert len(captured["source-manifest.json"]) <= 65536
         assert sum(map(len, captured.values())) <= 8 * 1024 * 1024
     with new_destination(destination) as output:
         for name, data in captured.items():
@@ -625,12 +804,16 @@ def main(argv=None):
             "workflow-cli",
             "workflow-graphql",
             "workflow-graphql-network",
+            EXECUTION_MODE,
+            JOIN_MODE,
+            LIFECYCLE_MODE,
         ),
+        # Lifecycle is explicit; no default, legacy case or launch limit changes.
     )
     parser.add_argument("--runtime-image")
     parser.add_argument("--provision-manifest", type=Path)
     options = parser.parse_args(argv)
-    if options.mode not in GRAPHQL_MODES:
+    if options.mode not in GRAPHQL_BOOTSTRAP_MODES:
         assert options.runtime_image is None and options.provision_manifest is None
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root / "web/arena-workbench/tests/e2e/functional-v7"))
@@ -640,6 +823,12 @@ def main(argv=None):
     token = "arena-neo4j-" + uuid.uuid4().hex
     output = (root / "outputs/workflow/plan03-implementation/graphql-query-launch/implementation/runs" if options.mode == "workflow-graphql-network" else root / "outputs/workflow/plan03-implementation/graphql-query-api/runs" if options.mode == "workflow-graphql"
               else root / "web/arena-workbench/tests/e2e/functional-v7/.runs") / token
+    if options.mode == EXECUTION_MODE:
+        output = root / "outputs/workflow/plan04-implementation/installed-execution/runs" / token
+    if options.mode == JOIN_MODE:
+        output = root / "outputs/workflow/plan04-implementation/installed-execution/joined-runs" / token
+    if options.mode == LIFECYCLE_MODE:
+        output = root / "outputs/workflow/plan04-implementation/installed-execution/lifecycle-runs" / token
     # Validate every ancestor before the first write; never resolve .runs links.
     with ConfinedRoot(output.parent.parent) as parent:
         try:
@@ -679,7 +868,7 @@ def main(argv=None):
     try:
         discovery = discover(root, False)
         client_image = CLIENT_IMAGE
-        if options.mode in GRAPHQL_MODES:
+        if options.mode in GRAPHQL_BOOTSTRAP_MODES:
             discovery = select_graphql_runtime(discovery, options.runtime_image, options.provision_manifest)
             client_image = discovery["selected_runtime_image"]
             run.proof["graphql_provision_manifest_sha256"] = GRAPHQL_MANIFEST_SHA256
@@ -687,7 +876,12 @@ def main(argv=None):
         run.proof["host_root"] = discovery["host_root"]
         for image in (DB_IMAGE, client_image):
             assert docker("image", "inspect", "--format", "{{.Id}}", image) == image
+        if options.mode == JOIN_MODE:
+            run.proof["historical_metadata"] = validate_join_historical_metadata(root)
         manifest = stage_source(root, output / "source", options.mode, provision=discovery.get("provision"))
+        if options.mode == JOIN_MODE:
+            historical = run.proof["historical_metadata"]
+            assert manifest[historical["fixture"]] == historical["fixture_sha256"]
         run.proof["source_sha256"] = manifest
         host = discovery["host_root"] + "/" + output.relative_to(root).as_posix()
         run.save()
@@ -809,8 +1003,9 @@ def main(argv=None):
                     "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1",
                     "NVIDIA_VISIBLE_DEVICES=void",
                     "CUDA_VISIBLE_DEVICES=",
+                    *(["OPENBLAS_NUM_THREADS=1", "OMP_NUM_THREADS=1", "MKL_NUM_THREADS=1"] if options.mode == JOIN_MODE else []),
                     "/isaac-sim/python.sh",
-                    *(["-I", "-S"] if options.mode in GRAPHQL_MODES else []),
+                    *(["-I", "-S"] if options.mode in GRAPHQL_BOOTSTRAP_MODES else []),
                     "/source/" + SELF,
                     "--inside",
                     options.mode,
@@ -938,6 +1133,54 @@ def main(argv=None):
                 run.proof["evidence_sha256"][name] = hashlib.sha256(read_confined(output / "evidence", name)).hexdigest()
             run.proof["captured_source_files"] = len(manifest)
             run.proof["captured_source_bytes"] = sum(len(read_confined(output / "source", name)) for name in manifest)
+        if options.mode == EXECUTION_MODE:
+            from check_proof import graphql_import_contract
+
+            graphql_import_contract(dict(discovery["provision"], imports=proof["imports"]))
+            run.proof["evidence_sha256"] = {}
+            for row in proof["execution_admission_processes"]:
+                name = row["evidence_file"]
+                assert name == f"graphql-execution-process-{row['pid']}.json"
+                raw = read_confined(output / "evidence", name)
+                assert hashlib.sha256(raw).hexdigest() == row["evidence_sha256"]
+                detail = json.loads(raw)
+                assert detail["source_sha256"] == proof["source_sha256"]
+                assert detail["pid"] == row["pid"] and detail["returncode"] == row["returncode"]
+                assert detail["loader_events"] == row["loader_events"]
+                assert not any(detail["allowed"].values()) and not any(detail["forbidden"].values())
+                graphql_import_contract(dict(discovery["provision"], imports=detail["imports"]))
+                run.proof["evidence_sha256"][name] = row["evidence_sha256"]
+            for name in ("client-proof.json", "pytest.xml", "execution-admission.json"):
+                run.proof["evidence_sha256"][name] = hashlib.sha256(read_confined(output / "evidence", name)).hexdigest()
+            run.proof["captured_source_files"] = len(manifest)
+            run.proof["captured_source_bytes"] = sum(len(read_confined(output / "source", name)) for name in manifest)
+        if options.mode == JOIN_MODE:
+            from check_proof import graphql_import_contract
+
+            graphql_import_contract(dict(discovery["provision"], imports=proof["imports"]))
+            for row in proof["joined_processes"]:
+                detail = json.loads(read_confined(output / "evidence", f"join-process-{row['pid']}.json"))
+                assert detail["source_sha256"] == proof["source_sha256"]
+                assert detail["status"] == "completed" and detail["returncode"] == 0
+                assert not any(detail["forbidden"].values())
+                graphql_import_contract(dict(discovery["provision"], imports=detail["imports"]))
+            run.proof["captured_source_files"] = len(manifest)
+            run.proof["captured_source_bytes"] = sum(len(read_confined(output / "source", name)) for name in manifest)
+        if options.mode == LIFECYCLE_MODE:
+            from check_proof import graphql_import_contract
+
+            graphql_import_contract(dict(discovery["provision"], imports=proof["imports"]))
+            assert proof["source_sha256"] == {name: digest for name, digest in manifest.items() if name != "source-manifest.json"}
+            witness = json.loads(read_confined(output / "evidence", "lifecycle-blocked-admission.json"))
+            assert witness["historical_path"] == LIFECYCLE_ARCHIVE
+            assert witness["historical_sha256"] == LIFECYCLE_ARCHIVE_SHA256
+            assert witness["observations"] == proof["lifecycle"]["blocked_admission"]
+            run.proof["evidence_sha256"] = {
+                name: hashlib.sha256(read_confined(output / "evidence", name)).hexdigest()
+                for name in ("client-proof.json", "pytest.xml", "lifecycle-blocked-admission.json")
+            }
+            run.proof["captured_source_files"] = len(manifest)
+            run.proof["captured_source_bytes"] = sum(len(read_confined(output / "source", name)) for name in manifest)
         run.proof.update(client=proof, status="passed")
     except BaseException:
         run.proof["error"] = traceback.format_exc()
@@ -984,9 +1227,72 @@ def main(argv=None):
                 except BaseException:
                     clean = False
                     run.proof["network_cleanup_error"] = traceback.format_exc()
+            if options.mode == EXECUTION_MODE:
+                # Hash actual partial failure evidence after owned processes stop.
+                # No success-only witness is invented when startup/pytest failed.
+                import re
+
+                try:
+                    with ConfinedRoot(output / "evidence") as evidence:
+                        names = sorted(os.listdir(evidence.fd))
+                    assert len(names) <= 5
+                    assert all(name in {"client-proof.json", "pytest.xml", "execution-admission.json"}
+                               or re.fullmatch(r"graphql-execution-process-[1-9][0-9]*\.json", name) for name in names)
+                    actual = {}
+                    for name in names:
+                        raw = read_confined(output / "evidence", name)
+                        assert len(raw) <= 4 * 1024 * 1024
+                        actual[name] = hashlib.sha256(raw).hexdigest()
+                    for name, digest in run.proof.get("evidence_sha256", {}).items():
+                        assert actual.get(name) == digest, "Execution admission evidence changed during cleanup"
+                    run.proof["evidence_sha256"] = actual
+                except BaseException:
+                    clean = False
+                    run.proof["evidence_collection_error"] = traceback.format_exc()
+            if options.mode == JOIN_MODE:
+                # Hash actual partial witnesses after owned resources stop. Keep
+                # incomplete/failed records as evidence, never fabricate success.
+                import re
+
+                try:
+                    with ConfinedRoot(output / "evidence") as evidence:
+                        names = sorted(os.listdir(evidence.fd))
+                    assert len(names) <= 55
+                    fixed = {"client-proof.json", "pytest.xml", "join-case.json", "join-detached.json",
+                             "join-http-result.json", "join-retained.json", "join-positive.json"}
+                    fixed |= {name + ".pending" for name in fixed if name.startswith("join-")}
+                    assert all(name in fixed or re.fullmatch(
+                        r"(?:join-process-[1-9][0-9]*(?:-started)?|join-launch-[1-9][0-9]*|generation-child-[1-9][0-9]*-(?:sdk|active))\.json(?:\.pending)?",
+                        name) for name in names)
+                    actual = {}
+                    for name in names:
+                        raw = read_confined(output / "evidence", name)
+                        assert len(raw) <= 4 * 1024 * 1024
+                        actual[name] = hashlib.sha256(raw).hexdigest()
+                    run.proof["evidence_sha256"] = actual
+                except BaseException:
+                    clean = False
+                    run.proof["evidence_collection_error"] = traceback.format_exc()
+            if options.mode == LIFECYCLE_MODE:
+                # Preserve only actual partial evidence; collection is not RED.
+                try:
+                    with ConfinedRoot(output / "evidence") as evidence:
+                        names = sorted(os.listdir(evidence.fd))
+                    assert set(names) <= {"client-proof.json", "pytest.xml", "lifecycle-blocked-admission.json"}
+                    actual = {}
+                    for name in names:
+                        raw = read_confined(output / "evidence", name)
+                        assert len(raw) <= 4 * 1024 * 1024
+                        actual[name] = hashlib.sha256(raw).hexdigest()
+                    for name, digest in run.proof.get("evidence_sha256", {}).items():
+                        assert actual.get(name) == digest, "Lifecycle evidence changed during cleanup"
+                    run.proof["evidence_sha256"] = actual
+                except BaseException:
+                    clean = False
+                    run.proof["evidence_collection_error"] = traceback.format_exc()
             for name, digest in run.proof.get("source_sha256", {}).items():
                 assert hashlib.sha256(read_confined(output / "source", name)).hexdigest() == digest
-                if options.mode in GRAPHQL_MODES and name not in {
+                if options.mode in GRAPHQL_BOOTSTRAP_MODES and name not in {
                     "closure.json", "source-manifest.json", "graphql-import-check.py", "graphql-profile.json"
                 }:
                     assert hashlib.sha256(read_confined(root, name)).hexdigest() == digest, "Live query cohort source changed"
@@ -1032,6 +1338,9 @@ if __name__ == "__main__":
             "workflow-cli",
             "workflow-graphql",
             "workflow-graphql-network",
+            EXECUTION_MODE,
+            JOIN_MODE,
+            LIFECYCLE_MODE,
         )
         raise SystemExit(inside(sys.argv[2]))
     raise SystemExit(main())

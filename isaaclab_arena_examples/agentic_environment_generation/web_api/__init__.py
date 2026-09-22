@@ -5,6 +5,13 @@
 
 """Local single-operator workbench API factory."""
 
-from .application import create_app
-
 __all__ = ["create_app"]
+
+
+def __getattr__(name):
+    """Load the legacy app factory only when explicitly requested."""
+    if name == "create_app":
+        from .application import create_app
+
+        return create_app
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

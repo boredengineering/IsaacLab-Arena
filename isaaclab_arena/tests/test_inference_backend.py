@@ -1152,7 +1152,9 @@ def test_transport_module_import_defers_sdk_and_backend(monkeypatch):
         return original_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", guarded_import)
-    spec = importlib.util.spec_from_file_location("transport_import_unit", inference_transport.__file__)
+    spec = importlib.util.spec_from_file_location(
+        "isaaclab_arena.agentic_environment_generation.workflow.transport_import_unit", inference_transport.__file__
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module.CallAllowance(max_calls=1, deadline=0).attempted_calls == 0

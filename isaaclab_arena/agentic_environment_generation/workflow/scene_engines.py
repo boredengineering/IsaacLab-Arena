@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from ..inference_profiles import checked_inference_profile
 from .inference_transport import CallAllowance, bounded_client, checked_workflow_accounting
+from .request_envelope import RequestEnvelope
 
 
 @dataclass(frozen=True)
@@ -30,17 +31,32 @@ class BoundedSceneModels:
 
     Approved roles are caller-authorized {role: {model, endpoint}} bindings, not grants.
     No prices are inferred. One instance serves one exact model/endpoint attestation.
+    request_envelopes optionally supplies every approved role's frozen RequestEnvelope;
+    refinement retains the existing generation role. Absent envelopes preserve legacy
+    configuration/serialization. This callable seam is not installed or durable binding.
     """
 
-    def __init__(self, *, config, approved_roles, allowance):
-        required = {"api_key", "model", "base_url", "inference_profile", "workflow_accounting"}
+    def __init__(self, *, config, approved_roles, allowance, request_envelopes=None):
+        required = {
+            "api_key",
+            "model",
+            "base_url",
+            "inference_profile",
+            "workflow_accounting",
+        }
         if type(config) is not dict or set(config) != required:
             raise ValueError("complete explicit model configuration required")
         if any(type(config[k]) is not str or not config[k] for k in ("api_key", "model", "base_url")):
             raise ValueError("explicit provider configuration required")
-        checked_inference_profile(config["inference_profile"], model=config["model"], base_url=config["base_url"])
+        checked_inference_profile(
+            config["inference_profile"],
+            model=config["model"],
+            base_url=config["base_url"],
+        )
         accounting = checked_workflow_accounting(
-            config["workflow_accounting"], model=config["model"], endpoint=config["base_url"]
+            config["workflow_accounting"],
+            model=config["model"],
+            endpoint=config["base_url"],
         )
         if (
             not isinstance(allowance, CallAllowance)
@@ -59,21 +75,48 @@ class BoundedSceneModels:
         self._config = copy.deepcopy(config)
         self._roles = frozenset(approved_roles)
         self.allowance = allowance
+        self._envelopes = None if request_envelopes is None else dict(request_envelopes)
+        if self._envelopes is not None:
+            if set(self._envelopes) != self._roles:
+                raise ValueError("request envelope roles mismatch")
+            for envelope in self._envelopes.values():
+                if type(envelope) is not RequestEnvelope:
+                    raise ValueError("frozen request envelope required")
+                envelope.check_binding(
+                    model=config["model"],
+                    endpoint=config["base_url"],
+                    accounting=accounting,
+                )
 
     def _config_for(self, role):
         if role not in self._roles:
             raise ValueError("model role not approved")
         return {k: v for k, v in self._config.items() if k != "workflow_accounting"} | {
             "load_dotenv": False,
-            "max_tokens": min(4096, self._config["workflow_accounting"]["max_tokens"]),
+            "max_tokens": (
+                self._envelopes[role].max_output_tokens
+                if self._envelopes is not None
+                else min(4096, self._config["workflow_accounting"]["max_tokens"])
+            ),
             "max_retries": 0,
         }
+
+    def _client(self, role):
+        return bounded_client(
+            self._config,
+            allowance=self.allowance,
+            request_envelope=None if self._envelopes is None else self._envelopes[role],
+        )
 
     @staticmethod
     def _catalogues(asset_catalog, relation_catalog, task_catalog):
         if any(v is None for v in (asset_catalog, relation_catalog, task_catalog)):
             raise ValueError("explicit catalogues required")
-        return dict(asset_catalog=asset_catalog, relation_catalog=relation_catalog, task_catalog=task_catalog)
+        return dict(
+            asset_catalog=asset_catalog,
+            relation_catalog=relation_catalog,
+            task_catalog=task_catalog,
+        )
 
     @staticmethod
     def _proposal(spec, agent, *, protect):
@@ -121,13 +164,17 @@ class BoundedSceneModels:
         if type(require_prior) is not bool:
             raise ValueError("explicit prior requirement required")
         snapshot = priors.verified_snapshot(
-            prior, prompt=prompt, contract_digest=contract_digest, run_id=run_id, protect=protect
+            prior,
+            prompt=prompt,
+            contract_digest=contract_digest,
+            run_id=run_id,
+            protect=protect,
         )
         if require_prior and snapshot["status"] in {"unavailable", "not_requested"}:
             raise ValueError("required prior unavailable")
         from ..environment_generation_agent import EnvironmentGenerationAgent
 
-        with bounded_client(self._config, allowance=self.allowance):
+        with self._client("generation"):
             agent = EnvironmentGenerationAgent(**config)
             spec, _ = agent.generate_spec(
                 prompt,
@@ -138,7 +185,16 @@ class BoundedSceneModels:
             )
             return self._proposal(spec, agent, protect=protect)
 
-    def refine(self, *, base_spec, feedback, protect, asset_catalog, relation_catalog, task_catalog):
+    def refine(
+        self,
+        *,
+        base_spec,
+        feedback,
+        protect,
+        asset_catalog,
+        relation_catalog,
+        task_catalog,
+    ):
         """Propose against the exact base and caller-verified retained structured feedback.
 
         The caller must obtain feedback from durable decision/evidence readback (ScenePorts
@@ -155,9 +211,15 @@ class BoundedSceneModels:
             raise ValueError("structured retained feedback required")
         checked = ArenaEnvGraphSpec.model_validate(base_spec.model_dump(mode="json"))
         encoded = _protected(feedback, protect).decode("utf-8")
-        with bounded_client(self._config, allowance=self.allowance):
+        with self._client("generation"):
             agent = EnvironmentGenerationAgent(**config)
-            spec, _ = agent.refine_spec(checked, encoded, **catalogues, publish_to_graph=False, proposal_only=True)
+            spec, _ = agent.refine_spec(
+                checked,
+                encoded,
+                **catalogues,
+                publish_to_graph=False,
+                proposal_only=True,
+            )
             return self._proposal(spec, agent, protect=protect)
 
     def assess(self, *, criterion, candidate, cohort, artifacts, observation, protect):
@@ -185,6 +247,6 @@ class BoundedSceneModels:
             "Do not claim aggregate success, physics, support or policy performance. Request:\n"
             + canonical(request).decode("utf-8")
         )
-        with bounded_client(self._config, allowance=self.allowance):
+        with self._client("assessment"):
             backend = InferenceBackend(**config)
             return backend.multimodal_chat(prompt, images)

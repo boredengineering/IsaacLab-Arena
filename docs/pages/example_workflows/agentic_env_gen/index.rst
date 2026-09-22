@@ -24,6 +24,10 @@ For Plan 03's managed capture and task-bound policy adapter contracts, see
 :doc:`workflow_native_policy`. Those isolated-tested components do not enable
 native execution through the :doc:`query-only installed CLI <workflow_query_cli>`.
 
+Begin Plan 04 operator preparation with :doc:`workflow_setup_readiness`, an
+offline inventory of explicit public selections and setup blockers. It does not
+read credentials, probe services or authorize execution.
+
 
 Prompt to Environment Graph Spec
 --------------------------------

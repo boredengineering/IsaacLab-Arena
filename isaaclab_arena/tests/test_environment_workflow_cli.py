@@ -550,6 +550,233 @@ class BootstrapTests(unittest.TestCase):
                     self.assertIn("unavailable", result)
 
 
+class OfflineSetupReportTests(unittest.TestCase):
+    def test_installed_cli_reports_unresolved_roles_without_setup(self):
+        from isaaclab_arena.agentic_environment_generation.workflow.cli import main
+
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(["setup-readiness"])
+        self.assertEqual(code, 0, err.getvalue())
+        report = json.loads(out.getvalue())
+        self.assertEqual(report["schema_version"], 1)
+        self.assertEqual(report["outcome"], "scene-only")
+        self.assertEqual(
+            set(report["roles"]),
+            {"generation", "assessment", "repair", "local_policy", "prior_read", "operational_db"},
+        )
+        for row in report["roles"].values():
+            self.assertEqual(row["public_selection"], "unresolved")
+            self.assertEqual(row["access"], "not_checked")
+            self.assertEqual(row["capability"], "not_checked")
+            self.assertEqual(row["execution"], "not_authorized")
+            self.assertIsNone(row["checked_at"])
+        self.assertFalse(report["execution_authorized"])
+        self.assertEqual(len(report["selection_sha256"]), 64)
+        self.assertTrue(report["blockers"])
+        self.assertTrue(all(b["next_action"] for b in report["blockers"]))
+        self.assertTrue(all("scene-only" in b["outcomes"] for b in report["blockers"]))
+        self.assertTrue(all("local_policy" not in b["roles"] for b in report["blockers"]))
+        if Path("/evidence").is_dir():
+            (Path("/evidence") / "setup-readiness-unresolved.json").write_text(out.getvalue())
+
+    def test_explicit_selection_file_is_the_only_data_read(self):
+        from unittest.mock import patch
+
+        from isaaclab_arena.agentic_environment_generation.workflow import cli
+
+        with tempfile.TemporaryDirectory() as directory:
+            selected = Path(directory) / "public.json"
+            selected.write_text(
+                json.dumps({
+                    "schema_version": 1,
+                    "outcome": "required-policy",
+                    "roles": {
+                        "generation": {
+                            "provider": "openai",
+                            "model": "Literal.Model-1",
+                            "endpoint": "https://api.openai.com/v1",
+                        },
+                    },
+                })
+            )
+            opened = []
+            real_open = os.open
+
+            def only_selected(path, *args, **kwargs):
+                self.assertEqual(path, str(selected))
+                opened.append(path)
+                return real_open(path, *args, **kwargs)
+
+            out, err = io.StringIO(), io.StringIO()
+            with (
+                patch.object(os, "open", only_selected),
+                contextlib.redirect_stdout(out),
+                contextlib.redirect_stderr(err),
+            ):
+                code = cli.main(["setup-readiness", "--selection", str(selected)])
+            self.assertEqual(code, 0, err.getvalue())
+            report = json.loads(out.getvalue())
+            self.assertEqual(opened, [str(selected)])
+            self.assertEqual(report["outcome"], "required-policy")
+            self.assertEqual(report["roles"]["generation"]["selection"]["model"], "Literal.Model-1")
+
+    def test_bad_selection_files_have_exact_static_errors(self):
+        from isaaclab_arena.agentic_environment_generation.workflow.cli import main
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sentinel-secret-path.json"
+            for raw in (
+                b"{sentinel-secret",
+                b"{}",
+                b"x" * 65537,
+                b"\xff",
+                b'{"schema_version":1,"schema_version":1}',
+                b"[" * 1000,
+            ):
+                path.write_bytes(raw)
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    code = main(["setup-readiness", "--selection", str(path)])
+                self.assertEqual(
+                    (code, out.getvalue(), err.getvalue()), (2, "", "setup-readiness: invalid selection file\n")
+                )
+            path.unlink()
+            for kind in ("missing", "directory", "symlink", "fifo"):
+                if kind == "directory":
+                    path.mkdir()
+                elif kind == "symlink":
+                    path.symlink_to(Path(directory))
+                elif kind == "fifo":
+                    os.mkfifo(path)
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    code = main(["setup-readiness", "--selection", str(path)])
+                self.assertEqual(
+                    (code, out.getvalue(), err.getvalue()), (2, "", "setup-readiness: invalid selection file\n")
+                )
+                if kind == "directory":
+                    path.rmdir()
+                elif kind != "missing":
+                    path.unlink()
+
+    def test_documented_selection_example_through_installed_cli(self):
+        from isaaclab_arena.agentic_environment_generation.workflow.cli import main
+
+        # Kept byte-equivalent as JSON to setup_selection.example.json; checked
+        # statically outside the sandbox without widening its source closure.
+        example = {
+            "schema_version": 1,
+            "outcome": "scene-only",
+            "roles": {
+                "generation": {
+                    "provider": "openai",
+                    "model": "gpt-4.1",
+                    "endpoint": "https://api.openai.com/v1",
+                    "inference_profile": None,
+                    "credential": {
+                        "alias": "cloud-example",
+                        "source": "private_file",
+                        "source_role": "models.generation",
+                        "public_id": "public-project-example",
+                    },
+                },
+                "assessment": {
+                    "provider": "openai",
+                    "model": "gpt-4.1",
+                    "endpoint": "https://api.openai.com/v1",
+                    "inference_profile": None,
+                    "credential": {
+                        "alias": "cloud-example",
+                        "source": "private_file",
+                        "source_role": "models.assessment",
+                        "public_id": "public-project-example",
+                    },
+                },
+                "repair": None,
+                "local_policy": None,
+                "prior_read": {
+                    "provider": "neo4j",
+                    "endpoint": "neo4j+s://research.example.invalid:7687",
+                    "database": "research-example",
+                    "authentication": "basic",
+                    "tls": "system_ca",
+                    "credential": {
+                        "alias": "prior-reader-example",
+                        "source": "private_file",
+                        "source_role": "databases.prior_read",
+                    },
+                },
+                "operational_db": {
+                    "provider": "neo4j",
+                    "endpoint": "bolt://192.0.2.10:7687",
+                    "database": "pilot-example",
+                    "authentication": "basic",
+                    "tls": "none",
+                    "credential": {
+                        "alias": "operational-example",
+                        "source": "private_file",
+                        "source_role": "databases.operational",
+                    },
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "public-selection.json"
+            path.write_text(json.dumps(example))
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = main(["setup-readiness", "--selection", str(path)])
+            self.assertEqual(code, 0, err.getvalue())
+            report = json.loads(out.getvalue())
+        self.assertEqual(report["selection"], example)
+        self.assertEqual(report["roles"]["generation"]["shared_alias_with"], ["assessment"])
+        self.assertEqual(report["database_compatibility"]["prior_read"]["transport"], "incompatible")
+        self.assertEqual(report["roles"]["repair"]["public_selection"], "unresolved")
+        self.assertFalse(report["execution_authorized"])
+
+    def test_query_only_dispatch_and_exact_error_screening_remain_unchanged(self):
+        import sys
+        from types import ModuleType
+        from unittest.mock import patch
+
+        from isaaclab_arena.agentic_environment_generation.workflow import cli
+
+        calls = []
+        client = ModuleType("isaaclab_arena.agentic_environment_generation.workflow.api.client")
+
+        def query(path, command, **kwargs):
+            calls.append((path, command, kwargs))
+            return {"retained": "Run.Exact"}
+
+        client.query = query
+        with patch.dict(sys.modules, {client.__name__: client}):
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                self.assertEqual(cli.main(["status", "--client", "/explicit/client", "Run.Exact"]), 0)
+            self.assertEqual(json.loads(out.getvalue()), {"retained": "Run.Exact"})
+            self.assertEqual(calls[0][:2], ("/explicit/client", "status"))
+            self.assertEqual(calls[0][2]["identifier"], "Run.Exact")
+
+            def denied(*args, **kwargs):
+                raise RuntimeError("SENTINEL-PRIVATE")
+
+            client.query = denied
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = cli.main(["status", "--client", "/explicit/client", "Run.Exact"])
+            self.assertEqual((code, out.getvalue(), err.getvalue()), (2, "", "workflow: query unavailable\n"))
+        for argv in (
+            ["setup-readiness", "--execution-authorized", "SENTINEL-PRIVATE"],
+            ["setup-readiness", "--sel", "SENTINEL-PRIVATE"],
+            ["run", "SENTINEL-PRIVATE"],
+        ):
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = cli.main(argv)
+            self.assertEqual((code, out.getvalue(), err.getvalue()), (2, "", "inspect-contract: invalid arguments\n"))
+
+
 class CoreDispatchTests(unittest.TestCase):
     def test_core_parser_dispatches_without_loading_domain_or_application(self):
         import argparse
@@ -564,7 +791,8 @@ class CoreDispatchTests(unittest.TestCase):
             body=[
                 node
                 for node in tree.body
-                if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name in {"main", "_StaticArgumentParser"}
+                if isinstance(node, (ast.FunctionDef, ast.ClassDef))
+                and node.name in {"main", "_StaticArgumentParser", "_add_installed_arguments"}
             ],
             type_ignores=[],
         )

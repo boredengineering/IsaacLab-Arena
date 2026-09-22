@@ -1,5 +1,8 @@
-# Copyright (c) 2026, The Isaac Lab Arena Project Developers.
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
 # SPDX-License-Identifier: Apache-2.0
+
 """Nonbrowser local bearer authentication before body consumption."""
 
 import hashlib
@@ -7,8 +10,8 @@ import math
 import re
 import secrets
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from ..scope_binding import ScopeBinding
 
@@ -158,13 +161,18 @@ def strict_json(raw):
     return value
 
 
-async def bounded_body(request):
+async def bounded_body(request, *, execution=False):
+    from ..contracts import MAX_CONTRACT_BYTES
+
+    # A JSON string may escape every contract byte. Domain parsing separately
+    # enforces the unchanged raw/canonical 2 MiB and depth-32 contract bounds.
+    limit = 6 * MAX_CONTRACT_BYTES + MAX_BODY_BYTES if execution else MAX_BODY_BYTES
     declared = request.headers.get("content-length")
-    if declared is not None and (not re.fullmatch(r"0|[1-9][0-9]{0,9}", declared) or int(declared) > MAX_BODY_BYTES):
+    if declared is not None and (not re.fullmatch(r"0|[1-9][0-9]{0,9}", declared) or int(declared) > limit):
         raise ValueError("Request rejected")
     data = bytearray()
     async for chunk in request.stream():
-        if len(data) + len(chunk) > MAX_BODY_BYTES:
+        if len(data) + len(chunk) > limit:
             raise ValueError("Request rejected")
         data.extend(chunk)
     if declared is not None and len(data) != int(declared):
@@ -172,7 +180,7 @@ async def bounded_body(request):
     return strict_json(bytes(data))
 
 
-def validate_document(body, schema):
+def validate_document(body, schema, *, execution=False):
     """Bound the expanded operation and validate all variables before resolver IO."""
     from graphql import Undefined, get_variable_values, parse, validate, value_from_ast_untyped
     from graphql.language import OperationType, ast
@@ -185,12 +193,14 @@ def validate_document(body, schema):
     fragments = {n.name.value: n for n in document.definitions if isinstance(n, ast.FragmentDefinitionNode)}
     if (
         len(operations) != 1
-        or operations[0].operation != OperationType.QUERY
+        or operations[0].operation
+        not in ({OperationType.QUERY, OperationType.MUTATION} if execution else {OperationType.QUERY})
         or len(fragments) > 16
         or len(document.definitions) != 1 + len(fragments)
     ):
         raise ValueError("Request rejected")
     operation = operations[0]
+    mutation = operation.operation == OperationType.MUTATION
     if body.get("operationName") is not None and (
         operation.name is None or operation.name.value != body["operationName"]
     ):
@@ -223,7 +233,10 @@ def validate_document(body, schema):
                 if (
                     counts["fields"] > 256
                     or counts["aliases"] > 16
-                    or counts["roots"] > 8
+                    or counts["roots"] > (1 if mutation else 8)
+                    or mutation
+                    and at_root
+                    and node.name.value != "submitWorkflow"
                     or node.name.value in ("__schema", "__type")
                 ):
                     raise ValueError("Request rejected")

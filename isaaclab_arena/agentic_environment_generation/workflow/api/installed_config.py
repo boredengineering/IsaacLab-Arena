@@ -1,6 +1,11 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Copyright (c) 2026, The Isaac Lab Arena Project Developers.
 # SPDX-License-Identifier: Apache-2.0
-"""Explicit installed query configuration; no ambient credential discovery."""
+"""Explicit installed configuration admission; no ambient credential discovery."""
 
 import fcntl
 import hashlib
@@ -74,7 +79,13 @@ def load(path):
         "schema_version mode operator private_root credentials_file endpoint bolt_uri binding artifact_root"
         " required_profiles bootstrap_principal read_principal",
     )
-    if type(value["schema_version"]) is not int or value["schema_version"] != 1 or value["mode"] != "query-only":
+    # Setup selection only, not execution authority or readiness. The installed
+    # server still composes query-only resources; no synthetic owner is enabled.
+    if (
+        type(value["schema_version"]) is not int
+        or type(value["mode"]) is not str
+        or (value["schema_version"], value["mode"]) not in ((1, "query-only"), (2, "isolated-synthetic-execution-v1"))
+    ):
         raise PrivateFileError("Unsupported configuration")
     operator = fields(value["operator"], "uid gid groups account home cwd")
     if (

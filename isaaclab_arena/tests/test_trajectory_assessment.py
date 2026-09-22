@@ -681,6 +681,7 @@ def test_droid_hold_uses_actual_term_order_affine_targets_and_binary_gripper(mon
         build_droid_posture_hold(SimpleNamespace(unwrapped=base))
 
 
+@pytest.mark.parametrize("already_reset", [False, True], ids=["legacy-reset", "already-reset"])
 @pytest.mark.parametrize(
     "velocity,terminal,expected",
     [
@@ -691,9 +692,12 @@ def test_droid_hold_uses_actual_term_order_affine_targets_and_binary_gripper(mon
         (float("inf"), None, "invalid_measurement"),
         (0.0, "terminated", "terminated"),
         (0.0, "truncated", "truncated"),
+        (0.0, "terminated_and_truncated", "terminated_and_truncated"),
     ],
 )
-def test_native_settle_is_blocking_raw_strict_bounded_and_single_reset(tmp_path, velocity, terminal, expected):
+def test_native_settle_is_blocking_raw_strict_bounded_and_single_reset(
+    tmp_path, velocity, terminal, expected, already_reset
+):
     from types import SimpleNamespace
 
     from isaaclab_arena.agentic_environment_generation.trajectory_capture import capture_trajectory
@@ -703,13 +707,15 @@ def test_native_settle_is_blocking_raw_strict_bounded_and_single_reset(tmp_path,
         initialize_and_settle,
     )
 
-    calls, charges, samples = [], [], []
+    calls, charges, samples, holds = [], [], [], []
+    entry_observation = {"camera_obs": {"wrist": "supplied-reset"}}
 
     class Env:
         unwrapped = SimpleNamespace(num_envs=1)
         steps = 0
 
         def reset(self):
+            assert not already_reset, "Already-reset preparation must never call reset"
             calls.append("reset")
             return {"camera_obs": {"wrist": 0}}, {}
 
@@ -719,10 +725,10 @@ def test_native_settle_is_blocking_raw_strict_bounded_and_single_reset(tmp_path,
             calls.append(action)
 
             def flag(name):
-                return SimpleNamespace(any=lambda: terminal == name)
+                return SimpleNamespace(any=lambda: terminal is not None and name in terminal)
 
             return (
-                {"camera_obs": {"wrist": self.steps}},
+                {"camera_obs": {"wrist": "autoreset-not-terminal" if terminal else self.steps}},
                 0,
                 flag("terminated"),
                 flag("truncated"),
@@ -740,6 +746,11 @@ def test_native_settle_is_blocking_raw_strict_bounded_and_single_reset(tmp_path,
             for name in names
         }
 
+    def hold(env):
+        assert calls == ([] if already_reset else ["reset"])
+        holds.append(env)
+        return "hold"
+
     env = Env()
     settings = NativeSettleSettings(
         settle_steps=3,
@@ -748,12 +759,14 @@ def test_native_settle_is_blocking_raw_strict_bounded_and_single_reset(tmp_path,
         camera_names=("wrist",),
         consecutive_steps=2,
     )
-    kwargs = dict(
+    kwargs: dict = dict(
         settings=settings,
         charge_step=charges.append,
         sample_velocities=measure,
-        hold_action_factory=lambda env: "hold",
+        hold_action_factory=hold,
     )
+    if already_reset:
+        kwargs["initialized_observation"] = entry_observation
     if expected != "settled":
         with pytest.raises(SceneSettleRejected) as failure:
             initialize_and_settle(env, **kwargs)
@@ -761,9 +774,15 @@ def test_native_settle_is_blocking_raw_strict_bounded_and_single_reset(tmp_path,
         assert report["reason"] == expected and report["all_objects_settled"] is False
         assert report["executed_steps"] == env.steps == (3 if expected == "unsettled" else 1)
         assert samples == ([] if terminal else [1] if expected == "invalid_measurement" else [1, 2, 3])
+        assert charges == list(range(1, env.steps + 1))
+        if terminal:
+            assert report["samples"] == []  # Never measure the newly autoreset cohort.
     else:
         initialized = initialize_and_settle(env, **kwargs)
         assert initialized.step_offset == env.steps == 3
+        assert initialized.observation == {"camera_obs": {"wrist": 3}}
+        assert initialized.hold_action == "hold"
+        assert initialized.report["executed_steps"] == 3
         assert initialized.report["samples"][-1]["subjects"]["object"]["linear_speed"] == velocity
         assert initialized.report["all_objects_settled"] is True
         assert charges == [1, 2, 3]
@@ -781,8 +800,8 @@ def test_native_settle_is_blocking_raw_strict_bounded_and_single_reset(tmp_path,
             step_offset=initialized.step_offset,
         )
         assert list(result["frames"]) == ["step_000003_wrist", "step_000004_wrist"]
-    assert calls.count("reset") == 1
-    assert calls[1:] == ["hold"] * env.steps
+    assert holds == [env]
+    assert calls == ([] if already_reset else ["reset"]) + ["hold"] * env.steps
 
 
 @pytest.mark.parametrize("shape", [(1, 3), (2, 3)])
@@ -843,6 +862,7 @@ def test_uninitialized_capture_cannot_reuse_policy_state(tmp_path):
         )
 
 
+@pytest.mark.parametrize("already_reset", [False, True], ids=["legacy-reset", "already-reset"])
 @pytest.mark.parametrize(
     "defect",
     [
@@ -851,11 +871,13 @@ def test_uninitialized_capture_cannot_reuse_policy_state(tmp_path):
         "other_subject",
         "coverage",
         "camera",
+        "camera_after_step",
         "late_motion",
         "cancel",
+        "budget",
     ],
 )
-def test_settle_rejects_incomplete_or_unstable_cohorts_before_followup(defect):
+def test_settle_rejects_incomplete_or_unstable_cohorts_before_followup(defect, already_reset):
     from types import SimpleNamespace
 
     from isaaclab_arena.agentic_environment_generation.workflow.native_realization import (
@@ -864,18 +886,31 @@ def test_settle_rejects_incomplete_or_unstable_cohorts_before_followup(defect):
         initialize_and_settle,
     )
 
-    steps, charges = [], []
+    steps, charges, resets = [], [], []
     flag = SimpleNamespace(any=lambda: False)
     obs = {"camera_obs": {} if defect == "camera" else {"wrist": 0}}
+
+    def reset():
+        assert not already_reset, "Already-reset preparation must never call reset"
+        resets.append("reset")
+        return obs, {}
+
+    def step(action):
+        assert charges[-1] == len(steps) + 1
+        steps.append(action)
+        return ({} if defect == "camera_after_step" else obs), 0, flag, flag, {}
+
     env = SimpleNamespace(
         unwrapped=SimpleNamespace(num_envs=1),
-        reset=lambda: (obs, {}),
-        step=lambda action: (steps.append(action), 0, flag, flag, {}) and (obs, 0, flag, flag, {}),
+        reset=reset,
+        step=step,
     )
 
     def charge(step):
         if defect == "cancel":
             raise RuntimeError("cancelled")
+        if defect == "budget" and step == 2:
+            raise RuntimeError("budget exhausted")
         charges.append(step)
 
     def measure(env, names):
@@ -904,18 +939,23 @@ def test_settle_rejects_incomplete_or_unstable_cohorts_before_followup(defect):
             charge_step=charge,
             sample_velocities=measure,
             hold_action_factory=lambda env: "hold",
+            **({"initialized_observation": obs} if already_reset else {}),
         )
     if defect == "cancel":
         assert str(failure.value) == "cancelled" and steps == []
+    elif defect == "budget":
+        assert str(failure.value) == "budget exhausted" and steps == ["hold"]
     else:
         assert isinstance(failure.value, SceneSettleRejected)
         assert failure.value.report["reason"] == (
             "camera_unavailable"
-            if defect == "camera"
+            if defect in ("camera", "camera_after_step")
             else "invalid_measurement" if defect == "coverage" else "unsettled"
         )
-        assert len(steps) == (0 if defect == "camera" else 1 if defect == "coverage" else 3)
+        assert len(steps) == (0 if defect == "camera" else 1 if defect in ("coverage", "camera_after_step") else 3)
+        assert failure.value.report["executed_steps"] == len(steps)
     assert len(charges) == len(steps)
+    assert resets == ([] if already_reset else ["reset"])
 
 
 def test_graph_requested_cameras_also_require_kit_activation():

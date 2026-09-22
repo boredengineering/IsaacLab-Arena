@@ -12,6 +12,87 @@ import json
 import pytest
 
 
+def test_worker_package_initializer_is_cold_until_public_factory_access(monkeypatch):
+    """Execute only initializer source; the core API import veto stays installed."""
+    import builtins
+    import importlib.util
+    from pathlib import Path
+
+    package = "isaaclab_arena_examples.agentic_environment_generation.web_api"
+    path = Path(__file__).parents[2] / package.replace(".", "/") / "__init__.py"
+    original = builtins.__import__
+    attempted = []
+
+    class LegacyImportDenied(Exception):
+        pass
+
+    def guarded(name, globals=None, locals=None, fromlist=(), level=0):
+        resolved = importlib.util.resolve_name("." * level + name, globals["__package__"]) if level else name
+        if resolved == package or resolved.startswith(package + "."):
+            attempted.append((resolved, fromlist))
+            raise LegacyImportDenied("explicit legacy application import")
+        return original(name, globals, locals, fromlist, level)
+
+    # A source-only namespace is not registered as a dependency module. This
+    # local veto precedes the inherited core guard, including in the RED run.
+    namespace = {"__name__": package, "__package__": package}
+    monkeypatch.setattr(builtins, "__import__", guarded)
+    exec(compile(path.read_bytes(), str(path), "exec"), namespace)
+    assert attempted == [] and namespace["__all__"] == ["create_app"]
+    assert "create_app" not in namespace
+    with pytest.raises(AttributeError, match="no attribute 'unknown_worker_attribute'"):
+        namespace["__getattr__"]("unknown_worker_attribute")
+    assert attempted == []
+    with pytest.raises(LegacyImportDenied, match="explicit legacy application import"):
+        namespace["__getattr__"]("create_app")
+    assert attempted == [(package + ".application", ("create_app",))]
+
+
+def test_public_worker_package_factory_is_direct_original_export():
+    """Prove identity structurally without importing the forbidden legacy API."""
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).parents[2] / "isaaclab_arena_examples/agentic_environment_generation/web_api"
+    tree = ast.parse((root / "__init__.py").read_text())
+    functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)]
+    assert [node.name for node in functions] == ["__getattr__"]
+    resolver = functions[0]
+    assert [arg.arg for arg in resolver.args.args] == ["name"]
+    branch = next(node for node in resolver.body if isinstance(node, ast.If))
+    assert ast.unparse(branch.test) == "name == 'create_app'"
+    expected = ast.parse("from .application import create_app\nreturn create_app").body
+    assert [ast.dump(node) for node in branch.body] == [ast.dump(node) for node in expected]
+    assert not branch.orelse
+    assert isinstance(resolver.body[-1], ast.Raise)
+    legacy = ast.parse((root / "application.py").read_text())
+    assert sum(isinstance(node, ast.FunctionDef) and node.name == "create_app" for node in legacy.body) == 1
+
+
+def test_query_source_has_only_fixed_explicit_execution_loaders():
+    """AST closure must not admit execution through conditional static imports."""
+    import ast
+    from pathlib import Path
+
+    api = Path(__file__).parents[1] / "agentic_environment_generation/workflow/api"
+    expected = {
+        "application.py": {"isaaclab_arena.agentic_environment_generation.workflow.api.execution_schema",
+                           "isaaclab_arena.agentic_environment_generation.workflow.api.execution_owner"},
+        "server.py": {"isaaclab_arena.agentic_environment_generation.workflow.api.installed_execution"},
+    }
+    for name, targets in expected.items():
+        tree = ast.parse((api / name).read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                assert not any(part in {"execution_owner", "execution_schema", "installed_execution"}
+                               for part in (node.module or "").split(".")), "legacy static execution edge"
+        calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Attribute) and node.func.attr == "import_module"]
+        assert all(len(node.args) == 1 and isinstance(node.args[0], ast.Constant)
+                   and type(node.args[0].value) is str and not node.keywords for node in calls)
+        assert {node.args[0].value for node in calls} == targets
+
+
 def test_scope_admin_cold_construction_has_no_resource_effects(monkeypatch):
     import builtins
     import importlib.util
@@ -309,9 +390,60 @@ def test_shared_foreground_extraction_preserves_operational_ast():
         "stop_requested",
     }
 
+    class AdmissionExtraction(ast.NodeTransformer):
+        """Undo only the enumerated handoff extraction, not its legacy branches."""
+
+        def visit_Return(self, node):
+            assert isinstance(node.value, ast.Tuple) and len(node.value.elts) == 2
+            result, drive = node.value.elts
+            if isinstance(drive, ast.Constant):
+                assert drive.value is None
+                node.value = result
+            else:
+                assert ast.unparse(result) == "handle"
+                assert ast.unparse(drive) == "self._admitted_drive(principal, run, contract)"
+                node.value = ast.parse("self._generate(principal, run, contract)", mode="eval").body
+            return node
+
+        def visit_With(self, node):
+            late_lookup, late_replay = node.body[:2]
+            assert ast.unparse(late_lookup) == (
+                "try:\n    retained = self.store.lookup_submission(operation_id, canonical_json(contract))\n"
+                "except StoreUnavailable:\n    return (self._unknown(None), None)"
+            )
+            assert ast.unparse(late_replay) == (
+                "if retained is not None:\n    return (self.status(principal, retained.run_id), None)"
+            )
+            del node.body[:2]
+            index = next(i for i, item in enumerate(node.body)
+                         if isinstance(item, ast.Assign) and ast.unparse(item.targets[0]) == "handle")
+            handle = node.body.pop(index)
+            listener = node.body[index]
+            assert isinstance(listener, ast.If)
+            assert ast.unparse(listener.test) == "self._admission_listener is not None"
+            listener.body.insert(0, handle)
+            return self.generic_visit(node)
+
+        def visit_Call(self, node):
+            if ast.unparse(node.func) == "self._admission_listener":
+                assert ast.unparse(node.args[0]) == "dict(handle)"
+                node.args[0] = node.args[0].args[0]
+            if ast.unparse(node.func) in {"self.authority.bind_run", "self.authority.bind_workflow_models"}:
+                retained = next(kw for kw in node.keywords if kw.arg == "retained_run")
+                assert ast.unparse(retained.value) == "run"
+                node.keywords.remove(retained)
+            return self.generic_visit(node)
+
     class OriginalCalls(ast.NodeTransformer):
 
         def visit_FunctionDef(self, node):
+            if node.name == "_admit":
+                node.name = "run"
+                node = AdmissionExtraction().visit(node)
+            if node.name == "resume":
+                guard = node.body.pop(0)
+                assert ast.unparse(guard.test) == "getattr(_resume_authority_context, 'active', False)"
+                assert ast.unparse(guard.body[0]) == "raise RuntimeError('Guarded resume reentry unavailable')"
             if node.name in {"_generate", "_scene", "_scene_phase", "_drive_scene"}:
                 assert node.args.kwonlyargs[-1].arg == "resume_receipt"
                 assert ast.dump(node.args.kw_defaults[-1]) == "Constant(value=None)"
@@ -364,7 +496,8 @@ def test_shared_foreground_extraction_preserves_operational_ast():
         for node in core.body
         if isinstance(node, ast.FunctionDef)
         and node.name
-        not in {"__init__", "cancel_keyed", "resume_keyed", "_resume_pin", "_resume_result", "_resume_reconcile"}
+        not in {"__init__", "run", "admit", "_admitted_drive", "cancel_keyed", "resume_keyed",
+                "_resume_pin", "_resume_result", "_resume_reconcile"}
     ]
     normalized = "\n".join(ast.dump(OriginalCalls().visit(node), include_attributes=False) for node in operations)
     # Captured from the original class with the sandbox's Python 3.12 AST.
@@ -385,7 +518,10 @@ def test_extracted_accounting_compatibility_exports_and_exact_bodies():
         "_usd_units": "3560ac2d98cfca8d846816310dc288b302143d5a6ef238a29c638825dc9f331d",
         "checked_workflow_accounting": "64dca39c621d528b4f94bc7c19b6a535abd536fc5514e89fd3a6f3f6362ad1e9",
         "CallAllowance": "31ad628a7e867f0a463b3ebdfb3ff775743820e8a78aab6e1c966bc3026c8b8d",
-        "bounded_client": "26be3539cddde8e46a64dd858b1a35c2927f2f8e533d79385f049efe8e41daa5",
+        # Plan 04 intentionally extends this callable with an opt-in envelope.
+        # Its absent-envelope path is exercised by the actual SDK regressions;
+        # keep the other extraction bodies at their original fingerprints.
+        "bounded_client": "deaa1b79764a900dc508ff59ab9995641b187866c9211ebe7725a8181e3e568b",
         "managed_inference_active": "186082ac2bf0422d0f15d8c00b5df30735b6a0fa5869224756a579d470938f14",
     }
     for name, digest in expected.items():
@@ -812,6 +948,556 @@ def resume_authority_fixture():
         current_config=lambda p: dict(config=config, expires_at=900),
     )
     return SimpleNamespace(authority=authority, contract=contract, run=run, calls=calls, now=now)
+
+
+def admission_fixture():
+    """Real application/service/coordinator, inert store and owned worker ports."""
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import canonical_json
+    from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import RunHandle, SubmissionConflict
+    from isaaclab_arena.tests.test_environment_workflow_service import contract
+
+    t = keyed_resume_fixture()
+    app, f, state = t.app, t.f, t.state
+    state.run = None
+    state.bind_error = False
+    state.lost_ack = False
+    raw = canonical_json(contract())
+
+    def lookup(key, normalized):
+        f.calls.append("lookup")
+        if state.run is not None:
+            assert key == state.run.operation_id
+            if normalized != state.run.request_json:
+                raise SubmissionConflict("changed request")
+        return state.run
+
+    def admit(key, normalized, frozen, capacity):
+        assert state.in_guard and state.run is None
+        f.calls.append("admit")
+        state.run = RunHandle("run", key, normalized, frozen, 1, "pending", "dependency_readiness", 1)
+        if state.lost_ack:
+            raise OSError("commit acknowledgement lost")
+        return state.run
+
+    def bind(*args, **kwargs):
+        assert state.in_guard
+        f.calls.append("bind")
+        if state.bind_error:
+            raise ValueError("bind failed")
+
+    def claim(*args, **kwargs):
+        assert not state.in_guard
+        f.calls.append("claim")
+        return f.prepared.registration.fence
+
+    app.service._validate_support = lambda contract: None
+    app.store.lookup_submission, app.store.admit = lookup, admit
+    app.store.get_run = lambda run_id: state.run
+    app.store.claim_intent = claim
+    app.authority.require_submit = lambda *a: f.calls.append("submit_auth")
+    app.authority.protect_workflow_contract = lambda *a, **kw: None
+    app.authority.bind_run = app.authority.bind_workflow_models = bind
+    app.authority.require_scene_execute = lambda *a, **kw: None
+    app.prior_factory = lambda **kw: f.calls.append("prior")
+    app.status = lambda *a: dict(disposition="retained", run_id="run", state=state.run.state)
+    t.raw = raw
+    return t
+
+
+def test_admission_defers_real_coordinator_dispatch_until_owner_drives_once():
+    t = admission_fixture()
+    app, calls = t.app, t.f.calls
+    notices = []
+    app.set_admission_listener(lambda receipt: notices.append(copy.deepcopy(receipt)))
+    receipt, drive = app.admit("creator", "submission", t.raw)
+    assert receipt == dict(schema_version=1, disposition="admitted", run_id="run", operation_id="submission",
+                           state="pending", version=1, event_cursor=1)
+    assert notices == [receipt] and callable(drive)
+    assert calls.count("admit") == 1 and calls.count("bind") == 2
+    assert not {"prior", "prepare", "reserve", "send"}.intersection(calls)
+    assert not t.state.in_guard
+    result = drive()
+    assert result["disposition"] == "blocked"
+    assert calls.count("prior") == calls.count("reserve") == calls.count("release") == calls.count("send") == 1
+    with pytest.raises(ValueError, match="consumed"):
+        drive()
+    assert calls.count("send") == 1
+
+
+@pytest.mark.parametrize("change", [dict(state="cancel_requested"), dict(state="cancelled"), dict(version=2),
+                                         dict(contract_json="changed")])
+def test_admission_drive_discards_stale_retained_work_before_factories(change):
+    from dataclasses import replace
+
+    t = admission_fixture()
+    receipt, drive = t.app.admit("creator", "submission", t.raw)
+    t.state.run = replace(t.state.run, **change)
+    assert drive()["state"] == t.state.run.state
+    assert not {"prior", "reserve", "prepare", "release", "send"}.intersection(t.f.calls)
+    with pytest.raises(ValueError, match="consumed"):
+        drive()
+
+
+@pytest.mark.parametrize("entry", ["admit", "run", "drive", "resume_keyed", "resume"])
+def test_admission_callbacks_cannot_reenter_execution_or_receipt_lookup(entry):
+    t = admission_fixture()
+    other = admission_fixture()
+    _, old_drive = other.app.admit("creator", "submission", other.raw)
+    calls_at_callback = []
+
+    def listener(receipt):
+        before = list(t.f.calls)
+        with pytest.raises(RuntimeError, match="[Gg]uarded"):
+            if entry == "drive":
+                old_drive()
+            elif entry == "resume_keyed":
+                t.app.resume_keyed("creator", "resume", {}, check_resume=lambda *a: None)
+            elif entry == "resume":
+                t.app.resume("creator", "run")
+            else:
+                getattr(t.app, entry)("creator", "submission", t.raw)
+        assert t.f.calls == before
+        calls_at_callback.append("blocked")
+
+    t.app.set_admission_listener(listener)
+    _, drive = t.app.admit("creator", "submission", t.raw)
+    assert calls_at_callback == ["blocked"]
+    assert not {"prior", "send"}.intersection(t.f.calls + other.f.calls)
+    drive()
+    assert t.f.calls.count("send") == 1
+
+
+@pytest.mark.parametrize("change", ["none", "expired", "source"])
+def test_admission_captures_real_authority_once_and_rechecks_before_drive(change):
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import canonical_json
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    t, trusted = admission_fixture(), resume_authority_fixture()
+    app, authority = t.app, trusted.authority
+    app.authority = authority
+    authority.store = app.store
+    app.store.database = "db"
+    app.store.scope = dict(deployment_id="dep", workspace_id="workspace")
+    app.service = WorkflowService(app.store, authority, app.gate, validate_support=lambda c: None)
+    # This also catches DB reads introduced by bind/drive beneath the guard.
+    def read(run_id):
+        assert not authority._lock._is_owned(), "DB under authority mutation guard"
+        return t.state.run
+
+    app.store.get_run = read
+    original_admit = app.store.admit
+
+    def commit(*args):
+        # Original test port checks its own guard; here the real authority owns it.
+        t.state.in_guard = authority._lock._is_owned()
+        try:
+            return original_admit(*args)
+        finally:
+            t.state.in_guard = False
+
+    app.store.admit = commit
+    driven = []
+    app._generate = lambda p, r, c: driven.append((p, r, c)) or {"disposition": "driven"}
+    receipt, drive = app.admit("creator", "submission", canonical_json(trusted.contract))
+    frozen_binding = authority._bindings["run"]
+    frozen_roles = copy.deepcopy(authority._workflow_bindings)
+    issued = list(trusted.calls)
+    assert driven == [] and issued
+    if change == "expired":
+        trusted.now[0] = frozen_binding[0].expires_at
+    elif change == "source":
+        authority.current_config = lambda p: dict(config=provider_config(api_key="different-private-key"), expires_at=900)
+    else:
+        trusted.now[0] += 20
+    if change == "none":
+        assert drive() == {"disposition": "driven"}
+        assert driven == [("creator", t.state.run, trusted.contract)]
+    else:
+        with pytest.raises(ValueError):
+            drive()
+        assert driven == []
+    assert authority._bindings["run"] == frozen_binding
+    assert authority._workflow_bindings == frozen_roles and trusted.calls == issued
+    with pytest.raises(ValueError, match="consumed"):
+        drive()
+
+
+def test_admission_replay_and_changed_payload_never_rebind_or_drive():
+    from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import SubmissionConflict
+
+    t = admission_fixture()
+    receipt, drive = t.app.admit("creator", "submission", t.raw)
+    before = list(t.f.calls)
+
+    def forbidden(*a, **kw):
+        pytest.fail("replay reached current configuration, listener, grants or worker")
+
+    t.app._preflight = t.app.authority.bind_run = t.app.authority.bind_workflow_models = forbidden
+    t.app.set_admission_listener(forbidden)
+    t.app.gate.check = forbidden
+    result, replay_drive = t.app.admit("creator", "submission", t.raw)
+    assert replay_drive is None and result["run_id"] == receipt["run_id"]
+    assert t.app.run("creator", "submission", t.raw) == result
+    changed = json.loads(t.raw)
+    changed["source"]["prompt"] = "A different request"
+    with pytest.raises(SubmissionConflict):
+        t.app.admit("creator", "submission", json.dumps(changed))
+    assert t.f.calls[len(before):] == ["read_auth", "lookup"] * 3
+    assert not {"prior", "reserve", "prepare", "send"}.intersection(t.f.calls)
+
+
+@pytest.mark.parametrize("failure", ["ack", "listener", "bind"])
+def test_admission_interruption_replay_recovers_only_receipt(failure):
+    t = admission_fixture()
+    t.state.lost_ack = failure == "ack"
+    t.state.bind_error = failure == "bind"
+
+    def listener(receipt):
+        t.f.calls.append("notified")
+        if failure == "listener":
+            raise RuntimeError("observer failed")
+
+    t.app.set_admission_listener(listener)
+    with pytest.raises((OSError, RuntimeError, ValueError)):
+        t.app.admit("creator", "submission", t.raw)
+    assert t.state.run is not None
+    before = list(t.f.calls)
+    receipt, drive = t.app.admit("creator", "submission", t.raw)
+    assert receipt["run_id"] == "run" and drive is None
+    assert t.f.calls[len(before):] == ["read_auth", "lookup"]
+    assert not {"prior", "reserve", "prepare", "send"}.intersection(t.f.calls)
+
+
+def test_admission_listener_is_detached_and_cancellation_during_drive_check_wins():
+    from dataclasses import replace
+
+    t = admission_fixture()
+    t.app.set_admission_listener(lambda receipt: receipt.update(run_id="not-the-run"))
+    receipt, drive = t.app.admit("creator", "submission", t.raw)
+    assert receipt["run_id"] == "run"
+
+    def cancel(*a, **kw):
+        t.state.run = replace(t.state.run, state="cancel_requested", version=2)
+
+    t.app.authority.require_scene_execute = cancel
+    assert drive()["state"] == "cancel_requested"
+    assert not {"prior", "prepare", "send"}.intersection(t.f.calls)
+
+
+@pytest.mark.parametrize("case", ["local_stop", "closed", "factory_error"])
+def test_admission_one_shot_survives_stop_close_and_factory_failure(case):
+    t = admission_fixture()
+    _, drive = t.app.admit("creator", "submission", t.raw)
+    if case == "local_stop":
+        t.state.stop = True
+        assert drive()["state"] == "pending"
+    elif case == "closed":
+        t.app._closed = True
+        with pytest.raises(ValueError, match="closed"):
+            drive()
+    else:
+        def fail(**kwargs):
+            raise OSError("prior unavailable")
+
+        t.app.prior_factory = fail
+        with pytest.raises(OSError, match="prior unavailable"):
+            drive()
+    with pytest.raises(ValueError, match="consumed"):
+        drive()
+    assert not {"prepare", "reserve", "send"}.intersection(t.f.calls)
+
+
+def test_admission_drive_reentrant_and_concurrent_calls_do_not_hold_mutation_lock():
+    from threading import Event, RLock, Thread
+    from contextlib import contextmanager
+
+    t = admission_fixture()
+    lock, entered, finish = RLock(), Event(), Event()
+
+    @contextmanager
+    def guard():
+        with lock:
+            t.state.in_guard = True
+            try:
+                yield
+            finally:
+                t.state.in_guard = False
+
+    t.app.authority.mutation_guard = guard
+    _, drive = t.app.admit("creator", "submission", t.raw)
+
+    def preparing():
+        assert not lock._is_owned() and not t.app._lock._is_owned()
+        with pytest.raises(ValueError, match="consumed"):
+            drive()
+        entered.set()
+        assert finish.wait(3)
+
+    t.f.state.prepare_hook = preparing
+    errors = []
+
+    def run():
+        try:
+            drive()
+        except BaseException as exc:
+            errors.append(exc)
+
+    thread = Thread(target=run)
+    thread.start()
+    try:
+        assert entered.wait(3)
+        assert lock.acquire(timeout=1), "worker held authority mutation lock"
+        lock.release()
+        assert t.app._lock.acquire(timeout=1), "worker held application lock"
+        t.app._lock.release()
+        with pytest.raises(ValueError, match="consumed"):
+            drive()
+    finally:
+        finish.set()
+        thread.join(3)
+    assert not thread.is_alive() and errors == []
+    assert t.f.calls.count("prepare") == t.f.calls.count("release") == t.f.calls.count("send") == 1
+
+
+def test_admission_legacy_run_keeps_notification_order_and_synchronous_result():
+    t = admission_fixture()
+    t.app.set_admission_listener(lambda receipt: t.f.calls.append("listener"))
+    result = t.app.run("creator", "submission", t.raw)
+    assert result["disposition"] == "blocked" and result["state"] == "pending"
+    ordered = [call for call in t.f.calls if call in {"admit", "listener", "bind", "prior", "reserve", "prepare", "release", "send"}]
+    assert ordered == ["admit", "listener", "bind", "bind", "prior", "reserve", "prepare", "release", "send"]
+    assert t.app.run("creator", "submission", t.raw)["disposition"] == "retained"
+    assert t.f.calls.count("send") == 1
+
+
+def test_admission_late_same_key_replay_precedes_current_preflight():
+    from contextlib import contextmanager
+
+    from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import RunHandle
+
+    t = admission_fixture()
+    original_guard = t.app.authority.mutation_guard
+
+    @contextmanager
+    def guard():
+        with original_guard():
+            # Another trusted same-owner submission won after the outer lookup.
+            t.state.run = RunHandle("run", "submission", t.raw, t.raw, 1, "pending", "dependency_readiness", 1)
+            yield
+
+    def obsolete(*args):
+        pytest.fail("late replay demanded current preflight")
+
+    t.app.authority.mutation_guard = guard
+    t.app._preflight = obsolete
+    receipt, drive = t.app.admit("creator", "submission", t.raw)
+    assert receipt["run_id"] == "run" and drive is None
+    assert not {"admit", "bind", "prior", "send"}.intersection(t.f.calls)
+
+
+@pytest.mark.parametrize("failure", ["not_ready", "store_unavailable"])
+def test_admission_nonacceptance_has_no_private_drive_or_notification(failure):
+    from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import StoreUnavailable
+
+    t = admission_fixture()
+    notices = []
+    t.app.set_admission_listener(notices.append)
+    if failure == "not_ready":
+        t.f.state.absent = True
+    else:
+        def unavailable(*args):
+            raise StoreUnavailable("offline")
+
+        t.app.store.lookup_submission = unavailable
+    receipt, drive = t.app.admit("creator", "submission", t.raw)
+    assert receipt["disposition"] == ("dependencies_not_ready" if failure == "not_ready" else "unknown")
+    assert drive is None and notices == []
+    assert not {"admit", "bind", "prior", "send"}.intersection(t.f.calls)
+    assert t.app.run("creator", "submission", t.raw) == receipt
+
+
+def test_admission_response_loss_does_not_lose_owners_original_drive():
+    t = admission_fixture()
+    _, owner_drive = t.app.admit("creator", "submission", t.raw)
+    # Response delivery is lost, not the owner's already retained callable.
+    _, client_replay_drive = t.app.admit("creator", "submission", t.raw)
+    assert client_replay_drive is None
+    owner_drive()
+    assert t.f.calls.count("admit") == t.f.calls.count("send") == 1
+    assert t.f.calls.count("bind") == 2
+
+
+def test_admission_concurrent_same_key_returns_only_one_drive():
+    from contextlib import contextmanager
+    from threading import Event, RLock, Thread
+
+    t = admission_fixture()
+    lock, preflighting, replay_lookup, finish = RLock(), Event(), Event(), Event()
+
+    @contextmanager
+    def guard():
+        with lock:
+            t.state.in_guard = True
+            try:
+                yield
+            finally:
+                t.state.in_guard = False
+
+    t.app.authority.mutation_guard = guard
+    original_lookup = t.app.store.lookup_submission
+
+    def lookup(*args):
+        result = original_lookup(*args)
+        if preflighting.is_set() and not lock._is_owned():
+            replay_lookup.set()
+        return result
+
+    def preflight(*args):
+        preflighting.set()
+        assert finish.wait(3)
+
+    t.app.store.lookup_submission = lookup
+    t.app._preflight = preflight
+    results, errors = [], []
+
+    def submit():
+        try:
+            results.append(t.app.admit("creator", "submission", t.raw))
+        except BaseException as exc:
+            errors.append(exc)
+
+    first, second = Thread(target=submit), Thread(target=submit)
+    first.start()
+    assert preflighting.wait(3)
+    second.start()
+    try:
+        assert replay_lookup.wait(3)
+    finally:
+        finish.set()
+        first.join(3)
+        second.join(3)
+    assert not first.is_alive() and not second.is_alive() and errors == []
+    assert len(results) == 2 and sum(drive is not None for _, drive in results) == 1
+    assert t.f.calls.count("admit") == 1 and t.f.calls.count("bind") == 2
+    assert not {"prior", "prepare", "release", "send"}.intersection(t.f.calls)
+
+
+def test_admission_cancel_orders_real_authority_before_inert_control_lock():
+    """Bound the formerly deadlocking two-thread cycle; no real DB in this unit."""
+    from contextlib import contextmanager
+    from threading import Event, Lock, RLock, Thread, current_thread
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.application import ForegroundWorkflow
+    from isaaclab_arena.agentic_environment_generation.workflow.commands import (
+        LocalStopObservation, command_digest, command_json, make_cancel_receipt,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import canonical_json
+
+    trusted = resume_authority_fixture()
+    auth = trusted.authority
+    control = Lock()
+    outer_read, control_held, guard_attempt, guarded_lookup = (Event() for _ in range(4))
+    trace, errors, results = [], [], []
+    original_guard, original_protect = auth.mutation_guard, auth.protect_public
+
+    @contextmanager
+    def guard():
+        if current_thread().name == "admission":
+            guard_attempt.set()
+        with original_guard():
+            yield
+
+    def lookup(*args):
+        if auth._lock._is_owned():
+            trace.append("guarded_lookup")
+            guarded_lookup.set()
+        assert control.acquire(timeout=3), "admission control lock timeout"
+        control.release()
+        if not auth._lock._is_owned():
+            outer_read.set()
+            assert control_held.wait(3)
+        return None
+
+    def stop(*args):
+        assert not auth._lock._is_owned(), "physical stop under authority"
+        trace.append("stop")
+        return LocalStopObservation(delivery="no_owner")
+
+    def cancel(key, run_id, local_stop, *, protect):
+        with control:
+            trace.append("control_held")
+            control_held.set()
+            assert guard_attempt.wait(3)
+            if not auth._lock._is_owned():
+                assert guarded_lookup.wait(3)
+            # Timeout breaks RED's actual Python wait cycle, allowing both
+            # threads to unwind; GREEN reenters the concrete authority RLock.
+            acquired = auth._lock.acquire(timeout=0.5)
+            assert acquired, "authority/control lock inversion at precommit screen"
+            try:
+                payload = command_json(dict(runId=run_id))
+                receipt = make_cancel_receipt(
+                    scope=auth.scope, operation_id=key, run_id=run_id,
+                    payload_json=payload, payload_digest=command_digest(payload),
+                    before_version=None, after_version=None, disposition="refused",
+                    reason="target_not_found", first_local_stop=local_stop.model_dump(), events=[],
+                )
+                protect(receipt.model_dump(mode="json"))
+                trace.append("precommit_screen")
+                return receipt
+            finally:
+                auth._lock.release()
+
+    class AdmissionObserved(Exception):
+        pass
+
+    def preflight(*args):
+        raise AdmissionObserved()
+
+    app = ForegroundWorkflow.__new__(ForegroundWorkflow)
+    app._closed, app._lock, app._local = False, RLock(), {}
+    app.authority, app.store = auth, auth.store
+    app.store.lookup_submission, app.store.cancel_command = lookup, cancel
+
+    def cleanup(*args):
+        assert not auth._lock._is_owned(), "cleanup read under authority"
+        trace.append("cleanup")
+        return None
+
+    app.store.get_run_cleanup = cleanup
+    app._cancellation = SimpleNamespace(stop_only=stop)
+    app._preflight = preflight
+    auth.mutation_guard = guard
+    auth.protect_workflow_contract = lambda *a, **kw: None
+    auth.protect_public = original_protect
+
+    def submit():
+        try:
+            app.admit("creator", "new-submission", canonical_json(trusted.contract))
+        except AdmissionObserved:
+            trace.append("admission_observed")
+        except BaseException as exc:
+            errors.append(exc)
+
+    def cancelling():
+        try:
+            assert outer_read.wait(3)
+            results.append(app.cancel_keyed("creator", "cancel", "run", authorize_cancel=lambda *a: None))
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [Thread(target=submit, name="admission", daemon=True), Thread(target=cancelling, daemon=True)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(8)
+    assert not any(thread.is_alive() for thread in threads), "bounded race failed to unwind"
+    assert errors == [], [str(error) for error in errors]
+    assert results[0].durable == "recorded" and results[0].receipt.disposition == "refused"
+    assert trace.index("stop") < trace.index("control_held") < trace.index("precommit_screen")
+    assert trace.index("precommit_screen") < trace.index("guarded_lookup")
+    assert "cleanup" in trace and "admission_observed" in trace and trusted.calls == []
 
 
 def keyed_resume_fixture():
@@ -1898,6 +2584,7 @@ def test_keyed_handler_auth_stop_database_order_and_known_receipt(fault):
     )
 
     def durable(key, run, local, *, protect):
+        assert authority_lock._is_owned(), "cancel transaction must follow authority lock"
         assert calls[:3] == ["read_auth", "cancel_auth", "stop"]
         assert local.delivery == "delivered"
         calls.append("db")
@@ -1906,13 +2593,18 @@ def test_keyed_handler_auth_stop_database_order_and_known_receipt(fault):
         return receipt
 
     def finish(*args):
+        assert not authority_lock._is_owned(), "physical cleanup must not hold authority"
         calls.append("finish")
         if fault == "cleanup":
             raise OSError("private")
 
     app = ForegroundWorkflow.__new__(ForegroundWorkflow)
     app._closed, app._lock, app._local = False, RLock(), {"run": object()}
-    app.authority = SimpleNamespace(require_read=lambda p: calls.append("read_auth"), protect_public=lambda v: None)
+    authority_lock = RLock()
+    app.authority = SimpleNamespace(
+        require_read=lambda p: calls.append("read_auth"), protect_public=lambda v: None,
+        mutation_guard=lambda: authority_lock,
+    )
     app.store = SimpleNamespace(cancel_command=durable, get_run_cleanup=lambda r: None)
     app._cancellation = SimpleNamespace(
         stop_only=lambda *args: (calls.append("stop") or LocalStopObservation(delivery="delivered")),
@@ -2003,7 +2695,7 @@ def test_keyed_handler_cleanup_protection_preserves_known_receipt(fault):
 
     app = ForegroundWorkflow.__new__(ForegroundWorkflow)
     app._closed, app._lock, app._local = False, RLock(), {}
-    app.authority = SimpleNamespace(require_read=lambda p: None, protect_public=protect)
+    app.authority = SimpleNamespace(require_read=lambda p: None, protect_public=protect, mutation_guard=RLock)
     app.store = SimpleNamespace(cancel_command=lambda *a, **kw: receipt, get_run_cleanup=lambda r: cleanup)
     app._cancellation = SimpleNamespace(stop_only=lambda *a: LocalStopObservation(delivery="delivered"))
     if fault == "receipt_screen":

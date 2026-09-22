@@ -4,7 +4,7 @@ Status: source-grounded design proposal, not implementation or execution authori
 
 ## Decision summary
 
-**Latest discussion supersedes this as the sole proposed route:** Plan 04 P1 now compares S1 (this metadata/bootstrap separation), S2 (runtime-faithful isolated initialization), S3 (owned-process boundary) and S4 (complementary dependency-injected contract tests). The user supports workflow/database isolation, not a requirement to eliminate every native initializer at any architectural cost. No solution has been selected; current admission is unchanged and no implementation/probes are authorized. This document preserves S1's candidate contract and proof obligations only. Do not make S1's manifest/context redesign a prerequisite for evaluating S2/S3.
+**Current disposition — S1 contingency, not the selected approach:** Plan 04 selects S2, runtime-faithful isolated initialization through IF-A–IF-D. This document preserves S1's metadata/bootstrap contract only for an explicit evidence-backed contingency decision; do not implement it in parallel or require its manifest/context redesign before S2. S3 is another contingency and S4 complementary testing. Selecting S2 does not approve initialization effects or imply feasibility; the concrete admission packet remains pending.
 
 If S1 is selected, use an explicitly selected immutable registration-metadata view, shared by catalogue construction and the existing graph-schema validators, with runtime class resolution kept separate. Built-in metadata should become a canonical declaration consumed by both that view and real runtime bindings—not an independently maintained catalogue, fake class registry or historical digest substitute.
 

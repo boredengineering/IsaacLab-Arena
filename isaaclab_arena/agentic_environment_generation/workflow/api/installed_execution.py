@@ -248,6 +248,12 @@ def compose(config, *, tokens, auth):
                 )
                 for role in ("runtime", "neo4j", "generation_model", "assessment_model", "capture", "gpu")
             )
+            catalogue_digest = execution_catalogue_sha256()
+            # Only the already authorized one-use harness can expose this
+            # initialization diagnostic. No config field enables a callback.
+            checkpoint = getattr(harness, "initialization_pre_readiness", None)
+            if checkpoint is not None:
+                checkpoint(catalogue_digest)
             app = ForegroundWorkflow(
                 store=store,
                 authority=authority,
@@ -256,7 +262,7 @@ def compose(config, *, tokens, auth):
                 private_parent=config.value["private_root"],
                 artifacts=GenerationArtifacts(area),
                 artifact_root=config.value["artifact_root"],
-                catalogue_sha256=execution_catalogue_sha256(),
+                catalogue_sha256=catalogue_digest,
                 generation_reservation=GenerationReservation(**common),
                 prior_factory=prior_factory,
                 initial_worker_factory=lambda **kw: InitialGenerationWorker(

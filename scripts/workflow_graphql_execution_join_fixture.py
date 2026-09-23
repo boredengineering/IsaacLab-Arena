@@ -96,6 +96,84 @@ def install_detachment_transport(transport_type, original, evidence, identify, w
     transport_type.handle_request = response
 
 
+def initialization_preparation(role):
+    """Exercise real schema/catalogue components under already installed S2 guards.
+
+    This is component preparation only. The caller owns cold interpreter,
+    environment, origin/native guards and lifecycle evidence; this function
+    cannot certify installed readiness, failure containment or cleanup.
+    """
+    from copy import deepcopy
+
+    import workflow_graphql_execution_join_harness as harness
+
+    assert role in {"init-server", "init-generate", "init-refine", "init-assess"}
+    guard = harness.ACTIVE
+    assert guard is not None and getattr(guard, "initialization_role", None) == role
+    assert getattr(guard, "initialization_controls_ready", False) is True
+    assert guard.sdk_calls == 0 and guard.owner_constructions == 0
+    # Environment/cache ownership must already hold before the early real
+    # ArenaEnvGraphSpec validation inside the existing synthetic SDK fixture.
+    assert all(os.environ.get(k) == v for k, v in harness.initialization_environment("positive", role).items())
+    if role != "init-server":
+        from generation_worker_fixture import install_synthetic_sdk
+
+        install_synthetic_sdk(scene=True)
+    from pydantic import ValidationError
+
+    from isaaclab_arena.agentic_environment_generation.workbench.document_yaml import parse_yaml, reject_unknown_fields
+    from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+    from isaaclab_arena.tests.utils.agentic_environment_generation import minimal_spec_dict
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.catalogues import execution_catalogue_sha256
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.scene_worker import prepare_catalogues
+
+    value = minimal_spec_dict()
+    normalized = ArenaEnvGraphSpec.model_validate(deepcopy(value)).model_dump(mode="json")
+    assert ArenaEnvGraphSpec.model_validate(deepcopy(normalized)).model_dump(mode="json") == normalized
+    checks = ["supported_normalization"]
+    negatives = []
+    unknown_asset = deepcopy(value)
+    unknown_asset["objects"][0]["registry_name"] = "s2_unknown_asset"
+    negatives.append(("unknown_asset", unknown_asset, "Unknown asset registry_name"))
+    unknown_relation = deepcopy(value)
+    unknown_relation["relations"][0]["kind"] = "s2_unknown_relation"
+    negatives.append(("unknown_relation", unknown_relation, "Unknown relation"))
+    dangling = deepcopy(value)
+    dangling["relations"][0]["subject"] = "s2_missing_subject"
+    negatives.append(("dangling_reference", dangling, "unknown subject"))
+    for name, invalid, reason in negatives:
+        try:
+            ArenaEnvGraphSpec.model_validate(invalid)
+        except ValidationError as error:
+            assert reason in str(error), "Different schema rejection is not the requested witness"
+            checks.append(name)
+        else:
+            raise AssertionError("Real schema accepted " + name)
+    text = json.dumps(dict(value, s2_unknown_field=True))  # JSON is valid YAML; use the actual parser.
+    try:
+        reject_unknown_fields(parse_yaml(text))
+    except ValueError as error:
+        assert "s2_unknown_field" in str(error)
+        checks.append("unknown_yaml_field")
+    else:
+        raise AssertionError("Real YAML validator accepted unknown field")
+    digest = execution_catalogue_sha256()
+    assets, relations, tasks = prepare_catalogues(digest)
+    assert execution_catalogue_sha256(assets=assets, relations=relations, tasks=tasks) == digest
+    checks.append("catalogue_agreement")
+    wrong_digest = ("1" if digest[0] == "0" else "0") + digest[1:]
+    try:
+        prepare_catalogues(wrong_digest)
+    except ValueError as error:
+        assert str(error) == "Catalogue mismatch"
+        checks.append("catalogue_disagreement")
+    else:
+        raise AssertionError("Real worker accepted catalogue disagreement")
+    assert guard.sdk_calls == 0 and guard.owner_constructions == 0
+    return dict(schema_checks=checks, normalized=normalized, catalogue_sha256=digest,
+                scope="real component preparation, not installed lifecycle or native acceptance")
+
+
 def registrations():
     from isaaclab_arena.agentic_environment_generation.inference_profiles import (
         frozen_builtin_profile,

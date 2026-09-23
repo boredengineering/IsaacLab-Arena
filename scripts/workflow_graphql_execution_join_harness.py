@@ -1934,5 +1934,207 @@ def verify_positive():
     write_evidence("join-positive.json", proof)
 
 
+def initialization_pre_readiness(digest):
+    """Inject only in the real installed build, after catalogue evaluation.
+
+    Dormant in every legacy cohort; a reviewed S2 bootstrap must first establish
+    its private case/controls capability. Raising directly preserves profiling
+    guards, unlike an exception raised inside a profiling callback. Reaching
+    this checkpoint alone is never a passing failure/timeout witness.
+    """
+    guard = ACTIVE
+    case = getattr(guard, "initialization_case", None)
+    if case is None:
+        return
+    assert case in {"failure", "timeout"}
+    assert type(guard) is JoinGuards and guard.role == "server"
+    assert getattr(guard, "initialization_controls_ready", False) is True
+    assert guard.ports_issued and guard.owner_constructions == guard.sdk_calls == 0
+    caller = sys._getframe(1)
+    installed = sys.modules["isaaclab_arena.agentic_environment_generation.workflow.api.installed_execution"]
+    assert caller.f_globals is installed.__dict__
+    assert caller.f_code.co_name == "build" and caller.f_code.co_filename == (
+        "/source/isaaclab_arena/agentic_environment_generation/workflow/api/installed_execution.py"
+    )
+    assert caller.f_locals["catalogue_digest"] == digest
+    assert type(digest) is str and re.fullmatch(r"[a-f0-9]{64}", digest)
+    marker = dict(
+        **identity(), case=case, catalogue_sha256=digest,
+        after_real_initialization=True, before_owner_construction=True,
+        observed_at=time.monotonic(),
+        kind="fixed-initialization-failure" if case == "failure" else "supervisor-stall-not-native-hang",
+        status="checkpoint_only_not_lifecycle_proof",
+    )
+    write_evidence("initialization-pre-readiness.json", marker)
+    if case == "failure":
+        raise RuntimeError("S2 fixed post-initialization pre-readiness failure")
+    # Outer collection must stop the exact owned server group five seconds after
+    # the marker. This independent watchdog only prevents an unbounded fixture;
+    # its expiry is nonpass, not the specified external timeout witness.
+    deadline = time.monotonic() + 40
+    while time.monotonic() < deadline:
+        time.sleep(0.05)
+    raise TimeoutError("S2 external five-second stall supervision missing")
+
+
+def initialization_environment(case, role):
+    """Return the fixed S2 role environment; this grants no import authority."""
+    assert type(case) is str and case in {"positive", "failure", "timeout"}
+    assert type(role) is str and role in {"init-server", "init-generate", "init-refine", "init-assess"}
+    assert case == "positive" or role == "init-server"
+    root = "/tmp/s2-init/" + case + "/" + role
+    return {
+        "HOME": root + "/home", "XDG_CACHE_HOME": root + "/cache", "TMPDIR": root + "/tmp",
+        "WARP_CACHE_PATH": root + "/cache/warp", "PATH": "/usr/bin:/bin",
+        "NVIDIA_VISIBLE_DEVICES": "void", "CUDA_VISIBLE_DEVICES": "",
+        "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+    }
+
+
+def initialization_origin(name, origin, preloaded):
+    """Check one selected package's lexical origin, not its physical identity.
+
+    The caller must separately no-follow/hash the actual loader bytes before
+    loading. This deliberately does NOT admit arbitrary purelib dependencies,
+    Isaac Lab path rewrites, namespace fallbacks, or preloaded package objects.
+    """
+    assert type(name) is type(origin) is str and type(preloaded) is bool and not preloaded
+    pure = "/isaac-sim/kit/python/lib/python3.12/site-packages/"
+    roots = {
+        "warp": pure + "warp", "torch": pure + "torch", "pxr": pure + "pxr",
+        "openai": pure + "openai",
+        "yaml": "/isaac-sim/exts/omni.pip.compute/pip_prebundle/yaml",
+        "isaaclab": "/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab/isaaclab",
+    }
+    root = name.split(".")[0]
+    assert root in roots and all(part.isidentifier() for part in name.split("."))
+    assert origin.startswith(roots[root] + "/")
+    assert all(part not in {"", ".", ".."} for part in origin.split("/")[1:])
+    assert origin.endswith((".py", ".so"))
+    return root
+
+
+def initialization_inside(case):
+    """Return an explicit nonpass while S2's execution controls remain incomplete.
+
+    No imports, native initialization, children or pytest are attempted here.
+    In particular, never manufacture pytest.xml or promote static guard checks
+    to IF-B/IF-C evidence. Returning normally leaves collection to the runner.
+    This refusal must be replaced by reviewed orchestration before release.
+    """
+    assert type(case) is str and case in {"positive", "failure", "timeout"}
+    proof = dict(
+        status="failed", mode="workflow-graphql-initialization", case=case, tests=0,
+        execution_attempted=False, source_sha256={}, initialization_roles=[],
+        children_verified=False, missing_process_witnesses=[],
+        release_blockers=[
+            "cold-role origin/native-loader enforcement and cache identity preflight are not wired",
+            "exact CPU metadata subprocess mediation and loaded-map bounds are not wired",
+            "installed pre-readiness failure/stall and exact group cleanup witnesses are not wired",
+            "fixed real pytest case dispatch and source-frozen role collection are not wired",
+        ],
+    )
+    write_evidence("client-proof.json", proof)
+    return proof
+
+
+def initialization_verify_proof(proof, junit, case):
+    """Fail closed on incomplete S2 evidence; raw JUnit bytes are mandatory.
+
+    This is a readback contract, not admission and not a substitute for the
+    runner's archive/source/image and exact-owned container cleanup checks.
+    """
+    import hashlib
+    import re
+    import xml.etree.ElementTree as ET
+
+    assert type(case) is str and case in {"positive", "failure", "timeout"}
+    assert type(proof) is dict and type(junit) is bytes and 0 < len(junit) <= 4 * 1024 * 1024
+    assert proof["mode"] == "workflow-graphql-initialization" and proof["case"] == case
+    assert proof["status"] == "passed" and type(proof["tests"]) is int and proof["tests"] == 1
+    assert proof["junit_sha256"] == hashlib.sha256(junit).hexdigest()
+    assert proof["image"] == "sha256:b94e17024f1e123ac5a42759ab56651a18823fda7c701e765cba31f200154cdd"
+    assert proof["provision_manifest_sha256"] == "03764536ed54c1f59cbf46305c5bc4ba618e2dc1deeeac7ffdfb21a0dffbf810"
+    assert proof["source_sha256"] and all(
+        type(k) is type(v) is str and re.fullmatch(r"[a-f0-9]{64}", v)
+        and not k.startswith("/") and all(p not in {"", ".", ".."} for p in k.split("/"))
+        for k, v in proof["source_sha256"].items()
+    )
+    assert b"<!DOCTYPE" not in junit and b"<!ENTITY" not in junit
+    tree = ET.fromstring(junit)
+    tests = list(tree.iter("testcase"))
+    assert len(tests) == 1 and tests[0].get("name") == "test_initialization_" + case
+    assert not any(list(tree.iter(tag)) for tag in ("failure", "error", "skipped"))
+    assert proof["release_blockers"] == [] and proof["missing_process_witnesses"] == []
+    assert proof["children_verified"] is True and proof["owned_groups_absent"] is True
+    assert type(proof["sdk_calls"]) is int and proof["sdk_calls"] == 0
+    assert type(proof["provider_constructions"]) is int and proof["provider_constructions"] == 0
+    assert proof["readiness_observed"] is False and proof["owner_admitted"] is False
+    assert type(proof["forbidden"]) is dict and set(proof["forbidden"]) == {
+        "network", "subprocess", "provider", "runtime", "graph", "legacy", "blocked_import",
+    }
+    assert all(type(v) is int and v == 0 for v in proof["forbidden"].values())
+
+    def physical_witness(value):
+        # Same fields as physical_file, with S2's no-follow requirement. This
+        # checks retained structure only; it does not read or admit native bytes.
+        assert type(value) is dict
+        for key in ("path", "physical"):
+            path = value[key]
+            assert type(path) is str and path.startswith("/") and "\x00" not in path
+            assert all(part not in {"", ".", ".."} for part in path.split("/")[1:])
+        assert value["physical"] == value["path"] and value["links"] == []
+        assert type(value["size"]) is int and 0 < value["size"] <= 2 * 1024**3
+        assert type(value["sha256"]) is str and re.fullmatch(r"[a-f0-9]{64}", value["sha256"])
+        return value["size"]
+
+    native_count = 0
+    identity_bytes = 0
+    rows = proof["initialization_roles"]
+    expected = ["init-server", "init-generate", "init-refine", "init-assess"] if case == "positive" else ["init-server"]
+    assert [row["role"] for row in rows] == expected
+    assert len({row["pid"] for row in rows}) == len(rows)
+    for row in rows:
+        assert type(row["pid"]) is int and row["pid"] > 1
+        assert row["pid"] == row["pgid"] == row["sid"] and type(row["start_ticks"]) is int
+        assert row["start_ticks"] > 0 and row["source_sha256"] == proof["source_sha256"]
+        assert row["preimport"]["before_package_imports"] is True
+        assert row["real_preparation_complete"] is True and row["cache_verified"] is True
+        assert row["native_bindings_verified"] is True and row["module_origins_verified"] is True
+        assert row["platform_processor_unmodified"] is True and row["usable_gpu"] is False
+        assert type(row["catalogue_sha256"]) is str and re.fullmatch(r"[a-f0-9]{64}", row["catalogue_sha256"])
+        assert row["catalogue_sha256"] == rows[0]["catalogue_sha256"]
+        assert type(row["native_libraries"]) is list and row["native_libraries"]
+        native_count += len(row["native_libraries"])
+        assert native_count <= 64
+        for library in row["native_libraries"]:
+            identity_bytes += physical_witness(library)
+        assert type(row["module_origins"]) is list and row["module_origins"]
+        for module in row["module_origins"]:
+            identity_bytes += physical_witness(module)
+            assert module["origin"] == module["path"]
+            initialization_origin(module["name"], module["origin"], module["preloaded"])
+        assert identity_bytes <= 8 * 1024**3
+        assert row["cache_before"] is not None and row["cache_after"] is not None
+        assert row["schema_checks"] == [
+            "supported_normalization", "unknown_asset", "unknown_relation", "dangling_reference",
+            "unknown_yaml_field", "catalogue_agreement", "catalogue_disagreement",
+        ]
+    if case != "positive":
+        witness = proof["pre_readiness_failure"]
+        assert type(witness["catalogue_sha256"]) is str
+        assert witness["catalogue_sha256"] == rows[0]["catalogue_sha256"]
+        assert witness["after_real_initialization"] is True and witness["before_owner_construction"] is True
+        assert witness["case"] == case and witness["readiness_absent"] is True
+        assert witness["server_pid"] == rows[0]["pid"] and witness["original_failure_retained"] is True
+        if case == "timeout":
+            assert witness["kind"] == "supervisor-stall-not-native-hang"
+            assert witness["stall_seconds"] == 5 and witness["group_reap_seconds"] <= 5
+        else:
+            assert witness["kind"] == "fixed-initialization-failure"
+    return True
+
+
 if __name__ == "__main__":
     raise SystemExit(child())

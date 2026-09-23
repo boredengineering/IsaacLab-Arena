@@ -792,6 +792,105 @@ def stage_source(root, destination, mode, *, provision=None):
     return {name: hashlib.sha256(data).hexdigest() for name, data in captured.items()}
 
 
+INITIALIZATION_MODE = "workflow-graphql-initialization"
+INITIALIZATION_CASES = ("positive", "failure", "timeout")
+INITIALIZATION_TEST = "isaaclab_arena/tests/test_environment_workflow_initialization_neo4j.py"
+
+
+def initialization_validate_options(mode, case):
+    """Reject misplaced or absent case selection before any discovery or writes."""
+    if mode == INITIALIZATION_MODE:
+        if case not in INITIALIZATION_CASES:
+            raise ValueError("S2 requires an explicit positive|failure|timeout case")
+    elif case is not None:
+        raise ValueError("--initialization-case is exclusive to " + INITIALIZATION_MODE)
+
+
+class InitializationClock:
+    """Use one pre-discovery work deadline and one nonrenewable cleanup reserve."""
+
+    def __init__(self, monotonic):
+        self.monotonic = monotonic
+        self.work_deadline = monotonic() + 300
+        self.cleanup_deadline = None
+
+    def begin_cleanup(self):
+        if self.cleanup_deadline is None:
+            self.cleanup_deadline = self.monotonic() + 120
+
+    def timeout(self, ceiling=45):
+        deadline = self.work_deadline if self.cleanup_deadline is None else self.cleanup_deadline
+        remaining = deadline - self.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("S2 aggregate deadline exhausted; cleanup may be unknown")
+        return min(45, ceiling, remaining)
+
+
+def initialization_client_flags(host, network):
+    """Build only the S2 client's fixed quota and read-only mount controls."""
+    import re
+
+    assert network == "none" or re.fullmatch(r"[a-f0-9]{64}", network)
+    assert type(host) is str and host.startswith("/") and "," not in host
+    assert ".." not in host.split("/")
+    flags = [
+        "--network=" + network, "--read-only", "--user=1000:1000", "--group-add=1234",
+        "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=256",
+        "--memory=4g", "--memory-swap=4g", "--cpus=1", "--ipc=private", "--shm-size=16m",
+        "--no-healthcheck", "--log-opt=max-size=1m", "--log-opt=max-file=1", "--workdir=/tmp",
+        "--env=NVIDIA_VISIBLE_DEVICES=void", "--env=CUDA_VISIBLE_DEVICES=",
+        "--tmpfs=/tmp:rw,nosuid,nodev,uid=1000,gid=1000,mode=0700,size=134217728",
+        "--tmpfs=/evidence:rw,nosuid,nodev,noexec,uid=1000,gid=1000,mode=0700,size=33554432",
+        "--mount", f"type=bind,src={host}/source,dst=/source,readonly",
+    ]
+    if network != "none":
+        flags += ["--mount", f"type=bind,src={host}/network,dst=/network,readonly"]
+    return flags
+
+
+def initialization_archive(payload, allowed):
+    """Validate an already stream-bounded Docker tar without extracting paths."""
+    import io
+    import re
+    import tarfile
+
+    assert type(payload) is bytes and len(payload) <= 36 * 1024 * 1024, "S2 archive overflow"
+    assert type(allowed) is frozenset and len(allowed) <= 55
+    assert all(type(name) is str and re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,127}", name) for name in allowed)
+    files = {}
+    root_seen = False
+    total = 0
+    with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
+        for entry in archive:
+            assert not entry.linkname and not entry.pax_headers and entry.sparse is None
+            if entry.name in ("evidence", "evidence/"):
+                assert entry.isdir() and not root_seen and entry.size == 0
+                root_seen = True
+                continue
+            parts = entry.name.split("/")
+            assert len(parts) == 2 and parts[0] == "evidence", "Unsafe evidence archive path"
+            name = parts[1]
+            assert name in allowed and name not in files and len(files) < 55
+            assert entry.isreg() and 0 <= entry.size <= 4 * 1024 * 1024
+            total += entry.size
+            assert total <= 32 * 1024 * 1024, "S2 evidence aggregate overflow"
+            stream = archive.extractfile(entry)
+            assert stream is not None
+            with stream:
+                raw = stream.read(entry.size + 1)
+            assert len(raw) == entry.size
+            files[name] = raw
+    return files
+
+
+def initialization_main(options):
+    """Keep incomplete S2 orchestration closed rather than use legacy limits."""
+    raise RuntimeError(
+        "S2 execution closed: bounded discovery/provision command injection needs a scoped "
+        "shared-helper amendment; final source inventory and independent critic are required"
+    )
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -807,12 +906,20 @@ def main(argv=None):
             EXECUTION_MODE,
             JOIN_MODE,
             LIFECYCLE_MODE,
+            INITIALIZATION_MODE,
         ),
         # Lifecycle is explicit; no default, legacy case or launch limit changes.
     )
     parser.add_argument("--runtime-image")
     parser.add_argument("--provision-manifest", type=Path)
+    parser.add_argument("--initialization-case", choices=INITIALIZATION_CASES)
     options = parser.parse_args(argv)
+    try:
+        initialization_validate_options(options.mode, options.initialization_case)
+    except ValueError as error:
+        parser.error(str(error))
+    if options.mode == INITIALIZATION_MODE:
+        return initialization_main(options)
     if options.mode not in GRAPHQL_BOOTSTRAP_MODES:
         assert options.runtime_image is None and options.provision_manifest is None
     root = Path(__file__).resolve().parents[1]

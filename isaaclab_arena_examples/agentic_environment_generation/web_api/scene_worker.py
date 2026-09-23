@@ -133,6 +133,22 @@ def open_area(payload):
     return ArtifactArea.open(Path(payload["root"]), store_id=payload["store_id"], registry_id=payload["registry_id"])
 
 
+def prepare_catalogues(expected_sha256):
+    """Prepare the real execution catalogues and reject disagreement before model work."""
+    from isaaclab_arena.agentic_environment_generation.environment_generation_agent import (
+        build_asset_catalogue,
+        build_relation_catalogue,
+        build_task_catalogue,
+    )
+
+    from .catalogues import execution_catalogue_sha256
+
+    assets, relations, tasks = build_asset_catalogue(), build_relation_catalogue(), build_task_catalogue()
+    if execution_catalogue_sha256(assets=assets, relations=relations, tasks=tasks) != expected_sha256:
+        raise ValueError("Catalogue mismatch")
+    return assets, relations, tasks
+
+
 def execute(packet, allowance, protect):
     from isaaclab_arena.agentic_environment_generation.workflow.scene_engines import BoundedSceneModels
 
@@ -180,20 +196,7 @@ def execute(packet, allowance, protect):
                 raise ValueError("Visual response bound")
             output = {"kind": "raw_visual_response", "raw_response": raw, "publication": "not_published"}
         else:
-            from isaaclab_arena.agentic_environment_generation.environment_generation_agent import (
-                build_asset_catalogue,
-                build_relation_catalogue,
-                build_task_catalogue,
-            )
-
-            from .catalogues import execution_catalogue_sha256
-
-            assets, relations, tasks = build_asset_catalogue(), build_relation_catalogue(), build_task_catalogue()
-            if (
-                execution_catalogue_sha256(assets=assets, relations=relations, tasks=tasks)
-                != inputs["execution_catalogue_sha256"]
-            ):
-                raise ValueError("Catalogue mismatch")
+            assets, relations, tasks = prepare_catalogues(inputs["execution_catalogue_sha256"])
             kwargs = dict(asset_catalog=assets, relation_catalog=relations, task_catalog=tasks, protect=protect)
             if action == "refine":
                 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec

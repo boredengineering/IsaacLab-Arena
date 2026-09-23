@@ -357,9 +357,12 @@ def install_synthetic_sdk(*, scene=False):
     if scene:
         from isaaclab_arena.agentic_environment_generation.spec_wire_adapter import SpecWireAdapter
         from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
-        from isaaclab_arena.tests.utils.agentic_environment_generation import minimal_spec_dict
+        from isaaclab_arena.environment_spec.arena_env_graph_yaml_loader import load_env_graph_spec_dict
 
-        wire = SpecWireAdapter().encode(ArenaEnvGraphSpec.model_validate(minimal_spec_dict()).model_dump(mode="json"))
+        fixture_spec = load_env_graph_spec_dict(
+            Path(__file__).resolve().parents[5] / "isaaclab_arena/tests/test_data/minimal_maple_table_env_graph.yaml"
+        )
+        wire = SpecWireAdapter().encode(ArenaEnvGraphSpec.model_validate(fixture_spec).model_dump(mode="json"))
         evidence["scope"] = "synthetic HTTP; real scene model methods, SDK and schema; no native acceptance"
 
     def synthetic_response(transport, request):

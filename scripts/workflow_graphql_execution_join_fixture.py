@@ -124,7 +124,7 @@ def initialization_preparation(role):
 
     from isaaclab_arena.agentic_environment_generation.workbench.document_yaml import parse_yaml, reject_unknown_fields
     from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
-    from isaaclab_arena.tests.utils.agentic_environment_generation import minimal_spec_dict
+    from isaaclab_arena.environment_spec.arena_env_graph_yaml_loader import load_env_graph_spec_dict
     from isaaclab_arena_examples.agentic_environment_generation.web_api.catalogues import execution_catalogue_sha256
     from isaaclab_arena_examples.agentic_environment_generation.web_api.scene_worker import prepare_catalogues
 
@@ -143,7 +143,9 @@ def initialization_preparation(role):
 
         assert RetainedPriorArtifacts is not None and RetainedPriorReceipt is not None
 
-    value = minimal_spec_dict()
+    value = load_env_graph_spec_dict(
+        Path(__file__).resolve().parents[1] / "isaaclab_arena/tests/test_data/minimal_maple_table_env_graph.yaml"
+    )
     normalized = ArenaEnvGraphSpec.model_validate(deepcopy(value)).model_dump(mode="json")
     assert ArenaEnvGraphSpec.model_validate(deepcopy(normalized)).model_dump(mode="json") == normalized
     checks = ["supported_normalization"]

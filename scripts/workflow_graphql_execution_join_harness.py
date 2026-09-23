@@ -430,9 +430,187 @@ def registration_metadata_point(
         os.close(fd)
 
 
-def registration_metadata_probe(preimport, guard, runner, report):
-    """Prepare E1 immutable candidate evidence without enabling package imports."""
+def registration_metadata_probe(preimport, guard, runner, report, *, admission=None, trigger=None):
+    """Prepare bounded source evidence without enabling package imports."""
     import ast
+
+    def dependency_frontier():
+        started = time.monotonic()
+        # Fixed source selection from retained IsaacLab utils / Torch AST and
+        # the actual 2339d5215d5840e7b65df34d2d1f5faf refusal, not a resolver.
+        p = "/isaac-sim/kit/python/lib/python3.12/site-packages"
+        l = "/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab/isaaclab"
+        paths = [p + suffix for suffix in (
+            "/lazy_loader/__init__.py", "/numpy/__init__.py", "/sympy/__init__.py",
+            "/torch/__init__.py", "/torch/_utils.py", "/torch/_utils_internal.py",
+            "/torch/torch_version.py", "/torch/version.py",
+        )] + [l + "/sim/__init__.py", l + "/sim/__init__.pyi"]
+        assert trigger == dict(fullname="lazy_loader", origin=paths[0])
+        assert guard.initialization_case == "positive" and guard.initialization_role == "init-server"
+        assert runner.GRAPHQL_IMAGE == "sha256:b94e17024f1e123ac5a42759ab56651a18823fda7c701e765cba31f200154cdd"
+        assert runner.GRAPHQL_MANIFEST_SHA256 == "03764536ed54c1f59cbf46305c5bc4ba618e2dc1deeeac7ffdfb21a0dffbf810"
+        budget = admission.budget
+        saved = {key: budget[key] for key in ("deadline", "byte_limit", "file_limit") if key in budget}
+        initial_bytes = budget["bytes"]
+        report.update(
+            schema_version=1, status="partial", trigger=trigger, role=guard.initialization_role, pid=os.getpid(),
+            image=runner.GRAPHQL_IMAGE, provision_manifest_sha256=runner.GRAPHQL_MANIFEST_SHA256,
+            expanded_import_admitted=False, package_imports_executed=False,
+            complete_dependency_closure=False, requested_manifest=paths,
+            selection="fixed retained trace/IsaacLab utils/Torch AST candidates; existence not assumed",
+            baseline={}, baseline_complete=False, module_origins=[], module_origins_complete=False,
+            source_capture_complete=False, imports_complete=False,
+            files=[dict(path=path, status="not_read_pending", imports_complete=False) for path in paths], bytes_read=0,
+            limits=dict(seconds=5, file_bytes=262144, total_bytes=4194304, report_bytes=1048576, imports=512),
+        )
+        # Reserve space for all terminal statuses/counters before accepting any
+        # variable data. JSON escaping, not raw UTF-8 length, determines cost.
+        encoder = json.JSONEncoder(sort_keys=True)
+        encoding_deadline = None
+
+        def size(value):
+            count = 0
+            for chunk in encoder.iterencode(value):
+                if encoding_deadline is not None and time.monotonic() >= encoding_deadline:
+                    raise TimeoutError("S2 frontier encoding deadline")
+                count += len(chunk.encode("utf-8"))
+                if count > 1048576:
+                    return count
+            return count
+
+        used = size(report)
+
+        def replace(container, key, value):
+            nonlocal used
+            delta = size(value) - size(container[key])
+            if used + delta > 1048576 - 8192:
+                return False
+            container[key] = value
+            used += delta
+            return True
+
+        def add(container, key, value):
+            nonlocal used
+            assert key not in container and type(key) is str
+            # Default JSON separators are ': ' and ', '; encode each new key
+            # and value once rather than copying/re-encoding growing metadata.
+            delta = size(key) + 2 + size(value) + (2 if container else 0)
+            if used + delta > 1048576 - 8192:
+                return False
+            container[key] = value
+            used += delta
+            return True
+
+        def append(container, value):
+            nonlocal used
+            delta = size(value) + (2 if container else 0)
+            if used + delta > 1048576 - 8192:
+                return False
+            container.append(value)
+            used += delta
+            return True
+
+        budget["deadline"] = min(saved["deadline"], started + 5)
+        budget["byte_limit"] = min(saved.get("byte_limit", 8 * 1024**3), initial_bytes + 4194304)
+        budget["file_limit"] = min(saved.get("file_limit", 2 * 1024**3), 262144)
+        encoding_deadline = budget["deadline"]
+        try:
+            # Source capture has priority over optional AST and loaded-module
+            # summaries: finish the fixed selection before walking any tree.
+            for index, path in enumerate(paths):
+                row = report["files"][index]
+                if time.monotonic() >= budget["deadline"]:
+                    row["status"] = "not_read_deadline"
+                    continue
+                if used >= 1048576 - 16384:
+                    row["status"] = "not_read_encoded_limit"
+                    continue
+                try:
+                    witness, raw = initialization_physical_file(path, budget, source=True)
+                    assert type(witness) is dict and type(raw) is bytes
+                    observed = dict(path=path, status="read_source_omitted", witness=witness,
+                                    imports_complete=False, imports=[],
+                                    imports_semantics="syntactic including deferred/conditional; not execution order")
+                    if not replace(report["files"], index, observed):
+                        row["status"] = "read_encoded_limit"
+                        continue
+                    row = report["files"][index]
+                    text = raw.decode("utf-8", errors="strict")
+                    assert text.encode("utf-8") == raw
+                    source = dict(format="complete_utf8_source", complete_source=True,
+                                  bytes=len(raw), sha256=witness["sha256"], text=text)
+                    if not add(row, "source_evidence", source):
+                        row["status"] = "read_encoded_limit"
+                        continue
+                    row["status"] = "observed"
+                except BaseException as error:
+                    row["status"] = ("not_read_missing" if isinstance(error, FileNotFoundError)
+                                     else "read_error" if "witness" in row else "not_read_refused")
+                    row["error_type"] = type(error).__name__[:128]
+                    if isinstance(error, AssertionError) and "witness" not in row:
+                        reasons = {"S2 physical link refused": "not_read_link",
+                                   "S2 physical hard link refused": "not_read_link",
+                                   "S2 physical per-file ceiling": "not_read_oversize",
+                                   "S2 physical read ceiling": "not_read_byte_limit"}
+                        if len(error.args) == 1 and type(error.args[0]) is str:
+                            row["status"] = reasons.get(error.args[0], row["status"])
+                    if time.monotonic() >= budget["deadline"]:
+                        row["status"] = "read_deadline" if "witness" in row else "not_read_deadline"
+            for row in report["files"]:
+                if "source_evidence" not in row or time.monotonic() >= budget["deadline"]:
+                    continue
+                try:
+                    tree = ast.parse(row["source_evidence"]["text"].encode("utf-8"), filename=row["path"])
+                    complete = True
+                    for node in ast.walk(tree):
+                        if time.monotonic() >= budget["deadline"]:
+                            complete = False
+                            break
+                        if isinstance(node, (ast.Import, ast.ImportFrom)):
+                            edge = dict(line=node.lineno, end_line=node.end_lineno, col=node.col_offset,
+                                        end_col=node.end_col_offset, module=getattr(node, "module", None),
+                                        level=getattr(node, "level", 0), names=[x.name for x in node.names])
+                            if len(row["imports"]) >= 512 or not append(row["imports"], edge):
+                                complete = False
+                                break
+                    row["imports_complete"] = complete
+                except BaseException as error:
+                    # Summary failure never invalidates complete captured bytes.
+                    row["imports_error_type"] = type(error).__name__[:128]
+            for field, values in (("baseline", admission.baseline), ("module_origins", admission.modules)):
+                complete = True
+                for key in values if field == "baseline" else range(len(values)):
+                    if time.monotonic() >= budget["deadline"]:
+                        complete = False
+                        break
+                    retained = (add(report[field], key, values[key]) if field == "baseline"
+                                else append(report[field], values[key]))
+                    if not retained:
+                        complete = False
+                        break
+                report[field + "_complete"] = complete
+        finally:
+            report["source_capture_complete"] = all("source_evidence" in row for row in report["files"])
+            report["imports_complete"] = all(row["imports_complete"] for row in report["files"])
+            report["status"] = ("observed" if all(report[field] for field in (
+                "source_capture_complete", "imports_complete", "baseline_complete", "module_origins_complete"
+            )) else "partial")
+            report["bytes_read"] = budget["bytes"] - initial_bytes
+            for row in report["files"]:
+                if row["status"] == "not_read_pending":
+                    row["status"] = ("not_read_deadline" if time.monotonic() >= budget["deadline"]
+                                     else "not_read_inspection_error")
+            # Restore limits only: inspection reads remain charged to the role.
+            for key in ("deadline", "byte_limit", "file_limit"):
+                if key in saved:
+                    budget[key] = saved[key]
+                else:
+                    budget.pop(key, None)
+
+    if admission is not None:
+        dependency_frontier()
+        return
+
     import sysconfig
     from email.parser import BytesParser
 
@@ -1043,7 +1221,12 @@ class JoinGuards(base.Guards):
         if getattr(self, "initialization_controls_ready", False) and event == "call":
             module = frame.f_globals.get("__name__", "")
             name = frame.f_code.co_name
-            if (module.startswith("warp") and name in {"launch", "launch_tiled", "capture_launch"}
+            # Teardown may clear module metadata; do not skip inherited guards.
+            # Unknown provenance must still fail closed for runtime actions.
+            if type(module) is not str:
+                module = ""
+            if (not module and name in {"launch", "launch_tiled", "capture_launch", "Open", "OpenMasked"}
+                    or module.startswith("warp") and name in {"launch", "launch_tiled", "capture_launch"}
                     or module.startswith("pxr") and name in {"Open", "OpenMasked"}):
                 self.deny("runtime")
         if self.role == "client" and event == "call" and frame.f_code.co_name == "query":
@@ -1595,6 +1778,7 @@ def child():
             platform.processor = lambda: os.uname().machine
         elif role == "server":
             guard.initialization_admission = InitializationAdmission(guard, runner, time.monotonic() + 35)
+            record["pythonapi_bootstrap"] = guard.initialization_admission.pythonapi_bootstrap
             guard.initialization_processor = platform.processor
             guard.initialization_controls_ready = True
         closure = read_json(Path("/source/closure.json"), 65536)
@@ -1750,6 +1934,8 @@ def child():
         raise
     finally:
         original_error = sys.exc_info()[0]
+        if initialization and getattr(guard, "initialization_admission", None) is not None:
+            record["pythonapi_bootstrap"] = guard.initialization_admission.pythonapi_bootstrap
         record.update(
             forbidden=guard.forbidden,
             allowed=guard.allowed,
@@ -2096,7 +2282,7 @@ def initialization_origin(name, origin, preloaded):
     return root
 
 
-def initialization_physical_file(path, budget, *, binary=False):
+def initialization_physical_file(path, budget, *, binary=False, source=False):
     """Hash a selected immutable file through no-follow descriptors, never load it.
 
     Hashes are measured identities, not preapproved native pins. The caller must
@@ -2119,6 +2305,7 @@ def initialization_physical_file(path, budget, *, binary=False):
             assert time.monotonic() < budget["deadline"]
             before = os.stat(part, dir_fd=fd, follow_symlinks=False)
             directory = index != len(parts) - 1
+            assert not stat.S_ISLNK(before.st_mode), "S2 physical link refused"
             assert stat.S_ISDIR(before.st_mode) if directory else stat.S_ISREG(before.st_mode)
             flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
             if directory:
@@ -2129,8 +2316,13 @@ def initialization_physical_file(path, budget, *, binary=False):
             info = os.fstat(fd)
             assert (info.st_dev, info.st_ino, info.st_mode) == (before.st_dev, before.st_ino, before.st_mode)
             assert os.fstatvfs(fd).f_flag & os.ST_RDONLY, "S2 mutable selected origin"
-        assert info.st_nlink == 1 and 0 < info.st_size <= 2 * 1024**3
+        file_limit = budget.get("file_limit", 2 * 1024**3)
+        assert type(file_limit) is int and file_limit > 0
+        assert info.st_nlink == 1, "S2 physical hard link refused"
+        assert 0 < info.st_size <= min(file_limit, 2 * 1024**3), "S2 physical per-file ceiling"
         assert budget["bytes"] + info.st_size <= byte_limit, "S2 physical read ceiling"
+        assert type(source) is bool and (not source or info.st_size <= 1024**2)
+        chunks = [] if source else None
         digest, count = hashlib.sha256(), 0
         while True:
             assert time.monotonic() < budget["deadline"]
@@ -2141,17 +2333,86 @@ def initialization_physical_file(path, budget, *, binary=False):
             budget["bytes"] += len(chunk)
             assert count <= info.st_size and budget["bytes"] <= byte_limit
             digest.update(chunk)
+            if source:
+                chunks.append(chunk)
         final = os.fstat(fd)
         assert count == info.st_size
         assert (final.st_dev, final.st_ino, final.st_size, final.st_mtime_ns, final.st_ctime_ns) == (
             info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
         ), "S2 physical identity changed during read"
         budget["files"] += int(binary)
-        return dict(path=path, physical=path, links=[], size=count, sha256=digest.hexdigest(),
-                    device=info.st_dev, inode=info.st_ino, uid=info.st_uid, gid=info.st_gid,
-                    mode=stat.S_IMODE(info.st_mode), mtime_ns=info.st_mtime_ns, ctime_ns=info.st_ctime_ns)
+        row = dict(path=path, physical=path, links=[], size=count, sha256=digest.hexdigest(),
+                   device=info.st_dev, inode=info.st_ino, uid=info.st_uid, gid=info.st_gid,
+                   mode=stat.S_IMODE(info.st_mode), mtime_ns=info.st_mtime_ns, ctime_ns=info.st_ctime_ns)
+        return (row, b"".join(chunks)) if source else row
     finally:
         os.close(fd)
+
+
+def initialization_executable_binding(budget):
+    """Bind the literal invocation to a physical file and the running kernel inode.
+
+    Only the selected terminal python3 alias is admitted. /proc/self/exe is
+    explicitly a kernel magic-link observation, never an ordinary path exemption.
+    Both physical reads use the existing shared byte/deadline budget.
+    """
+    assert EXECUTABLE == "/isaac-sim/kit/python/bin/python3"
+    assert sys.executable == EXECUTABLE and sys.implementation.name == "cpython"
+    assert tuple(sys.version_info[:2]) == (3, 12), "S2 CPython version mismatch"
+    target = EXECUTABLE + ".12"
+
+    def nominal():
+        fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            assert os.fstatvfs(fd).f_flag & os.ST_RDONLY, "S2 mutable executable root"
+            for part in EXECUTABLE.split("/")[1:-1]:
+                assert time.monotonic() < budget["deadline"]
+                before = os.stat(part, dir_fd=fd, follow_symlinks=False)
+                assert stat.S_ISDIR(before.st_mode), "S2 executable parent must be no-follow directory"
+                nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                os.close(fd)
+                fd = nxt
+                info = os.fstat(fd)
+                assert (info.st_dev, info.st_ino, info.st_mode) == (before.st_dev, before.st_ino, before.st_mode)
+                assert os.fstatvfs(fd).f_flag & os.ST_RDONLY, "S2 mutable executable parent"
+            info = os.stat("python3", dir_fd=fd, follow_symlinks=False)
+            metadata = dict(device=info.st_dev, inode=info.st_ino, mode=info.st_mode,
+                            size=info.st_size, mtime_ns=info.st_mtime_ns, ctime_ns=info.st_ctime_ns)
+            if stat.S_ISREG(info.st_mode):
+                return EXECUTABLE, None, metadata
+            assert stat.S_ISLNK(info.st_mode), "S2 unknown executable terminal layout"
+            link = os.readlink("python3", dir_fd=fd)
+            assert link in {"python3.12", target}, "S2 unapproved executable terminal alias target"
+            return target, dict(metadata, target=link), metadata
+        finally:
+            os.close(fd)
+
+    try:
+        selected, alias, metadata = nominal()
+        physical = initialization_physical_file(selected, budget)
+        assert time.monotonic() < budget["deadline"]
+        link = os.readlink("/proc/self/exe")
+        assert type(link) is str and link == selected, "S2 kernel executable path mismatch or deleted target"
+        # This fixed kernel magic link alone is intentionally followed. No bytes
+        # are read here; the selected no-follow physical reader owns byte costs.
+        fd = os.open("/proc/self/exe", os.O_RDONLY | os.O_NONBLOCK)
+        try:
+            info = os.fstat(fd)
+            assert stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+            assert os.fstatvfs(fd).f_flag & os.ST_RDONLY, "S2 mutable running executable"
+            assert (info.st_dev, info.st_ino) == (physical["device"], physical["inode"]), (
+                "S2 kernel executable inode mismatch")
+            assert os.readlink("/proc/self/exe") == link, "S2 kernel executable readback changed"
+            assert initialization_physical_file(selected, budget) == physical
+            assert nominal() == (selected, alias, metadata), "S2 executable alias changed"
+            assert time.monotonic() < budget["deadline"]
+            kernel = dict(path="/proc/self/exe", target=link, device=info.st_dev, inode=info.st_ino, pid=os.getpid())
+        finally:
+            os.close(fd)
+        return physical, dict(invocation=EXECUTABLE, implementation="cpython", version=[3, 12],
+                              alias=alias, kernel=kernel)
+    except (AssertionError, OSError) as error:
+        raise AssertionError("S2 executable binding unresolved: " + str(error)[:256]) from error
 
 
 def initialization_cache_manifest(root, deadline):
@@ -2302,6 +2563,64 @@ class InitializationLoader:
         self.admission.modules.append(dict(self.row, name=self.name, origin=self.row["path"], preloaded=False))
 
 
+class InitializationPythonAPILoader(InitializationLoader):
+    """Execute unchanged physical stdlib source, binding its one bootstrap call."""
+
+    def exec_module(self, module):
+        import ast
+        import types
+
+        admission = self.admission
+        self.verify()
+        assert module is sys.modules[self.name] and module.__spec__._initializing
+        assert module.__file__ == module.__spec__.origin == self.row["path"]
+        if self.name == "_ctypes":
+            assert admission.pythonapi_dlopen is None
+            self.original.exec_module(module)
+            assert type(module.dlopen) is types.BuiltinFunctionType
+            assert module.dlopen.__self__ is module and module.dlopen.__name__ == "dlopen"
+            admission.pythonapi_dlopen = module.dlopen
+            self.verify()
+            return
+        assert self.name == "ctypes" and not admission.pythonapi_bootstrap
+        assert admission.pythonapi_active is None and "pythonapi" not in module.__dict__
+        assert sys.implementation.name == "cpython" and sys.executable == EXECUTABLE
+        executable, executable_binding = initialization_executable_binding(admission.budget)
+        row, raw = initialization_physical_file(self.row["path"], admission.budget, source=True)
+        assert row == self.row
+        tree = ast.parse(raw, self.row["path"])
+        assignments = [node for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                       and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                       and node.targets[0].id == "pythonapi" and isinstance(node.value, ast.Call)
+                       and isinstance(node.value.func, ast.Name) and node.value.func.id == "PyDLL"
+                       and len(node.value.args) == 1 and isinstance(node.value.args[0], ast.Constant)
+                       and node.value.args[0].value is None and not node.value.keywords]
+        assert len(assignments) == 1, "S2 exact stdlib pythonapi assignment missing"
+        code = compile(raw, self.row["path"], "exec", dont_inherit=True)
+        cdll = next(c for c in code.co_consts if isinstance(c, types.CodeType) and c.co_name == "CDLL")
+        init = next(c for c in cdll.co_consts if isinstance(c, types.CodeType) and c.co_name == "__init__")
+        admission.pythonapi_active = dict(module=module, code=code, init=init,
+                                          line=assignments[0].lineno, source=row, executable=executable,
+                                          executable_binding=executable_binding)
+        try:
+            # Execute all original source, not a rewritten/replacement initializer.
+            exec(code, module.__dict__)
+            assert len(admission.pythonapi_bootstrap) == 1
+            witness = admission.pythonapi_bootstrap[0]
+            assert witness["status"] == "admitted"
+            assert module is sys.modules.get("ctypes") and module.__spec__._initializing
+            assert module.__file__ == module.__spec__.origin == self.row["path"]
+            assert module.pythonapi is admission.pythonapi_active["instance"]
+            assert type(module.pythonapi) is module.PyDLL and module.pythonapi._name is None
+            assert module.pythonapi._handle is not None
+            self.verify()
+            assert initialization_executable_binding(admission.budget) == (executable, executable_binding)
+            witness["status"] = "completed"
+        finally:
+            # Failed attempts remain admitted, never falsely completed.
+            admission.pythonapi_active = None
+
+
 class InitializationAdmission:
     """Lock selected origins before real loads; unknown package authority refuses."""
 
@@ -2315,6 +2634,9 @@ class InitializationAdmission:
             # not a check after excess bytes have already been consumed.
             self.budget.update(native_limit=16, byte_limit=2 * 1024**3)
         self.modules, self.libraries, self.pins, self.cpu_metadata = [], {}, {}, []
+        self.dependency_frontier, self.dependency_frontier_started = None, False
+        self.pythonapi_bootstrap, self.pythonapi_active, self.pythonapi_dlopen = [], None, None
+        assert "ctypes" not in sys.modules and "_ctypes" not in sys.modules, "S2 preloaded ctypes bootstrap"
         self.roots = {
             name: DEPENDENCY_ROOTS[0] + "/" + name for name in ("warp", "torch", "pxr", "openai")
         }
@@ -2344,6 +2666,23 @@ class InitializationAdmission:
 
     def find_spec(self, fullname, path=None, target=None):
         top = fullname.split(".")[0]
+        if fullname in {"ctypes", "_ctypes"}:
+            from importlib.machinery import ExtensionFileLoader, SourceFileLoader
+
+            assert target is None and fullname not in sys.modules and not self.pythonapi_bootstrap
+            stdlib = "/isaac-sim/kit/python/lib/python3.12/"
+            selected = stdlib if fullname == "ctypes" else stdlib + "lib-dynload"
+            spec = self.pathfinder.find_spec(fullname, [selected])
+            assert spec is not None
+            if fullname == "ctypes":
+                assert spec.origin == stdlib + "ctypes/__init__.py" and type(spec.loader) is SourceFileLoader
+            else:
+                assert type(spec.loader) is ExtensionFileLoader
+                assert str(Path(spec.origin).parent) == selected and Path(spec.origin).name.startswith("_ctypes.")
+                assert spec.origin.endswith(".so")
+            row = initialization_physical_file(spec.origin, self.budget)
+            spec.loader = InitializationPythonAPILoader(self, fullname, spec.loader, row)
+            return spec
         if top in {"isaaclab_arena", "isaaclab_arena_examples", "isaaclab_arena_environments", "isaaclab_arena_g1"}:
             return None  # The separately installed exact staged-closure finder owns these.
         if top in self.roots:
@@ -2373,7 +2712,20 @@ class InitializationAdmission:
             return None
         # No automatic exemption for torch/Isaac Lab's transitive families.
         # A new httpx2/jiter/omni origin is a bounded diagnostic, not authority.
-        raise ImportError("Unadmitted S2 package origin: " + fullname[:128] + " at " + origin[:512])
+        refusal = ImportError("Unadmitted S2 package origin: " + fullname[:128] + " at " + origin[:512])
+        try:
+            if (self.guard.initialization_case == "positive" and self.guard.initialization_role == "init-server"
+                    and fullname == "lazy_loader"
+                    and origin == "/isaac-sim/kit/python/lib/python3.12/site-packages/lazy_loader/__init__.py"
+                    and not self.dependency_frontier_started):
+                self.dependency_frontier_started = True  # Consume before any inspection/reentry.
+                self.dependency_frontier = {}
+                registration_metadata_probe(None, self.guard, self.runner, self.dependency_frontier,
+                                            admission=self, trigger=dict(fullname=fullname, origin=origin))
+        except BaseException as error:
+            self.dependency_frontier["inspection_error"] = type(error).__name__[:128]
+        finally:
+            raise refusal from None
 
     def library(self, path):
         assert type(path) is str and path.startswith("/"), "S2 unnamed native load has no physical binding"
@@ -2386,7 +2738,44 @@ class InitializationAdmission:
 
     def audit(self, event, args):
         if event == "ctypes.dlopen":
-            self.library(args[0])  # Audit fires before dlopen/ELF constructors.
+            if args == (None,):
+                self.pythonapi_process_namespace(sys._getframe(1))
+            else:
+                self.library(args[0])  # Audit fires before dlopen/ELF constructors.
+
+    def pythonapi_process_namespace(self, frame):
+        """Consume exactly one genuine partial-module PyDLL(None) admission."""
+        active = self.pythonapi_active
+        assert active is not None and not self.pythonapi_bootstrap, "S2 unnamed native load denied"
+        module = active["module"]
+        assert self.guard.initialization_controls_ready is True
+        assert module is sys.modules.get("ctypes") and module.__spec__._initializing
+        assert module.__file__ == module.__spec__.origin == active["source"]["path"]
+        assert "pythonapi" not in module.__dict__
+        assert frame.f_code is active["init"] and frame.f_globals is module.__dict__
+        assert module.CDLL.__init__.__code__ is active["init"]
+        assert module.CDLL.__init__.__globals__ is module.__dict__
+        assert module.PyDLL.__bases__ == (module.CDLL,) and module.PyDLL.__init__ is module.CDLL.__init__
+        values = frame.f_locals
+        assert type(values["self"]) is module.PyDLL
+        assert values["name"] is values["self"]._name is values["handle"] is None
+        assert values["final_name"] is None
+        assert values["mode"] == module.DEFAULT_MODE == module.CDLL.__init__.__defaults__[0]
+        assert values["use_errno"] is values["use_last_error"] is False and values["winmode"] is None
+        assert module.CDLL.__init__.__defaults__[1:] == (None, False, False, None)
+        assert self.pythonapi_dlopen is not None
+        assert module._dlopen is self.pythonapi_dlopen is sys.modules["_ctypes"].dlopen
+        caller = frame.f_back
+        assert caller.f_code is active["code"] and caller.f_globals is module.__dict__
+        assert caller.f_locals is module.__dict__ and caller.f_lineno == active["line"]
+        active["instance"] = values["self"]
+        # Consume before the native call. None is not a filesystem library.
+        self.pythonapi_bootstrap.append(dict(
+            kind="ctypes-pythonapi-process-namespace", argument=None, status="admitted",
+            role=self.guard.initialization_role, pid=os.getpid(), source=active["source"],
+            executable=active["executable"], executable_binding=active["executable_binding"],
+            callsite=dict(module_line=caller.f_lineno,
+            init_line=frame.f_lineno, module_code="<module>", init_code="CDLL.__init__")))
 
     def check_output(self, *args, **kwargs):
         # Keep platform.processor itself unchanged; mediate only its exact real
@@ -2499,6 +2888,14 @@ def initialization_collect(proc, deadline, stdout_limit=8 * 1024**2, stderr_limi
                 if installed_launcher:
                     initialization_owned_server(proc.pid)
                 initialization_monitor_stall()
+                if installed_launcher:
+                    cleanup_deadline = ACTIVE.initialization_cleanup_deadline
+                    if cleanup_deadline is not None:
+                        deadline = min(deadline, cleanup_deadline)
+                    # A successful monitor may have spent the containment
+                    # allowance; neither open pipes nor EOF may restart it.
+                    remaining = deadline - time.monotonic()
+                    assert remaining > 0, "S2 cold role deadline"
                 for key, _ in selector.select(min(remaining, 0.05)):
                     stream = key.fileobj
                     limit = stdout_limit if stream is proc.stdout else stderr_limit
@@ -2508,7 +2905,7 @@ def initialization_collect(proc, deadline, stdout_limit=8 * 1024**2, stderr_limi
                     else:
                         buffers[stream].extend(chunk)
                         assert len(buffers[stream]) <= limit, "S2 output ceiling"
-            proc.wait(timeout=max(0.001, deadline - time.monotonic()))
+            proc.wait(timeout=max(0 if installed_launcher else 0.001, deadline - time.monotonic()))
         return bytes(buffers[proc.stdout]), bytes(buffers[proc.stderr])
     finally:
         try:
@@ -2603,6 +3000,11 @@ def initialization_child(role):
                       owner_constructions=guard.owner_constructions)
         if admission is not None:
             record["physical_read_budget"] = dict(admission.budget)
+            record["pythonapi_bootstrap"] = admission.pythonapi_bootstrap
+            if admission.dependency_frontier is not None:
+                # Baseline and existing origins share the bounded diagnostic;
+                # do not duplicate unbounded metadata into the 4MiB role leaf.
+                record["dependency_frontier"] = admission.dependency_frontier
         write_evidence("initialization-" + role + ".json", record)
         signal.alarm(0)
 
@@ -2650,6 +3052,7 @@ def initialization_finish_role(guard, prepared):
                platform_processor_unmodified=True, usable_gpu=False,
                native_libraries=list(admission.libraries.values()), module_origins=admission.modules,
                mapped_libraries=initialization_maps(), cpu_metadata=admission.cpu_metadata,
+               pythonapi_bootstrap=admission.pythonapi_bootstrap,
                forbidden=guard.forbidden, sdk_calls=guard.sdk_calls, owner_constructions=guard.owner_constructions,
                physical_read_budget=dict(admission.budget), status="completed")
     assert row["native_libraries"] and not any(guard.forbidden.values())
@@ -2809,6 +3212,161 @@ def initialization_evidence_names(case, proof=None):
     return names
 
 
+def initialization_required_evidence(case, proof):
+    """Select mandatory emitted leaves, separately from the diagnostic allowlist."""
+    allowed = initialization_evidence_names(case, proof)
+    pids = proof["process_pids"]
+    rows = proof["initialization_roles"]
+    assert len(pids) == (4 if case == "positive" else 11)
+    names = {"client-proof.json", "pytest.xml", "collection-ready", "initialization-harness.json"}
+    roles = INITIALIZATION_ROLES if case == "positive" else ("init-server",)
+    assert [row["role"] for row in rows] == list(roles)
+    names.update("initialization-" + role + ".json" for role in roles)
+    names.update(f"join-launch-{pid}.json" for pid in pids)
+    if case == "positive":
+        assert pids == [row["pid"] for row in rows]
+        names.update("initialization-" + role + "-output.json" for role in roles)
+        # Cold initialization_child bypasses child(): no join-process witnesses.
+        # Only the three model preparations install the SDK fixture.
+        names.update(f"generation-child-{row['pid']}-sdk.json" for row in rows[1:])
+    else:
+        assert rows[0]["pid"] == pids[-1] and rows[0]["pid"] not in pids[:-1]
+        names.update("initialization-cli-" + str(index) + ".json" for index in range(10))
+        names.update(f"join-process-{pid}.json" for pid in pids[:-1])
+        names.update({"initialization-pre-readiness.json", f"join-process-{pids[-1]}-started.json"})
+        if case == "failure":
+            names.add(f"join-process-{pids[-1]}.json")
+        else:
+            # SIGKILL cannot emit the server's finally record.
+            names.add("initialization-stall-stop.json")
+    assert names <= allowed and len(names) <= 55
+    return names
+
+
+def initialization_verify_evidence(files, case):
+    """Verify actual archive bytes against their single captured client proof."""
+    import json
+
+    proof = json.loads(files["client-proof.json"])
+    assert initialization_required_evidence(case, proof) <= set(files), "S2 mandatory evidence missing"
+    assert initialization_verify_proof(proof, files["pytest.xml"], case) is True
+    assert files["collection-ready"] == (case + "\n").encode()
+    assert "initialization-error.json" not in files
+
+    def read(name):
+        value = json.loads(files[name])
+        assert type(value) is dict
+        return value
+
+    def same(left, right):
+        # bool is not an integer identity, including in nested witness records.
+        assert json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True), "S2 evidence disagreement"
+
+    def zero_effects(row):
+        same(row["forbidden"], proof["forbidden"])
+        for key in ("sdk_calls", "owner_constructions"):
+            assert type(row[key]) is int and row[key] == 0
+
+    harness = read("initialization-harness.json")
+    same(harness["forbidden"], proof["forbidden"])
+    spawns = harness["spawn_records"]
+    assert type(spawns) is list
+    same([row["pid"] for row in spawns], proof["process_pids"] if case == "positive" else proof["process_pids"][:-1])
+    prefix = ["/isaac-sim/kit/python/bin/python3", "-I", "-S", "-B",
+              "/source/scripts/workflow_graphql_execution_join_harness.py"]
+    rows = proof["initialization_roles"]
+    for row in rows:
+        same(read("initialization-" + row["role"] + ".json"), row)
+        assert row["status"] == "completed"
+        zero_effects(row)
+    if case == "positive":
+        same(harness["used"], [])
+        assert len({row["parent_pid"] for row in rows}) == 1
+        for row, spawn in zip(rows, spawns, strict=True):
+            pid = row["pid"]
+            same(spawn, dict(pid=pid, bootstrap_argv=prefix + ["--initialization", "positive", row["role"]],
+                             production_argv=None))
+            same(read(f"join-launch-{pid}.json"), dict(spawn, parent_pid=row["parent_pid"]))
+            output = read("initialization-" + row["role"] + "-output.json")
+            assert type(output["pid"]) is int and output["pid"] == pid
+            assert type(output["returncode"]) is int and output["returncode"] == 0
+            assert type(output["stdout"]) is type(output["stderr"]) is str
+            if row["role"] != "init-server":
+                sdk = read(f"generation-child-{pid}-sdk.json")
+                assert type(sdk["pid"]) is int and sdk["pid"] == pid
+                assert type(sdk["calls"]) is int and sdk["calls"] == 0 and sdk["responses"] == []
+    else:
+        module = "isaaclab_arena.agentic_environment_generation.workflow.cli"
+        identity_fields = ("pid", "parent_pid", "pgid", "sid", "start_ticks", "boot", "pid_namespace")
+        server = rows[0]
+        server_pid = server["pid"]
+        cleanup = proof["initialization_server_cleanup"]
+        assert cleanup["launcher_pid"] == spawns[7]["pid"] == server["parent_pid"]
+        server_launch = read(f"join-launch-{server_pid}.json")
+        same({key: server_launch[key] for key in identity_fields}, {key: server[key] for key in identity_fields})
+        argv = server_launch["bootstrap_argv"]
+        assert argv[:6] == prefix + ["--cli"] and argv[6] == "api-serve"
+        same(server_launch["production_argv"], [prefix[0], "-m", module] + argv[6:])
+        processes = []
+        for index, spawn in enumerate(spawns):
+            pid = spawn["pid"]
+            process = read(f"join-process-{pid}.json")
+            output = read(f"initialization-cli-{index}.json")
+            same(read(f"join-launch-{pid}.json"), dict(spawn, parent_pid=process["parent_pid"]))
+            same(spawn["bootstrap_argv"], prefix + ["--cli"] + output["argv"])
+            assert spawn["production_argv"] is None
+            same(process["bootstrap_argv"], spawn["bootstrap_argv"])
+            same(process["argv"], [module] + output["argv"])
+            same(process["source_sha256"], proof["source_sha256"])
+            assert type(process["pid"]) is int and process["pid"] == pid == output["pid"]
+            assert process["pgid"] == process["sid"] == pid and type(process["start_ticks"]) is int
+            assert process["start_ticks"] > 0
+            same(process["boot"], server["boot"])
+            same(process["pid_namespace"], server["pid_namespace"])
+            expected_role = (["setup"] * 2 + ["admin"] * 5 + ["launcher", "client", "client"])[index]
+            assert process["role"] == expected_role and process["status"] == "completed"
+            assert output["argv"][0] == (["setup"] * 2 + ["admin"] * 5 + ["api-launch", "api-stop", "api-status"])[index]
+            assert type(output["returncode"]) is int and type(process["returncode"]) is int
+            same(output["returncode"], process["returncode"])
+            if index < 7:
+                assert output["returncode"] == 0
+                result = json.loads(output["stdout"])
+                assert result["code"] == ("setup_complete" if index < 2 else "admin_complete")
+            elif index in {7, 9}:
+                result = json.loads(output["stdout"])
+                assert result.get("state") != "ready"
+                if index == 7:
+                    assert not result.get("capabilities", {}).get("submit", False)
+            assert type(output["stdout"]) is type(output["stderr"]) is str
+            zero_effects(process)
+            same(process["spawn_records"], [server_launch] if index == 7 else [])
+            processes.append(process)
+        assert len({row["parent_pid"] for row in processes}) == 1
+        same(harness["used"], [read(f"initialization-cli-{i}.json")["argv"] for i in range(10)])
+        for name in ([f"join-process-{server_pid}-started.json", f"join-process-{server_pid}.json"]
+                     if case == "failure" else [f"join-process-{server_pid}-started.json"]):
+            process = read(name)
+            same({key: process[key] for key in identity_fields}, {key: server[key] for key in identity_fields})
+            same(process["source_sha256"], proof["source_sha256"])
+            assert process["role"] == "server"
+            same(process["bootstrap_argv"], argv)
+            same(process["argv"], [module] + argv[6:])
+        marker = read("initialization-pre-readiness.json")
+        same({key: marker[key] for key in identity_fields}, {key: server[key] for key in identity_fields})
+        witness = dict(marker, readiness_absent=True, server_pid=server_pid, original_failure_retained=True)
+        if case == "timeout":
+            stop = read("initialization-stall-stop.json")
+            assert stop["server_pid"] == server_pid and stop["signal"] == 9
+            assert stop["observed_stall_seconds"] >= 5
+            witness.update(stop)
+        else:
+            final = read(f"join-process-{server_pid}.json")
+            zero_effects(final)
+            assert final["startup_exception_sites"]
+        same(witness, proof["pre_readiness_failure"])
+    return proof
+
+
 def initialization_inside(case):
     """Run one fixed real pytest case, retain actual failures, return for live collection."""
     global ACTIVE
@@ -2948,6 +3506,34 @@ def initialization_verify_proof(proof, junit, case):
         assert type(value["sha256"]) is str and re.fullmatch(r"[a-f0-9]{64}", value["sha256"])
         return value["size"]
 
+    def executable_binding(value, physical, pid):
+        assert type(value) is dict and set(value) == {"invocation", "implementation", "version", "alias", "kernel"}
+        invocation = "/isaac-sim/kit/python/bin/python3"
+        assert value["invocation"] == invocation and value["implementation"] == "cpython"
+        assert type(value["version"]) is list and value["version"] == [3, 12]
+        assert all(type(v) is int for v in value["version"])
+        alias = value["alias"]
+        selected = invocation
+        if alias is not None:
+            assert type(alias) is dict and set(alias) == {
+                "target", "device", "inode", "mode", "size", "mtime_ns", "ctime_ns"}
+            selected += ".12"
+            assert alias["target"] in {"python3.12", selected}
+            assert all(type(alias[k]) is int and alias[k] >= 0 for k in (
+                "device", "inode", "mode", "size", "mtime_ns", "ctime_ns"))
+            assert alias["inode"] > 0 and alias["mode"] & 0o170000 == 0o120000
+            assert alias["size"] == len(alias["target"].encode())
+        assert physical["path"] == selected
+        kernel = value["kernel"]
+        assert type(kernel) is dict and set(kernel) == {"path", "target", "device", "inode", "pid"}
+        assert kernel["path"] == "/proc/self/exe" and kernel["target"] == selected
+        assert type(kernel["pid"]) is int and kernel["pid"] == pid
+        for key in ("device", "inode"):
+            assert type(kernel[key]) is type(physical[key]) is int
+            assert kernel[key] == physical[key] and kernel[key] >= (1 if key == "inode" else 0)
+        # The kernel PID is role-specific; all other observed bindings agree.
+        return dict(value, kernel={k: v for k, v in kernel.items() if k != "pid"})
+
     native_count = 0
     identity_bytes = 0
     rows = proof["initialization_roles"]
@@ -2964,6 +3550,24 @@ def initialization_verify_proof(proof, junit, case):
         assert row["platform_processor_unmodified"] is True and row["usable_gpu"] is False
         assert type(row["catalogue_sha256"]) is str and re.fullmatch(r"[a-f0-9]{64}", row["catalogue_sha256"])
         assert row["catalogue_sha256"] == rows[0]["catalogue_sha256"]
+        bootstrap = row["pythonapi_bootstrap"]
+        assert type(bootstrap) is list and len(bootstrap) == 1
+        bootstrap = bootstrap[0]
+        assert type(bootstrap) is dict and bootstrap["kind"] == "ctypes-pythonapi-process-namespace"
+        assert bootstrap["argument"] is None and bootstrap["status"] == "completed"
+        assert bootstrap["role"] == row["role"] and type(bootstrap["pid"]) is int
+        assert bootstrap["pid"] == row["pid"]
+        assert bootstrap["source"]["path"] == "/isaac-sim/kit/python/lib/python3.12/ctypes/__init__.py"
+        context_bytes = 3 * physical_witness(bootstrap["source"]) + 4 * physical_witness(bootstrap["executable"])
+        identity_bytes += context_bytes
+        bound = executable_binding(bootstrap["executable_binding"], bootstrap["executable"], row["pid"])
+        first = rows[0]["pythonapi_bootstrap"][0]
+        assert bound == executable_binding(first["executable_binding"], first["executable"], rows[0]["pid"])
+        for field in ("source", "executable", "callsite"):
+            assert bootstrap[field] == rows[0]["pythonapi_bootstrap"][0][field]
+        callsite = bootstrap["callsite"]
+        assert callsite["module_code"] == "<module>" and callsite["init_code"] == "CDLL.__init__"
+        assert all(type(callsite[k]) is int and callsite[k] > 0 for k in ("module_line", "init_line"))
         assert type(row["native_libraries"]) is list and row["native_libraries"]
         native_count += len(row["native_libraries"])
         assert native_count <= 64
@@ -3001,11 +3605,14 @@ def initialization_verify_proof(proof, junit, case):
         budget = row["physical_read_budget"]
         assert type(budget) is dict
         assert type(budget["bytes"]) is int and 0 < budget["bytes"] <= 8 * 1024**3
+        assert budget["bytes"] >= context_bytes + sum(v["size"] for v in row["native_libraries"] + row["module_origins"])
         assert type(budget["files"]) is int and 0 < budget["files"] <= 64
         assert row["schema_checks"] == [
             "supported_normalization", "unknown_asset", "unknown_relation", "dangling_reference",
             "unknown_yaml_field", "catalogue_agreement", "catalogue_disagreement",
         ]
+    assert sum(row["physical_read_budget"]["bytes"] for row in rows) <= 8 * 1024**3
+    assert sum(row["physical_read_budget"]["files"] for row in rows) <= 64
     if case != "positive":
         cleanup = proof["initialization_server_cleanup"]
         assert type(cleanup) is dict and cleanup["status"] == "contained"

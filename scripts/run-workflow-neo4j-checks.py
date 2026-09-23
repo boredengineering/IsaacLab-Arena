@@ -807,7 +807,8 @@ def stage_source(root, destination, mode, *, provision=None):
 
 
 INITIALIZATION_MODE = "workflow-graphql-initialization"
-INITIALIZATION_CASES = ("positive", "failure", "timeout")
+INITIALIZATION_CASES = ("transport", "positive", "failure", "timeout")
+INITIALIZATION_TRANSPORT_BYTES = b"arena-s2-tmpfs-transport-v1\x00\xff\n"
 INITIALIZATION_TEST = "isaaclab_arena/tests/test_environment_workflow_initialization_neo4j.py"
 INITIALIZATION_INVENTORY = "outputs/workflow/plan04-implementation/s2-initialization/source-files.json"
 INITIALIZATION_SOURCE_LIMIT = 385  # 381 measured repository leaves plus four generated.
@@ -817,7 +818,7 @@ def initialization_validate_options(mode, case):
     """Reject misplaced or absent case selection before any discovery or writes."""
     if mode == INITIALIZATION_MODE:
         if case not in INITIALIZATION_CASES:
-            raise ValueError("S2 requires an explicit positive|failure|timeout case")
+            raise ValueError("S2 requires an explicit transport|positive|failure|timeout case")
     elif case is not None:
         raise ValueError("--initialization-case is exclusive to " + INITIALIZATION_MODE)
 
@@ -829,6 +830,7 @@ class InitializationClock:
         self.monotonic = monotonic
         self.work_deadline = monotonic() + 300
         self.cleanup_deadline = None
+        self.collection_deadline = None
 
     def begin_cleanup(self):
         if self.cleanup_deadline is None:
@@ -836,6 +838,8 @@ class InitializationClock:
 
     def timeout(self, ceiling=45):
         deadline = self.work_deadline if self.cleanup_deadline is None else self.cleanup_deadline
+        if self.cleanup_deadline is None and self.collection_deadline is not None:
+            deadline = min(deadline, self.collection_deadline)
         remaining = deadline - self.monotonic()
         if remaining <= 0:
             raise TimeoutError("S2 aggregate deadline exhausted; cleanup may be unknown")
@@ -861,17 +865,24 @@ class InitializationCommand:
         self.close = close or os.close
         self.last = None
         self.reap_unknown = False
+        self.operation_deadline = None
 
-    def _stream(self, args, stdout_limit):
+    def _stream(self, args, stdout_limit, *, operation_deadline=None):
         import selectors
         import subprocess
 
         assert not self.reap_unknown or self.clock.cleanup_deadline is not None, "S2 command reap unknown; work closed"
         self.last = None
+        started = self.clock.monotonic()
         budget = self.clock.timeout()
+        end = started + budget
+        for limit in (self.operation_deadline, operation_deadline):
+            if limit is not None:
+                end = min(end, limit)
+        budget = end - self.clock.monotonic()
         if budget <= 5:
             raise TimeoutError("S2 command cannot reserve bounded group reap time")
-        deadline = self.clock.monotonic() + budget - 5
+        deadline = end - 5
         selected = self.selector()
         try:
             process = self.popen(["docker", *args], stdin=subprocess.DEVNULL,
@@ -934,9 +945,7 @@ class InitializationCommand:
             except BaseException:
                 self.reap_unknown = True
             try:
-                reap_timeout = 5
-                if self.clock.cleanup_deadline is not None:
-                    reap_timeout = min(5, max(0, self.clock.cleanup_deadline - self.clock.monotonic()))
+                reap_timeout = min(5, max(0, end - self.clock.monotonic()))
                 process.wait(timeout=reap_timeout)
                 if group_fd is not None:
                     try:
@@ -964,13 +973,22 @@ class InitializationCommand:
         out, err = self._stream(args, 4 * 1024 * 1024 - (65536 if args[0] == "logs" else 0))
         return (out + (err if args[0] == "logs" else b"")).decode("utf-8").strip()
 
-    def archive(self, identity, path):
+    def export(self, identity, case):
         import re
 
-        assert re.fullmatch(r"[a-f0-9]{64}", identity)
-        assert path in ("/evidence", "/evidence/collection-ready")
-        limit = 36 * 1024 * 1024 if path == "/evidence" else 65536
-        return self._stream(("cp", identity + ":" + path, "-"), limit)[0]
+        assert re.fullmatch(r"[a-f0-9]{64}", identity) and case in INITIALIZATION_CASES
+        return self._stream(("exec", "--user", "1000:1000", identity,
+                             "/isaac-sim/kit/python/bin/python3", "-I", "-S", "-B",
+                             "/source/scripts/run-workflow-neo4j-checks.py", "--export-initialization", case),
+                            36 * 1024 * 1024)
+
+    def ready(self, identity, case):
+        import re
+
+        assert re.fullmatch(r"[a-f0-9]{64}", identity) and case in INITIALIZATION_CASES
+        out, err = self._stream(("logs", "--tail", "64", identity), 65536)
+        marker = ("ARENA_S2_COLLECTION_READY_V1:" + case).encode()
+        return marker in out.splitlines() or marker in err.splitlines()
 
 
 def initialization_client_flags(host, network):
@@ -1010,6 +1028,9 @@ def initialization_archive(payload, allowed):
     total = 0
     with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
         for entry in archive:
+            header = payload[entry.offset:entry.offset + 512]
+            assert header[257:265] == b"ustar\x0000", "S2 requires explicit USTAR"
+            assert entry.offset_data == entry.offset + 512, "S2 extended headers forbidden"
             assert not entry.linkname and not entry.pax_headers and entry.sparse is None
             if entry.name in ("evidence", "evidence/"):
                 assert entry.isdir() and not root_seen and entry.size == 0
@@ -1019,7 +1040,7 @@ def initialization_archive(payload, allowed):
             assert len(parts) == 2 and parts[0] == "evidence", "Unsafe evidence archive path"
             name = parts[1]
             assert name in allowed and name not in files and len(files) < 55
-            assert entry.isreg() and 0 <= entry.size <= 4 * 1024 * 1024
+            assert entry.type == tarfile.REGTYPE and 0 <= entry.size <= 4 * 1024 * 1024
             total += entry.size
             assert total <= 32 * 1024 * 1024, "S2 evidence aggregate overflow"
             stream = archive.extractfile(entry)
@@ -1039,70 +1060,179 @@ def initialization_archive_names(payload, case, evidence_names):
 
     assert type(payload) is bytes and len(payload) <= 36 * 1024 * 1024
     proof = None
+    proof_seen = False
     with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
         for index, entry in enumerate(archive):
             assert index < 56, "S2 evidence entry count"
             if entry.name == "evidence/client-proof.json":
-                assert proof is None and entry.isreg() and not entry.linkname and not entry.pax_headers
-                assert entry.sparse is None and 0 < entry.size <= 4 * 1024 * 1024
+                assert not proof_seen and entry.isreg() and not entry.linkname and not entry.pax_headers
+                proof_seen = True
+                assert entry.sparse is None and 0 <= entry.size <= 4 * 1024 * 1024
                 raw = archive.extractfile(entry).read(entry.size + 1)
                 assert len(raw) == entry.size
-                proof = json.loads(raw)
-                assert type(proof) is dict
-    names = evidence_names(case, proof)
+                try:
+                    proof = json.loads(raw)
+                    assert type(proof) is dict
+                except (ValueError, TypeError, AssertionError, RecursionError):
+                    proof = None
+    try:
+        names = evidence_names(case, proof)
+    except (ValueError, TypeError, AssertionError, AttributeError):
+        names = evidence_names(case)
     assert type(names) in (set, frozenset)
     return frozenset(names) | {"initialization-error.json"}
 
 
-def initialization_marker(payload, case):
-    """Read only the bounded single regular marker member, never extract it."""
+def initialization_read_leaf(directory, name, limit, *, uid=None, gid=None):
+    """Snapshot one flat regular leaf without following links or blocking on FIFOs."""
+    import stat
+
+    assert type(name) is str and name not in {"", ".", ".."} and "/" not in name
+    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+    try:
+        before = os.fstat(fd)
+        assert stat.S_ISREG(before.st_mode) and before.st_nlink == 1
+        assert uid is None or (before.st_uid, before.st_gid) == (uid, gid)
+        assert 0 <= before.st_size <= limit
+        chunks = []
+        size = 0
+        while True:
+            chunk = os.read(fd, min(65536, limit - size + 1))
+            if not chunk:
+                break
+            size += len(chunk)
+            assert size <= limit
+            chunks.append(chunk)
+        after = os.fstat(fd)
+        current = os.stat(name, dir_fd=directory, follow_symlinks=False)
+        def identity(info):
+            return (info.st_dev, info.st_ino, info.st_mode, info.st_nlink, info.st_uid,
+                    info.st_gid, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+        assert identity(before) == identity(after) == identity(current), "S2 evidence changed during read"
+        assert size == before.st_size
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
+
+
+def initialization_snapshot(root, case, evidence_names, *, verify_evidence=None, uid=1000, gid=1000):
+    """Capture selected bytes before emitting an explicit bounded regular USTAR."""
     import io
     import tarfile
 
-    assert len(payload) <= 65536
-    with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
-        entries = list(archive)
-        assert len(entries) == 1
-        entry = entries[0]
-        assert entry.name == "collection-ready" and entry.isreg() and entry.size <= 32
-        assert not entry.linkname and not entry.pax_headers and entry.sparse is None
-        assert archive.extractfile(entry).read(33) == (case + "\n").encode()
+    assert case in INITIALIZATION_CASES
+    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        assert (info.st_uid, info.st_gid) == (uid, gid)
+        names = ({"transport.bin", "transport-proof.json", "collection-ready"} if case == "transport"
+                 else set(evidence_names(case)) | {"initialization-error.json"})
+        files = {}
+        partial = False
+        if case != "transport":
+            try:
+                raw = initialization_read_leaf(fd, "client-proof.json", 4 * 1024 * 1024, uid=uid, gid=gid)
+            except FileNotFoundError:
+                partial = True
+            else:
+                files["client-proof.json"] = raw
+                try:
+                    proof = json.loads(raw)
+                    assert type(proof) is dict
+                    names |= set(evidence_names(case, proof))
+                except (ValueError, TypeError, AssertionError, AttributeError, RecursionError):
+                    partial = True  # Keep fixed leaves; never guess dynamic PIDs.
+        assert len(names) <= 55
+        for name in sorted(names):
+            if name in files:
+                continue  # Use precisely the proof bytes used to select PID names.
+            try:
+                limit = min(4 * 1024 * 1024, 32 * 1024 * 1024 - sum(map(len, files.values())))
+                files[name] = initialization_read_leaf(fd, name, limit, uid=uid, gid=gid)
+            except FileNotFoundError:
+                continue
+        assert sum(map(len, files.values())) <= 32 * 1024 * 1024
+        if case == "transport" and set(files) != names:
+            partial = True
+        if case != "transport":
+            try:
+                assert verify_evidence is not None
+                verify_evidence(files, case)
+            except (ValueError, TypeError, AssertionError, KeyError, AttributeError, RecursionError, IndexError, SyntaxError):
+                partial = True  # Safe diagnostic bytes survive a failed acceptance contract.
+    finally:
+        os.close(fd)
+    target = io.BytesIO()
+    with tarfile.open(fileobj=target, mode="w", format=tarfile.USTAR_FORMAT) as archive:
+        for name, raw in sorted(files.items()):
+            entry = tarfile.TarInfo("evidence/" + name)
+            entry.type = tarfile.REGTYPE
+            entry.mode = 0o600
+            entry.uid = uid
+            entry.gid = gid
+            entry.size = len(raw)
+            archive.addfile(entry, io.BytesIO(raw))
+    payload = target.getvalue()
+    assert len(payload) <= 36 * 1024 * 1024
+    return payload, dict(status="partial" if partial else "complete", case=case,
+                         files=sorted(files), bytes=len(payload))
 
 
-def initialization_collect(command, identity, case, allowed, clock, *, sleep=time.sleep):
-    """Poll at most thirty times, then collect exactly one live tmpfs archive."""
+def initialization_collect(command, identity, case, allowed, clock, *, run, verify_owner, sleep=time.sleep):
+    """Reserve collection time and attempt one source-bound export, even without readiness."""
+    assert not run.proof.get("export_attempted"), "S2 exporter must never be retried"
     ready = False
-    for attempt in range(30):
-        clock.timeout()
-        assert command("inspect", "--format", "{{.State.Running}}", identity) == "true", "S2 collector exited"
+    cutoff = clock.work_deadline - 65
+    command.operation_deadline = cutoff
+    try:
+        while clock.monotonic() < cutoff:
+            # Reserve the CLI reap allowance inside this phase, not after it.
+            if cutoff - clock.monotonic() <= 5:
+                break
+            try:
+                ready = command.ready(identity, case)
+            except (TimeoutError, RuntimeError) as error:
+                run.proof["collection_poll_error"] = str(error)[:4096]
+                if getattr(command, "reap_unknown", False):
+                    raise
+                break  # One reserved partial export; never retry a failed log command.
+            if ready:
+                break
+            sleep(max(0, min(2, cutoff - clock.monotonic())))
+        run.proof["collection_ready"] = ready
+        command.operation_deadline = min(clock.monotonic() + 10, clock.work_deadline - 55)
+        verify_owner()  # Exact ID/name/label/image/resources/mounts AND running.
+        assert clock.monotonic() < command.operation_deadline
+        command.operation_deadline = min(clock.monotonic() + 45, clock.work_deadline - 10)
+        run.proof.update(export_attempted=True, exporter_launches=1, container_exec_unknown=True,
+                         export_status="attempted")
+        run.save()  # Persist ambiguity before the daemon can receive exec.
+        payload, stderr = command.export(identity, case)
+        command.operation_deadline = min(clock.monotonic() + 10, clock.work_deadline)
+        clock.collection_deadline = command.operation_deadline
+        assert len(stderr) <= 65536
+        run.proof["export_stderr_hex"] = stderr.hex()  # Lossless, bounded, separate from tar stdout.
+        run.save()
+        # Even a reaped CLI says nothing about a timed-out container process.
+        # A successful exporter reply still requires fresh running ownership.
+        verify_owner()
+        files = initialization_archive(payload, allowed(payload) if callable(allowed) else allowed)
         try:
-            payload = command.archive(identity, "/evidence/collection-ready")
-        except RuntimeError:
-            # A missing marker is the only retryable Docker error. Other failures
-            # are retained by the command transport; no general command retry.
-            last = getattr(command, "last", None)
-            if last is not None:
-                assert last["returncode"] not in (None, 0)
-                assert b"Could not find the file" in last["stderr"], "S2 marker command failed"
-        else:
-            initialization_marker(payload, case)
-            ready = True
-            break
-        if attempt < 29:
-            assert clock.timeout(2) == 2, "S2 collection deadline exhausted"
-            sleep(2)
-    # Even missing-readiness failures get one bounded partial-evidence attempt.
-    clock.timeout()
-    assert command("inspect", "--format", "{{.State.Running}}", identity) == "true", "S2 tmpfs lost"
-    payload = command.archive(identity, "/evidence")
-    files = initialization_archive(payload, allowed(payload) if callable(allowed) else allowed)
-    assert command("inspect", "--format", "{{.State.Running}}", identity) == "true", "S2 collector died during copy"
-    if not ready:
-        # The caller can retain actual partial leaves without certifying them.
-        error = RuntimeError("S2 collection marker absent after thirty checks")
-        error.evidence_files = files
-        raise error
-    return files
+            receipt = json.loads(stderr)
+            assert type(receipt) is dict and set(receipt) == {"status", "case", "files", "bytes"}
+            assert receipt["case"] == case and receipt["files"] == sorted(files)
+            assert receipt["bytes"] == len(payload) and receipt["status"] in {"complete", "partial"}
+            run.proof.update(export_receipt=receipt, export_status=receipt["status"], container_exec_unknown=False)
+            run.save()
+            assert clock.monotonic() < command.operation_deadline
+            if not ready or receipt["status"] != "complete":
+                raise RuntimeError("S2 readiness or complete export absent; partial evidence only")
+        except BaseException as error:
+            error.evidence_files = files
+            raise
+        return files
+    finally:
+        command.operation_deadline = None  # Cleanup has its independent, nonrenewable clock.
 
 
 def initialization_verify_container(info, extra, identity, name, token, label, host, network, role):
@@ -1196,12 +1326,100 @@ def initialization_cleanup(run, clock, network, label):
     return clean
 
 
+def initialization_export_sources(root=Path("/source")):
+    """Verify the staged closure and compile only its stdlib evidence-name function."""
+    import re
+
+    root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    def read(name, limit):
+        assert type(name) is str and not name.startswith("/")
+        parts = name.split("/")
+        assert all(part not in {"", ".", ".."} for part in parts)
+        fd = os.dup(root_fd)
+        try:
+            for part in parts[:-1]:
+                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                os.close(fd)
+                fd = child
+            return initialization_read_leaf(fd, parts[-1], limit)
+        finally:
+            os.close(fd)
+    try:
+        raw = read("source-manifest.json", 65536)
+        manifest = json.loads(raw)
+        assert type(manifest) is dict and len(manifest) + 1 == INITIALIZATION_SOURCE_LIMIT
+        assert SELF in manifest and JOIN_HELPER in manifest
+        total = len(raw)
+        helper = None
+        for name, digest in manifest.items():
+            assert type(digest) is str and re.fullmatch(r"[a-f0-9]{64}", digest)
+            data = read(name, 8 * 1024 * 1024 - total)
+            total += len(data)
+            assert hashlib.sha256(data).hexdigest() == digest, "S2 staged source changed"
+            if name == JOIN_HELPER:
+                helper = data
+        names = {"initialization_origin", "initialization_verify_proof", "initialization_evidence_names",
+                 "initialization_required_evidence", "initialization_verify_evidence"}
+        nodes = [node for node in ast.parse(helper).body
+                 if isinstance(node, ast.FunctionDef) and node.name in names]
+        assert len(nodes) == len(names) and {node.name for node in nodes} == names
+        assert all(not node.decorator_list and not node.args.kw_defaults for node in nodes)
+        assert all(all(isinstance(default, ast.Constant) and default.value is None
+                       for default in node.args.defaults) for node in nodes)
+        namespace = {"INITIALIZATION_ROLES": ("init-server", "init-generate", "init-refine", "init-assess")}
+        exec(compile(ast.Module(body=nodes, type_ignores=[]), JOIN_HELPER, "exec"), namespace)
+        return manifest, raw, namespace
+    finally:
+        os.close(root_fd)
+
+
+def initialization_export_entry(case):
+    """Run only the fixed non-root stdlib exporter; stdout is exclusively USTAR."""
+    signal.signal(signal.SIGALRM, signal.SIG_DFL)
+    signal.alarm(40)  # Fatal even if a file or stdout operation stalls.
+    assert case in INITIALIZATION_CASES
+    assert os.getuid() == os.getgid() == 1000
+    assert sys.executable == "/isaac-sim/kit/python/bin/python3"
+    assert sys.flags.isolated == sys.flags.no_site == sys.flags.ignore_environment == 1
+    _, _, contract = initialization_export_sources()
+    payload, receipt = initialization_snapshot(Path("/evidence"), case, contract["initialization_evidence_names"],
+                                               verify_evidence=contract["initialization_verify_evidence"])
+    sys.stdout.buffer.write(payload)
+    sys.stdout.buffer.flush()
+    print(json.dumps(receipt, sort_keys=True), file=sys.stderr, flush=True)
+    return 0  # Partial transport is NOT acceptance; the receipt is mandatory.
+
+
+def initialization_transport_inside(deadline):
+    """Write known bytes without importing J, pytest, Arena or any runtime package."""
+    assert sys.executable == "/isaac-sim/kit/python/bin/python3"
+    assert sys.flags.isolated == sys.flags.no_site == sys.flags.ignore_environment == 1
+    assert os.getuid() == os.getgid() == 1000
+    manifest, raw, _ = initialization_export_sources()
+    proof = dict(schema_version=1, case="transport", scope="stdlib tmpfs transport only; no initialization",
+                 uid=os.getuid(), gid=os.getgid(), length=len(INITIALIZATION_TRANSPORT_BYTES),
+                 sha256=hashlib.sha256(INITIALIZATION_TRANSPORT_BYTES).hexdigest(), source_sha256=manifest,
+                 runner_sha256=manifest[SELF], manifest_sha256=hashlib.sha256(raw).hexdigest())
+    os.umask(0o077)
+    for name, data in (("transport.bin", INITIALIZATION_TRANSPORT_BYTES),
+                       ("transport-proof.json", json.dumps(proof, sort_keys=True).encode()),
+                       ("collection-ready", b"transport\n")):
+        with open("/evidence/" + name, "xb") as stream:
+            stream.write(data)
+    print("ARENA_S2_COLLECTION_READY_V1:transport", flush=True)
+    while time.monotonic() < deadline:
+        time.sleep(max(0, min(1, deadline - time.monotonic())))
+    return 1
+
+
 def initialization_inside_entry(case):
     """Dispatch S2 before legacy DB self-check and hold its live quotaed evidence."""
     assert case in INITIALIZATION_CASES
     deadline = time.monotonic() + 300
     assert os.getuid() == 1000 and os.statvfs("/").f_flag & os.ST_RDONLY
     assert not any(name.startswith("nvidia") or name == "dri" for name in os.listdir("/dev"))
+    if case == "transport":
+        return initialization_transport_inside(deadline)
     sys.path.insert(0, "/source/scripts")
     import workflow_graphql_execution_join_harness as helper
 
@@ -1222,6 +1440,7 @@ def initialization_inside_entry(case):
             stream.write(raw)
     with open("/evidence/collection-ready", "xb") as stream:
         stream.write((case + "\n").encode())
+    print("ARENA_S2_COLLECTION_READY_V1:" + case, flush=True)
     while time.monotonic() < deadline:
         time.sleep(max(0, min(1, deadline - time.monotonic())))
     return 1  # Expired collection is never a successful stopped-tmpfs result.
@@ -1232,7 +1451,8 @@ def initialization_host_contract(root):
     from confined_io import read_confined
 
     raw = read_confined(root, JOIN_HELPER)
-    names = {"initialization_origin", "initialization_verify_proof", "initialization_evidence_names"}
+    names = {"initialization_origin", "initialization_verify_proof", "initialization_evidence_names",
+             "initialization_required_evidence", "initialization_verify_evidence"}
     nodes = [node for node in ast.parse(raw).body if isinstance(node, ast.FunctionDef) and node.name in names]
     assert {node.name for node in nodes} == names, "S2 producer/reader contract incomplete"
     assert all(not node.decorator_list and not node.args.kw_defaults for node in nodes)
@@ -1245,6 +1465,22 @@ def initialization_host_contract(root):
     exec(compile(ast.Module(body=nodes, type_ignores=[]), JOIN_HELPER, "exec"), namespace)
     namespace["_source_sha256"] = hashlib.sha256(raw).hexdigest()
     return namespace
+
+
+def initialization_validate_transport(files, manifest):
+    """Accept only exact known bytes and the current staged source/UID bindings."""
+    assert set(files) == {"transport.bin", "transport-proof.json", "collection-ready"}
+    assert files["transport.bin"] == INITIALIZATION_TRANSPORT_BYTES
+    assert files["collection-ready"] == b"transport\n"
+    proof = json.loads(files["transport-proof.json"])
+    expected = dict(schema_version=1, case="transport", scope="stdlib tmpfs transport only; no initialization",
+                    uid=1000, gid=1000, length=len(INITIALIZATION_TRANSPORT_BYTES),
+                    sha256=hashlib.sha256(INITIALIZATION_TRANSPORT_BYTES).hexdigest(),
+                    source_sha256={name: digest for name, digest in manifest.items() if name != "source-manifest.json"},
+                    runner_sha256=manifest[SELF], manifest_sha256=manifest["source-manifest.json"])
+    assert proof == expected
+    assert all(type(proof[key]) is int for key in ("schema_version", "uid", "gid", "length"))
+    return proof
 
 
 def initialization_run(options):
@@ -1262,11 +1498,14 @@ def initialization_run(options):
     from run import LABEL, OWN_FORMAT, OwnedRun, discover, projection
 
     contract = initialization_host_contract(root)
-    fixed_names = contract["initialization_evidence_names"](case)
+    fixed_names = ({"transport.bin", "transport-proof.json", "collection-ready"} if case == "transport"
+                   else contract["initialization_evidence_names"](case))
     assert type(fixed_names) in (set, frozenset) and len(fixed_names) <= 54
-    assert {"client-proof.json", "pytest.xml", "collection-ready"} <= fixed_names
+    assert "collection-ready" in fixed_names
 
     def allowed(payload):
+        if case == "transport":
+            return frozenset(fixed_names)
         return initialization_archive_names(payload, case, contract["initialization_evidence_names"])
     token = "arena-s2-init-" + uuid.uuid4().hex
     output = root / "outputs/workflow/plan04-implementation/s2-initialization/runs" / token
@@ -1280,6 +1519,7 @@ def initialization_run(options):
         pass
     run = OwnedRun(output, token, command=command)
     run.proof.update(status="failed", mode=INITIALIZATION_MODE, case=case, create_attempts={},
+                     export_attempted=False, exporter_launches=0, container_exec_unknown=False,
                      network_id=None, work_deadline=clock.work_deadline,
                      graphql_provision_manifest_sha256=GRAPHQL_MANIFEST_SHA256)
     network = None
@@ -1296,7 +1536,7 @@ def initialization_run(options):
         discovery = discover(root, False, command=command)
         discovery = select_graphql_runtime(discovery, options.runtime_image, options.provision_manifest, command=command)
         assert discovery["selected_runtime_image"] == GRAPHQL_IMAGE
-        for image in (DB_IMAGE, GRAPHQL_IMAGE):
+        for image in ((GRAPHQL_IMAGE,) if case in {"transport", "positive"} else (DB_IMAGE, GRAPHQL_IMAGE)):
             assert command("image", "inspect", "--format", "{{.Id}}", image) == image
         clock.timeout()
         manifest = stage_source(root, output / "source", INITIALIZATION_MODE, provision=discovery["provision"])
@@ -1306,7 +1546,7 @@ def initialization_run(options):
         host = discovery["host_root"] + "/" + output.relative_to(root).as_posix()
         run.proof["host_root"] = discovery["host_root"]
         run.save()
-        if case != "positive":
+        if case not in {"transport", "positive"}:
             network = token  # Set before an ambiguous daemon create.
             run.proof["create_attempts"][token] = "attempted"
             run.save()
@@ -1322,7 +1562,7 @@ def initialization_run(options):
             assert not net["Containers"]
             validate_process_network(net)
             run.proof["isolated_network"] = net
-        for role in (("client",) if case == "positive" else ("db", "client")):
+        for role in (("client",) if case in {"transport", "positive"} else ("db", "client")):
             clock.timeout()
             name = token + "-" + role
             run.candidates.append(name)
@@ -1334,7 +1574,9 @@ def initialization_run(options):
                 flags += ["--entrypoint=/usr/bin/env", GRAPHQL_IMAGE, "-i", "HOME=/tmp", "PATH=/usr/bin:/bin",
                           "PYTHONDONTWRITEBYTECODE=1", "PYTHONNOUSERSITE=1", "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1",
                           "NVIDIA_VISIBLE_DEVICES=void", "CUDA_VISIBLE_DEVICES=", "OPENBLAS_NUM_THREADS=1",
-                          "OMP_NUM_THREADS=1", "MKL_NUM_THREADS=1", "/isaac-sim/python.sh", "-I", "-S", "-B",
+                          "OMP_NUM_THREADS=1", "MKL_NUM_THREADS=1",
+                          "/isaac-sim/kit/python/bin/python3" if case == "transport" else "/isaac-sim/python.sh",
+                          "-I", "-S", "-B",
                           "/source/" + SELF, "--inside", INITIALIZATION_MODE, case]
             else:
                 flags += ["--network=" + network, "--read-only", "--user=7474:7474", "--cap-drop=ALL",
@@ -1360,7 +1602,7 @@ def initialization_run(options):
             extra_format = projection({"NanoCpus": ".HostConfig.NanoCpus", "MemorySwap": ".HostConfig.MemorySwap",
                                        "ShmSize": ".HostConfig.ShmSize", "GroupAdd": ".HostConfig.GroupAdd",
                                        "PublishAllPorts": ".HostConfig.PublishAllPorts", "RestartPolicy": ".HostConfig.RestartPolicy",
-                                       "Networks": ".NetworkSettings.Networks"})
+                                       "Networks": ".NetworkSettings.Networks", "Running": ".State.Running"})
             info = json.loads(command("inspect", "--format", OWN_FORMAT, identity))
             extra = json.loads(command("inspect", "--format", extra_format, identity))
             initialization_verify_container(info, extra, identity, name, token, LABEL, host, network or "none", role)
@@ -1381,8 +1623,15 @@ def initialization_run(options):
                         destination.write_new("manifest.json", json.dumps(binding).encode())
                     run.proof["network_manifest"] = binding
                     run.save()
+        def verify_owner():
+            current = json.loads(command("inspect", "--format", OWN_FORMAT, identity))
+            limits = json.loads(command("inspect", "--format", extra_format, identity))
+            initialization_verify_container(current, limits, identity, name, token, LABEL,
+                                            host, network or "none", "client")
+            assert limits["Running"] is True, "S2 tmpfs collector not running"
+
         try:
-            files = initialization_collect(command, identity, case, allowed, clock)
+            files = initialization_collect(command, identity, case, allowed, clock, run=run, verify_owner=verify_owner)
         except BaseException as error:
             files = getattr(error, "evidence_files", None)
             raise
@@ -1393,10 +1642,15 @@ def initialization_run(options):
                         clock.timeout()
                         destination.write_new(name, raw)
                 run.proof["evidence_sha256"] = {name: hashlib.sha256(raw).hexdigest() for name, raw in files.items()}
-        proof = json.loads(read_confined(output / "evidence", "client-proof.json"))
-        junit = read_confined(output / "evidence", "pytest.xml")
-        assert contract["initialization_verify_proof"](proof, junit, case) is True
-        assert proof["source_sha256"] == {name: digest for name, digest in manifest.items() if name != "source-manifest.json"}
+        if case == "transport":
+            proof = initialization_validate_transport(files, manifest)
+        else:
+            # Read back every retained leaf; receipt completeness is not authority.
+            assert files is not None
+            retained = {name: read_confined(output / "evidence", name) for name in files}
+            assert retained == files, "S2 retained evidence changed"
+            proof = contract["initialization_verify_evidence"](retained, case)
+            assert proof["source_sha256"] == {name: digest for name, digest in manifest.items() if name != "source-manifest.json"}
         assert read_confined(output / "evidence", "collection-ready") == (case + "\n").encode()
         for name, digest in manifest.items():
             clock.timeout()
@@ -1433,11 +1687,10 @@ def initialization_run(options):
 
 
 def initialization_main(options):
-    """Refuse further attempts until the tmpfs evidence transport is amended."""
-    raise RuntimeError(
-        "S2 execution closed: Docker cp does not support tmpfs evidence; "
-        "a reviewed collection-protocol amendment is required before another attempt"
-    )
+    """Release reviewed transport and positive initialization; keep C cases closed."""
+    if getattr(options, "initialization_case", None) not in {"transport", "positive"}:
+        raise RuntimeError("S2 execution closed: failure/timeout cases await their release review")
+    return initialization_run(options)
 
 
 def main(argv=None):
@@ -1985,6 +2238,9 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--export-initialization"]:
+        assert len(sys.argv) == 3 and sys.argv[2] in INITIALIZATION_CASES
+        raise SystemExit(initialization_export_entry(sys.argv[2]))
     if sys.argv[1:3] == ["--inside", INITIALIZATION_MODE]:
         assert len(sys.argv) == 4 and sys.argv[3] in INITIALIZATION_CASES
         raise SystemExit(initialization_inside_entry(sys.argv[3]))

@@ -114,7 +114,8 @@ def initialization_preparation(role):
     assert guard.sdk_calls == 0 and guard.owner_constructions == 0
     # Environment/cache ownership must already hold before the early real
     # ArenaEnvGraphSpec validation inside the existing synthetic SDK fixture.
-    assert all(os.environ.get(k) == v for k, v in harness.initialization_environment("positive", role).items())
+    case = guard.initialization_case
+    assert all(os.environ.get(k) == v for k, v in harness.initialization_environment(case, role).items())
     if role != "init-server":
         from generation_worker_fixture import install_synthetic_sdk
 
@@ -126,6 +127,21 @@ def initialization_preparation(role):
     from isaaclab_arena.tests.utils.agentic_environment_generation import minimal_spec_dict
     from isaaclab_arena_examples.agentic_environment_generation.web_api.catalogues import execution_catalogue_sha256
     from isaaclab_arena_examples.agentic_environment_generation.web_api.scene_worker import prepare_catalogues
+
+    if role == "init-assess":
+        # Same deferred assessment imports as scene_worker.execute, without
+        # constructing BoundedSceneModels or submitting an assessment.
+        from isaaclab_arena.agentic_environment_generation.workflow.contracts import Criterion
+        from isaaclab_arena.agentic_environment_generation.workflow.evidence import CandidateBinding, EvidenceCohort
+        from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import SceneEvidenceArtifacts
+
+        assert all(value is not None for value in (Criterion, CandidateBinding, EvidenceCohort, SceneEvidenceArtifacts))
+    elif role == "init-generate":
+        from isaaclab_arena.agentic_environment_generation.workflow.prior_artifacts import (
+            RetainedPriorArtifacts, RetainedPriorReceipt,
+        )
+
+        assert RetainedPriorArtifacts is not None and RetainedPriorReceipt is not None
 
     value = minimal_spec_dict()
     normalized = ArenaEnvGraphSpec.model_validate(deepcopy(value)).model_dump(mode="json")
@@ -170,8 +186,19 @@ def initialization_preparation(role):
     else:
         raise AssertionError("Real worker accepted catalogue disagreement")
     assert guard.sdk_calls == 0 and guard.owner_constructions == 0
+    if role != "init-server":
+        sdk = harness.read_json(Path(f"/evidence/generation-child-{os.getpid()}-sdk.json"))
+        assert sdk["calls"] == 0 and sdk["responses"] == []
     return dict(schema_checks=checks, normalized=normalized, catalogue_sha256=digest,
                 scope="real component preparation, not installed lifecycle or native acceptance")
+
+
+def initialization_group_absent(pgid):
+    """Read existing bounded production process census; never signal foreign groups."""
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.owned_process_group import group_members
+
+    assert type(pgid) is int and pgid > 1
+    return not any(row["state"] not in {"Z", "X"} for row in group_members(pgid).values())
 
 
 def registrations():
@@ -212,7 +239,7 @@ def private_json(path, value):
     path.chmod(0o600)
 
 
-def configuration(kind, profiles):
+def configuration(kind, profiles, *, home="/tmp"):
     from isaaclab_arena.agentic_environment_generation.workflow.profiles import profile_revision
 
     assert kind in {"query", "execution"}
@@ -228,7 +255,7 @@ def configuration(kind, profiles):
             "gid": os.getgid(),
             "groups": sorted(os.getgroups()),
             "account": pwd.getpwuid(os.getuid()).pw_name,
-            "home": "/tmp",
+            "home": home,
             "cwd": "/tmp",
         },
         "private_root": str(root / "runtime"),

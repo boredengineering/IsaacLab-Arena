@@ -4,7 +4,19 @@ This is the single current implementation handoff. The user has authorized imple
 
 ## 1. Current authorization and implementation gate
 
-### Plan 04 implementation campaign — S2 partial; shared-helper amendment required
+### Current Plan 04 STOP — S2 evidence collection needs amendment
+
+Shared command injection is implemented and parent-verified; bounded runner/cold-role source is delivered. Fresh scoped positive-safety reviews `deleg_f7951fa1` and `deleg_85417339` preceded the only diagnostic, `arena-s2-init-b5134c85cac94476a92464ea10d36a2a`. It failed to retrieve a collection marker or any evidence leaves. Docker documents tmpfs as unsupported by `docker cp`; the selected evidence transport was a planning/review miss. Inner initialization progress is UNKNOWN, not a CUDA failure or proven nonexecution. Frozen failed source (385 leaves), run proof and parent readback remain under `outputs/workflow/plan04-implementation/s2-initialization/`. Exact owned client cleanup and fresh empty label/network listings were verified. No DB/network was created.
+
+All initialization cases are closed before effects again. `collection-stop.md` consolidates evidence and recommends one explicitly admitted fixed non-root stdlib exporter in the owned client, preserving quotas/deadlines/proof checks, with a transport-only known-byte verification before another native diagnostic. This requires a process/collection amendment, not an automatic extra `docker exec`. One diagnostic consumed, two remain. The approved49-minute continuation and one review round are conservatively charged through01:15:27Z; further implementation/review time needs explicit amendment. C2 checkpoint cleanup-budget correction is source-only; final tests/hashes/disposition are in `continuation-final-verification.json`. IF-B/IF-C/IF-D and live behavior remain unaccepted. S2 remains selected. No commits/pushes.
+
+### Historical approval and implementation chronology
+
+All older “current”, “next”, “unrun”, and budget statements below describe their dated checkpoints and are superseded by the STOP above.
+
+### Plan 04 implementation campaign — S2 shared-helper amendment approved
+
+**Current resumed scope:** user explicitly approved the recommended dependency-injection implementation, remaining S2 wiring, and the consolidated amendment. Intake HEAD `c9c45b88edda23f9eeb309fe0d4415fe2e60885e`, clean tree, `2026-09-23T00:26:27Z`. Carry19 minutes plus approved30 =49 active minutes, one continuation/review round, the same three unused diagnostic slots; deadline `2026-09-23T01:15:27Z` while continuously active. Evidence/counters: `outputs/workflow/plan04-implementation/s2-initialization/amendment-intake.json`. Bounded non-overlapping owners: `deleg_559678f2` shared three-function forwarding and harness/cold-role wiring, `deleg_4b323f16` runner/collector. No children may execute packages/containers/native code; parent final-source critique and preflight precede diagnostics. Shared file permission is narrow, not global Docker/default/browser behavior changes. Earlier STOP/amendment-request paragraphs below are superseded by this authorization, not evidence that runtime now works.
 
 **Current STOP:** partial S2 source is retained and both runtime entrypoints refuse before effects. Fresh source reviews confirmed the shared-helper scope gap and found three dormant reader/clock defects; these were corrected, independently re-reviewed (`deleg_f1c042c2` PASS limited corrections), and parent-rerun on final source: 19 stdlib/source-isolated cases pass. Legacy joined inventory remains 379 repository leaves; prospective S2 closure is 380. Final source fingerprint `9504a9d525c7aec385c884dd3f40d6360bdcb9947ef4ae1a40f831500bc45529`, with exact hashes/results in `outputs/workflow/plan04-implementation/s2-initialization/corrected-source-verification.json`. This is not accepted IF-B/IF-C or a completed usable slice; cold dispatch, physical native/cache gates, collector/cleanup and real cases remain unwired.
 

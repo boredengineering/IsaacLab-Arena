@@ -952,6 +952,8 @@ def write_evidence(name, value):
 
 
 def verify_sources():
+    if getattr(ACTIVE, "initialization_case", None) is not None:
+        return initialization_verify_sources()
     root = Path("/source")
     assert os.statvfs(root).f_flag & os.ST_RDONLY
     manifest = read_json(root / "source-manifest.json", SOURCE_MANIFEST_LIMIT)
@@ -1016,6 +1018,8 @@ def checked_pipe(fd):
 class JoinGuards(base.Guards):
     """Keep legacy denials; exempt only the exact production core owner constructor."""
 
+    initialization_cleanup_deadline: float | None
+
     def __init__(self, role, db_ip=None):
         assert role in {"harness", "setup", "admin", "launcher", "server", "client", "model"}
         super().__init__(db_ip if role in {"harness", "admin", "server"} else None, query_only=True)
@@ -1036,6 +1040,12 @@ class JoinGuards(base.Guards):
         self.last_status = None
 
     def profile(self, frame, event, arg):
+        if getattr(self, "initialization_controls_ready", False) and event == "call":
+            module = frame.f_globals.get("__name__", "")
+            name = frame.f_code.co_name
+            if (module.startswith("warp") and name in {"launch", "launch_tiled", "capture_launch"}
+                    or module.startswith("pxr") and name in {"Open", "OpenMasked"}):
+                self.deny("runtime")
         if self.role == "client" and event == "call" and frame.f_code.co_name == "query":
             name = "isaaclab_arena.agentic_environment_generation.workflow.api.client"
             loaded = sys.modules.get(name)
@@ -1114,6 +1124,12 @@ class JoinGuards(base.Guards):
         return executing(module, function.__code__)
 
     def audit(self, event, args):
+        if event == "import" and getattr(self, "initialization_controls_ready", False):
+            top = args[0].split(".")[0]
+            if top in self.initialization_admission.roots:
+                # Import event is not load permission: our physical finder must
+                # resolve and gate the actual bytes before they execute.
+                return None
         if event == "import" and self.role == "model" and args[0].split(".")[0] == "openai":
             return None
         if event in {"socket.bind", "socket.connect"}:
@@ -1198,6 +1214,17 @@ class JoinGuards(base.Guards):
             self.children.append(proc.pid)
             row = {"pid": proc.pid, "bootstrap_argv": args, "production_argv": production_argv}
             self.spawn_records.append(row)
+            # S2 captures the separate server before any checkpoint/package witness.
+            # Other modes retain their original launch record and behavior.
+            if getattr(self, "initialization_case", None) in {"failure", "timeout"} and production_argv is not None:
+                fields = Path(f"/proc/{proc.pid}/stat").read_text().rsplit(")", 1)[1].split()
+                owned = dict(pid=proc.pid, parent_pid=int(fields[1]), pgid=int(fields[2]), sid=int(fields[3]),
+                             start_ticks=int(fields[19]), boot=Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
+                             pid_namespace=os.readlink(f"/proc/{proc.pid}/ns/pid"))
+                assert owned["parent_pid"] == os.getpid() and owned["pid"] == owned["pgid"] == owned["sid"]
+                assert owned["pid_namespace"] == os.readlink("/proc/self/ns/pid")
+                live_identity(owned)
+                row.update(owned)
             # Independent launch evidence remains available while server is live.
             write_evidence(f"join-launch-{proc.pid}.json", {**row, "parent_pid": os.getpid()})
             return proc
@@ -1205,6 +1232,13 @@ class JoinGuards(base.Guards):
             self.local.expected = None
 
     def popen(self, args, *positional, **kwargs):
+        initialization = getattr(self, "initialization_case", None)
+        if initialization is not None and self.role == "harness":
+            caller = sys._getframe(1)
+            if caller.f_code is initialization_fresh.__code__ and self.permit == (args, kwargs):
+                assert initialization == "positive" and len(self.spawn_records) < 4
+                self.permit = None
+                return self.launch(args, kwargs)
         if positional or type(args) is not list or not all(type(v) is str for v in args):
             return self.deny("subprocess")
         if self.role == "launcher":
@@ -1220,6 +1254,8 @@ class JoinGuards(base.Guards):
                 return self.deny("subprocess")
             lifetime, gate = int(args[9]), int(args[11])
             expected = process_kwargs(env=LAUNCH_ENV, outputs=False, pass_fds=(lifetime, gate))
+            if initialization in {"failure", "timeout"}:
+                expected["env"]["HOME"] = initialization_environment(initialization, "init-server")["HOME"]
             info = os.fstat(lifetime)
             if (
                 kwargs != expected
@@ -1235,6 +1271,10 @@ class JoinGuards(base.Guards):
             # Production's exact sanitized env is checked above. Only the owned
             # bootstrap adds these finite thread caps before interpreter startup.
             kwargs = {**kwargs, "env": dict(ENV)}
+            if initialization in {"failure", "timeout"}:
+                kwargs.update(env={**initialization_environment(initialization, "init-server"),
+                                   "ARENA_S2_INITIALIZATION_CASE": initialization},
+                              stdout=sys.stdout, stderr=sys.stderr)
             return self.launch(wrapped, kwargs, production_argv=args)
         if self.role == "server":
             module = "isaaclab_arena_examples.agentic_environment_generation.foreground_generation"
@@ -1320,6 +1360,10 @@ def fresh(arguments, *, private_fd=None):
     guard = ACTIVE
     assert type(guard) is JoinGuards and guard.role == "harness"
     role = role_for(arguments)
+    case = getattr(guard, "initialization_case", None)
+    if case is not None:
+        assert case in {"failure", "timeout"} and arguments not in (SUBMIT, RESULT)
+        assert len(guard.used) < 10
     assert role != "server" and unused(arguments)
     index = len(guard.used)
     if role == "setup":
@@ -1336,6 +1380,9 @@ def fresh(arguments, *, private_fd=None):
     guard.used.append(list(arguments))
     args = [EXECUTABLE, "-I", "-S", "-B", "/source/" + SELF, "--cli", *arguments]
     kwargs = process_kwargs(pass_fds=() if private_fd is None else (private_fd,))
+    if case is not None:
+        kwargs["env"]["ARENA_S2_INITIALIZATION_CASE"] = case
+        kwargs["env"]["HOME"] = initialization_environment(case, "init-server")["HOME"]
     guard.permit = (args, kwargs)
     proc = None
     try:
@@ -1350,6 +1397,8 @@ def fresh(arguments, *, private_fd=None):
 
 
 def collect(proc, deadline):
+    if getattr(ACTIVE, "initialization_case", None) is not None:
+        return initialization_collect(proc, deadline)
     buffers = {proc.stdout: bytearray(), proc.stderr: bytearray()}
     try:
         with selectors.DefaultSelector() as selector:
@@ -1473,6 +1522,9 @@ def runtime_metadata(runner, modules, yaml_finder=None):
 
 def child():
     global ACTIVE
+    if sys.argv[1:3] == ["--initialization", "positive"]:
+        assert len(sys.argv) == 4
+        return initialization_child(sys.argv[3])
     # The executable bootstrap and production's fixed capability import must
     # resolve to this same module/guard, never a second inactive module instance.
     assert "workflow_graphql_execution_join_harness" not in sys.modules or (
@@ -1481,21 +1533,38 @@ def child():
     sys.modules["workflow_graphql_execution_join_harness"] = sys.modules[__name__]
     assert sys.flags.isolated == sys.flags.no_site == sys.flags.ignore_environment == 1
     assert sys.executable == EXECUTABLE and os.statvfs(EXECUTABLE).f_flag & os.ST_RDONLY
-    assert all(os.environ.get(k) == v for k, v in ENV.items())
+    initialization = os.environ.get("ARENA_S2_INITIALIZATION_CASE")
+    assert initialization is None or initialization in {"failure", "timeout"}
     model = sys.argv[1:] == ["--model"]
     assert model or sys.argv[1:2] == ["--cli"]
     arguments = [] if model else sys.argv[2:]
     role = "model" if model else role_for(arguments)
+    expected_environment = (initialization_environment(initialization, "init-server")
+                            if initialization and role == "server" else ENV)
+    if initialization and role != "server":
+        expected_environment = {**ENV, "HOME": initialization_environment(initialization, "init-server")["HOME"]}
+    assert all(os.environ.get(k) == v for k, v in expected_environment.items())
+    if initialization:
+        assert not model and arguments not in (SUBMIT, RESULT)
+        if role == "server":
+            initialization_cache_create(initialization, "init-server")
     assert os.getcwd() == ("/source" if model else "/tmp")
     signal.alarm(30 if model else 130 if arguments == RESULT else 145 if role == "server" else 40)
     if role == "setup":
         checked_pipe(int(arguments[-1]))
     preimport = base.preflight()
-    manifest = verify_sources()
+    manifest = initialization_verify_sources() if initialization else verify_sources()
     network = read_json(Path("/network/manifest.json"), 65536)
     assert os.statvfs("/network/manifest.json").f_flag & os.ST_RDONLY
     assert set(network) == {"container_id", "network_id", "ip", "port"} and network["port"] == 7687
     guard = JoinGuards(role, network["ip"])
+    if initialization:
+        guard.initialization_case = initialization
+        if role == "server":
+            guard.initialization_role = "init-server"
+            guard.initialization_preimport = preimport
+            guard.initialization_cache_before = initialization_cache_manifest(
+                "/tmp/s2-init/" + initialization + "/init-server", time.monotonic() + 5)
     guard.cli_arguments = arguments
     ACTIVE = base.ACTIVE = guard
     guard.install()
@@ -1513,16 +1582,21 @@ def child():
     yaml_finder = None
     try:
         record["imports"] = runner.graphql_imports(preimport, guard)
-        if role == "server":
+        if role == "server" and not initialization:
             record["dependency_location_probe"] = dependency_location_probe(preimport, guard, runner)
             record["registration_metadata_probe"] = {}
             registration_metadata_probe(preimport, guard, runner, record["registration_metadata_probe"])
-        if role in {"server", "model"}:
+        if role in {"server", "model"} and not initialization:
             record["e1_yaml_binding"] = {}
             yaml_finder = install_e1_yaml(preimport, guard, runner, record["e1_yaml_binding"])
         import platform
 
-        platform.processor = lambda: os.uname().machine
+        if not initialization:
+            platform.processor = lambda: os.uname().machine
+        elif role == "server":
+            guard.initialization_admission = InitializationAdmission(guard, runner, time.monotonic() + 35)
+            guard.initialization_processor = platform.processor
+            guard.initialization_controls_ready = True
         closure = read_json(Path("/source/closure.json"), 65536)
         runner.install_staged_import_guard("/source", closure["files"], closure["namespaces"])
         sys.path.insert(0, "/source/scripts")
@@ -1653,7 +1727,10 @@ def child():
                 sys.settrace(startup_trace)
             try:
                 try:
-                    runpy.run_module(MODULE, run_name="__main__", alter_sys=False)
+                    output_scope = (contextlib.redirect_stdout(sys.stderr)
+                                    if initialization and role == "server" else contextlib.nullcontext())
+                    with output_scope:
+                        runpy.run_module(MODULE, run_name="__main__", alter_sys=False)
                 except SystemExit as error:
                     code = error.code
                 else:
@@ -1685,7 +1762,7 @@ def child():
         )
         try:
             assert verify_sources() == manifest
-            if "imports" in record:
+            if "imports" in record and not initialization:
                 record["runtime_modules"] = e1_runtime_modules(runner, yaml_finder)
                 record["additional_runtime_metadata"] = runtime_metadata(runner, record["runtime_modules"], yaml_finder)
         except BaseException as error:
@@ -1958,6 +2035,10 @@ def initialization_pre_readiness(digest):
     )
     assert caller.f_locals["catalogue_digest"] == digest
     assert type(digest) is str and re.fullmatch(r"[a-f0-9]{64}", digest)
+    from workflow_graphql_execution_join_fixture import initialization_preparation
+    prepared = initialization_preparation("init-server")
+    assert prepared["catalogue_sha256"] == digest
+    initialization_finish_role(guard, prepared)
     marker = dict(
         **identity(), case=case, catalogue_sha256=digest,
         after_real_initialization=True, before_owner_construction=True,
@@ -2015,27 +2096,805 @@ def initialization_origin(name, origin, preloaded):
     return root
 
 
-def initialization_inside(case):
-    """Return an explicit nonpass while S2's execution controls remain incomplete.
+def initialization_physical_file(path, budget, *, binary=False):
+    """Hash a selected immutable file through no-follow descriptors, never load it.
 
-    No imports, native initialization, children or pytest are attempted here.
-    In particular, never manufacture pytest.xml or promote static guard checks
-    to IF-B/IF-C evidence. Returning normally leaves collection to the runner.
-    This refusal must be replaced by reviewed orchestration before release.
+    Hashes are measured identities, not preapproved native pins. The caller must
+    first admit the exact origin under the fixed image; transitive ELF loads
+    remain trusted image behavior. Every read, including reverification, counts.
     """
-    assert type(case) is str and case in {"positive", "failure", "timeout"}
-    proof = dict(
-        status="failed", mode="workflow-graphql-initialization", case=case, tests=0,
-        execution_attempted=False, source_sha256={}, initialization_roles=[],
-        children_verified=False, missing_process_witnesses=[],
-        release_blockers=[
-            "cold-role origin/native-loader enforcement and cache identity preflight are not wired",
-            "exact CPU metadata subprocess mediation and loaded-map bounds are not wired",
-            "installed pre-readiness failure/stall and exact group cleanup witnesses are not wired",
-            "fixed real pytest case dispatch and source-frozen role collection are not wired",
-        ],
+    assert type(path) is str and path.startswith("/") and len(path) <= 1024 and "\x00" not in path
+    parts = path[1:].split("/")
+    assert len(parts) <= 32 and all(p not in {"", ".", ".."} for p in parts)
+    assert type(binary) is bool and time.monotonic() < budget["deadline"]
+    native_limit = budget.get("native_limit", 64)
+    byte_limit = budget.get("byte_limit", 8 * 1024**3)
+    assert type(native_limit) is int and 0 < native_limit <= 64
+    assert type(byte_limit) is int and 0 < byte_limit <= 8 * 1024**3
+    assert not binary or budget["files"] < native_limit, "S2 native identity count ceiling"
+    fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        assert os.fstatvfs(fd).f_flag & os.ST_RDONLY, "S2 mutable image root"
+        for index, part in enumerate(parts):
+            assert time.monotonic() < budget["deadline"]
+            before = os.stat(part, dir_fd=fd, follow_symlinks=False)
+            directory = index != len(parts) - 1
+            assert stat.S_ISDIR(before.st_mode) if directory else stat.S_ISREG(before.st_mode)
+            flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+            if directory:
+                flags |= os.O_DIRECTORY
+            nxt = os.open(part, flags, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+            info = os.fstat(fd)
+            assert (info.st_dev, info.st_ino, info.st_mode) == (before.st_dev, before.st_ino, before.st_mode)
+            assert os.fstatvfs(fd).f_flag & os.ST_RDONLY, "S2 mutable selected origin"
+        assert info.st_nlink == 1 and 0 < info.st_size <= 2 * 1024**3
+        assert budget["bytes"] + info.st_size <= byte_limit, "S2 physical read ceiling"
+        digest, count = hashlib.sha256(), 0
+        while True:
+            assert time.monotonic() < budget["deadline"]
+            chunk = os.read(fd, min(65536, info.st_size + 1 - count))
+            if not chunk:
+                break
+            count += len(chunk)
+            budget["bytes"] += len(chunk)
+            assert count <= info.st_size and budget["bytes"] <= byte_limit
+            digest.update(chunk)
+        final = os.fstat(fd)
+        assert count == info.st_size
+        assert (final.st_dev, final.st_ino, final.st_size, final.st_mtime_ns, final.st_ctime_ns) == (
+            info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+        ), "S2 physical identity changed during read"
+        budget["files"] += int(binary)
+        return dict(path=path, physical=path, links=[], size=count, sha256=digest.hexdigest(),
+                    device=info.st_dev, inode=info.st_ino, uid=info.st_uid, gid=info.st_gid,
+                    mode=stat.S_IMODE(info.st_mode), mtime_ns=info.st_mtime_ns, ctime_ns=info.st_ctime_ns)
+    finally:
+        os.close(fd)
+
+
+def initialization_cache_manifest(root, deadline):
+    """Read a bounded owner-only cache tree without following any path component."""
+    assert type(root) is str and root.startswith("/") and "\x00" not in root
+    parts = root[1:].split("/")
+    assert len(parts) <= 16 and all(p not in {"", ".", ".."} for p in parts)
+    assert os.getuid() == os.getgid() == 1000
+    rows, total = [], [0]
+    fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in parts:
+            assert time.monotonic() < deadline
+            nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+        def visit(parent, relative, depth):
+            assert time.monotonic() < deadline and depth <= 16 and len(rows) < 256
+            info = os.fstat(parent)
+            assert info.st_uid == info.st_gid == 1000
+            assert not info.st_mode & 0o022, "S2 cache writable by another principal"
+            row = dict(path=relative, device=info.st_dev, inode=info.st_ino,
+                       uid=info.st_uid, gid=info.st_gid, mode=stat.S_IMODE(info.st_mode))
+            rows.append(row)
+            if stat.S_ISDIR(info.st_mode):
+                assert depth != 0 or stat.S_IMODE(info.st_mode) == 0o700
+                names = []
+                with os.scandir(parent) as entries:
+                    for item in entries:
+                        assert time.monotonic() < deadline and len(names) < 256
+                        assert item.name not in {".", ".."} and len(os.fsencode(item.name)) <= 255
+                        names.append(item.name)
+                for name in sorted(names):
+                    child = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+                    try:
+                        visit(child, name if relative == "." else relative + "/" + name, depth + 1)
+                    finally:
+                        os.close(child)
+                row["kind"] = "directory"
+            else:
+                assert stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+                assert 0 <= info.st_size <= 128 * 1024**2
+                assert total[0] + info.st_size <= 128 * 1024**2
+                digest, count = hashlib.sha256(), 0
+                while True:
+                    assert time.monotonic() < deadline
+                    chunk = os.read(parent, min(65536, info.st_size + 1 - count))
+                    if not chunk:
+                        break
+                    count += len(chunk)
+                    total[0] += len(chunk)
+                    assert count <= info.st_size and total[0] <= 128 * 1024**2
+                    digest.update(chunk)
+                final = os.fstat(parent)
+                assert (final.st_size, final.st_mtime_ns, final.st_ctime_ns) == (
+                    info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+                assert count == info.st_size
+                row.update(kind="file", size=count, sha256=digest.hexdigest())
+        visit(fd, ".", 0)
+        return rows
+    finally:
+        os.close(fd)
+
+
+INITIALIZATION_SOURCE_LIMIT = 385  # 381 measured repository leaves plus four generated.
+INITIALIZATION_INVENTORY = "outputs/workflow/plan04-implementation/s2-initialization/source-files.json"
+INITIALIZATION_TEST = "isaaclab_arena/tests/test_environment_workflow_initialization_neo4j.py"
+INITIALIZATION_ROLES = ("init-server", "init-generate", "init-refine", "init-assess")
+
+
+def initialization_verify_sources():
+    """Verify the independent S2 capture without broadening any legacy source gate."""
+    root = Path("/source")
+    assert os.statvfs(root).f_flag & os.ST_RDONLY
+    inventory = read_json(root / INITIALIZATION_INVENTORY, SOURCE_MANIFEST_LIMIT)
+    manifest = read_json(root / "source-manifest.json", SOURCE_MANIFEST_LIMIT)
+    assert INITIALIZATION_SOURCE_LIMIT > 0, "S2 exact source inventory not frozen"
+    assert len(manifest) + 1 == INITIALIZATION_SOURCE_LIMIT
+    assert set(manifest) == set(inventory) | {"closure.json", "graphql-import-check.py", "graphql-profile.json"}
+    total = (root / "source-manifest.json").stat().st_size
+    for name, expected in manifest.items():
+        assert type(name) is type(expected) is str and re.fullmatch(r"[a-f0-9]{64}", expected)
+        assert not name.startswith("/") and all(p not in {"", ".", ".."} for p in name.split("/"))
+        path = root
+        for part in name.split("/"):
+            path /= part
+            assert not path.is_symlink()
+        assert path.is_file() and os.statvfs(path).f_flag & os.ST_RDONLY
+        with path.open("rb") as stream:
+            raw = stream.read(8 * 1024**2 + 1)
+        total += len(raw)
+        assert total <= 8 * 1024**2 and hashlib.sha256(raw).hexdigest() == expected
+    return manifest
+
+
+def initialization_cache_create(case, role):
+    """Create only the finite role cache directories; refuse existing role roots."""
+    env = initialization_environment(case, role)
+    assert all(os.environ.get(k) == v for k, v in env.items())
+    fd = os.open("/tmp", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for index, name in enumerate(("s2-init", case, role)):
+            try:
+                os.mkdir(name, 0o700, dir_fd=fd)
+            except FileExistsError:
+                assert index < 2, "S2 role cache already exists"
+            nxt = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+            info = os.fstat(fd)
+            assert info.st_uid == info.st_gid == 1000 and stat.S_IMODE(info.st_mode) == 0o700
+        for name in ("home", "cache", "tmp"):
+            os.mkdir(name, 0o700, dir_fd=fd)
+        cache = os.open("cache", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+        try:
+            os.mkdir("warp", 0o700, dir_fd=cache)
+        finally:
+            os.close(cache)
+    finally:
+        os.close(fd)
+    return "/tmp/s2-init/" + case + "/" + role
+
+
+class InitializationLoader:
+    """Gate original immutable loaders before extension create_module can run."""
+
+    def __init__(self, admission, name, original, row):
+        self.admission, self.name, self.original, self.row = admission, name, original, row
+
+    def verify(self):
+        observed = initialization_physical_file(self.row["path"], self.admission.budget)
+        assert observed == self.row, "S2 loader identity drift"
+
+    def create_module(self, spec):
+        self.verify()
+        return self.original.create_module(spec)
+
+    def exec_module(self, module):
+        self.verify()
+        self.original.exec_module(module)
+        assert module.__file__ == module.__spec__.origin == self.row["path"]
+        locations = module.__spec__.submodule_search_locations
+        if locations is not None:
+            assert list(module.__path__) == list(locations) == [str(Path(self.row["path"]).parent)], (
+                "S2 package path rewrite is not admitted")
+        self.verify()
+        assert len(self.admission.modules) < 2048, "S2 selected module witness ceiling"
+        self.admission.modules.append(dict(self.row, name=self.name, origin=self.row["path"], preloaded=False))
+
+
+class InitializationAdmission:
+    """Lock selected origins before real loads; unknown package authority refuses."""
+
+    def __init__(self, guard, runner, deadline):
+        from importlib.machinery import PathFinder
+
+        self.guard, self.runner, self.pathfinder = guard, runner, PathFinder
+        self.budget = dict(bytes=0, files=0, deadline=deadline)
+        if guard.initialization_case == "positive":
+            # Disjoint slices make the four-role aggregate a pre-read limit,
+            # not a check after excess bytes have already been consumed.
+            self.budget.update(native_limit=16, byte_limit=2 * 1024**3)
+        self.modules, self.libraries, self.pins, self.cpu_metadata = [], {}, {}, []
+        self.roots = {
+            name: DEPENDENCY_ROOTS[0] + "/" + name for name in ("warp", "torch", "pxr", "openai")
+        }
+        self.roots.update(yaml=E1_YAML_ROOT,
+                          isaaclab="/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab/isaaclab")
+        assert not any(name.split(".")[0] in self.roots for name in sys.modules), "S2 preloaded selected package"
+        assert runner.GRAPHQL_IMAGE == "sha256:b94e17024f1e123ac5a42759ab56651a18823fda7c701e765cba31f200154cdd"
+        assert runner.GRAPHQL_MANIFEST_SHA256 == "03764536ed54c1f59cbf46305c5bc4ba618e2dc1deeeac7ffdfb21a0dffbf810"
+        pins = {**DEPENDENCY_RECIPES, **REGISTRATION_PINS, **E1_YAML_PINS,
+                REGISTRATION_CONTEXT_EXCEPTION["path"]: "40948811fbc2e99773883f762cc0eb939718b11d26676739e4332b13337d5ee2",
+                DEPENDENCY_ROOTS[0] + "/warp/config.py": "9a1ca6a287d599e64286e600dff2c929022fb1d0d836e4f68af31217f547325c"}
+        for path, digest in pins.items():
+            row = initialization_physical_file(path, self.budget)
+            assert row["sha256"] == digest, "S2 immutable image pin changed"
+            self.pins[path] = row
+        self.baseline = {}
+        for name, module in list(sys.modules.items()):
+            origin = getattr(getattr(module, "__spec__", None), "origin", None)
+            if origin and any(origin.startswith(root + "/") for root in DEPENDENCY_ROOTS[:5]):
+                # Only already verified query-probe packages, never new families.
+                assert name in runner._GRAPHQL_PROBE["result"]["loaded_modules"], "Unverified preloaded dependency"
+                self.baseline[name] = origin
+        self.original_check_output = subprocess.check_output
+        subprocess.check_output = self.check_output
+        sys.meta_path.insert(0, self)
+        sys.addaudithook(self.audit)
+
+    def find_spec(self, fullname, path=None, target=None):
+        top = fullname.split(".")[0]
+        if top in {"isaaclab_arena", "isaaclab_arena_examples", "isaaclab_arena_environments", "isaaclab_arena_g1"}:
+            return None  # The separately installed exact staged-closure finder owns these.
+        if top in self.roots:
+            assert target is None and fullname not in sys.modules
+            if fullname == top:
+                selected = str(Path(self.roots[top]).parent)
+            else:
+                selected = self.roots[top] + ("/" + "/".join(fullname.split(".")[1:-1]) if "." in fullname[len(top)+1:] else "")
+                assert list(path or ()) == [selected], "S2 changed package search path"
+            spec = self.pathfinder.find_spec(fullname, [selected])
+            assert spec is not None and spec.origin is not None, "S2 fixed package origin missing: " + fullname[:128]
+            initialization_origin(fullname, spec.origin, False)
+            row = initialization_physical_file(spec.origin, self.budget)
+            if spec.origin.endswith(".so"):
+                self.library(spec.origin)
+            spec.loader = InitializationLoader(self, fullname, spec.loader, row)
+            return spec
+        spec = self.pathfinder.find_spec(fullname, path)
+        if spec is None or spec.origin in {None, "built-in", "frozen"}:
+            return None
+        origin = spec.origin
+        stdlib = "/isaac-sim/kit/python/lib/python3.12/"
+        if origin.startswith(stdlib) and not origin.startswith(stdlib + "site-packages/"):
+            return None
+        if origin.startswith("/source/"):
+            assert origin.removeprefix("/source/") in initialization_verify_sources()
+            return None
+        # No automatic exemption for torch/Isaac Lab's transitive families.
+        # A new httpx2/jiter/omni origin is a bounded diagnostic, not authority.
+        raise ImportError("Unadmitted S2 package origin: " + fullname[:128] + " at " + origin[:512])
+
+    def library(self, path):
+        assert type(path) is str and path.startswith("/"), "S2 unnamed native load has no physical binding"
+        assert any(path.startswith(root + "/") for root in self.roots.values()), "S2 unreviewed explicit library origin"
+        previous = self.libraries.get(path)
+        row = initialization_physical_file(path, self.budget, binary=previous is None)
+        assert previous is None or previous == row
+        self.libraries[path] = row
+        return row
+
+    def audit(self, event, args):
+        if event == "ctypes.dlopen":
+            self.library(args[0])  # Audit fires before dlopen/ELF constructors.
+
+    def check_output(self, *args, **kwargs):
+        # Keep platform.processor itself unchanged; mediate only its exact real
+        # uname command, recording the actual bounded bytes and executable hash.
+        if args != (["uname", "-p"],):
+            return self.original_check_output(*args, **kwargs)
+        import platform
+
+        assert executing("platform", platform._Processor.from_subprocess.__code__)
+        assert kwargs == dict(stderr=subprocess.DEVNULL, text=True, encoding="utf8")
+        assert not self.cpu_metadata, "S2 CPU metadata role ceiling"
+        executable = initialization_physical_file("/usr/bin/uname", self.budget)
+        self.cpu_metadata.append(dict(executable=executable, status="started"))
+        options = dict(executable="/usr/bin/uname", env={"PATH": "/usr/bin:/bin"}, cwd="/tmp",
+                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                       shell=False, close_fds=True, start_new_session=True, text=False)
+        self.guard.local.expected = ("/usr/bin/uname", ["uname", "-p"], "/tmp", options["env"])
+        try:
+            proc = self.guard.native(["uname", "-p"], **options)
+        finally:
+            self.guard.local.expected = None
+        # collect applies streaming limits; metadata uses a separate stricter cap.
+        stdout, stderr = initialization_collect(proc, min(self.budget["deadline"], time.monotonic() + 2), 4096, 4096)
+        self.cpu_metadata[0].update(pid=proc.pid, returncode=proc.returncode,
+                                    stdout=stdout.decode("utf8"), stderr=stderr.decode("utf8"), status="completed")
+        assert proc.returncode == 0
+        return stdout.decode("utf8")
+
+
+def initialization_owned_server(launcher_pid):
+    """Retain only the independent S2 launcher-owned server identity."""
+    retained = getattr(ACTIVE, "initialization_server_identity", None)
+    if retained is not None:
+        assert retained["parent_pid"] == launcher_pid
+        return retained
+    matches = []
+    for index, path in enumerate(Path("/evidence").glob("join-launch-*.json")):
+        assert index < 11, "S2 launch record ceiling"
+        row = read_json(path)
+        if row["parent_pid"] == launcher_pid:
+            assert role_for(row["bootstrap_argv"][6:]) == "server"
+            matches.append(row)
+    assert len(matches) <= 1, "S2 ambiguous server ownership"
+    if not matches:
+        return None
+    row = matches[0]
+    owned = {key: row[key] for key in ("pid", "parent_pid", "pgid", "sid", "start_ticks", "boot", "pid_namespace")}
+    assert all(type(owned[key]) is int and owned[key] > 1 for key in ("pid", "parent_pid", "pgid", "sid"))
+    assert owned["pid"] == owned["pgid"] == owned["sid"] and owned["pid"] != launcher_pid
+    assert type(owned["start_ticks"]) is int and owned["start_ticks"] > 0
+    assert all(type(owned[key]) is str and owned[key] for key in ("boot", "pid_namespace"))
+    ACTIVE.initialization_server_identity = owned
+    return owned
+
+
+def initialization_contain_launcher(proc, deadline):
+    """Contain both owned groups within one five-second cleanup allowance."""
+    guard = ACTIVE
+    started = time.monotonic()
+    until = getattr(guard, "initialization_cleanup_deadline", None)
+    if until is None:
+        until = min(deadline + 5, started + 5)
+        guard.initialization_cleanup_deadline = until
+    cleanup = dict(status="unknown", host_containment_required=True, launcher_pid=proc.pid)
+    guard.initialization_server_cleanup = cleanup
+    try:
+        try:
+            owned = initialization_owned_server(proc.pid)
+            assert owned is not None, "S2 server identity unknown; exact host containment required"
+            cleanup["server_pid"] = owned["pid"]
+            if not guard.initialization_group_absent(owned["pid"]):
+                live_identity(owned)  # PID/start/PGID/SID/boot/namespace; no numeric-PID fallback.
+                os.killpg(owned["pid"], signal.SIGKILL)
+        finally:
+            if proc.poll() is None:
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait(timeout=max(0, until - time.monotonic()))
+        while not guard.initialization_group_absent(owned["pid"]):
+            assert time.monotonic() < until, "S2 exact server group reap deadline"
+            time.sleep(min(0.02, until - time.monotonic()))
+        assert guard.initialization_group_absent(proc.pid), "S2 launcher group remains"
+        assert time.monotonic() <= until, "S2 combined group reap deadline"
+        cleanup.update(status="contained", host_containment_required=False,
+                       group_reap_seconds=time.monotonic() - started)
+    except BaseException as error:
+        cleanup["failure_type"] = type(error).__name__
+        raise
+
+
+def initialization_collect(proc, deadline, stdout_limit=8 * 1024**2, stderr_limit=65536):
+    """Collect under byte/deadline caps, then reap only the owned process group."""
+    buffers = {proc.stdout: bytearray(), proc.stderr: bytearray()}
+    installed_launcher = (
+        getattr(ACTIVE, "initialization_case", None) in {"failure", "timeout"}
+        and ACTIVE.role == "harness"
+        and any(row["pid"] == proc.pid and row["bootstrap_argv"][6:] == LAUNCH for row in ACTIVE.spawn_records)
     )
-    write_evidence("client-proof.json", proof)
+    if installed_launcher:
+        # One allowance per collection, shared by checkpoint and finally cleanup.
+        ACTIVE.initialization_cleanup_deadline = None
+    try:
+        with selectors.DefaultSelector() as selector:
+            for stream in buffers:
+                os.set_blocking(stream.fileno(), False)
+                selector.register(stream, selectors.EVENT_READ)
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                assert remaining > 0, "S2 cold role deadline"
+                if installed_launcher:
+                    initialization_owned_server(proc.pid)
+                initialization_monitor_stall()
+                for key, _ in selector.select(min(remaining, 0.05)):
+                    stream = key.fileobj
+                    limit = stdout_limit if stream is proc.stdout else stderr_limit
+                    chunk = os.read(stream.fileno(), min(4096, limit + 1 - len(buffers[stream])))
+                    if not chunk:
+                        selector.unregister(stream)
+                    else:
+                        buffers[stream].extend(chunk)
+                        assert len(buffers[stream]) <= limit, "S2 output ceiling"
+            proc.wait(timeout=max(0.001, deadline - time.monotonic()))
+        return bytes(buffers[proc.stdout]), bytes(buffers[proc.stderr])
+    finally:
+        try:
+            if installed_launcher:
+                initialization_contain_launcher(proc, deadline)
+            elif proc.poll() is None:
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait(timeout=5)
+        finally:
+            for stream in buffers:
+                stream.close()
+
+
+def initialization_maps():
+    """Observe finite actual mappings; do not imply transitive binary attestation."""
+    with open("/proc/self/maps", "rb") as stream:
+        raw = stream.read(65537)
+    assert len(raw) <= 65536
+    lines = raw.decode("utf8").splitlines()
+    assert len(lines) <= 256
+    rows = []
+    for line in lines:
+        fields = line.split(None, 5)
+        assert len(fields) in {5, 6}
+        rows.append(dict(address=fields[0], permissions=fields[1], offset=fields[2],
+                         device=fields[3], inode=fields[4], path=fields[5] if len(fields) == 6 else None))
+    return rows
+
+
+def initialization_child(role):
+    """Run one genuinely cold positive preparation; no database or network manifest."""
+    global ACTIVE
+    assert role in INITIALIZATION_ROLES and sys.argv[1:] == ["--initialization", "positive", role]
+    assert sys.flags.isolated == sys.flags.no_site == sys.flags.ignore_environment == 1
+    assert sys.executable == EXECUTABLE and os.getuid() == os.getgid() == 1000
+    assert os.getcwd() == "/tmp"
+    sys.modules["workflow_graphql_execution_join_harness"] = sys.modules[__name__]
+    signal.alarm(40)
+    root = initialization_cache_create("positive", role)
+    manifest = initialization_verify_sources()
+    preimport = initialization_preflight()
+    guard = JoinGuards("server" if role == "init-server" else "model")
+    guard.initialization_role = role
+    guard.initialization_case = "positive"
+    ACTIVE = base.ACTIVE = guard
+    guard.install()
+    runner = load_runner()
+    record = dict(**identity(), role=role, status="failed", source_sha256=manifest,
+                  preimport=preimport, cache_before=initialization_cache_manifest(root, time.monotonic()+5))
+    admission = None
+    try:
+        record["imports"] = runner.graphql_imports(record["preimport"], guard)
+        admission = InitializationAdmission(guard, runner, time.monotonic() + 35)
+        guard.initialization_admission = admission
+        closure = read_json(Path("/source/closure.json"), 65536)
+        runner.install_staged_import_guard("/source", closure["files"], closure["namespaces"])
+        sys.path[:0] = ["/source/scripts", "/source/web/arena-workbench/tests/e2e/functional-v7"]
+        import platform
+        processor = platform.processor
+        guard.initialization_controls_ready = True
+        from workflow_graphql_execution_join_fixture import initialization_preparation
+        record.update(initialization_preparation(role))
+        assert platform.processor is processor
+        warp = sys.modules.get("warp")
+        assert warp is not None and warp.config.kernel_cache_dir is not None
+        cache = str(warp.config.kernel_cache_dir)
+        assert cache.startswith(root + "/cache/warp/") and all(p not in {".", ".."} for p in cache.split("/"))
+        assert not warp.is_cuda_available(), "S2 unexpectedly usable GPU"
+        record.update(real_preparation_complete=True, cache_verified=True, native_bindings_verified=True,
+                      module_origins_verified=True, platform_processor_unmodified=True, usable_gpu=False,
+                      cache_after=initialization_cache_manifest(root, admission.budget["deadline"]),
+                      native_libraries=list(admission.libraries.values()), module_origins=admission.modules,
+                      mapped_libraries=initialization_maps(), cpu_metadata=admission.cpu_metadata,
+                      native_trust_residual="fixed-image transitive ELF loading is trusted, not individually hash-attested",
+                      status="completed")
+        assert record["native_libraries"] and not any(guard.forbidden.values())
+        assert any(row["path"] == cache.removeprefix(root + "/") and row["kind"] == "directory"
+                   for row in record["cache_after"]), "S2 resolved cache directory not physically present"
+        for before in record["cache_before"]:
+            after = next(row for row in record["cache_after"] if row["path"] == before["path"])
+            assert before["device"] == after["device"] and before["inode"] == after["inode"]
+        assert initialization_verify_sources() == manifest
+        return 0
+    except BaseException as error:
+        record["failure_type"] = type(error).__name__
+        if isinstance(error, (AssertionError, ImportError)):
+            record["bounded_reason"] = str(error)[:1024]
+        raise
+    finally:
+        record.update(forbidden=guard.forbidden, sdk_calls=guard.sdk_calls,
+                      owner_constructions=guard.owner_constructions)
+        if admission is not None:
+            record["physical_read_budget"] = dict(admission.budget)
+        write_evidence("initialization-" + role + ".json", record)
+        signal.alarm(0)
+
+
+def initialization_preflight():
+    """Observe network-none or isolated-network kernel denial before package imports."""
+    import errno
+
+    assert os.getuid() == os.getgid() == 1000 and os.statvfs("/").f_flag & os.ST_RDONLY
+    assert not any(n == "pytest" or n.startswith("isaaclab_arena") for n in sys.modules)
+    assert not any(n.startswith("nvidia") or n == "dri" for n in os.listdir("/dev"))
+    routes = Path("/proc/net/route").read_text()
+    assert all(row.split()[1] != "00000000" and row.split()[2] == "00000000" for row in routes.splitlines()[1:])
+    denied = {}
+    for family, address in ((socket.AF_INET, ("192.0.2.1", 443)), (socket.AF_INET6, ("2001:db8::1", 443))):
+        with socket.socket(family, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.5)
+            try:
+                sock.connect(address)
+            except OSError as error:
+                assert error.errno in {errno.ENETUNREACH, errno.EHOSTUNREACH, errno.EACCES, errno.EPERM}
+                denied[str(family)] = error.errno
+            else:
+                raise AssertionError("S2 kernel external connect unexpectedly succeeded")
+    return dict(before_package_imports=True, kernel_denial=denied, routes=routes)
+
+
+def initialization_finish_role(guard, prepared):
+    """Capture real C server preparation before its deliberately failing checkpoint."""
+    import platform
+
+    admission = guard.initialization_admission
+    role, case = guard.initialization_role, guard.initialization_case
+    root = "/tmp/s2-init/" + case + "/" + role
+    assert platform.processor is guard.initialization_processor
+    warp = sys.modules.get("warp")
+    assert warp is not None and not warp.is_cuda_available()
+    cache = str(warp.config.kernel_cache_dir)
+    assert cache.startswith(root + "/cache/warp/") and all(p not in {".", ".."} for p in cache.split("/"))
+    row = dict(**identity(), **prepared, role=role, source_sha256=initialization_verify_sources(),
+               preimport=guard.initialization_preimport, real_preparation_complete=True,
+               cache_before=guard.initialization_cache_before,
+               cache_after=initialization_cache_manifest(root, admission.budget["deadline"]),
+               cache_verified=True, native_bindings_verified=True, module_origins_verified=True,
+               platform_processor_unmodified=True, usable_gpu=False,
+               native_libraries=list(admission.libraries.values()), module_origins=admission.modules,
+               mapped_libraries=initialization_maps(), cpu_metadata=admission.cpu_metadata,
+               forbidden=guard.forbidden, sdk_calls=guard.sdk_calls, owner_constructions=guard.owner_constructions,
+               physical_read_budget=dict(admission.budget), status="completed")
+    assert row["native_libraries"] and not any(guard.forbidden.values())
+    assert any(entry["path"] == cache.removeprefix(root + "/") and entry["kind"] == "directory"
+               for entry in row["cache_after"]), "S2 resolved cache directory not physically present"
+    for before in row["cache_before"]:
+        after = next(entry for entry in row["cache_after"] if entry["path"] == before["path"])
+        assert before["device"] == after["device"] and before["inode"] == after["inode"]
+    write_evidence("initialization-init-server.json", row)
+
+
+def initialization_monitor_stall():
+    """Externally contain only the proven owned C timeout server after its checkpoint."""
+    guard = ACTIVE
+    if getattr(guard, "initialization_case", None) != "timeout" or guard.role != "harness":
+        return
+    marker_path = Path("/evidence/initialization-pre-readiness.json")
+    if not marker_path.exists() or getattr(guard, "initialization_stall_stop", None) is not None:
+        return
+    marker = read_json(marker_path)
+    assert marker["case"] == "timeout" and marker["before_owner_construction"] is True
+    elapsed = time.monotonic() - marker["observed_at"]
+    if elapsed < 5:
+        return
+    assert marker["pid"] == marker["pgid"] == marker["sid"]
+    launchers = [row for row in guard.spawn_records if row["bootstrap_argv"][6:] == LAUNCH]
+    assert len(launchers) == 1
+    spawned = read_json(Path(f"/evidence/join-launch-{marker['pid']}.json"))
+    assert spawned["parent_pid"] == launchers[0]["pid"] == marker["parent_pid"]
+    assert role_for(spawned["bootstrap_argv"][6:]) == "server"
+    live_identity(marker)
+    started = time.monotonic()
+    until = getattr(guard, "initialization_cleanup_deadline", None)
+    if until is None:
+        until = started + 5
+        guard.initialization_cleanup_deadline = until
+    os.killpg(marker["pid"], signal.SIGKILL)
+    from workflow_graphql_execution_join_fixture import initialization_group_absent
+    while not initialization_group_absent(marker["pid"]):
+        assert time.monotonic() < until, "S2 exact server group reap deadline"
+        time.sleep(min(0.02, until - time.monotonic()))
+    guard.initialization_stall_stop = dict(server_pid=marker["pid"], signal=signal.SIGKILL,
+                                           observed_stall_seconds=elapsed, stall_seconds=5,
+                                           group_reap_seconds=time.monotonic() - started)
+    write_evidence("initialization-stall-stop.json", guard.initialization_stall_stop)
+
+
+def initialization_fresh(role):
+    """Launch precisely one next positive role in a fresh isolated interpreter."""
+    guard = ACTIVE
+    assert type(guard) is JoinGuards and guard.role == "harness" and guard.initialization_case == "positive"
+    assert role == INITIALIZATION_ROLES[len(guard.spawn_records)]
+    arguments = [EXECUTABLE, "-I", "-S", "-B", "/source/" + SELF, "--initialization", "positive", role]
+    kwargs = process_kwargs(env=initialization_environment("positive", role))
+    guard.permit = (arguments, kwargs)
+    try:
+        proc = subprocess.Popen(arguments, **kwargs)
+        stdout, stderr = initialization_collect(proc, min(guard.deadline, time.monotonic() + 40))
+        screen(stdout + stderr)
+        write_evidence("initialization-" + role + "-output.json", dict(pid=proc.pid, returncode=proc.returncode,
+                       stdout=stdout.decode("utf8", "replace"), stderr=stderr.decode("utf8", "replace")))
+        assert proc.returncode == 0, "S2 cold preparation failed: " + role
+        row = read_json(Path("/evidence/initialization-" + role + ".json"))
+        assert row["pid"] == proc.pid and row["parent_pid"] == os.getpid() and row["status"] == "completed"
+        from workflow_graphql_execution_join_fixture import initialization_group_absent
+        assert initialization_group_absent(proc.pid), "S2 cold role group remains"
+        return row
+    finally:
+        guard.permit = None
+
+
+def initialization_installed_case(case):
+    """Exercise the actual installed setup/admin/launcher and bounded stop/status path."""
+    from workflow_graphql_execution_join_fixture import configuration, registrations, initialization_group_absent
+
+    assert case in {"failure", "timeout"} and ACTIVE.initialization_case == case
+    ACTIVE.initialization_group_absent = initialization_group_absent
+    records, launched = [], False
+    def invoke(arguments, private_fd=None):
+        result = fresh(arguments, private_fd=private_fd)
+        screen(result.stdout + result.stderr)
+        row = dict(argv=arguments, pid=result.pid, returncode=result.returncode,
+                   stdout=result.stdout.decode("utf8", "replace"), stderr=result.stderr.decode("utf8", "replace"))
+        write_evidence("initialization-cli-" + str(len(records)) + ".json", row)
+        records.append(row)
+        return result
+    try:
+        profiles = registrations()
+        for kind, config in zip(("query", "execution"), CONFIGS, strict=True):
+            configuration(kind, profiles if kind == "execution" else (),
+                          home=initialization_environment(case, "init-server")["HOME"])
+            payload = json.dumps(dict(schema_version=1, databases=dict(operational=dict(
+                scheme="basic", username="synthetic-user", password="synthetic-only-secret")))).encode()
+            read_fd, write_fd = os.pipe()
+            try:
+                os.fchmod(read_fd, 0o600)
+                assert os.write(write_fd, payload) == len(payload)
+            finally:
+                os.close(write_fd)
+            try:
+                result = invoke(["setup", "--config", config, "--create", "--credentials-fd", str(read_fd)], read_fd)
+            finally:
+                os.close(read_fd)
+            assert result.returncode == 0 and json.loads(result.stdout)["code"] == "setup_complete"
+        for args in ADMIN:
+            result = invoke(args)
+            assert result.returncode == 0 and json.loads(result.stdout)["code"] == "admin_complete"
+        launched = True
+        result = invoke(LAUNCH)
+        receipt = json.loads(result.stdout)
+        assert receipt.get("state") != "ready" and not receipt.get("capabilities", {}).get("submit", False)
+        checkpoint = read_json(Path("/evidence/initialization-pre-readiness.json"))
+        assert checkpoint["case"] == case and checkpoint["pid"] == server_pid()
+        row = read_json(Path("/evidence/initialization-init-server.json"))
+        assert row["catalogue_sha256"] == checkpoint["catalogue_sha256"]
+    finally:
+        if launched:
+            cleanup = getattr(ACTIVE, "initialization_server_cleanup", None)
+            assert cleanup is not None and cleanup["status"] == "contained", (
+                "S2 server cleanup unknown; stop launches and request exact host containment"
+            )
+            invoke(STOP)
+            status = invoke(STATUS)
+            state = json.loads(status.stdout)
+            assert state.get("state") != "ready"
+            assert initialization_group_absent(server_pid()), "S2 installed server remains"
+    witness = dict(checkpoint, readiness_absent=True, server_pid=row["pid"], original_failure_retained=True)
+    if case == "timeout":
+        witness.update(ACTIVE.initialization_stall_stop)
+    else:
+        final = read_json(Path(f"/evidence/join-process-{row['pid']}.json"))
+        assert final["owner_constructions"] == final["sdk_calls"] == 0
+        assert final.get("startup_exception_sites"), "Original installed failure missing"
+    ACTIVE.initialization_result = dict(initialization_roles=[row], pre_readiness_failure=witness)
+
+
+def initialization_evidence_names(case, proof=None):
+    """Return finite S2 archive leaves; PID leaves require bounded producer identities."""
+    assert case in {"positive", "failure", "timeout"}
+    names = {"client-proof.json", "pytest.xml", "collection-ready", "initialization-harness.json"}
+    roles = INITIALIZATION_ROLES if case == "positive" else ("init-server",)
+    names.update("initialization-" + role + ".json" for role in roles)
+    if case == "positive":
+        names.update("initialization-" + role + "-output.json" for role in roles)
+    else:
+        names.update({"initialization-pre-readiness.json", "initialization-stall-stop.json"})
+        names.update("initialization-cli-" + str(index) + ".json" for index in range(10))
+    if proof is not None:
+        pids = proof.get("process_pids", [])
+        assert type(pids) is list and len(pids) <= (4 if case == "positive" else 11)
+        assert len(set(pids)) == len(pids) and all(type(pid) is int and 1 < pid < 2**31 for pid in pids)
+        for pid in pids:
+            names.update({f"join-launch-{pid}.json", f"join-process-{pid}.json", f"join-process-{pid}-started.json"})
+            if case == "positive":
+                names.add(f"generation-child-{pid}-sdk.json")
+    assert len(names) <= 55
+    return names
+
+
+def initialization_inside(case):
+    """Run one fixed real pytest case, retain actual failures, return for live collection."""
+    global ACTIVE
+    import xml.etree.ElementTree as ET
+
+    assert type(case) is str and case in {"positive", "failure", "timeout"}
+    proof = dict(status="failed", mode="workflow-graphql-initialization", case=case, tests=0,
+                 execution_attempted=False, source_sha256={}, initialization_roles=[], process_pids=[],
+                 children_verified=False, missing_process_witnesses=[], release_blockers=[])
+    guard = None
+    try:
+        preimport = initialization_preflight()
+        manifest = initialization_verify_sources()
+        network = None if case == "positive" else read_json(Path("/network/manifest.json"), 65536)
+        guard = JoinGuards("harness", None if network is None else network["ip"])
+        guard.initialization_case = case
+        guard.deadline = time.monotonic() + 260  # Host owns the earlier aggregate 300s start.
+        guard.initialization_result = {}
+        ACTIVE = base.ACTIVE = guard
+        guard.install()
+        runner = load_runner()
+        runner.graphql_imports(preimport, guard)
+        closure = read_json(Path("/source/closure.json"), 65536)
+        runner.install_staged_import_guard("/source", closure["files"], closure["namespaces"])
+        sys.path.insert(0, "/source/scripts")
+        os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+        import pytest
+        proof.update(execution_attempted=True, source_sha256=manifest)
+        code = pytest.main(["/source/" + INITIALIZATION_TEST + "::test_initialization_" + case,
+                            "-q", "-p", "no:cacheprovider", "--confcutdir=/source/isaaclab_arena/tests",
+                            "--noconftest", "--junitxml=/evidence/pytest.xml"])
+        with open("/evidence/pytest.xml", "rb") as stream:
+            junit = stream.read(4 * 1024**2 + 1)
+        assert len(junit) <= 4 * 1024**2
+        proof.update(tests=len(list(ET.fromstring(junit).iter("testcase"))), junit_sha256=hashlib.sha256(junit).hexdigest())
+        assert code == 0 and guard.initialization_result, "Actual S2 pytest case failed"
+        proof.update(guard.initialization_result)
+        if case != "positive":
+            proof["initialization_server_cleanup"] = guard.initialization_server_cleanup
+            proof["host_containment_required"] = guard.initialization_server_cleanup["host_containment_required"]
+        from workflow_graphql_execution_join_fixture import initialization_group_absent
+        pids = [row["pid"] for row in guard.spawn_records]
+        if case != "positive":
+            pids.append(server_pid())
+        assert all(initialization_group_absent(pid) for pid in pids)
+        rows = proof["initialization_roles"]
+        assert len(guard.spawn_records) == (4 if case == "positive" else 10)
+        if case != "positive":
+            for launched in guard.spawn_records:
+                child_record = read_json(Path(f"/evidence/join-process-{launched['pid']}.json"))
+                assert child_record["source_sha256"] == manifest
+                assert child_record["parent_pid"] == os.getpid()
+                assert not any(child_record["forbidden"].values())
+                assert child_record["owner_constructions"] == child_record["sdk_calls"] == 0
+        assert all(not any(row["forbidden"].values()) and row["sdk_calls"] == row["owner_constructions"] == 0 for row in rows)
+        assert sum(row["physical_read_budget"]["bytes"] for row in rows) <= 8 * 1024**3
+        assert sum(row["physical_read_budget"]["files"] for row in rows) <= 64
+        proof.update(status="passed", process_pids=pids, image=runner.GRAPHQL_IMAGE,
+                     provision_manifest_sha256=runner.GRAPHQL_MANIFEST_SHA256, children_verified=True,
+                     owned_groups_absent=True, sdk_calls=0, provider_constructions=0,
+                     readiness_observed=False, owner_admitted=False, forbidden=guard.forbidden)
+        assert initialization_verify_sources() == manifest
+        initialization_verify_proof(proof, junit, case)
+    except BaseException as error:
+        proof.update(status="failed", failure_type=type(error).__name__)
+        proof["release_blockers"].append(str(error)[:1024])
+    finally:
+        if guard is not None:
+            proof["process_pids"] = [row["pid"] for row in guard.spawn_records]
+            if case != "positive" and LAUNCH in guard.used:
+                cleanup = getattr(guard, "initialization_server_cleanup", None)
+                proof["initialization_server_cleanup"] = cleanup or dict(
+                    status="unknown", host_containment_required=True)
+                proof["host_containment_required"] = proof["initialization_server_cleanup"]["host_containment_required"]
+                if proof["host_containment_required"]:
+                    proof.update(status="failed", children_verified=False, owned_groups_absent=False)
+                    proof["release_blockers"].append("S2 server cleanup unknown; exact host containment required")
+                owned = getattr(guard, "initialization_server_identity", None)
+                if owned is not None:
+                    proof["process_pids"].append(owned["pid"])
+                else:
+                    with contextlib.suppress(Exception):
+                        proof["process_pids"].append(server_pid())
+            write_evidence("initialization-harness.json", dict(forbidden=guard.forbidden, used=guard.used,
+                           spawn_records=guard.spawn_records))
+        write_evidence("client-proof.json", proof)
     return proof
 
 
@@ -2117,11 +2976,44 @@ def initialization_verify_proof(proof, junit, case):
             initialization_origin(module["name"], module["origin"], module["preloaded"])
         assert identity_bytes <= 8 * 1024**3
         assert row["cache_before"] is not None and row["cache_after"] is not None
+        maps = row["mapped_libraries"]
+        assert type(maps) is list and 0 < len(maps) <= 256
+        map_bytes = 0
+        for mapping in maps:
+            assert type(mapping) is dict and set(mapping) == {"address", "permissions", "offset", "device", "inode", "path"}
+            assert re.fullmatch(r"[a-f0-9]+-[a-f0-9]+", mapping["address"])
+            assert re.fullmatch(r"[r-][w-][x-][ps]", mapping["permissions"])
+            assert re.fullmatch(r"[a-f0-9]+", mapping["offset"])
+            assert re.fullmatch(r"[a-f0-9]+:[a-f0-9]+", mapping["device"])
+            assert re.fullmatch(r"[0-9]+", mapping["inode"])
+            assert mapping["path"] is None or type(mapping["path"]) is str
+            map_bytes += sum(len(value.encode()) for value in mapping.values() if value is not None) + 6
+        assert map_bytes <= 65536
+        metadata = row["cpu_metadata"]
+        assert type(metadata) is list and len(metadata) <= 1
+        for command in metadata:
+            assert command["status"] == "completed" and type(command["returncode"]) is int and command["returncode"] == 0
+            assert type(command["pid"]) is int and command["pid"] > 1
+            assert command["executable"]["path"] == "/usr/bin/uname"
+            physical_witness(command["executable"])
+            assert type(command["stdout"]) is type(command["stderr"]) is str
+            assert len(command["stdout"].encode()) <= 4096 and len(command["stderr"].encode()) <= 4096
+        budget = row["physical_read_budget"]
+        assert type(budget) is dict
+        assert type(budget["bytes"]) is int and 0 < budget["bytes"] <= 8 * 1024**3
+        assert type(budget["files"]) is int and 0 < budget["files"] <= 64
         assert row["schema_checks"] == [
             "supported_normalization", "unknown_asset", "unknown_relation", "dangling_reference",
             "unknown_yaml_field", "catalogue_agreement", "catalogue_disagreement",
         ]
     if case != "positive":
+        cleanup = proof["initialization_server_cleanup"]
+        assert type(cleanup) is dict and cleanup["status"] == "contained"
+        assert cleanup["host_containment_required"] is False and proof["host_containment_required"] is False
+        assert type(cleanup["server_pid"]) is int and cleanup["server_pid"] == rows[0]["pid"]
+        assert type(cleanup["launcher_pid"]) is int and cleanup["launcher_pid"] > 1
+        assert cleanup["launcher_pid"] != cleanup["server_pid"]
+        assert type(cleanup["group_reap_seconds"]) in {int, float} and 0 <= cleanup["group_reap_seconds"] <= 5
         witness = proof["pre_readiness_failure"]
         assert type(witness["catalogue_sha256"]) is str
         assert witness["catalogue_sha256"] == rows[0]["catalogue_sha256"]

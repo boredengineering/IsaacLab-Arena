@@ -95,7 +95,7 @@ def image_metadata(image, command=None):
     return info
 
 
-def provision_image_metadata(image, *, profile=None):
+def provision_image_metadata(image, *, profile=None, command=None):
     from check_proof import PROVISION_LABEL, GRAPHQL_LABEL
 
     assert profile in (None, 'graphql-test-v1'), 'Unknown provision profile'
@@ -108,10 +108,11 @@ def provision_image_metadata(image, *, profile=None):
     if profile == 'graphql-test-v1':
         fields['GraphQLRecipe'] = '(index .Config.Labels "' + GRAPHQL_LABEL + '")'
         fields.update(Labels='.Config.Labels', User='.Config.User')
-    return json.loads(docker("image", "inspect", "--format", projection(fields), image))
+    command = docker if command is None else command
+    return json.loads(command("image", "inspect", "--format", projection(fields), image))
 
 
-def select_runtime(discovered, image=None, manifest=None, *, profile=None):
+def select_runtime(discovered, image=None, manifest=None, *, profile=None, command=None):
     """Select a provisioned test image without relabelling live discovery."""
     import re
 
@@ -130,16 +131,17 @@ def select_runtime(discovered, image=None, manifest=None, *, profile=None):
     value = parse(read_confined(path.parent, path.name))
     selected = dict(discovered, selected_runtime_image=image, provision=value)
     selected_runtime(selected, profile=profile)
+    command_kwargs = {} if command is None else {"command": command}
     if profile == 'graphql-test-v1':
         parent = parse(value['parent_manifest'])
-        assert provision_image_metadata(image, profile=profile) == value['image_projection'], 'GraphQL image readback mismatch'
-        assert provision_image_metadata(parent['image']) == value['base_projection'], 'GraphQL parent readback mismatch'
-        assert provision_image_metadata(parent['image'], profile=profile) == value['parent_config_projection'], 'GraphQL parent config readback mismatch'
-        assert provision_image_metadata(discovered['runtime_image']) == parent['base_projection'], 'GraphQL original readback mismatch'
+        assert provision_image_metadata(image, profile=profile, **command_kwargs) == value['image_projection'], 'GraphQL image readback mismatch'
+        assert provision_image_metadata(parent['image'], **command_kwargs) == value['base_projection'], 'GraphQL parent readback mismatch'
+        assert provision_image_metadata(parent['image'], profile=profile, **command_kwargs) == value['parent_config_projection'], 'GraphQL parent config readback mismatch'
+        assert provision_image_metadata(discovered['runtime_image'], **command_kwargs) == parent['base_projection'], 'GraphQL original readback mismatch'
         return selected
-    assert provision_image_metadata(image) == value["image_projection"], "Provisioned image readback mismatch"
+    assert provision_image_metadata(image, **command_kwargs) == value["image_projection"], "Provisioned image readback mismatch"
     assert (
-        provision_image_metadata(discovered["runtime_image"]) == value["base_projection"]
+        provision_image_metadata(discovered["runtime_image"], **command_kwargs) == value["base_projection"]
     ), "Provision base readback mismatch"
     return selected
 
@@ -354,15 +356,20 @@ def discover_frontend(root, frontend_dependency_container=None, *, running=None)
     return result
 
 
-def discover(root, browser, frontend_dependency_container=None):
+def discover(root, browser, frontend_dependency_container=None, *, command=None):
     import re
 
+    command_kwargs = {}
+    if command is not None:
+        assert not browser and frontend_dependency_container is None, "Command override requires non-browser discovery"
+        # Lower helpers use `command or docker`; keep falsy callables injected.
+        command_kwargs["command"] = lambda *args: command(*args)
     if frontend_dependency_container is not None:
         assert re.fullmatch(
             r"[0-9a-f]{64}", frontend_dependency_container
         ), "Frontend dependency container requires exact lowercase 64-hex ID"
         assert browser, "Frontend dependency selection requires browser discovery"
-    running = running_metadata(root)
+    running = running_metadata(root, **command_kwargs)
     host_roots = {
         m["Source"] for c in running for m in c["Mounts"] if m["Type"] == "bind" and m["Destination"] == str(root)
     }
@@ -396,7 +403,7 @@ def discover(root, browser, frontend_dependency_container=None):
         result.update(browser_image=image_metadata(candidates[0])["Id"])
         images.append(result["browser_image"])
     for image in images:
-        image_metadata(image)
+        image_metadata(image, **command_kwargs)
     return result
 
 

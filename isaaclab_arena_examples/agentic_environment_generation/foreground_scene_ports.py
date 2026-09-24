@@ -17,6 +17,7 @@ No callback replaces model engines, workflow routing or retained evidence checks
 
 import json
 import time
+from contextlib import contextmanager
 from threading import RLock
 
 from isaaclab_arena.agentic_environment_generation.workflow.contracts import parse_contract
@@ -278,11 +279,32 @@ class ForegroundScenePorts(ScenePorts):
             )
             encoded = json.dumps(packet, allow_nan=False, separators=(",", ":")).encode() + b"\n"
             self.lease.require_held(self.run_id, self.principal)
+            self.worker.bind_model_send(
+                prepared, lambda frozen: self._model_send_guard(intent, contract, prepared, role, frozen)
+            )
             self.worker.send(prepared, encoded, timeout_s=min(2.0, deadline - time.time()))
         result = self.worker.receive(prepared, protect=self.protect)
         self._results[intent.intent_id] = result
         _protected(result.output, self.protect)
         return result
+
+    @contextmanager
+    def _model_send_guard(self, intent, contract, prepared, role, config):
+        """Revalidate the same reserved scene release just before each SDK transmission."""
+        with self._interlock, self.authority.release_guard(self.principal, contract, run_id=self.run_id):
+            self._check_active()
+            registration = prepared.registration
+            auth = self.authority.require_scene_execute(self.principal, contract, run_id=self.run_id)
+            retained = self.store.check_scene_release(
+                self.run_id, intent.intent_id, auth, readiness=self.ready(contract),
+                fence=registration.fence, registration_id=registration.registration_id,
+            )
+            if retained != intent or self.authority.private_model_config(
+                self.principal, contract, run_id=self.run_id, role=role
+            ) != config:
+                raise ValueError("Scene send binding changed")
+            self.require_bounded_capability(self.principal, contract, intent.reservation)
+            yield
 
     def cleanup_worker(self, intent):
         """Stop without authority or DB access; retain physical witness for later advance."""

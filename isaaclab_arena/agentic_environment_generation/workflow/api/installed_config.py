@@ -13,6 +13,7 @@ import ipaddress
 import os
 import pwd
 import re
+import secrets
 import select
 import stat
 import time
@@ -74,17 +75,25 @@ def load(path):
     from ..scope_binding import ScopeBinding
 
     canonical_path(path)
-    value = fields(
-        decode(read_private(path, MAX_CONFIG), MAX_CONFIG),
+    value = decode(read_private(path, MAX_CONFIG), MAX_CONFIG)
+    fields(
+        value,
         "schema_version mode operator private_root credentials_file endpoint bolt_uri binding artifact_root"
-        " required_profiles bootstrap_principal read_principal",
+        " required_profiles bootstrap_principal read_principal"
+        + (" role_bindings" if type(value) is dict and value.get("schema_version") == 3 else ""),
     )
-    # Setup selection only, not execution authority or readiness. The installed
-    # server still composes query-only resources; no synthetic owner is enabled.
+    # Setup selection is never readiness or execution authority. V3 adds explicit
+    # private roles, not a production mode or an exemption from the harness guard.
     if (
         type(value["schema_version"]) is not int
         or type(value["mode"]) is not str
-        or (value["schema_version"], value["mode"]) not in ((1, "query-only"), (2, "isolated-synthetic-execution-v1"))
+        or (value["schema_version"], value["mode"])
+        not in (
+            (1, "query-only"),
+            (2, "isolated-synthetic-execution-v1"),
+            (3, "query-only"),
+            (3, "isolated-synthetic-execution-v1"),
+        )
     ):
         raise PrivateFileError("Unsupported configuration")
     operator = fields(value["operator"], "uid gid groups account home cwd")
@@ -124,19 +133,114 @@ def load(path):
     profiles = tuple(ProfileRevision.model_validate_json(encode(p)) for p in value["required_profiles"])
     if len({(p.profile_id, p.revision) for p in profiles}) != len(profiles):
         raise PrivateFileError("Duplicate profile identity")
+    if value["schema_version"] == 3:
+        validate_role_bindings(value["role_bindings"], profiles)
     return Config(path, value, binding, profiles, hashlib.sha256(encode(value)).hexdigest())
 
 
-def credential_document(raw):
-    value = fields(decode(raw, MAX_CREDENTIALS), "schema_version databases")
-    if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+def alias(value):
+    if type(value) is not str or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", value):
+        raise PrivateFileError("Invalid credential alias")
+    return value
+
+
+def validate_role_bindings(value, profiles):
+    """Validate explicit public pins without credentials, providers or database IO."""
+    from ..profiles import ProfileRegistration, profile_revision
+    from ..provider_configuration import ENDPOINTS
+
+    fields(value, "generation assessment repair prior_read")
+    for role in ("generation", "assessment", "repair"):
+        row = fields(value[role], "credential_alias profile")
+        alias(row["credential_alias"])
+        profile = ProfileRegistration.model_validate_json(encode(row["profile"]))
+        if (
+            profile.kind != "model"
+            or profile_revision(profile) not in profiles
+            or profile.settings.endpoint not in ENDPOINTS.values()
+            or ("generation_model" if role == "repair" else role + "_model") not in profile.roles
+        ):
+            raise PrivateFileError("Unsupported role profile")
+    # The current workflow contract pins repair to its generation model. Require
+    # explicit sharing rather than silently selecting a separate unbound model/key.
+    if value["repair"] != value["generation"]:
+        raise PrivateFileError("Repair requires explicit generation binding")
+    prior = fields(value["prior_read"], "credential_alias endpoint database authentication")
+    alias(prior["credential_alias"])
+    endpoint(prior["endpoint"], bolt=True)
+    text(prior["database"], 128)
+    if prior["authentication"] != "basic":
+        raise PrivateFileError("Unsupported prior authentication")
+
+
+def credential_document(raw, *, input_document=False):
+    value = decode(raw, MAX_CREDENTIALS)
+    if type(value) is not dict or type(value.get("schema_version")) is not int or value["schema_version"] not in (1, 2):
         raise PrivateFileError("Unsupported credentials")
-    databases = fields(value["databases"], "operational")
+    fields(
+        value,
+        "schema_version databases"
+        + (" models" + ("" if input_document else " generation") if value["schema_version"] == 2 else ""),
+    )
+    databases = value["databases"]
+    if type(databases) is not dict or not {"operational"} <= set(databases) <= (
+        {"operational", "prior_read"} if value["schema_version"] == 2 else {"operational"}
+    ):
+        raise PrivateFileError("Unsupported database credentials")
     operational = fields(databases["operational"], "scheme username password")
     if operational["scheme"] != "basic":
         raise PrivateFileError("Unsupported credentials")
     text(operational["username"], 256)
     text(operational["password"], 4096)
+    if value["schema_version"] == 2:
+        if not input_document and (
+            type(value["generation"]) is not str or not re.fullmatch(r"[a-f0-9]{32}", value["generation"])
+        ):
+            raise PrivateFileError("Invalid credential generation")
+        models = value["models"]
+        if type(models) is not dict or not set(models) <= {"generation", "assessment", "repair"}:
+            raise PrivateFileError("Unsupported model credentials")
+        aliases = {}
+        for item in models.values():
+            fields(item, "alias api_key")
+            alias(item["alias"])
+            text(item["api_key"], 4096)
+            if len(item["api_key"]) < 16 or any(ord(c) < 33 or ord(c) > 126 for c in item["api_key"]):
+                raise PrivateFileError("Invalid private model credential")
+            if aliases.setdefault(item["alias"], item["api_key"]) != item["api_key"]:
+                raise PrivateFileError("Shared credential alias differs")
+        if "prior_read" in databases:
+            prior = fields(databases["prior_read"], "alias scheme username password")
+            alias(prior["alias"])
+            if prior["scheme"] != "basic" or prior["alias"] in aliases:
+                raise PrivateFileError("Unsupported prior credentials")
+            text(prior["username"], 256)
+            text(prior["password"], 4096)
+    return value
+
+
+def prepare_credentials(config, value):
+    """Bind supplied private roles and issue a nonsecret revision, never a grant."""
+    from ..provider_configuration import reject_secret
+
+    if config.value["schema_version"] == 3:
+        if value["schema_version"] != 2:
+            raise PrivateFileError("Versioned private roles required")
+        selected = config.value["role_bindings"]
+        for role, item in value["models"].items():
+            if item["alias"] != selected[role]["credential_alias"]:
+                raise PrivateFileError("Private role binding differs")
+            reject_secret(config.value, item["api_key"])
+        prior = value["databases"].get("prior_read")
+        if prior is not None:
+            if prior["alias"] != selected["prior_read"]["credential_alias"]:
+                raise PrivateFileError("Private prior binding differs")
+            reject_secret(config.value, prior["password"])
+            reject_secret(config.value, prior["username"])
+    elif value["schema_version"] != 1:
+        raise PrivateFileError("Explicit role configuration required")
+    if value["schema_version"] == 2:
+        value = {**value, "generation": secrets.token_hex(16)}
     return value
 
 
@@ -166,14 +270,14 @@ def input_credentials(fd):
         data.extend(chunk)
         if len(data) > MAX_CREDENTIALS:
             raise PrivateFileError("Credential input too large")
-    return credential_document(bytes(data))
+    return credential_document(bytes(data), input_document=True)
 
 
 def change_credentials(config, *, remove, credential_fd=None):
     """Explicit serialized update/removal; failed directory sync stays unknown."""
     if type(remove) is not bool:
         raise ValueError("Explicit credential operation required")
-    value = None if remove else input_credentials(credential_fd)
+    value = None if remove else prepare_credentials(config, input_credentials(credential_fd))
     target = Path(config.value["credentials_file"])
     with Directory(str(target.parent)) as directory, directory.lease("credentials.lock"):
         fd = directory.open_file(target.name)
@@ -184,14 +288,30 @@ def change_credentials(config, *, remove, credential_fd=None):
             os.fsync(directory.fd)
         else:
             directory.write(target.name, encode(value), replace=True)
-    return {"schema_version": 1, "code": "credentials_removed" if remove else "credentials_updated"}
+    return {
+        "schema_version": 1,
+        "code": "credentials_removed" if remove else "credentials_updated",
+        **(
+            {"execution_authorized": False, "credential_generation": value["generation"]}
+            if value is not None and value["schema_version"] == 2
+            else {}
+        ),
+    }
 
 
 def setup(config, credential_fd):
-    credential = input_credentials(credential_fd)
+    credential = prepare_credentials(config, input_credentials(credential_fd))
     target = Path(config.value["credentials_file"])
     with Directory(str(target.parent)) as directory, directory.lease("credentials.lock"):
         with Directory(config.value["private_root"], create=True):
             pass
         directory.write(target.name, encode(credential))
-    return {"schema_version": 1, "code": "setup_complete"}
+    return {
+        "schema_version": 1,
+        "code": "setup_complete",
+        **(
+            {"execution_authorized": False, "credential_generation": credential["generation"]}
+            if credential["schema_version"] == 2
+            else {}
+        ),
+    }

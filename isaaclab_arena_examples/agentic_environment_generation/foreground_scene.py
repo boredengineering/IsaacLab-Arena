@@ -11,6 +11,10 @@ Cancellation calls inherited stop_owned; remote effects remain unknown. A lost
 pipe can be reconciled by reading the deterministic output artifact, never resend.
 """
 
+import json
+import os
+import re
+import time
 from dataclasses import dataclass
 
 from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import _protected, canonical
@@ -41,7 +45,48 @@ class ForegroundSceneWorker(ForegroundGenerationWorker):
         allowance = scene_allowance(packet, contract=owned.contract)
         # Memory only, frozen at release; never part of registration/artifact/proof.
         owned.scene_private_key = packet["config"]["api_key"]
+        if "request_bounds" in packet["config"]:
+            if not callable(getattr(owned, "model_send_guard", None)):
+                raise ValueError("Owned model send authority required")
+            owned.model_send_config = packet["config"]
+            owned.model_send_allowance = allowance
+            owned.model_send_handler = lambda message: self._answer_model_send(owned, message)
         return allowance
+
+    def bind_model_send(self, prepared, guard):
+        """Bind only a trusted parent callback, never a private-packet callable selector."""
+        owned = self._get(prepared)
+        with owned.lock:
+            if not callable(guard) or owned.attempted or hasattr(owned, "model_send_guard"):
+                raise ValueError("Fresh owned model send binding required")
+            owned.model_send_guard = guard
+            owned.model_send_count = 0
+
+    def _answer_model_send(self, owned, message):
+        """Consume one reserved send before rechecking authority and replying once."""
+        with owned.lock:
+            if (
+                not any(owned is item for item in self._owned)
+                or type(message) is not dict
+                or set(message) != {"version", "ordinal", "request_sha256"}
+                or type(message["version"]) is not int or message["version"] != 1
+                or type(message["ordinal"]) is not int
+                or message["ordinal"] != owned.model_send_count + 1
+                or message["ordinal"] > owned.model_send_allowance.max_calls
+                or type(message["request_sha256"]) is not str
+                or re.fullmatch("[0-9a-f]{64}", message["request_sha256"]) is None
+                or owned.cleanup is not None or time.monotonic() >= owned.deadline
+            ):
+                raise ValueError("Invalid or consumed owned send request")
+            owned.model_send_count += 1
+        # Preserve coordinator/authority -> owned-lock order. No lock spans HTTP.
+        with owned.model_send_guard(owned.model_send_config), owned.lock:
+            if owned.cleanup is not None or time.monotonic() >= owned.deadline:
+                raise ValueError("Owned send authority expired")
+            raw = (json.dumps({"model_send_ack": message}, separators=(",", ":")) + "\n").encode()
+            if os.write(owned.process.stdin.fileno(), raw) != len(raw):
+                raise ValueError("Owned send reply incomplete; never retry")
+        return True
 
     def receive(self, prepared, *, protect):
         """Reverify immutable output under frozen-key AND reject-only current policy."""

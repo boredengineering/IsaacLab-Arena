@@ -214,9 +214,9 @@ def _database_compatibility(selected, role):
         "auth": (
             "unresolved" if authentication is None else "compatible" if authentication == "basic" else "incompatible"
         ),
-        "installed_credential_slot": "databases.operational" if role == "operational_db" else None,
+        "installed_credential_slot": "databases.operational" if role == "operational_db" else "databases.prior_read",
         "selection_credential": selected.get("credential"),
-        "credential_source": source if role == "operational_db" else "implementation_missing",
+        "credential_source": source,
         "access": "not_checked",
     }
 
@@ -269,17 +269,18 @@ def _blockers(selection, rows, databases):
         )
     add(
         "private_role_bootstrap",
-        "implementation_missing",
+        "operator_setup",
         [*FIXED_MODEL_ROLES, "prior_read"],
-        "Implement and sentinel-test installed provider/prior-read private role binding; current setup accepts only"
-        " operational DB credentials.",
+        "Use explicit v3 role bindings and the private v2 setup pipe; no credential existence or live access is"
+        " checked here. Repair currently requires explicit sharing of the generation profile and credential.",
     )
     add(
         "installed_execution",
         "implementation_missing",
         required,
-        "Join and isolated-test installed submission, owned execution, exact priors and retained readback; installed"
-        " mode remains query-only.",
+        "Ordinary production execution remains unsupported. Preserve installed query-only access and guarded"
+        " synthetic role/prior submission/control/readback; separately approve production composition, measured"
+        " provider capabilities and campaign bounds before live work.",
         (outcome,),
     )
     incompatible = [role for role, row in databases.items() if "incompatible" in (row["transport"], row["auth"])]
@@ -427,12 +428,25 @@ def setup_readiness(raw=None):
         "database_compatibility": databases,
         "installed_boundary": {
             "mode": "query-only",
-            "provider_bootstrap": "implementation_missing",
+            "execution_modes": {
+                "query-only": "supported",
+                "isolated-synthetic-execution-v1": "harness_only",
+                "production": "unsupported",
+            },
+            "provider_bootstrap": "private_roles_v2",
             "db_transport": "Exact numeric IPv4 bolt://address:port only; no DNS, routing or TLS support.",
             "db_authentication": "basic",
             "runtime_credential_slot": "databases.operational",
             "admin_credential_slot": "databases.operational",
-            "prior_read_credential_slot": None,
+            "prior_read_credential_slot": "databases.prior_read",
+            "prior_retrieval": {
+                "mode": "harness_only",
+                "workflow_contract_schema": "2",
+                "source": "neo4j-legacy-graph-rag",
+                "eligibility": "measured-or-structural-v1",
+                "continuation": "retained_exact_snapshot_only",
+                "managed_source": "unsupported",
+            },
             "distinct_principals_select_distinct_db_logins": False,
             "administration": (
                 "Explicit administration uses the same DB login; administration may remain operator-owned."
@@ -461,3 +475,42 @@ def setup_readiness(raw=None):
             ),
         ],
     }
+
+
+def setup_readiness_from_config(config):
+    """Project validated public configuration without opening its credential source."""
+    value = config.value
+    roles = {}
+    for role, binding in value.get("role_bindings", {}).items():
+        credential = dict(alias=binding["credential_alias"], source="private_file", source_role=SOURCE_ROLES[role])
+        if role == "prior_read":
+            roles[role] = dict(
+                provider="neo4j",
+                endpoint=binding["endpoint"],
+                database=binding["database"],
+                authentication=binding["authentication"],
+                tls="none",
+                credential=credential,
+            )
+        else:
+            settings = binding["profile"]["settings"]
+            provider = next(name for name, endpoint in FIXED_ENDPOINTS.items() if endpoint == settings["endpoint"])
+            roles[role] = dict(
+                provider=provider,
+                model=settings["model"],
+                endpoint=settings["endpoint"],
+                inference_profile=settings["inference_policy"],
+                credential=credential,
+            )
+    roles["operational_db"] = dict(
+        provider="neo4j",
+        endpoint=value["bolt_uri"],
+        database=config.binding.database,
+        authentication="basic",
+        tls="none",
+        credential=dict(alias="databases.operational", source="private_file", source_role="databases.operational"),
+    )
+    report = setup_readiness(json.dumps(dict(schema_version=1, outcome="scene-only", roles=roles)).encode())
+    report["installed_boundary"]["mode"] = value["mode"]
+    report["configuration_sha256"] = config.digest
+    return report

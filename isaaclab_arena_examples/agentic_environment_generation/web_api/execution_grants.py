@@ -106,6 +106,14 @@ def _private_strings(credentials):
             credentials["workflow_accounting"], model=credentials["model"], endpoint=credentials["base_url"]
         )
         metadata.add("workflow_accounting")
+    if "request_bounds" in credentials:
+        from isaaclab_arena.agentic_environment_generation.workflow.request_envelope import RequestBounds
+
+        RequestBounds.model_validate(credentials["request_bounds"]).bind(
+            model=credentials.get("model"), endpoint=credentials.get("base_url"),
+            accounting=credentials.get("workflow_accounting"), inference_policy=credentials.get("inference_profile"),
+        )
+        metadata.add("request_bounds")
     for key, value in credentials.items():
         if key not in metadata:
             yield from walk(value)

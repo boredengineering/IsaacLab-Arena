@@ -308,8 +308,27 @@ def validate_client_proof(proof, mode, junit=None, network_manifest=None):
         assert proof["network_manifest"] == network_manifest
         assert proof["children_verified"] is True and not proof["missing_process_witnesses"]
         case = proof.get("join_case", "happy")
-        assert case in {"happy", "cancel", "resume", "evidence"}
-        processes, launches = {"happy": (17, 12), "cancel": (16, 14), "resume": (24, 18), "evidence": (18, 13)}[case]
+        assert case in {"happy", "cancel", "resume", "evidence", "operator", "rotation", "prior", "bounds", "bounds-text",
+                        "bounds-schema", "bounds-routing", "bounds-output", "bounds-uncertain", "bounds-probe", "bounds-images", "bounds-cost", "bounds-stale"}
+        processes, launches = {
+            "happy": (17, 12),
+            "operator": (24, 18),
+            "rotation": (25, 19),
+            "prior": (25, 19),
+            "cancel": (16, 14),
+            "resume": (24, 18),
+            "evidence": (18, 13),
+            "bounds": (18, 13),
+            "bounds-text": (15, 13),
+            "bounds-schema": (15, 13),
+            "bounds-routing": (15, 13),
+            "bounds-output": (15, 13),
+            "bounds-uncertain": (15, 13),
+            "bounds-probe": (15, 13),
+            "bounds-images": (16, 13),
+            "bounds-cost": (14, 13),
+            "bounds-stale": (16, 14),
+        }[case]
         assert len(proof["joined_processes"]) == processes
         assert proof["allowed"]["child_launch"] == launches and proof["allowed"]["bolt"] > 0
         assert not any(proof["forbidden"].values())
@@ -1721,7 +1740,10 @@ def main(argv=None):
     parser.add_argument("--runtime-image")
     parser.add_argument("--provision-manifest", type=Path)
     parser.add_argument("--initialization-case", choices=INITIALIZATION_CASES)
-    parser.add_argument("--joined-case", choices=("happy", "cancel", "resume", "evidence"))
+    parser.add_argument(
+        "--joined-case", choices=("happy", "cancel", "resume", "evidence", "operator", "rotation", "prior", "bounds", "bounds-text",
+                                  "bounds-schema", "bounds-routing", "bounds-output", "bounds-uncertain", "bounds-probe", "bounds-images", "bounds-cost", "bounds-stale")
+    )
     options = parser.parse_args(argv)
     if options.joined_case is not None and options.mode != JOIN_MODE:
         parser.error("--joined-case requires " + JOIN_MODE)
@@ -2083,11 +2105,12 @@ def main(argv=None):
 
             assert proof["join_case"] == options.joined_case
             graphql_import_contract(dict(discovery["provision"], imports=proof["imports"]))
+            failed_model = next((p["pid"] for p in reversed(proof["joined_processes"]) if p["role"] == "model"), None)
             for row in proof["joined_processes"]:
                 terminated = row["status"] == "owned_termination"
                 interrupted = row["status"] == "interrupted_known_unreleased"
                 assert not terminated or options.joined_case == "cancel"
-                assert not interrupted or options.joined_case == "resume"
+                assert not interrupted or options.joined_case in {"resume", "rotation", "prior"}
                 name = f"join-process-{row['pid']}{'-started' if terminated or interrupted else ''}.json"
                 detail = json.loads(read_confined(output / "evidence", name))
                 assert detail["source_sha256"] == proof["source_sha256"]
@@ -2106,20 +2129,24 @@ def main(argv=None):
                         checkpoint["guard"]["forbidden"].values()
                     )
                 else:
-                    reconciled = options.joined_case == "resume" and detail.get("argv", [])[1:] == [
+                    reconciled = options.joined_case in {"resume", "rotation", "prior"} and detail.get("argv", [])[
+                        1:
+                    ] == [
                         "api-reconcile",
                         "--config",
                         "/tmp/graphql-execution/execution/config/server.json",
                         "--instance",
                         "d" * 32,
                     ]
-                    lost = options.joined_case == "resume" and detail.get("argv", [])[1:] == [
+                    lost = options.joined_case in {"resume", "rotation", "prior"} and detail.get("argv", [])[1:] == [
                         "p1-resume-lost",
                         "--client",
                         "/tmp/graphql-execution/execution/runtime/instances/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/client.json",
                     ]
                     assert detail["status"] == "completed" and detail["returncode"] == (
-                        3 if reconciled else 2 if lost else 0
+                        3 if reconciled else 2 if lost
+                        else 1 if options.joined_case in {"bounds-text", "bounds-schema", "bounds-routing", "bounds-output", "bounds-uncertain", "bounds-probe", "bounds-images", "bounds-cost", "bounds-stale"}
+                        and detail["pid"] == failed_model else 0
                     )
                     if lost:
                         assert detail["lost_response_status"] == 200
@@ -2218,21 +2245,37 @@ def main(argv=None):
                 try:
                     with ConfinedRoot(output / "evidence") as evidence:
                         names = sorted(os.listdir(evidence.fd))
-                    assert len(names) <= (75 if options.joined_case == "resume" else 55)
+                    assert len(names) <= (
+                        76
+                        if options.joined_case == "prior"
+                        else 75 if options.joined_case in {"resume", "operator", "rotation"} else 55
+                    )
                     fixed = {"client-proof.json", "pytest.xml", "join-case.json", "join-detached.json",
                              "join-http-result.json", "join-retained.json", "join-positive.json"}
-                    if options.joined_case == "resume":
+                    if options.joined_case in {"bounds-text", "bounds-schema", "bounds-routing", "bounds-output", "bounds-uncertain", "bounds-probe", "bounds-images", "bounds-cost", "bounds-stale"}:
+                        fixed.add("join-bounds-blocked.json")
+                    if options.joined_case == "bounds-stale":
+                        fixed.add("join-bounds-rotation.json")
+                    if options.joined_case == "prior":
+                        fixed.update(
+                            {"join-prior-failure.json", "join-prior-diagnostic.json", "join-api-negatives.json"}
+                        )
+                    if options.joined_case in {"resume", "rotation", "prior"}:
                         fixed |= {
                             "join-unreleased.json",
                             "join-restart.json",
                             "join-resume-receipt.json",
                             "join-resume-original.json",
                         }
-                    if options.joined_case in {"resume", "cancel"}:
+                    if options.joined_case in {"resume", "rotation", "prior", "cancel"}:
                         fixed.add("join-controls.json")
-                    if options.joined_case in {"resume", "evidence"}:
+                    if options.joined_case in {"resume", "rotation", "prior", "evidence", "operator", "bounds"}:
                         fixed.add("join-api-readback.json")
-                    if options.joined_case == "evidence":
+                    if options.joined_case == "operator":
+                        fixed.update(
+                            {"join-operator-before.json", "join-operator-after.json", "join-operator-privacy.json"}
+                        )
+                    if options.joined_case in {"evidence", "bounds"}:
                         fixed.update({"join-api-readback.json", "join-api-negatives.json"})
                     fixed |= {name + ".pending" for name in fixed if name.startswith("join-")}
                     assert all(name in fixed or re.fullmatch(

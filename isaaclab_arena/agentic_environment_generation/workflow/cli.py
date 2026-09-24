@@ -41,8 +41,12 @@ def _read_contract(path):
 def _add_installed_arguments(commands):
     """Declare installed commands without importing any optional API dependencies."""
     readiness = commands.add_parser("setup-readiness", help="Report offline public setup blockers", allow_abbrev=False)
-    readiness.add_argument("--selection", help="Explicit public selection JSON; no credentials or checks")
-    setup = commands.add_parser("setup", help="Create explicit private query configuration state", allow_abbrev=False)
+    readiness_source = readiness.add_mutually_exclusive_group()
+    readiness_source.add_argument("--selection", help="Explicit public selection JSON; no credentials or checks")
+    readiness_source.add_argument("--config", help="Explicit installed public config; never read credentials")
+    setup = commands.add_parser(
+        "setup", help="Create private credential state; grants no execution authority", allow_abbrev=False
+    )
     setup.add_argument("--config", required=True)
     setup.add_argument("--create", action="store_true", required=True)
     setup.add_argument("--credentials-fd", type=int, required=True)
@@ -136,13 +140,33 @@ def _add_installed_arguments(commands):
             action.add_argument("--create", action="store_true")
         if name == "register-profile":
             action.add_argument("--registration", required=True)
-    for name in ("api-launch", "api-status", "api-stop", "api-reconcile", "api-serve"):
+    for name in ("api-launch", "api-handover", "api-status", "api-stop", "api-reconcile", "api-serve"):
         command = commands.add_parser(name, allow_abbrev=False)
         command.add_argument("--config", required=True)
         command.add_argument("--instance", required=True)
+        if name == "api-handover":
+            command.add_argument(
+                "--previous-config", required=True, help="Unchanged C1 used for exact stop/reconciliation"
+            )
+            command.add_argument("--previous-instance", required=True, help="Exactly drained C1 instance")
         if name == "api-serve":
             command.add_argument("--lease-fd", required=True, type=int)
             command.add_argument("--gate-fd", required=True, type=int)
+
+
+def _launch_instance(options, config, selected):
+    """Use the existing launcher with an optional exact prior-configuration binding."""
+    from .api.installed_config import load
+    from .api.instance import instance_id, launch
+
+    if options.command == "api-launch":
+        return launch(config, selected)
+    return launch(
+        config,
+        selected,
+        previous_config=load(options.previous_config),
+        previous_instance=instance_id(options.previous_instance),
+    )
 
 
 def _run_installed(options):
@@ -163,7 +187,13 @@ def _run_installed(options):
                         raw = stream.read(MAX_SELECTION_BYTES + 1)
                 finally:
                     os.close(fd)
-            report = setup_readiness(raw)
+            if options.config is None:
+                report = setup_readiness(raw)
+            else:
+                from .api.installed_config import load
+                from .setup_readiness import setup_readiness_from_config
+
+                report = setup_readiness_from_config(load(options.config))
         except (OSError, ValueError, RecursionError, AttributeError):
             print("setup-readiness: invalid selection file", file=sys.stderr)
             return 2
@@ -265,7 +295,7 @@ def _run_installed(options):
     if options.command.startswith("api-"):
         try:
             from .api.installed_config import load
-            from .api.instance import instance_id, launch, observe
+            from .api.instance import instance_id, observe
 
             selected = instance_id(options.instance)
             config = load(options.config)
@@ -273,8 +303,8 @@ def _run_installed(options):
                 from .api.server import serve
 
                 return serve(config, selected, options.lease_fd, options.gate_fd)
-            if options.command == "api-launch":
-                result, code = launch(config, selected)
+            if options.command in {"api-launch", "api-handover"}:
+                result, code = _launch_instance(options, config, selected)
             else:
                 result, code = observe(
                     config, selected, stop=options.command == "api-stop", reconcile=options.command == "api-reconcile"

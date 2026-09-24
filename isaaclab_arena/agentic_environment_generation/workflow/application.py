@@ -298,6 +298,8 @@ class ForegroundWorkflow:
         if self._cancellation.stop_requested(self, run.run_id):
             return self.status(principal, run.run_id)
         prior = self.prior_factory(principal=principal, run_id=run.run_id, contract=contract)
+        if contract.retrieval is not None:
+            run = self.store.get_run(run.run_id)
         worker = self.initial_worker_factory(
             area=self.artifacts.area,
             root=self.artifact_root,

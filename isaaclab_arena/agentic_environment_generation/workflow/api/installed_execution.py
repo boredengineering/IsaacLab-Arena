@@ -7,6 +7,7 @@
 
 import sys
 import time
+from decimal import Decimal
 from pathlib import Path
 from threading import Lock
 
@@ -23,7 +24,7 @@ def protect(value):
 
 def compose(config, *, tokens, auth):
     """Authorize fixed ports before resources; return one lifespan-only builder."""
-    if (config.value["schema_version"], config.value["mode"]) != (2, MODE):
+    if (config.value["schema_version"], config.value["mode"]) not in ((2, MODE), (3, MODE)):
         raise ValueError("Explicit synthetic mode required")
     # Never import a discoverable plugin. Only the already executing reviewed
     # bootstrap may issue this one-use capability to this exact compose frame.
@@ -38,10 +39,7 @@ def compose(config, *, tokens, auth):
     catalogue = ports["catalogue"]()
     if not isinstance(catalogue, ExecutionCatalogue):
         raise ValueError("Explicit adapter vocabulary required")
-    from isaaclab_arena.agentic_environment_generation.inference_profiles import (
-        frozen_builtin_profile,
-        resolve_inference_profile,
-    )
+
     from isaaclab_arena.agentic_environment_generation.prior_receipt import empty_snapshot
     from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
     from isaaclab_arena.agentic_environment_generation.workflow.artifacts import GenerationArtifacts
@@ -77,57 +75,57 @@ def compose(config, *, tokens, auth):
     from ..application import ForegroundWorkflow
     from .execution_owner import ExecutionOwner
 
-    model, endpoint = "gpt-6-astra", "https://api.openai.com/v1"
-    model_config = dict(
-        api_key="synthetic-unit-key",
-        model=model,
-        base_url=endpoint,
-        inference_profile=frozen_builtin_profile(resolve_inference_profile(model, endpoint)),
-        workflow_accounting=dict(
-            version=1,
-            attested=True,
-            model=model,
-            endpoint=endpoint,
-            max_tokens=10000,
-            max_cost_usd="0",
-        ),
-    )
-    profiles = {
-        r: dict(
-            profile_id=r,
-            billing="free",
-            settings_sha256=model_settings_sha256(model_config, billing="free"),
+    expected = tuple(config.profiles)
+    if {p.profile_id for p in expected} != {"generation", "assessment"} or len(expected) != 2:
+        raise ValueError("Exact synthetic role selections required")
+    model_configs, profiles = {}, {}
+    for selected in expected:
+        settings = selected.registration.settings
+        if (
+            selected.registration.roles != (selected.profile_id + "_model",)
+            or settings.model != "gpt-6-astra"
+            or settings.endpoint != "https://api.openai.com/v1"
+            or settings.request_bounds is None
+            or settings.workflow_accounting is None
+            or settings.inference_policy is None
+            or settings.request_bounds.pricing.kind != "synthetic_fixture"
+            or (settings.billing == "free" and Decimal(settings.workflow_accounting.max_cost_usd) != 0)
+        ):
+            raise ValueError("Explicit supported synthetic request/pricing selections required")
+        model_configs[selected.profile_id] = dict(
+            api_key="synthetic-unit-key",
+            model=settings.model,
+            base_url=settings.endpoint,
+            inference_profile=settings.inference_policy.model_dump(mode="json"),
+            workflow_accounting=settings.workflow_accounting.model_dump(mode="json"),
+            request_bounds=settings.request_bounds.model_dump(mode="json"),
         )
-        for r in ("generation", "assessment")
-    }
-    from ..profiles import ProfileRegistration, profile_revision
-
-    expected = tuple(
-        profile_revision(
-            ProfileRegistration.model_validate(
-                dict(
-                    profile_id=role,
-                    revision=1,
-                    kind="model",
-                    roles=[role + "_model"],
-                    settings=dict(
-                        model=model,
-                        endpoint=endpoint,
-                        billing="free",
-                        inference_policy=model_config["inference_profile"],
-                        workflow_accounting=model_config["workflow_accounting"],
-                    ),
-                )
-            )
+        profiles[selected.profile_id] = dict(
+            profile_id=selected.profile_id, billing=settings.billing, settings_sha256=selected.settings_sha256
         )
-        for role in ("generation", "assessment")
-    )
-    if tuple(config.profiles) != expected:
-        raise ValueError("Exact fixed synthetic registrations required")
     # Registry and execution use independently checked codecs. Never substitute
     # an unrelated registry body hash or suppress the authority's settings check.
-    if any(p.settings_sha256 != profiles[p.profile_id]["settings_sha256"] for p in expected):
+    if any(
+        p.settings_sha256 != model_settings_sha256(model_configs[p.profile_id], billing=p.registration.settings.billing)
+        for p in expected
+    ):
         raise ValueError("Synthetic registry/execution settings differ")
+
+    private_roles = None
+    if config.value["schema_version"] == 3:
+        from .installed_composition import PrivateRoles
+
+        private_roles = PrivateRoles(config)
+        for role in ("generation", "assessment", "repair"):
+            selected = private_roles.model_config(role)
+            profile = profiles["generation" if role == "repair" else role]
+            if (
+                model_settings_sha256(selected, billing=profile["billing"])
+                != profile["settings_sha256"]
+            ):
+                raise ValueError("Exact synthetic role settings required")
+        if private_roles.model_config("repair") != private_roles.model_config("generation"):
+            raise ValueError("Explicit shared repair source required")
 
     build_lock = Lock()
     built = False
@@ -161,7 +159,11 @@ def compose(config, *, tokens, auth):
                 clock=time.time,
                 principal_lookup=principal_lookup,
                 profiles=profiles,
-                current_config=lambda p: dict(config=model_config, expires_at=expires),
+                current_config=lambda p: dict(
+                    config=model_configs[p] if private_roles is None else private_roles.model_config(p), expires_at=expires
+                ),
+                source_guard=None if private_roles is None else private_roles.release_guard,
+                prior_source=None if private_roles is None else private_roles.prior_source,
             )
 
             grant_protect = authority.protect_public
@@ -169,6 +171,8 @@ def compose(config, *, tokens, auth):
             def protect_all(value):
                 protect(value)
                 grant_protect(value)
+                if private_roles is not None:
+                    private_roles.protect(value)
 
             authority.protect_public = protect_all
 
@@ -203,7 +207,49 @@ def compose(config, *, tokens, auth):
                     instance_id=required.instance_id,
                 )
 
+            def prior_driver(*, uri, user, password, **options):
+                from neo4j import GraphDatabase, basic_auth
+
+                return GraphDatabase.driver(uri, auth=basic_auth(user, password), **options)
+
             def prior_factory(*, principal, run_id, contract):
+                if contract.retrieval is not None:
+                    from isaaclab_arena_examples.agentic_environment_generation.web_api.graph_access import (
+                        retrieve_snapshot,
+                    )
+
+                    retained = RetainedPriorArtifacts(area)
+                    reference = store.get_prior_reference(run_id)
+                    if reference is None:
+                        deadline = store.begin_prior_retrieval(run_id)
+                        with authority.prior_read(principal, contract, run_id=run_id, deadline=deadline) as (
+                            source,
+                            check,
+                        ):
+                            snapshot = retrieve_snapshot(
+                                contract.source.prompt,
+                                source,
+                                settings=contract.retrieval.settings,
+                                driver_factory=prior_driver,
+                                read_guard=check,
+                            )
+                        receipt = retained.write(
+                            contract.source.prompt,
+                            contract_digest(contract),
+                            run_id,
+                            snapshot,
+                            protect=authority.protect_public,
+                        )
+                        reference = retained.reference(
+                            receipt,
+                            contract=contract,
+                            run_id=run_id,
+                            protect=authority.protect_public,
+                        )
+                        store.retain_prior_reference(run_id, reference)
+                    return retained.reopen(
+                        reference, contract=contract, run_id=run_id, protect=authority.protect_public
+                    )
                 snapshot = empty_snapshot(contract.source.prompt, status="unavailable", warning="unconfigured")
                 return RetainedPriorArtifacts(area).write(
                     contract.source.prompt,
@@ -216,26 +262,25 @@ def compose(config, *, tokens, auth):
             def validate_document(text):
                 return catalogue.validate_document(text)
 
-            common = dict(
-                model_calls=2,
-                model_tokens=20000,
-                cost_ceiling_usd=0.0,
-                runtime_allowance_seconds=30.0,
-            )
-            ceiling = ModelCeiling(
-                max_calls=2,
-                max_tokens=20000,
-                max_cost_usd="0",
-                timeout_seconds=25.0,
-                per_call_bound=model_config["workflow_accounting"],
-            )
+            reservations, ceilings = {}, {}
+            for role, selected in model_configs.items():
+                bound = selected["workflow_accounting"]
+                cost = 2 * Decimal(bound["max_cost_usd"])
+                reservations[role] = dict(
+                    model_calls=2, model_tokens=2 * bound["max_tokens"],
+                    cost_ceiling_usd=float(cost), runtime_allowance_seconds=30.0,
+                )
+                ceilings[role] = ModelCeiling(
+                    max_calls=2, max_tokens=2 * bound["max_tokens"], max_cost_usd=format(cost, "f"),
+                    timeout_seconds=25.0, per_call_bound=bound,
+                )
             profile = ScenePortProfile(
                 port_id="synthetic-retained",
                 assurance="synthetic",
                 owned_worker=True,
                 producer_ids=("scene.linear-speed", "scene.visible"),
-                observe=dict(common, observations=1, realizations=1, steps=2),
-                repair=dict(common, candidates=1, revisions=1),
+                observe=dict(reservations["assessment"], observations=1, realizations=1, steps=2),
+                repair=dict(reservations["generation"], candidates=1, revisions=1),
             )
             approved = tuple(
                 DependencyRequirement(
@@ -255,7 +300,7 @@ def compose(config, *, tokens, auth):
                 artifacts=GenerationArtifacts(area),
                 artifact_root=config.value["artifact_root"],
                 catalogue_sha256=catalogue_digest,
-                generation_reservation=GenerationReservation(**common),
+                generation_reservation=GenerationReservation(**reservations["generation"]),
                 prior_factory=prior_factory,
                 initial_worker_factory=lambda **kw: InitialGenerationWorker(
                     **kw, require_prior=False, spawn_spec=ports["spawn_spec"]
@@ -272,7 +317,7 @@ def compose(config, *, tokens, auth):
                     profile=profile,
                     artifacts=SceneEvidenceArtifacts(area),
                     capture=ports["capture"],
-                    model_ceilings={r: ceiling for r in profiles},
+                    model_ceilings=ceilings,
                     capture_steps=2,
                     capture_timeout_seconds=5.0,
                     output_root=Path(config.value["private_root"]) / "capture",

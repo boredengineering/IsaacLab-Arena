@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Fixed E1 input/capture/vocabulary ports; no owner, grants, service or receipt mocks."""
 
+import hashlib
 import json
 import os
 import pwd
@@ -68,7 +69,7 @@ def check_detachment_proof(detached, release):
     ), "release ordering or timeout"
 
 
-def install_detachment_transport(transport_type, original, evidence, identify, write):
+def install_detachment_transport(transport_type, original, evidence, identify, write, *, after_probe=False):
     """Gate only E1's real synthetic generation response, without extra sends."""
     assert transport_type.handle_request is original
     assert not Path("/tmp/workflow-cli/pause-generation").exists(), "legacy generation pause is not E1 authority"
@@ -77,7 +78,7 @@ def install_detachment_transport(transport_type, original, evidence, identify, w
         # The original installed fixture still constructs every byte and counts
         # every ping/completion. No model, SDK or generation method is replaced.
         result = original(transport, request)
-        if evidence["calls"] != 2:
+        if evidence["calls"] != (1 if after_probe else 2):
             return result
         body = json.loads(request.content)
         texts = []
@@ -87,9 +88,9 @@ def install_detachment_transport(transport_type, original, evidence, identify, w
                 texts.append(content)
             elif isinstance(content, list):
                 texts.extend(part["text"] for part in content if part.get("type") == "text")
-        if any("Request:\n" in text for text in texts) or not any(
+        if not after_probe and (any("Request:\n" in text for text in texts) or not any(
             "Initial foreground workflow scene fixture" in text for text in texts
-        ):
+        )):
             return result
         assert result.status_code == 200 and PAUSE.read_bytes() == PAUSE_BYTES
         waiting_at = time.monotonic()
@@ -231,7 +232,85 @@ def initialization_group_absent(pgid):
     return not any(row["state"] not in {"Z", "X"} for row in group_members(pgid).values())
 
 
-def registrations():
+def request_bounds(*, priced=False, case=None):
+    """Explicit synthetic-only bounds; no actual provider rate or tokenization claim."""
+    from isaaclab_arena.agentic_environment_generation.workflow.request_envelope import RequestBounds
+
+    value: dict = dict(
+        version=1,
+        envelope=dict(
+            version=1, max_text_bytes=100000, max_schema_bytes=100000, max_request_bytes=300000,
+            output_parameter="max_completion_tokens", max_output_tokens=64, image_formats=["png"],
+            max_images=4, max_image_bytes=4096, max_image_width=8, max_image_height=8, image_detail="auto",
+            permitted_fields=["model", "messages", "max_completion_tokens", "store", "response_format"],
+            route_policy="direct-chat-completions-v1",
+        ),
+        pricing=dict(
+            version=1, revision="synthetic-priced-1" if priced else "synthetic-free-1", kind="synthetic_fixture",
+            source="urn:arena:synthetic-pricing-fixture:v1", provider="openai", input_tokens_per_request_byte=1,
+            image_tokens_per_image=1024, input_usd_per_million_tokens="1" if priced else "0",
+            output_usd_per_million_tokens="2" if priced else "0", per_request_usd="0.001" if priced else "0",
+            assumptions=[
+                "Fictional rates and token bounds for deterministic transport only; no live billing guarantee.",
+                "Every admitted request byte bounds text, catalogue, schema, prior, repair and message overhead.",
+                "Each image allowance covers the admitted dimensions and auto detail worst case.",
+                "Output allowance includes default reasoning; failed transmissions incur the full bound.",
+            ],
+        ),
+    )
+    if case == "bounds":
+        value["envelope"].update(max_schema_bytes=16447, max_images=3, max_image_width=1, max_image_height=1)
+    elif case == "bounds-text":
+        value["envelope"]["max_text_bytes"] = 24  # Exact admitted constructor probe, not aggregate generation context.
+    elif case == "bounds-schema":
+        value["envelope"]["max_schema_bytes"] = 1
+    elif case == "bounds-probe":
+        value["envelope"]["max_text_bytes"] = 23  # Below the actual 24-byte probe; output probes are safely clamped.
+    elif case == "bounds-images":
+        value["envelope"]["max_images"] = 2
+    return RequestBounds.model_validate(value)
+
+
+def install_request_fault(case, transport_type, original, evidence, write):
+    """Deterministic SDK-preparation and uncertain transport faults, not provider simulation fidelity."""
+    import importlib
+    import openai
+
+    if case in {"bounds-routing", "bounds-output"}:
+        prepare = openai.OpenAI._prepare_request
+
+        def altered(client, request):
+            prepare(client, request)
+            if evidence["calls"] != 1:
+                return
+            if case == "bounds-routing":
+                request.url = request.url.copy_with(query=b"unsupported-route=1")
+            else:
+                body = json.loads(request.content)
+                body["max_completion_tokens"] = 65
+                request._content = json.dumps(body, separators=(",", ":")).encode()
+                httpx = importlib.import_module(type(request).__module__.split(".")[0])
+                request.stream = httpx.ByteStream(request.content)
+                request.headers["content-length"] = str(len(request.content))
+            evidence["injected_after_sdk_serialization"] = case
+            write(f"generation-child-{os.getpid()}-sdk.json", evidence)
+
+        openai.OpenAI._prepare_request = altered
+    elif case == "bounds-uncertain":
+        def uncertain(transport, request):
+            response = original(transport, request)
+            if evidence["calls"] == 2:
+                response.close()
+                evidence["outcome"] = "potential_transmission_no_response"
+                write(f"generation-child-{os.getpid()}-sdk.json", evidence)
+                httpx = importlib.import_module(type(response).__module__.split(".")[0])
+                raise httpx.ReadTimeout("Deterministic uncertain transport fixture", request=request)
+            return response
+
+        transport_type.handle_request = uncertain
+
+
+def registrations(*, priced=False, case=None):
     from isaaclab_arena.agentic_environment_generation.inference_profiles import (
         frozen_builtin_profile,
         resolve_inference_profile,
@@ -239,25 +318,20 @@ def registrations():
     from isaaclab_arena.agentic_environment_generation.workflow.profiles import ProfileRegistration
 
     model, endpoint = "gpt-6-astra", "https://api.openai.com/v1"
+    bounds = request_bounds(priced=priced, case=case)
     return tuple(
         ProfileRegistration.model_validate({
             "profile_id": role,
-            "revision": 1,
+            "revision": 2,
             "kind": "model",
             "roles": [role + "_model"],
             "settings": {
                 "model": model,
                 "endpoint": endpoint,
-                "billing": "free",
+                "billing": "paid" if priced else "free",
                 "inference_policy": frozen_builtin_profile(resolve_inference_profile(model, endpoint)),
-                "workflow_accounting": {
-                    "version": 1,
-                    "attested": True,
-                    "model": model,
-                    "endpoint": endpoint,
-                    "max_tokens": 10000,
-                    "max_cost_usd": "0",
-                },
+                "workflow_accounting": bounds.accounting(model=model, endpoint=endpoint),
+                "request_bounds": bounds.model_dump(mode="json"),
             },
         })
         for role in ("generation", "assessment")
@@ -267,6 +341,67 @@ def registrations():
 def private_json(path, value):
     path.write_text(json.dumps(value, sort_keys=True))
     path.chmod(0o600)
+
+
+def operational_credentials():
+    """Keep private fixture constants out of the installed test's failure source dump."""
+    return {
+        "schema_version": 1,
+        "databases": {
+            "operational": {
+                "scheme": "basic",
+                "username": "synthetic-user",
+                "password": "synthetic-only-secret",
+            }
+        },
+    }
+
+
+def operator_sentinels(*, rotated=False):
+    return {
+        role: "synthetic-" + "operator-private-" + role + ("-rotated" if rotated else "")
+        for role in ("generation", "assessment", "prior")
+    }
+
+
+def operator_configuration(profiles, credentials):
+    """Select explicit test roles without adding a live execution composition."""
+    path = Path("/tmp/graphql-execution/execution/config/server.json")
+    value = json.loads(path.read_text())
+    value["schema_version"] = 3
+    value["role_bindings"] = {
+        role: dict(
+            credential_alias="cloud-" + ("generation" if role == "repair" else role),
+            profile=profiles[role == "assessment"].model_dump(mode="json"),
+        )
+        for role in ("generation", "assessment", "repair")
+    }
+    value["role_bindings"]["prior_read"] = dict(
+        credential_alias="prior-only",
+        endpoint=value["bolt_uri"],
+        database=value["binding"]["database"],
+        authentication="basic",
+    )
+    private_json(path, value)
+    private_json(path.with_name("next.json"), dict(value, mode="query-only"))
+    sentinels = operator_sentinels()
+    return dict(
+        credentials,
+        schema_version=2,
+        databases={
+            **credentials["databases"],
+            "prior_read": dict(
+                alias="prior-only", scheme="basic", username="prior-unit-operator", password=sentinels["prior"]
+            ),
+        },
+        models={
+            role: dict(
+                alias=value["role_bindings"][role]["credential_alias"],
+                api_key=sentinels["generation" if role == "repair" else role],
+            )
+            for role in ("generation", "assessment", "repair")
+        },
+    )
 
 
 def configuration(kind, profiles, *, home="/tmp"):
@@ -313,7 +448,42 @@ def configuration(kind, profiles, *, home="/tmp"):
         private_json(folder / (profile.profile_id + ".json"), profile.model_dump(mode="json"))
 
 
+def prior_contract(profiles, binding):
+    """Freeze an explicitly selected legacy-only fixture source and nonempty policy."""
+    value = json.loads(contract(profiles))
+    settings = dict(
+        limit=2,
+        min_success_rate=0.0,
+        min_episodes=1,
+        query_timeout_seconds=5.0,
+        connection_timeout_seconds=3.0,
+        connection_acquisition_timeout_seconds=5.0,
+        max_transaction_retry_time_seconds=0.0,
+    )
+    eligibility = "measured-or-structural-v1"
+    sha = hashlib.sha256(
+        json.dumps(dict(eligibility=eligibility, settings=settings), sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    value["schema_version"] = "2"
+    value["effects"]["allow_database_reads"] = True
+    value["retrieval"] = dict(
+        schema_version="1",
+        source="neo4j-legacy-graph-rag",
+        credential_alias=binding["credential_alias"],
+        endpoint=binding["endpoint"],
+        database=binding["database"],
+        eligibility=eligibility,
+        settings=settings,
+        settings_sha256=sha,
+        required=True,
+        allow_empty=False,
+    )
+    return json.dumps(value)
+
+
 def contract(profiles):
+    from decimal import Decimal
+
     from isaaclab_arena.agentic_environment_generation.workflow.contracts import WorkflowContract, canonical_json
     from isaaclab_arena.agentic_environment_generation.workflow.profiles import profile_revision
 
@@ -368,7 +538,7 @@ def contract(profiles):
                     p.profile_id
                     + "_model": {
                         "profile_id": p.profile_id,
-                        "billing": "free",
+                        "billing": p.settings.billing,
                         "settings_sha256": profile_revision(p).settings_sha256,
                     }
                     for p in profiles
@@ -387,8 +557,8 @@ def contract(profiles):
                 "max_revisions": 1,
                 "max_runtime_seconds": 120.0,
                 "max_model_calls": 8,
-                "max_model_tokens": 80000,
-                "max_cost_usd": 0.0,
+                "max_model_tokens": 8 * max(p.settings.workflow_accounting.max_tokens for p in profiles),
+                "max_cost_usd": float(8 * max(Decimal(p.settings.workflow_accounting.max_cost_usd) for p in profiles)),
                 "max_realizations": 2,
                 "max_steps": 4,
                 "max_observations": 2,
@@ -398,7 +568,7 @@ def contract(profiles):
                 "total_deadline_seconds": 180.0,
             },
             "effects": {
-                "allow_paid_models": False,
+                "allow_paid_models": any(p.settings.billing == "paid" for p in profiles),
                 "allow_runtime": True,
                 "allow_database_reads": False,
                 "allow_operational_writes": True,
@@ -411,7 +581,22 @@ def contract(profiles):
 @contextmanager
 def synthetic_capture(*, candidate, contract, cohort):
     """Same fixed world-state/RGB algorithm as the retained synthetic example."""
+    import binascii
+    import struct
+    import zlib
+
     from isaaclab_arena.agentic_environment_generation.workflow.scene_ports import CaptureRuntime
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", binascii.crc32(kind + data))
+
+    # Valid, explicitly synthetic 1x1 RGB, without metadata or native rendering.
+    image = (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00"))
+        + chunk(b"IEND", b"")
+    )
 
     class Flag:
         def any(self):
@@ -419,7 +604,7 @@ def synthetic_capture(*, candidate, contract, cohort):
 
     class Env:
         def reset(self):
-            return {"camera_obs": {"wrist": b"synthetic-image"}}, {}
+            return {"camera_obs": {"wrist": image}}, {}
 
         def step(self, action):
             return self.reset()[0], 0, Flag(), Flag(), {}

@@ -230,8 +230,45 @@ def observe(config, selected, *, stop=False, reconcile=False):
     return receipt(known, code="unknown"), 3
 
 
-def launch(config, selected):
+def launch(config, selected, *, previous_config=None, previous_instance=None):
+    """Launch a fresh instance, or explicitly hand over an exactly drained configuration."""
+    from .installed_config import MAX_CONFIG
+
     instance_id(selected)
+    transition = None
+    if previous_config is not None or previous_instance is not None:
+        instance_id(previous_instance)
+        if previous_config is None or selected == previous_instance or config.digest == previous_config.digest:
+            raise ValueError("Distinct checked configurations and instances required")
+        unchanged = (
+            "private_root",
+            "credentials_file",
+            "bolt_uri",
+            "binding",
+            "artifact_root",
+            "operator",
+            "bootstrap_principal",
+            "read_principal",
+        )
+        if any(config.value[key] != previous_config.value[key] for key in unchanged):
+            raise ValueError("Handover cannot change durable scope or private roots")
+        transition = dict(
+            schema_version=1,
+            previous_instance=previous_instance,
+            previous_config_sha256=previous_config.digest,
+            instance=selected,
+            config_sha256=config.digest,
+        )
+        # A retry of the same consumed transition only observes its exact target.
+        with Directory(config.value["private_root"]) as root, root.lease("metadata.lock"):
+            current = decode(root.read("current.json", 4096), 4096)
+            replay = current == dict(schema_version=1, instance=selected, config_sha256=config.digest)
+            if replay:
+                with Directory(instance_path(config, selected)) as directory:
+                    if decode(directory.read("handover.json", 4096), 4096) != transition:
+                        raise ValueError("Handover replay differs")
+        if replay:
+            return observe(config, selected)
     with (
         Directory(config.value["private_root"]) as root,
         root.lease("metadata.lock"),
@@ -245,13 +282,26 @@ def launch(config, selected):
             current = None
         if current is not None:
             fields(current, "schema_version instance config_sha256")
-            prior = state(config, instance_id(current["instance"]))
+            if transition is not None and current != dict(
+                schema_version=1, instance=previous_instance, config_sha256=previous_config.digest
+            ):
+                raise ValueError("Previous configuration intent differs")
+            prior_config = config if transition is None else previous_config
+            prior = state(prior_config, instance_id(current["instance"]))
             if (
                 prior["identity"] is None
                 or same_process(prior["identity"])
                 or prior["state"] not in {"stopped", "failed", "exited_unclean"}
             ):
                 raise ValueError("Prior instance unresolved")
+            if transition is not None:
+                if prior["state"] != "stopped" or prior["code"] != "drained":
+                    raise ValueError("Prior cleanup unresolved; recover using the previous configuration")
+                with Directory(instance_path(previous_config, previous_instance)) as directory:
+                    if decode(directory.read("configuration.json", MAX_CONFIG), MAX_CONFIG) != previous_config.value:
+                        raise ValueError("Retained previous configuration differs")
+        elif transition is not None:
+            raise ValueError("Previous instance required")
         location = instance_path(config, selected)
         # A consumed directory is a permanent tombstone, including failed launches.
         with Directory(root.path + "/instances") as instances:
@@ -276,6 +326,9 @@ def launch(config, selected):
             identity=None,
         )
         with Directory(location) as directory:
+            directory.write("configuration.json", encode(config.value))
+            if transition is not None:
+                directory.write("handover.json", encode(transition))
             directory.write("state.json", encode(initial))
         root.write(
             "current.json",

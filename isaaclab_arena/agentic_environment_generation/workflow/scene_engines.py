@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from ..inference_profiles import checked_inference_profile
 from .inference_transport import CallAllowance, bounded_client, checked_workflow_accounting
-from .request_envelope import RequestEnvelope
+from .request_envelope import RequestBounds, RequestEnvelope
 
 
 @dataclass(frozen=True)
@@ -32,11 +32,11 @@ class BoundedSceneModels:
     Approved roles are caller-authorized {role: {model, endpoint}} bindings, not grants.
     No prices are inferred. One instance serves one exact model/endpoint attestation.
     request_envelopes optionally supplies every approved role's frozen RequestEnvelope;
-    refinement retains the existing generation role. Absent envelopes preserve legacy
-    configuration/serialization. This callable seam is not installed or durable binding.
+    refinement retains the existing generation role. An installed config's request_bounds
+    supplies the exact registered envelope. Absent bounds preserve legacy callable use.
     """
 
-    def __init__(self, *, config, approved_roles, allowance, request_envelopes=None):
+    def __init__(self, *, config, approved_roles, allowance, request_envelopes=None, send_guard=None):
         required = {
             "api_key",
             "model",
@@ -44,7 +44,7 @@ class BoundedSceneModels:
             "inference_profile",
             "workflow_accounting",
         }
-        if type(config) is not dict or set(config) != required:
+        if type(config) is not dict or set(config) not in (required, required | {"request_bounds"}):
             raise ValueError("complete explicit model configuration required")
         if any(type(config[k]) is not str or not config[k] for k in ("api_key", "model", "base_url")):
             raise ValueError("explicit provider configuration required")
@@ -75,6 +75,18 @@ class BoundedSceneModels:
         self._config = copy.deepcopy(config)
         self._roles = frozenset(approved_roles)
         self.allowance = allowance
+        self._send_guard = send_guard
+        if "request_bounds" in config:
+            if not callable(send_guard):
+                raise ValueError("Installed model send authority required")
+            envelope = RequestBounds.model_validate(config["request_bounds"]).bind(
+                model=config["model"], endpoint=config["base_url"], accounting=accounting,
+                inference_policy=config["inference_profile"],
+            )
+            installed = {role: envelope for role in approved_roles}
+            if request_envelopes is not None and request_envelopes != installed:
+                raise ValueError("Installed request envelope cannot be overridden")
+            request_envelopes = installed
         self._envelopes = None if request_envelopes is None else dict(request_envelopes)
         if self._envelopes is not None:
             if set(self._envelopes) != self._roles:
@@ -91,7 +103,7 @@ class BoundedSceneModels:
     def _config_for(self, role):
         if role not in self._roles:
             raise ValueError("model role not approved")
-        return {k: v for k, v in self._config.items() if k != "workflow_accounting"} | {
+        return {k: v for k, v in self._config.items() if k not in {"workflow_accounting", "request_bounds"}} | {
             "load_dotenv": False,
             "max_tokens": (
                 self._envelopes[role].max_output_tokens
@@ -106,6 +118,7 @@ class BoundedSceneModels:
             self._config,
             allowance=self.allowance,
             request_envelope=None if self._envelopes is None else self._envelopes[role],
+            send_guard=self._send_guard,
         )
 
     @staticmethod

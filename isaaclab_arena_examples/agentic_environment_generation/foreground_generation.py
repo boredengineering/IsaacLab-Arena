@@ -91,6 +91,12 @@ class ForegroundGenerationReceiver:
                         raise ValueError("Invalid generation stream")
                     if set(frame) == {"stage"} and frame["stage"] in GENERATION_STAGES:
                         continue
+                    if set(frame) == {"model_send"}:
+                        handler = getattr(owned, "model_send_handler", None)
+                        if not callable(handler):
+                            raise ValueError("Unbound model send request")
+                        handler(frame["model_send"])
+                        continue
                     if set(frame) != {"result"}:
                         raise ValueError("Generation worker failed")
                     result = frame["result"]
@@ -258,7 +264,8 @@ class ForegroundGenerationWorker:
                             offset += os.write(fd, envelope[offset:])
                         except BlockingIOError:
                             continue
-                owned.process.stdin.close()
+                if not callable(getattr(owned, "model_send_handler", None)):
+                    owned.process.stdin.close()
             except Exception:
                 raise RuntimeError("Private generation send incomplete") from None
 
@@ -275,6 +282,8 @@ class ForegroundGenerationWorker:
                 OwnedProcessGroup.__init__(owned.group, owned.process.pid)
             owned.group.stop(term_timeout=min(0.2, timeout_s / 3), kill_timeout=max(0.01, timeout_s * 2 / 3))
             owned.process.wait(timeout=max(0.01, timeout_s / 3))
+            if callable(getattr(owned, "model_send_handler", None)):
+                owned.process.stdin.close()
             if owned.timer is not None:
                 owned.timer.cancel()
             if owned.pidfd is not None:

@@ -21,7 +21,8 @@ registration commits needs explicit reconciliation; this coordinator never
 fabricates a durable registration to clear it.
 """
 
-from contextlib import AbstractContextManager
+import json
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field
 from threading import RLock
 from typing import Protocol
@@ -318,6 +319,9 @@ class GenerationCoordinator:
                         self._lease.require_held(self._run_id, principal)
                         if self._cancelled:
                             raise ValueError("locally stopped")
+                        bind_send = getattr(self._worker, "bind_model_send", None)
+                        if bind_send is not None:
+                            bind_send(prepared, lambda config: self.model_send_guard(principal, prepared, config))
                         self._worker.send(prepared, envelope, timeout_s=self._timeout)
                 finally:
                     del envelope
@@ -346,6 +350,36 @@ class GenerationCoordinator:
                         # Exact local fence/registration remains the recovery obligation.
                         self._handle.durable_reconciliation_pending = True
                 raise DispatchIncomplete(self._handle) from None
+
+    @contextmanager
+    def model_send_guard(self, principal, prepared, config):
+        """Recheck an already released exact child at each SDK send, without redispatch."""
+        with self._lock:
+            handle = self._handle
+            if self._cancelled or handle is None or handle.prepared is not prepared or handle.incomplete:
+                raise ValueError("Inactive local generation send")
+            run = self._store.get_run(self._run_id)
+            request = parse_contract(run.contract_json)
+            fence = prepared.registration.fence
+            with self._authority.release_guard(principal, request, fence, prepared.registration):
+                self._authenticate(principal)
+                self._lease.require_held(self._run_id, principal)
+                auth = self._authorization(request, fence=fence)
+                attempt = self._store.get_attempt(fence)
+                owner = self._store.get_owner()
+                if (
+                    run.state != "running" or run.phase != "generation"
+                    or attempt.registration != prepared.registration or attempt.status != "released"
+                    or not attempt.released or attempt.cleanup is not None or attempt.receipt is not None
+                    or attempt.authorization != auth
+                    or owner is None or not owner.dirty
+                    or (owner.owner_id, owner.owner_epoch) != (fence.owner_id, fence.owner_epoch)
+                ):
+                    raise ValueError("Exact active generation reservation required")
+                packet = json.loads(self._authority.private_envelope(principal, request, fence, prepared.registration))
+                if packet["config"] != config:
+                    raise ValueError("Generation send configuration changed")
+                yield
 
     def complete(self, principal, receipt: GenerationReceipt, artifacts: GenerationArtifacts, *, protect):
         """Receive a bounded worker result and observe receipt plus owned cleanup."""

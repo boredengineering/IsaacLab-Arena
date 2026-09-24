@@ -352,6 +352,7 @@ def install_synthetic_sdk(*, scene=False):
         "pid": os.getpid(),
         "calls": 0,
         "responses": [],
+        "request_shapes": [],
         "scope": "synthetic HTTP; real constructors, ping, catalogue and schema; fixed generate_spec",
     }
     saved_profile = sys.getprofile()
@@ -373,6 +374,22 @@ def install_synthetic_sdk(*, scene=False):
 
     def synthetic_response(transport, request):
         body = json.loads(request.content)
+        evidence["request_shapes"].append(dict(
+            request_sha256=hashlib.sha256(request.content).hexdigest(),
+            model=body.get("model"), url=str(request.url), body_bytes=len(request.content),
+            output_tokens=body.get("max_completion_tokens", body.get("max_tokens")),
+            text_bytes=sum(
+                len(message["content"].encode()) if isinstance(message["content"], str)
+                else sum(len(part["text"].encode()) for part in message["content"] if part["type"] == "text")
+                for message in body["messages"]
+            ),
+            schema_bytes=len(json.dumps(body["response_format"], ensure_ascii=True).encode())
+                if "response_format" in body else 0,
+            images=sum(
+                sum(part["type"] == "image_url" for part in message["content"])
+                for message in body["messages"] if isinstance(message["content"], list)
+            ),
+        ))
         evidence["calls"] += 1
         evidence["responses"].append(
             {"ordinal": evidence["calls"], "kind": "ping" if evidence["calls"] == 1 else "completion"}

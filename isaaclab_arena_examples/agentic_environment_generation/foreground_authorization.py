@@ -10,7 +10,7 @@ import hashlib
 import json
 import math
 import re
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from functools import wraps
 from threading import RLock
 
@@ -47,6 +47,18 @@ def _config(config):
             config["workflow_accounting"], model=result["model"], endpoint=result["base_url"]
         )
         reject_secret(result["workflow_accounting"], result["api_key"])
+    if "request_bounds" in config:
+        from isaaclab_arena.agentic_environment_generation.workflow.request_envelope import RequestBounds
+
+        bounds = RequestBounds.model_validate(config["request_bounds"])
+        bounds.bind(
+            model=result["model"],
+            endpoint=result["base_url"],
+            accounting=result.get("workflow_accounting"),
+            inference_policy=result.get("inference_profile"),
+        )
+        result["request_bounds"] = bounds.model_dump(mode="json")
+        reject_secret(result["request_bounds"], result["api_key"])
     if trusted:
         result["trusted_server"] = True
     return result
@@ -66,6 +78,8 @@ def model_settings_sha256(config, *, billing):
     }
     if "workflow_accounting" in frozen:
         settings["workflow_accounting"] = frozen["workflow_accounting"]
+    if "request_bounds" in frozen:
+        settings["request_bounds"] = frozen["request_bounds"]
     return _hash(settings)
 
 
@@ -88,11 +102,25 @@ class ForegroundAuthority:
     """
 
     def __init__(
-        self, *, database, deployment_id, workspace_id, store, grants, clock, principal_lookup, profiles, current_config
+        self,
+        *,
+        database,
+        deployment_id,
+        workspace_id,
+        store,
+        grants,
+        clock,
+        principal_lookup,
+        profiles,
+        current_config,
+        source_guard=None,
+        prior_source=None,
     ):
         self.scope = dict(database=database, deployment_id=deployment_id, workspace_id=workspace_id)
         self.store, self.grants, self.clock = store, grants, clock
         self.principal_lookup, self.current_config = principal_lookup, current_config
+        self._source_guard = nullcontext if source_guard is None else source_guard
+        self.prior_source = prior_source
         self.profiles = copy.deepcopy(profiles)
         self._lock = RLock()
         self._closed = False
@@ -121,7 +149,7 @@ class ForegroundAuthority:
         lease inside this guard, then resolve private_model_config immediately
         before bounded send. This guard grants no stage or price permission.
         """
-        with self._lock:
+        with self._lock, self._source_guard():
             if run_id is None:
                 self.private_envelope(principal, contract, fence, registration)
                 yield
@@ -182,8 +210,12 @@ class ForegroundAuthority:
         self.require_read(principal)
         if not isinstance(operation_id, str) or not operation_id:
             raise ValueError("Invalid operation")
-        if contract.source.kind != "new" or contract.effects.allow_database_reads:
+        if contract.source.kind != "new":
             raise ValueError("Foreground refinement and research reads are unsupported")
+        if contract.effects.allow_database_reads:
+            if contract.retrieval is None or self.prior_source is None:
+                raise ValueError("Foreground prior reads are not configured")
+            self.prior_source(contract.retrieval)
         if not contract.effects.allow_operational_writes:
             raise ValueError("Operational writes require permission")
         self.protect_public(contract.model_dump(mode="json"))
@@ -245,6 +277,55 @@ class ForegroundAuthority:
             for role in ("generation", "assessment")
             if role + "_model" in required
         }
+
+    @contextmanager
+    def prior_read(self, principal, contract, *, run_id, deadline):
+        """Resolve a bounded run-scoped read grant; never deliver this login to a model worker."""
+        from .web_api.execution_grants import MAX_TTL_SECONDS
+
+        with self._source_guard():
+            with self._lock:
+                self._retained(principal, contract, run_id)
+                if self.prior_source is None or contract.retrieval is None:
+                    raise ValueError("Explicit prior-read source required")
+                credentials = self.prior_source(contract.retrieval, credentials=True)
+                principal_state = self.require_read(principal)
+                now = self.clock()
+                expires = min(
+                    principal_state["expires_at"],
+                    _deadline(deadline),
+                    now + MAX_TTL_SECONDS,
+                    now + contract.budget.per_operation_timeout_seconds,
+                )
+                profile = dict(
+                    principal=principal,
+                    source=contract.retrieval.source,
+                    selection_sha256=_hash(contract.retrieval.model_dump(mode="json")),
+                )
+                grant = self.grants.issue(principal, run_id, "retrieval_read", profile, credentials, expires)
+                try:
+                    credentials = self.grants.resolve(principal, grant["grant_id"], run_id, "retrieval_read")
+                except BaseException:
+                    self.grants.revoke(grant["grant_id"])
+                    raise
+
+            def check_read(minimum_seconds=0.0):
+                with self._lock:
+                    current = self.require_read(principal)
+                    self.grants.resolve(principal, grant["grant_id"], run_id, "retrieval_read")
+                    if (
+                        type(minimum_seconds) not in (int, float)
+                        or not 0 <= minimum_seconds <= MAX_TTL_SECONDS
+                        or self.clock() + minimum_seconds >= min(expires, current["expires_at"])
+                    ):
+                        raise ValueError("Prior read authorization bound unavailable")
+
+            try:
+                yield credentials, check_read
+                check_read()
+            finally:
+                with self._lock:
+                    self.grants.revoke(grant["grant_id"])
 
     def _workflow_sources(self, principal, contract, *, operation_id=None):
         from isaaclab_arena.agentic_environment_generation.workflow.readiness import required_dependencies

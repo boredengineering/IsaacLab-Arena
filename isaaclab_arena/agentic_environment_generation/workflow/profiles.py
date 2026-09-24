@@ -14,10 +14,11 @@ import hashlib
 import json
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from ..inference_profiles import checked_request_policy
 from .contracts import FrozenModel, Hash, Identifier
+from .request_envelope import RequestBounds
 
 MAX_PROFILE_BYTES = 16 * 1024
 MAX_PROFILE_REVISIONS = 64
@@ -101,6 +102,14 @@ class PublicModelSettings(FrozenModel):
     billing: Literal["free", "paid"]
     inference_policy: PublicInferencePolicy | None
     workflow_accounting: PublicWorkflowAccounting | None = None
+    request_bounds: RequestBounds | None = None
+
+    @model_serializer(mode="wrap")
+    def compatible_bytes(self, handler):
+        value = handler(self)
+        if self.request_bounds is None:
+            value.pop("request_bounds", None)
+        return value
 
     @model_validator(mode="after")
     def bindings(self):
@@ -113,6 +122,15 @@ class PublicModelSettings(FrozenModel):
             self.model != self.workflow_accounting.model or self.endpoint != self.workflow_accounting.endpoint
         ):
             raise ValueError("Public accounting does not match literal settings")
+        if self.request_bounds is not None:
+            if self.workflow_accounting is None or self.inference_policy is None:
+                raise ValueError("Complete request/pricing settings required")
+            self.request_bounds.bind(
+                model=self.model,
+                endpoint=self.endpoint,
+                accounting=self.workflow_accounting.model_dump(mode="json"),
+                inference_policy=self.inference_policy.model_dump(mode="json"),
+            )
         return self
 
 

@@ -310,12 +310,10 @@ class Neo4jWorkflowStore:
         lookup_indexes = [(label, ["deployment_id", "workspace_id", field]) for _, label, field in _HISTORY_INDEXES]
         lookup_indexes.append(("ArenaWorkflowProfileRevision", ["deployment_id", "workspace_id"]))
         lookup_indexes.append(("ArenaWorkflowEvent", ["deployment_id", "workspace_id", "run_id", "kind", "sequence"]))
-        lookup_indexes.append(
-            (
-                "ArenaWorkflowCandidate",
-                ["deployment_id", "workspace_id", "run_id", "record_id"],
-            )
-        )
+        lookup_indexes.append((
+            "ArenaWorkflowCandidate",
+            ["deployment_id", "workspace_id", "run_id", "record_id"],
+        ))
         lookup_indexes.append(("ArenaWorkflowDecision", ["deployment_id", "workspace_id", "run_id", "decision_id"]))
         for label, fields in lookup_indexes:
             if not any(
@@ -714,8 +712,13 @@ class Neo4jWorkflowStore:
             )
         return list(
             tx.run(
-                "MATCH (r:ArenaWorkflowRun " + _SCOPE + ") WHERE r." + field + "=$identity "
-                "RETURN r {" + ", ".join(projection) + "} AS retained LIMIT 2",
+                "MATCH (r:ArenaWorkflowRun "
+                + _SCOPE
+                + ") WHERE r."
+                + field
+                + "=$identity RETURN r {"
+                + ", ".join(projection)
+                + "} AS retained LIMIT 2",
                 **self.scope,
                 identity=identity,
             )
@@ -1134,6 +1137,120 @@ class Neo4jWorkflowStore:
             result = self._run(tx, "run_id", run_id)
         return result
 
+    def _prior_reference(self, tx, run_id):
+        from .prior_artifacts import PRIOR_REFERENCE_BYTES, checked_prior_reference
+
+        run = self._run(tx, "run_id", run_id)
+        if run is None:
+            raise ValueError("Unknown prior run")
+        contract = parse_contract(run.contract_json)
+        rows = list(
+            tx.run(
+                "MATCH (r:ArenaWorkflowRun "
+                + _SCOPE
+                + ") WHERE r.run_id=$run_id "
+                "RETURN (r.prior_retrieval_state IS NOT NULL OR r.prior_reference_sha256 IS NOT NULL "
+                "OR r.prior_reference_json IS NOT NULL) AS present, "
+                "CASE WHEN size(toStringOrNull(r.prior_retrieval_state))<=16 "
+                "THEN r.prior_retrieval_state ELSE null END AS state, "
+                "CASE WHEN size(toStringOrNull(r.prior_reference_sha256))<=64 "
+                "THEN r.prior_reference_sha256 ELSE null END AS sha, "
+                "CASE WHEN size(toStringOrNull(r.prior_reference_json))<=$bound "
+                "THEN r.prior_reference_json ELSE null END AS body LIMIT 2",
+                **self.scope,
+                run_id=run_id,
+                bound=PRIOR_REFERENCE_BYTES,
+            )
+        )
+        if len(rows) != 1 or contract.retrieval is None:
+            raise ValueError("Missing or ambiguous prior selection")
+        row = rows[0]
+        if row["present"] is False:
+            return None
+        if row["state"] != "retained" or type(row["body"]) is not str:
+            raise ValueError("Prior retrieval incomplete or linkage missing")
+        if hashlib.sha256(row["body"].encode()).hexdigest() != row["sha"]:
+            raise ValueError("Prior linkage digest differs")
+        checked_prior_reference(row["body"], contract=contract, run_id=run_id)
+        return row["body"]
+
+    def get_prior_reference(self, run_id):
+        """Read the exact authoritative prior linkage, including incomplete-selection refusal."""
+        validate_operation_id(run_id)
+        with self._transaction() as tx:
+            self._lock(tx)
+            result = self._prior_reference(tx, run_id)
+        return result
+
+    def begin_prior_retrieval(self, run_id):
+        """Consume the one-shot prior selection before any source access, under the existing lock."""
+        validate_operation_id(run_id)
+        with self._transaction() as tx:
+            self._lock(tx)
+            run = self._run(tx, "run_id", run_id)
+            if (
+                run is None
+                or run.state != "pending"
+                or run.version != 1
+                or self._prior_reference(tx, run_id) is not None
+            ):
+                raise ValueError("Prior retrieval is not a fresh admission")
+            contract = parse_contract(run.contract_json)
+            row = tx.run(
+                "MATCH (r:ArenaWorkflowRun "
+                + _SCOPE
+                + ") WHERE r.run_id=$run_id "
+                "RETURN CASE WHEN size(toStringOrNull(r.admitted_at))<=64 "
+                "THEN r.admitted_at ELSE null END AS admitted_at",
+                **self.scope,
+                run_id=run_id,
+            ).single()
+            admitted_at, now = row["admitted_at"], self._now()
+            if (
+                type(admitted_at) not in (int, float)
+                or not math.isfinite(admitted_at)
+                or not admitted_at <= now < admitted_at + contract.budget.total_deadline_seconds
+            ):
+                raise ValueError("Prior retrieval deadline expired")
+            tx.run(
+                "MATCH (r:ArenaWorkflowRun "
+                + _SCOPE
+                + ") WHERE r.run_id=$run_id SET r.prior_retrieval_state='retrieving'",
+                **self.scope,
+                run_id=run_id,
+            ).consume()
+            self._event(tx, run_id, "PriorRetrievalStarted", contract.retrieval.settings_sha256)
+        return admitted_at + contract.budget.total_deadline_seconds
+
+    def retain_prior_reference(self, run_id, reference):
+        """Commit the immutable artifact link before generation reservation or release."""
+        from .prior_artifacts import checked_prior_reference
+
+        validate_operation_id(run_id)
+        with self._transaction() as tx:
+            self._lock(tx)
+            run = self._run(tx, "run_id", run_id)
+            if run is None or run.state != "pending":
+                raise ValueError("Prior run no longer pending")
+            checked_prior_reference(reference, contract=parse_contract(run.contract_json), run_id=run_id)
+            rows = list(
+                tx.run(
+                    "MATCH (r:ArenaWorkflowRun "
+                    + _SCOPE
+                    + ") WHERE r.run_id=$run_id "
+                    "AND r.prior_retrieval_state='retrieving' AND r.prior_reference_json IS NULL "
+                    "AND r.prior_reference_sha256 IS NULL SET r.prior_retrieval_state='retained', "
+                    "r.prior_reference_json=$body, r.prior_reference_sha256=$sha RETURN r.run_id AS id",
+                    **self.scope,
+                    run_id=run_id,
+                    body=reference,
+                    sha=hashlib.sha256(reference.encode()).hexdigest(),
+                )
+            )
+            if len(rows) != 1:
+                raise ValueError("Prior selection already consumed or ambiguous")
+            self._event(tx, run_id, "PriorRetained", hashlib.sha256(reference.encode()).hexdigest())
+
     def admit(self, operation_id, request_json, contract_json, max_pending):
         """Atomically admit or replay a request; a handle grants no execution authority."""
         validate_operation_id(operation_id)
@@ -1166,13 +1283,20 @@ class Neo4jWorkflowStore:
                 run_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()
                 rows = list(
                     tx.run(
-                        _CONTROL + "SET c.sequence=c.sequence+1 CREATE (r:ArenaWorkflowRun " + _SCOPE + ") "
+                        _CONTROL
+                        + "SET c.sequence=c.sequence+1 CREATE (r:ArenaWorkflowRun "
+                        + _SCOPE
+                        + ") "
                         "SET r.run_id=$run_id, r.operation_id=$operation_id, r.request_json=$request_json, "
                         "r.contract_json=$contract_json, r.version=1, r.state=$state, r.event_cursor=c.sequence, "
                         "r.admitted_at=$admitted_at, r.phase='dependency_readiness', r.decision_coverage=1 "
-                        "CREATE (e:ArenaWorkflowEvent " + _SCOPE + ") "
+                        "CREATE (e:ArenaWorkflowEvent "
+                        + _SCOPE
+                        + ") "
                         "SET e.sequence=c.sequence, e.run_id=$run_id, e.operation_id=$operation_id, "
-                        "e.kind=$kind, e.schema_version=1 RETURN " + _VIEW + " AS run",
+                        "e.kind=$kind, e.schema_version=1 RETURN "
+                        + _VIEW
+                        + " AS run",
                         **self.scope,
                         run_id=run_id,
                         operation_id=operation_id,
@@ -1308,6 +1432,8 @@ class Neo4jWorkflowStore:
             contract = parse_contract(run.contract_json)
             now = self._now()
             self._generation_authority(contract, authorization, now)
+            if contract.retrieval is not None and self._prior_reference(tx, run_id) is None:
+                raise ValueError("Authoritative prior linkage required before generation")
             readiness = self._readiness(contract, readiness, now)
             row = tx.run(
                 "MATCH (r:ArenaWorkflowRun "
@@ -3345,7 +3471,9 @@ class Neo4jWorkflowStore:
             if decision.action in ("observe", "capture"):
                 invalid |= allowance.realizations < 1 or allowance.observations < 1
                 required_steps = max(
-                    c.observation_window.end_step for c in contract.criteria if c.requirement == "required" and c.kind != "policy"
+                    c.observation_window.end_step
+                    for c in contract.criteria
+                    if c.requirement == "required" and c.kind != "policy"
                 )
                 invalid |= allowance.steps < required_steps
             elif decision.action == "repair":
@@ -3808,9 +3936,7 @@ class Neo4jWorkflowStore:
                 run=run_id,
                 id=intent_id,
                 scene=intent.model_dump_json(),
-                state=(
-                    s.run.state if s.run.state in ("cancelled", "cancel_requested") else "reconciliation_required"
-                ),
+                state=(s.run.state if s.run.state in ("cancelled", "cancel_requested") else "reconciliation_required"),
             ).consume()
             self._event(tx, run_id, "SceneReconciliationRequired", intent_id)
         return True
@@ -4338,9 +4464,7 @@ class Neo4jWorkflowStore:
                     and r["properties"] == ["deployment_id", "workspace_id", *keys]
                     for r in indexes
                 ):
-                    raise SchemaMissing(
-                        "Online nonunique candidate page index required"
-                    )
+                    raise SchemaMissing("Online nonunique candidate page index required")
         if decisions and not any(
             r["entityType"] == "NODE"
             and r["type"] == "RANGE"
@@ -4455,7 +4579,9 @@ class Neo4jWorkflowStore:
             )
             parents = list(
                 tx.run(
-                    "MATCH (r:ArenaWorkflowRun " + _SCOPE + ") "
+                    "MATCH (r:ArenaWorkflowRun "
+                    + _SCOPE
+                    + ") "
                     "USING INDEX r:ArenaWorkflowRun(deployment_id, workspace_id, run_id) "
                     "WHERE r.run_id=$run RETURN elementId(r) AS key, {"
                     + projection
@@ -4492,7 +4618,9 @@ class Neo4jWorkflowStore:
                 raise CorruptPage() from None
             predicate = "n.record_id >= ''" if after is None else "n.record_id > $after"
             stream = tx.run(
-                "MATCH (n:ArenaWorkflowCandidate " + _SCOPE + ") "
+                "MATCH (n:ArenaWorkflowCandidate "
+                + _SCOPE
+                + ") "
                 "USING INDEX n:ArenaWorkflowCandidate(deployment_id, workspace_id, run_id, record_id) "
                 "WHERE n.run_id=$run AND "
                 + predicate
@@ -4509,11 +4637,7 @@ class Neo4jWorkflowStore:
             for record in stream:
                 try:
                     row = CandidateItem.model_validate(dict(record["row"]))
-                    if (
-                        row.run_id != run_id
-                        or row.candidate_id <= previous
-                        or len(rows) >= first + 1
-                    ):
+                    if row.run_id != run_id or row.candidate_id <= previous or len(rows) >= first + 1:
                         raise ValueError()
                 except (ValueError, TypeError, KeyError, RecursionError):
                     raise CorruptPage() from None
@@ -4524,7 +4648,9 @@ class Neo4jWorkflowStore:
             for row in rows:
                 identities = list(
                     tx.run(
-                        "MATCH (n:ArenaWorkflowCandidate " + _SCOPE + ") "
+                        "MATCH (n:ArenaWorkflowCandidate "
+                        + _SCOPE
+                        + ") "
                         "USING INDEX n:ArenaWorkflowCandidate(deployment_id, workspace_id, record_id) "
                         "WHERE n.record_id=$id RETURN elementId(n) AS key LIMIT 2",
                         **self.scope,
@@ -4555,15 +4681,15 @@ class Neo4jWorkflowStore:
     def list_decisions_window(self, binding, run_id, *, first=100, after=None):
         """Read live decision references; not payloads, chronology or a graph audit."""
         from .paging import (
+            CorruptPage,
+            CursorQueryMismatch,
+            DecisionCoverageUnavailable,
             DecisionItem,
             DecisionPosition,
             DecisionWindow,
-            DecisionCoverageUnavailable,
-            UnsupportedDecisionCoverage,
-            CorruptPage,
-            CursorQueryMismatch,
             RunPosition,
             RunSummary,
+            UnsupportedDecisionCoverage,
             physical_counter,
             validate_first,
         )
@@ -4591,7 +4717,9 @@ class Neo4jWorkflowStore:
             )
             parents = list(
                 tx.run(
-                    "MATCH (r:ArenaWorkflowRun " + _SCOPE + ") "
+                    "MATCH (r:ArenaWorkflowRun "
+                    + _SCOPE
+                    + ") "
                     "USING INDEX r:ArenaWorkflowRun(deployment_id, workspace_id, run_id) "
                     "WHERE r.run_id=$run RETURN elementId(r) AS key, {"
                     + projection
@@ -4637,16 +4765,18 @@ class Neo4jWorkflowStore:
                 raise UnsupportedDecisionCoverage()
             predicate = "n.decision_id >= ''" if after is None else "n.decision_id > $after"
             stream = tx.run(
-                "MATCH (n:ArenaWorkflowDecision " + _SCOPE + ") "
+                "MATCH (n:ArenaWorkflowDecision "
+                + _SCOPE
+                + ") "
                 "USING INDEX n:ArenaWorkflowDecision(deployment_id, workspace_id, run_id, decision_id) "
                 "WHERE n.run_id=$run AND "
                 + predicate
-                + " WITH n ORDER BY n.deployment_id, n.workspace_id, n.run_id, n.decision_id ASC LIMIT $limit "
-                "RETURN {decision_id: CASE WHEN size(toStringOrNull(n.decision_id))<=128 THEN n.decision_id ELSE null END, "
-                "run_id: CASE WHEN size(toStringOrNull(n.run_id))<=64 THEN n.run_id ELSE null END, "
-                "record_kind: CASE WHEN size(toStringOrNull(n.record_kind))<=32 THEN n.record_kind ELSE null END, "
-                "membership_codec: CASE WHEN size(toStringOrNull(n.membership_codec))<=20 "
-                "THEN n.membership_codec ELSE null END} AS row",
+                + " WITH n ORDER BY n.deployment_id, n.workspace_id, n.run_id, n.decision_id ASC LIMIT $limit RETURN"
+                " {decision_id: CASE WHEN size(toStringOrNull(n.decision_id))<=128 THEN n.decision_id ELSE null END,"
+                " run_id: CASE WHEN size(toStringOrNull(n.run_id))<=64 THEN n.run_id ELSE null END, record_kind: CASE"
+                " WHEN size(toStringOrNull(n.record_kind))<=32 THEN n.record_kind ELSE null END, membership_codec:"
+                " CASE WHEN size(toStringOrNull(n.membership_codec))<=20 THEN n.membership_codec ELSE null END}"
+                " AS row",
                 **self.scope,
                 run=run_id,
                 after=None if after is None else after.position,
@@ -4672,7 +4802,9 @@ class Neo4jWorkflowStore:
             for row in rows:
                 identities = list(
                     tx.run(
-                        "MATCH (n:ArenaWorkflowDecision " + _SCOPE + ") "
+                        "MATCH (n:ArenaWorkflowDecision "
+                        + _SCOPE
+                        + ") "
                         "USING INDEX n:ArenaWorkflowDecision(deployment_id, workspace_id, run_id, decision_id) "
                         "WHERE n.run_id=$run AND n.decision_id=$id RETURN elementId(n) AS key LIMIT 2",
                         **self.scope,

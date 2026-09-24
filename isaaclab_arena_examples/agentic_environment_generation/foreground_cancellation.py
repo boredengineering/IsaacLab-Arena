@@ -196,6 +196,21 @@ def finish_cancelled(app, principal, run_id, local):
                 app.store.acknowledge_scene_cleanup(fence, cleanup)
         else:
             handle = local.handle
+            if (
+                run.state == "cancelled" and not getattr(local, "busy", True)
+                and (handle is None or (handle.prepared is None and handle.fence is None and handle.owner_epoch is None))
+            ):
+                # A rejected reservation may leave an actual flock but no owned
+                # worker. The stopped coordinator and the lease's preparation
+                # latch—not absence of a DB row alone—make this release safe.
+                if app.store.get_generation_attempt(run_id) is not None:
+                    return False
+                owner = app.store.get_owner()
+                if owner is not None and owner.dirty:
+                    return False
+                local.lease.release_never_prepared()
+                local.retired = True
+                return True
             if handle is None or handle.prepared is None or handle.cleanup is None:
                 return False
             registration, cleanup = handle.prepared.registration, handle.cleanup

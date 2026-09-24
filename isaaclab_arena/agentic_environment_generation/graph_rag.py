@@ -327,6 +327,22 @@ def _deduplicate_candidates(records, priors, *, rank=True):
     return list(chosen.values())
 
 
+def _checked_snapshot_rows(rows, before_read):
+    """Iterate snapshot rows only while the selected read authority remains valid."""
+    if before_read is None:
+        yield from rows
+        return
+    iterator = iter(rows)
+    while True:
+        before_read()
+        try:
+            row = next(iterator)
+        except StopIteration:
+            return
+        before_read()
+        yield row
+
+
 def _snapshot_prior(record: Any, evidence: str, min_success_rate: float, min_episodes: int) -> dict[str, Any]:
     """Project only schema-backed fields, rejecting lossy or malformed evidence."""
     prior: dict[str, Any] = {
@@ -393,6 +409,7 @@ class GraphRAGRetriever:
         *,
         managed_selection_provider=None,
         database: str | None = None,
+        before_read=None,
     ) -> dict[str, Any]:
         """Return bounded provenance and the exact context for explicit-driver retrieval.
 
@@ -408,6 +425,7 @@ class GraphRAGRetriever:
             min_episodes: Minimum completed episodes, from one to one million.
             managed_selection_provider: Trusted readback callback; receives only the explicitly injected driver.
             database: Explicit authorized database, required for combined managed retrieval.
+            before_read: Optional trusted authority check before session/query/cursor IO; cleanup is never gated.
 
         Returns:
             JSON-safe status, derived_filters, priors, exact_context, context_sha256,
@@ -439,6 +457,8 @@ class GraphRAGRetriever:
         deadline = started + 180.0
 
         def query_timeout():
+            if before_read is not None:
+                before_read()
             remaining = deadline - time.monotonic()
             if not 0 < remaining <= 180.0:
                 raise _SnapshotRejected("retrieval_failed")
@@ -518,7 +538,10 @@ class GraphRAGRetriever:
             with graph_session(self._snapshot_driver.session(**session_options)) as session:
                 records = list(
                     islice(
-                        session.run(Query(_SNAPSHOT_EVALUATED_QUERY, timeout=query_timeout()), **params),
+                        _checked_snapshot_rows(
+                            session.run(Query(_SNAPSHOT_EVALUATED_QUERY, timeout=query_timeout()), **params),
+                            before_read,
+                        ),
                         candidate_limit + 1,
                     )
                 )
@@ -532,7 +555,10 @@ class GraphRAGRetriever:
                     evidence = "unevaluated"
                     records = list(
                         islice(
-                            session.run(Query(_SNAPSHOT_STRUCTURAL_QUERY, timeout=query_timeout()), **params),
+                            _checked_snapshot_rows(
+                                session.run(Query(_SNAPSHOT_STRUCTURAL_QUERY, timeout=query_timeout()), **params),
+                                before_read,
+                            ),
                             candidate_limit + 1,
                         )
                     )

@@ -133,11 +133,14 @@ def verify_query_only_boundaries(metadata):
                 transport=httpx.ASGITransport(app=app), base_url="http://isolated", trust_env=False
             ) as client:
 
-                async def post(label, operation, variables, *, credential=good, status=200, field=None, typename=None):
+                async def post(
+                    label, operation, variables, *, token_kind="good", status=200, field=None, typename=None
+                ):
+                    credentials = dict(good=good, wrong=wrong, stale=stale, foreign=foreign_token)
                     response = await client.post(
                         "/graphql",
                         json={"query": DOCUMENTS[operation], "variables": variables},
-                        headers={"Authorization": "Bearer " + credential},
+                        headers={"Authorization": "Bearer " + credentials[token_kind]},
                     )
                     assert response.status_code == status, "Unexpected bounded read response"
                     value = response.json()
@@ -193,13 +196,13 @@ def verify_query_only_boundaries(metadata):
                     "wrong_principal",
                     "prior",
                     {"id": h.RUN_ID},
-                    credential=wrong,
+                    token_kind="wrong",
                     field="workflowPrior",
                     typename="QueryFailure",
                 )
                 assert denied["code"] == "FORBIDDEN"
-                await post("wrong_scope_token", "artifact", artifact_variables, credential=foreign_token, status=401)
-                await post("stale_authority", "artifact", artifact_variables, credential=stale, status=401)
+                await post("wrong_scope_token", "artifact", artifact_variables, token_kind="foreign", status=401)
+                await post("stale_authority", "artifact", artifact_variables, token_kind="stale", status=401)
                 await post(
                     "cross_run_candidate",
                     "candidate",
@@ -247,6 +250,52 @@ def verify_query_only_boundaries(metadata):
                     typename="ArtifactChunk",
                 )
                 assert base64.b64decode(restored["data"], validate=True) == original
+                if h.REQUESTED_CASE == "prior":
+                    with (
+                        resources.driver() as driver,
+                        driver.session(database=config.value["binding"]["database"]) as session,
+                    ):
+                        store = resources.store(driver)
+                        linkage = store.get_prior_reference(h.RUN_ID)
+                        from isaaclab_arena.agentic_environment_generation.workflow.prior_artifacts import (
+                            PRIOR_REFERENCE_BYTES,
+                        )
+
+                        sha = hashlib.sha256(linkage.encode()).hexdigest()
+                        for label, altered, state, checksum in (
+                            ("missing_prior_linkage", None, "retained", sha),
+                            ("tampered_prior_linkage", "{}", "retained", sha),
+                            ("ambiguous_prior_linkage", "x" * (PRIOR_REFERENCE_BYTES + 1), None, None),
+                        ):
+                            try:
+                                row = session.run(
+                                    "MATCH (r:ArenaWorkflowRun {run_id:$id}) SET r.prior_reference_json=$body, "
+                                    "r.prior_retrieval_state=$state, r.prior_reference_sha256=$sha "
+                                    "RETURN r.run_id AS id",
+                                    id=h.RUN_ID,
+                                    body=altered,
+                                    state=state,
+                                    sha=checksum,
+                                ).single()
+                                assert row is not None and row["id"] == h.RUN_ID
+                                try:
+                                    store.get_prior_reference(h.RUN_ID)
+                                except ValueError:
+                                    pass
+                                else:
+                                    raise AssertionError("Malformed prior linkage must not appear unselected")
+                                await post(
+                                    label, "prior", {"id": h.RUN_ID}, field="workflowPrior", typename="QueryFailure"
+                                )
+                            finally:
+                                session.run(
+                                    "MATCH (r:ArenaWorkflowRun {run_id:$id}) SET r.prior_reference_json=$body, "
+                                    "r.prior_retrieval_state='retained', r.prior_reference_sha256=$sha",
+                                    id=h.RUN_ID,
+                                    body=linkage,
+                                    sha=sha,
+                                ).consume()
+                            assert store.get_prior_reference(h.RUN_ID) == linkage
                 registry.rotate()
                 await post("stale_generation", "prior", {"id": h.RUN_ID}, status=401)
 
@@ -276,6 +325,7 @@ def test_installed_execution_survives_submit_exit():
         PAUSE_BYTES,
         configuration,
         contract,
+        operational_credentials,
         registrations,
     )
 
@@ -283,6 +333,20 @@ def test_installed_execution_survives_submit_exit():
     proof_negative_checks = []
     launched = False
     pause = PAUSE
+    active_stop = h.STOP_C1 if h.JOIN_CASE == "operator" else h.STOP
+
+    def durable_operator_state():
+        from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import Resources
+        from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+
+        resources = Resources(load(h.CONFIG))
+        with resources.driver() as driver:
+            store = resources.store(driver)
+            return (
+                store.get_run(h.RUN_ID),
+                store.get_generation_attempt(h.RUN_ID),
+                store.get_run_inspection(h.RUN_ID).model_dump(mode="json"),
+            )
 
     def invoke(arguments, *, private_fd=None):
         result = h.fresh(arguments, private_fd=private_fd)
@@ -298,19 +362,15 @@ def test_installed_execution_survives_submit_exit():
 
     try:
         proof_negative_checks = _detachment_proof_negatives()
-        profiles = registrations()
+        profiles = registrations(priced=h.REQUESTED_CASE in h.BOUNDS_CASES, case=h.REQUESTED_CASE)
         for kind, config_path in zip(("query", "execution"), h.CONFIGS, strict=True):
             configuration(kind, profiles if kind == "execution" else ())
-            raw = json.dumps({
-                "schema_version": 1,
-                "databases": {
-                    "operational": {
-                        "scheme": "basic",
-                        "username": "synthetic-user",
-                        "password": "synthetic-only-secret",
-                    }
-                },
-            }).encode()
+            credential = operational_credentials()
+            if h.PRIVATE_ROLES_CASE and kind == "execution":
+                from workflow_graphql_execution_join_fixture import operator_configuration
+
+                credential = operator_configuration(profiles, credential)
+            raw = json.dumps(credential).encode()
             read_fd, write_fd = os.pipe()
             try:
                 os.fchmod(read_fd, 0o600)
@@ -327,6 +387,15 @@ def test_installed_execution_survives_submit_exit():
             assert result.returncode == 0, "E1 prerequisite setup failed; not joined application RED"
             assert json.loads(result.stdout)["code"] == "setup_complete"
         raw_contract = contract(profiles)
+        if h.REQUESTED_CASE == "bounds-cost":
+            raw = json.loads(raw_contract)
+            raw["budget"]["max_cost_usd"] = float(profiles[0].settings.workflow_accounting.max_cost_usd)
+            raw_contract = json.dumps(raw)
+        if h.REQUESTED_CASE == "prior":
+            from workflow_graphql_execution_join_fixture import prior_contract
+
+            binding = json.loads(Path(h.CONFIG).read_text())["role_bindings"]["prior_read"]
+            raw_contract = prior_contract(profiles, binding)
         path = Path(h.CONTRACT)
         path.write_text(raw_contract)
         path.chmod(0o600)
@@ -334,6 +403,8 @@ def test_installed_execution_survives_submit_exit():
             result = invoke(arguments)
             assert result.returncode == 0, "E1 explicit administration failed; not joined application RED"
             assert json.loads(result.stdout)["code"] == "admin_complete"
+        if h.REQUESTED_CASE == "prior":
+            h.prior_corpus()
 
         result = invoke(h.LAUNCH)
         # First application acceptance assertion. This is an actual installed
@@ -360,9 +431,44 @@ def test_installed_execution_survives_submit_exit():
         assert admitted["data"]["submitWorkflow"]["runId"] == h.RUN_ID
         assert admitted["data"]["submitWorkflow"]["operationId"] == h.OPERATION
         assert not Path(f"/proc/{result.pid}").exists(), "submit was not reaped"
+        if h.BOUNDS_NEGATIVE:
+            if h.REQUESTED_CASE == "bounds-stale":
+                deadline = min(h.ACTIVE.deadline, time.monotonic() + 15)
+                while not list(Path("/evidence").glob("generation-child-*-active.json")):
+                    assert time.monotonic() < deadline, "Constructor probe did not reach the actual transport"
+                    time.sleep(0.02)
+                active = h.read_json(next(Path("/evidence").glob("generation-child-*-active.json")))
+                assert active["calls"] == 1 and active["phase"] == "waiting"
+                rotated = invoke(h.ROTATE)
+                assert rotated.returncode == 0
+                rotation = json.loads(rotated.stdout)
+                assert rotation["configuration_unchanged"] is True and rotation["old_source_invalidated"] is True
+                assert rotation["execution_authorized"] is False
+                h.write_evidence("join-bounds-rotation.json", rotation)
+            pause.unlink()
+            h.await_bounds_blocked()
+            cancellation = invoke(h.CANCEL)
+            assert cancellation.returncode == 0
+            result = invoke(h.RESULT)
+            assert result.returncode == 0
+            h.verify_bounds_result(json.loads(result.stdout), json.loads(cancellation.stdout), raw_contract)
+            result = invoke(h.STOP)
+            assert result.returncode == 0 and json.loads(result.stdout)["state"] == "stopped"
+            launched = False
+            result = invoke(h.STATUS)
+            assert result.returncode == 0 and json.loads(result.stdout)["state"] == "stopped"
+            h.verify_positive()
+            return
         if h.JOIN_CASE == "resume":
             h.interrupt_unreleased_server(server_pid)
             launched = False
+            if h.REQUESTED_CASE == "rotation":
+                rotated = invoke(h.ROTATE)
+                assert rotated.returncode == 0 and json.loads(rotated.stdout)["configuration_unchanged"] is True
+            if h.REQUESTED_CASE == "prior":
+                h.prior_corpus(mutate=True)
+                changed = invoke(h.PRIOR_CHANGE)
+                assert changed.returncode == 0 and json.loads(changed.stdout)["prior_credential_absent"] is True
             result = invoke(h.RECONCILE)
             assert result.returncode == 3 and json.loads(result.stdout)["state"] == "exited_unclean"
             result = invoke(h.RELAUNCH)
@@ -435,12 +541,70 @@ def test_installed_execution_survives_submit_exit():
             result = invoke(h.RESULT)
             assert result.returncode == 0, "Production exact-result HTTP reader missing or incomplete"
             h.verify_result(json.loads(result.stdout), raw_contract)
-            if h.JOIN_CASE in {"evidence", "resume"}:
+            if h.JOIN_CASE == "operator":
+                retained_before = durable_operator_state()
+                before = invoke(h.OPERATOR_BEFORE)
+                assert before.returncode == 0, "Installed rotation/read/replay acceptance failed"
+                h.write_evidence("join-operator-before.json", json.loads(before.stdout))
+                assert durable_operator_state() == retained_before
+                stopped = invoke(h.STOP_C1)
+                assert stopped.returncode == 0 and json.loads(stopped.stdout)["code"] == "drained"
+                launched = False
+                changed = invoke(h.HANDOVER)
+                assert changed.returncode == 0 and json.loads(changed.stdout)["state"] == "ready"
+                launched = True
+                active_stop = h.STOP
+                replay = invoke(h.HANDOVER_REPLAY)
+                assert replay.returncode == 0 and json.loads(replay.stdout) == json.loads(changed.stdout)
+                after = invoke(h.OPERATOR_AFTER)
+                assert after.returncode == 0, "Post-handover current-read acceptance failed"
+                assert durable_operator_state() == retained_before, "Handover changed retained work or reservations"
+                from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+                from isaaclab_arena.agentic_environment_generation.workflow.api.instance import state
+
+                assert state(load(h.CONFIG), h.INSTANCE)["code"] == "drained"
+                assert state(load(h.OPERATOR_CONFIG), h.OPERATOR_INSTANCE)["state"] == "ready"
+                from neo4j import Query
+                from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import Resources
+
+                resources = Resources(load(h.OPERATOR_CONFIG))
+                with (
+                    resources.driver() as driver,
+                    driver.session(database=resources.config.binding.database) as session,
+                ):
+                    nodes = list(session.run(Query("MATCH (n) RETURN properties(n) AS value LIMIT 513", timeout=5)))
+                    relations = list(
+                        session.run(Query("MATCH ()-[r]->() RETURN properties(r) AS value LIMIT 1025", timeout=5))
+                    )
+                assert 0 < len(nodes) <= 512 and len(relations) <= 1024
+                graph_bytes = json.dumps([dict(row) for row in nodes + relations], default=str).encode()
+                assert len(graph_bytes) <= 4 * 1024 * 1024
+                h.screen(graph_bytes)
+                h.write_evidence(
+                    "join-operator-privacy.json",
+                    dict(
+                        nodes_screened=len(nodes),
+                        relationships_screened=len(relations),
+                        graph_bytes_screened=len(graph_bytes),
+                        sentinel_values_absent=True,
+                    ),
+                )
+                h.write_evidence(
+                    "join-operator-after.json",
+                    dict(
+                        json.loads(after.stdout),
+                        durable_run_attempt_and_inspection_unchanged=True,
+                        handover_receipt=json.loads(changed.stdout),
+                        handover_replay=json.loads(replay.stdout),
+                        previous_tombstone_preserved=True,
+                    ),
+                )
+            if h.JOIN_CASE in {"evidence", "resume", "operator"}:
                 result = invoke(h.READBACK)
                 assert result.returncode == 0, "Authenticated retained bytes unavailable to a fresh HTTP client"
                 readback_value = json.loads(result.stdout)
                 h.verify_api_readback(readback_value)
-                if h.JOIN_CASE == "evidence":
+                if h.JOIN_CASE == "evidence" or h.REQUESTED_CASE == "prior":
                     verify_query_only_boundaries(readback_value)
         result = invoke(h.STOP)
         assert result.returncode == 0 and json.loads(result.stdout)["state"] == "stopped"
@@ -454,7 +618,7 @@ def test_installed_execution_survives_submit_exit():
         # Only the fixed stop/status roles; never restart, retry submit or create
         # authority from a receipt. Cleanup failure must remain visible.
         if launched:
-            for arguments in (h.STOP, h.STATUS):
+            for arguments in (active_stop, h.STATUS) if active_stop == h.STOP else (active_stop,):
                 if h.unused(arguments):
                     invoke(arguments)
         h.write_evidence("join-case.json", {

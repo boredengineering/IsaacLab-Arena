@@ -35,6 +35,35 @@ LEGACY_INPUTS = {"operation", "prompt", "retrieval_policy", "execution_catalogue
 ACTIONS = {"generate", "refine", "assess"}
 
 
+class ModelSendAuthorization:
+    """Recheck through the owned pipe at the SDK boundary; no DB login reaches the child.
+
+    Replies release one physical send under the existing precharged reservation.
+    An absent, late or ambiguous acknowledgement is never retried. Process alarms
+    and parent-death ownership bound the pipe wait, not a background broker.
+    """
+
+    def __init__(self, channel, source, allowance):
+        self.channel, self.source, self.allowance = channel, source, allowance
+        self.approved_calls = 0
+        self._requested = 0
+
+    def __call__(self, request):
+        if self._requested != self.approved_calls or self._requested >= self.allowance.max_calls:
+            raise ValueError("Model send authorization already consumed or uncertain")
+        if time.monotonic() >= self.allowance.deadline:
+            raise ValueError("Model send authorization expired")
+        self._requested += 1
+        message = dict(version=1, ordinal=self._requested, request_sha256=hashlib.sha256(request.content).hexdigest())
+        self.channel.write(json.dumps({"model_send": message}, separators=(",", ":")) + "\n")
+        self.channel.flush()
+        expected = (json.dumps({"model_send_ack": message}, separators=(",", ":")) + "\n").encode()
+        reply = self.source.readline(1025)
+        if reply != expected or time.monotonic() >= self.allowance.deadline:
+            raise ValueError("Exact current model send authorization required")
+        self.approved_calls += 1
+
+
 def _retain(area, family, binding, value, protect):
     raw = _protected(value, protect)
     version = hashlib.sha256(canonical(binding)).hexdigest()
@@ -149,7 +178,7 @@ def prepare_catalogues(expected_sha256):
     return assets, relations, tasks
 
 
-def execute(packet, allowance, protect):
+def execute(packet, allowance, protect, *, send_guard=None):
     from isaaclab_arena.agentic_environment_generation.workflow.scene_engines import BoundedSceneModels
 
     inputs, config = packet["inputs"], packet["config"]
@@ -161,6 +190,7 @@ def execute(packet, allowance, protect):
             config=config,
             approved_roles={role: {"model": config["model"], "endpoint": config["base_url"]}},
             allowance=allowance,
+            send_guard=send_guard,
         )
         if action == "assess":
             from isaaclab_arena.agentic_environment_generation.workflow.contracts import Criterion
@@ -279,8 +309,12 @@ def main():
             raise ValueError("Expired scene release")
         signal.signal(signal.SIGALRM, signal.SIG_DFL)
         signal.setitimer(signal.ITIMER_REAL, remaining)
+        send_guard = (
+            ModelSendAuthorization(channel, sys.stdin.buffer, allowance)
+            if "request_bounds" in packet["config"] else None
+        )
         with open(os.devnull, "w") as sink, contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
-            receipt = execute(packet, allowance, protect)
+            receipt = execute(packet, allowance, protect, send_guard=send_guard)
         message = {"result": receipt}
         _protected(message, protect)
         channel.write(json.dumps(message, allow_nan=False) + "\n")

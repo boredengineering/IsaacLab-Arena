@@ -7,9 +7,11 @@
 import hashlib
 import json
 import math
+from ipaddress import IPv4Address
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 MAX_CONTRACT_BYTES = 2_097_152
 MAX_CONTRACT_DEPTH = 32
@@ -175,8 +177,54 @@ class EffectsPolicy(FrozenModel):
         return self
 
 
-class WorkflowContract(FrozenModel):
+class PriorRetrievalSettings(FrozenModel):
+    """Explicit bounds for the existing snapshot retriever and its caller-owned driver."""
+
+    limit: Annotated[int, Field(strict=True, ge=1, le=5)]
+    min_success_rate: Annotated[float, Field(strict=True, ge=0, le=1, allow_inf_nan=False)]
+    min_episodes: Annotated[int, Field(strict=True, ge=1, le=1_000_000)]
+    query_timeout_seconds: Annotated[float, Field(strict=True, ge=5, le=5, allow_inf_nan=False)]
+    connection_timeout_seconds: Annotated[float, Field(strict=True, gt=0, le=5, allow_inf_nan=False)]
+    connection_acquisition_timeout_seconds: Annotated[float, Field(strict=True, gt=0, le=5, allow_inf_nan=False)]
+    max_transaction_retry_time_seconds: Annotated[float, Field(strict=True, ge=0, le=0, allow_inf_nan=False)]
+
+
+class PriorRetrievalSelection(FrozenModel):
+    """Public frozen selection, never prior-read permission or managed-migration certification."""
+
     schema_version: Literal["1"]
+    source: Literal["neo4j-legacy-graph-rag"]
+    credential_alias: Identifier
+    endpoint: Text
+    database: Identifier
+    eligibility: Literal["measured-or-structural-v1"]
+    settings: PriorRetrievalSettings
+    settings_sha256: Hash
+    required: StrictFlag
+    allow_empty: StrictFlag
+
+    @model_validator(mode="after")
+    def explicit_supported_selection(self):
+        try:
+            parsed = urlsplit(self.endpoint)
+            ip = IPv4Address(parsed.hostname)
+            port = parsed.port
+        except (TypeError, ValueError):
+            raise ValueError("Literal numeric IPv4 Bolt prior source required") from None
+        if port is None or not 1 <= port <= 65535 or self.endpoint != f"bolt://{ip}:{port}":
+            raise ValueError("Literal numeric IPv4 Bolt prior source required")
+        raw = json.dumps(
+            {"eligibility": self.eligibility, "settings": self.settings.model_dump(mode="json")},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+        if hashlib.sha256(raw).hexdigest() != self.settings_sha256:
+            raise ValueError("Prior eligibility/settings digest differs")
+        return self
+
+
+class WorkflowContract(FrozenModel):
+    schema_version: Literal["1", "2"]
     source: Annotated[NewSource | ExistingSource, Field(discriminator="kind")]
     criteria: Annotated[tuple[Criterion, ...], Field(min_length=1, max_length=256)]
     preserved: Annotated[tuple[PreservationRule, ...], Field(max_length=256)]
@@ -184,9 +232,29 @@ class WorkflowContract(FrozenModel):
     execution: ExecutionConfiguration
     budget: WorkflowBudget
     effects: EffectsPolicy
+    retrieval: PriorRetrievalSelection | None = None
+    """Required in schema 2; omitted from schema 1's unchanged wire representation."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def versioned_fields(cls, value):
+        if type(value) is dict and value.get("schema_version") == "1" and "retrieval" in value:
+            raise ValueError("Retrieval selection requires workflow schema 2")
+        return value
+
+    @model_serializer(mode="wrap")
+    def versioned_wire(self, serialize):
+        value = serialize(self)
+        if self.schema_version == "1":
+            value.pop("retrieval", None)
+        return value
 
     @model_validator(mode="after")
     def consistent_intent(self):
+        if self.schema_version == "2" and (
+            self.retrieval is None or self.source.kind != "new" or not self.effects.allow_database_reads
+        ):
+            raise ValueError("Workflow schema 2 requires explicit generation retrieval and read intent")
         ids = tuple(criterion.criterion_id for criterion in self.criteria)
         if len(ids) != len(set(ids)):
             raise ValueError("criterion IDs must be unique")

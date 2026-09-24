@@ -1,12 +1,13 @@
 Offline setup and readiness inventory
-====================================
+=====================================
 
-This is the first Plan 04 operator inventory, **not** workflow launch, private
-provider setup, live readiness, contract admission or an execution grant.
-It leaves the installed query-only commands unchanged.
+This is the Plan 04 offline operator inventory, **not** workflow launch, live
+readiness, contract admission or an execution grant. Private role installation
+and checked configuration handover use the separate explicit commands documented
+in :doc:`workflow_query_cli`.
 
 Usage (no service or credential access)
---------------------------------------
+---------------------------------------
 
 In an already installed, approved Arena runtime, as its mapped non-root operator,
 use the existing module entry point. From the repository root in that runtime::
@@ -19,10 +20,20 @@ To inspect explicit public selections::
    /isaac-sim/python.sh -m isaaclab_arena.agentic_environment_generation.workflow.cli setup-readiness \
      --selection docs/pages/example_workflows/agentic_env_gen/setup_selection.example.json
 
-The command reads only that bounded regular JSON data file, prints JSON to stdout
+Alternatively, inspect an explicit installed public configuration without opening
+its credential file::
+
+   /isaac-sim/python.sh -m isaaclab_arena.agentic_environment_generation.workflow.cli setup-readiness --config ABS
+
+``--selection`` and ``--config`` are mutually exclusive. The latter enforces the
+existing operator/file/configuration checks and projects v3 profile/alias bindings,
+with ``configuration_sha256``. Its report is a scene-only inventory, not a frozen
+workflow request. It reads no credential values, even before private setup.
+
+The command reads only the selected bounded regular JSON data file, prints JSON to stdout
 and exits 0 when the **offline report was produced**, even when every execution
-gate is blocked. It does not create files, read private configuration, inspect
-environment keys, connect to services, initialize native code, grant authority
+gate is blocked. It does not create files, read credentials, inspect
+credential environment variables, connect to services, initialize native code, grant authority
 or write any database/store. Normal Python module loading is not a scan of
 operator data. It does not require optional GraphQL, DB or provider SDK imports.
 No container start, installation or live probe is implied by these commands.
@@ -133,21 +144,32 @@ Interpreting the report
 * ``blockers`` are consolidated by code, with owner ``operator_setup``,
   ``implementation_missing`` or ``runtime_verification``, affected roles/outcomes
   and concrete next actions. Shared runtime prerequisites use an empty role list.
+* ``installed_boundary.execution_modes`` distinguishes installed query-only
+  operation, harness-only deterministic execution, and unsupported production
+  execution. Mode support is not an access check or authorization.
+* ``installed_boundary.prior_retrieval`` describes the supported schema-2,
+  legacy-only GraphRAG snapshot boundary in the guarded synthetic composition.
+  It is a capability description, not a selected source or a new grant. Exact
+  source, eligibility, settings, required/optional and permitted-empty policy
+  belong in the accepted workflow contract; see :doc:`workflow_query_cli`.
 * Scene-only omits policy blockers but still displays its unresolved policy row.
   Required-policy adds policy composition, checkpoint/task/evaluator setup,
   inference, GPU co-residency and per-reset verification gates. Neither report
-  claims scene execution currently works through the installed CLI. This bounded
-  first inventory assumes generation, visual assessment, repair and prior reads;
+  claims live scene execution currently works through the installed CLI. This bounded
+  inventory assumes generation, visual assessment, repair and prior reads;
   it is not a generic dependency compiler or a policy-free execution admission.
 
 The installed DB compatibility row describes exact numeric IPv4
-``bolt://address:port`` and Basic operational credentials only. DNS, routing,
+``bolt://address:port`` and Basic credentials only. DNS, routing,
 TLS/certificate requirements and other authentication modes remain incompatible,
 not automatically downgraded. Installed runtime reads its configured private
 file; pipe input during setup is not runtime pipe support. Query runtime and
 explicit administration select the **same** ``databases.operational`` credential
 slot. Distinct application principal strings do not select different DB logins.
-The installed prior-read slot and complete provider-role bootstrap are missing.
+Versioned private setup supports separate model-role and ``databases.prior_read``
+slots. This report does not inspect their existence or validity. Repair currently
+requires explicit sharing of the generation profile and credential; independent
+repair bindings and ordinary production execution remain unsupported.
 Keep administration operator-owned or implement a narrowly reviewed adapter;
 never solve compatibility by granting runtime DDL privileges.
 
@@ -164,8 +186,10 @@ when bindings change, and separately approved release authority and budgets.
 Remaining gates
 ---------------
 
-Private provider/prior-role setup, installed execution composition, exact prior
-recovery, measured model request/image capability, billing/price ceilings,
+Nonempty frozen-prior retrieval and known-unreleased continuation are exercised
+only in the guarded synthetic/disposable-graph case. They are not live provider
+or production readiness. Live provider access, ordinary production execution
+composition, measured model request/image capability, billing/price ceilings,
 DB privileges/schema and paired recovery, native calibration/cleanup, and
 (required-policy only) policy runtime/reset proofs remain separate work.
 Collecting keys is not a prerequisite to continue approved source/isolated work.

@@ -41,8 +41,17 @@ INSTANCE = "dddddddddddddddddddddddddddddddd"
 CLIENT = f"/tmp/graphql-execution/execution/runtime/instances/{INSTANCE}/client.json"
 CONTRACT = "/tmp/graphql-execution/execution/config/contract.json"
 OPERATION = "e1-submit"
-JOIN_CASE = os.environ.get("ARENA_WORKFLOW_JOIN_CASE", "happy")
-assert JOIN_CASE in {"happy", "cancel", "resume", "evidence"}
+REQUESTED_CASE = os.environ.get("ARENA_WORKFLOW_JOIN_CASE", "happy")
+BOUNDS_SENDS = {
+    "bounds-text": (1,), "bounds-schema": (1,), "bounds-routing": (1,),
+    "bounds-output": (1,), "bounds-uncertain": (2,), "bounds-probe": (0,),
+    "bounds-images": (2, 1), "bounds-cost": (), "bounds-stale": (1,),
+}
+BOUNDS_CASES = {"bounds", *BOUNDS_SENDS}
+BOUNDS_NEGATIVE = REQUESTED_CASE in BOUNDS_CASES - {"bounds"}
+assert REQUESTED_CASE in {"happy", "cancel", "resume", "evidence", "operator", "rotation", "prior"} | BOUNDS_CASES
+JOIN_CASE = "resume" if REQUESTED_CASE in {"rotation", "prior"} else "evidence" if REQUESTED_CASE == "bounds" else REQUESTED_CASE
+PRIVATE_ROLES_CASE = REQUESTED_CASE in {"operator", "rotation", "prior"} | BOUNDS_CASES
 RUN_ID = hashlib.sha256(
     json.dumps(["execution-admission-test", "execution", OPERATION], separators=(",", ":")).encode()
 ).hexdigest()
@@ -68,6 +77,36 @@ RESUME_CLIENT = f"/tmp/graphql-execution/execution/runtime/instances/{RESUME_INS
 RELAUNCH = ["api-launch", "--config", CONFIG, "--instance", RESUME_INSTANCE]
 RECONCILE = ["api-reconcile", "--config", CONFIG, "--instance", INSTANCE]
 READBACK = ["p1-readback", "--client", CLIENT]
+OPERATOR_CONFIG = "/tmp/graphql-execution/execution/config/next.json"
+ROTATE = ["p1-rotation", "--config", CONFIG]
+PRIOR_CHANGE = ["p1-prior-withdrawal", "--config", CONFIG]
+OPERATOR_INSTANCE = "ffffffffffffffffffffffffffffffff"
+OPERATOR_CLIENT = f"/tmp/graphql-execution/execution/runtime/instances/{OPERATOR_INSTANCE}/client.json"
+OPERATOR_BEFORE = ["p1-operator-before", "--client", CLIENT]
+OPERATOR_AFTER = ["p1-operator-after", "--client", OPERATOR_CLIENT]
+STOP_C1 = ["api-stop", "--config", CONFIG, "--instance", INSTANCE]
+HANDOVER = [
+    "api-handover",
+    "--config",
+    OPERATOR_CONFIG,
+    "--instance",
+    OPERATOR_INSTANCE,
+    "--previous-config",
+    CONFIG,
+    "--previous-instance",
+    INSTANCE,
+]
+HANDOVER_REPLAY = [
+    "api-handover",
+    "--previous-config",
+    CONFIG,
+    "--previous-instance",
+    INSTANCE,
+    "--config",
+    OPERATOR_CONFIG,
+    "--instance",
+    OPERATOR_INSTANCE,
+]
 RESUME = [
     "resume",
     RUN_ID,
@@ -88,16 +127,33 @@ CANCEL = ["cancel", RUN_ID, "--client", CLIENT, "--operation-id", "p1-cancel"]
 RESULT = ["result", RUN_ID, "--client", READ_CLIENT, "--operation-id", OPERATION, "--wait-terminal-seconds", "120"]
 STOP = ["api-stop", "--config", CONFIG, "--instance", READ_INSTANCE]
 STATUS = ["api-status", "--config", CONFIG, "--instance", READ_INSTANCE]
+if JOIN_CASE == "operator":
+    READ_CLIENT = OPERATOR_CLIENT
+    STOP = ["api-stop", "--config", OPERATOR_CONFIG, "--instance", OPERATOR_INSTANCE]
+    STATUS = ["api-status", "--config", OPERATOR_CONFIG, "--instance", OPERATOR_INSTANCE]
+    READBACK = ["p1-readback", "--client", OPERATOR_CLIENT]
 THREAD_ENV = {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
 LAUNCH_ENV = {"HOME": "/tmp", "PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"}
-ENV = {**LAUNCH_ENV, **THREAD_ENV, **({"ARENA_WORKFLOW_JOIN_CASE": JOIN_CASE} if JOIN_CASE != "happy" else {})}
-COMMANDS = [*ADMIN, LAUNCH, SUBMIT, *([CANCEL] if JOIN_CASE == "cancel" else []), RESULT]
+ENV = {
+    **LAUNCH_ENV,
+    **THREAD_ENV,
+    **({"ARENA_WORKFLOW_JOIN_CASE": REQUESTED_CASE} if REQUESTED_CASE != "happy" else {}),
+}
+COMMANDS = [*ADMIN, LAUNCH, SUBMIT, *([CANCEL] if JOIN_CASE == "cancel" or BOUNDS_NEGATIVE else []), RESULT]
+if REQUESTED_CASE == "bounds-stale":
+    COMMANDS.insert(COMMANDS.index(CANCEL), ROTATE)
 if JOIN_CASE == "resume":
     COMMANDS = [*ADMIN, LAUNCH, SUBMIT, RECONCILE, RELAUNCH, LOST_RESPONSE, RESUME, CONTROL_CHECK, RESULT, READBACK]
+    if REQUESTED_CASE == "rotation":
+        COMMANDS.insert(COMMANDS.index(RECONCILE), ROTATE)
+    if REQUESTED_CASE == "prior":
+        COMMANDS.insert(COMMANDS.index(RECONCILE), PRIOR_CHANGE)
 if JOIN_CASE == "cancel":
     COMMANDS.append(CONTROL_CHECK)
 if JOIN_CASE == "evidence":
     COMMANDS.append(READBACK)
+if JOIN_CASE == "operator":
+    COMMANDS.extend([OPERATOR_BEFORE, STOP_C1, HANDOVER, HANDOVER_REPLAY, OPERATOR_AFTER, READBACK])
 CLIENT_LAUNCHES = 2 + len(COMMANDS) + 2
 SOURCE_LIMIT = 384  # Exact static closure plus four generated leaves.
 SOURCE_MANIFEST_LIMIT = 65536
@@ -115,6 +171,7 @@ PROFILE_CALL_NAMES = frozenset({
     "OpenMasked",
     "synthetic_response",
     "claim_intent",
+    "set_exception",
 })
 
 # Bytes-only candidates, NOT import permissions. First five are the existing
@@ -1199,6 +1256,10 @@ def read_json(path, limit=4 * 1024 * 1024):
 
 def screen(raw):
     assert all(secret not in raw for secret in (b"synthetic-user", b"synthetic-only-secret", b"synthetic-unit-key"))
+    if PRIVATE_ROLES_CASE:
+        from workflow_graphql_execution_join_fixture import operator_sentinels
+
+        assert all(secret.encode() not in raw for secret in operator_sentinels().values())
 
 
 def write_evidence(name, value):
@@ -1239,6 +1300,10 @@ def verify_sources():
 
 
 def role_for(arguments):
+    if REQUESTED_CASE in {"rotation", "bounds-stale"} and arguments == ROTATE:
+        return "client"
+    if REQUESTED_CASE == "prior" and arguments == PRIOR_CHANGE:
+        return "client"
     assert type(arguments) is list and all(type(x) is str for x in arguments)
     if (
         len(arguments) == 6
@@ -1251,13 +1316,21 @@ def role_for(arguments):
         return "setup"
     if arguments in ADMIN:
         return "admin"
-    if arguments == LAUNCH or JOIN_CASE == "resume" and arguments == RELAUNCH:
+    if (
+        arguments == LAUNCH
+        or JOIN_CASE == "resume"
+        and arguments == RELAUNCH
+        or JOIN_CASE == "operator"
+        and arguments == HANDOVER
+    ):
         return "launcher"
-    if arguments in (SUBMIT, RESULT, STOP, STATUS) or JOIN_CASE == "cancel" and arguments == CANCEL:
+    if arguments in (SUBMIT, RESULT, STOP, STATUS) or (JOIN_CASE == "cancel" or BOUNDS_NEGATIVE) and arguments == CANCEL:
         return "client"
     if JOIN_CASE == "resume" and arguments == RECONCILE:
         return "client"
-    if JOIN_CASE in {"evidence", "resume"} and arguments == READBACK:
+    if JOIN_CASE in {"evidence", "resume", "operator"} and arguments == READBACK:
+        return "client"
+    if JOIN_CASE == "operator" and arguments in (OPERATOR_BEFORE, OPERATOR_AFTER, STOP_C1, HANDOVER_REPLAY):
         return "client"
     if JOIN_CASE in {"cancel", "resume"} and arguments == CONTROL_CHECK:
         return "client"
@@ -1267,8 +1340,14 @@ def role_for(arguments):
         return "client"
     if (
         len(arguments) == 9
-        and arguments[:4] == ["api-serve", "--config", CONFIG, "--instance"]
-        and arguments[4] in ({INSTANCE, RESUME_INSTANCE} if JOIN_CASE == "resume" else {INSTANCE})
+        and arguments[:2] == ["api-serve", "--config"]
+        and arguments[3] == "--instance"
+        and (arguments[2], arguments[4])
+        in (
+            {(CONFIG, INSTANCE), (OPERATOR_CONFIG, OPERATOR_INSTANCE)}
+            if JOIN_CASE == "operator"
+            else {(CONFIG, INSTANCE), (CONFIG, RESUME_INSTANCE)} if JOIN_CASE == "resume" else {(CONFIG, INSTANCE)}
+        )
         and arguments[5] == "--lease-fd"
         and arguments[7] == "--gate-fd"
         and all(re.fullmatch(r"[1-9][0-9]{0,5}", arguments[i]) and int(arguments[i]) >= 3 for i in (6, 8))
@@ -1312,6 +1391,11 @@ class JoinGuards(base.Guards):
         self.last_status = None
         self.http_interval_failure = None
         self.lost_response_status: int | None = None
+        self.private_role_delivery = []
+        self.prior_reads = 0
+        self.prior_role_handoffs = []
+        self.prior_consumption = []
+        self.model_send_authorizations = []
 
     def deny(self, kind):
         if kind == "blocked_import" and self.role in {"server", "model"}:
@@ -1334,10 +1418,53 @@ class JoinGuards(base.Guards):
         return super().deny(kind)
 
     def profile(self, frame, event, arg):
+        if (
+            BOUNDS_NEGATIVE and event == "return" and type(arg) is dict
+            and frame.f_globals.get("__name__") == "isaaclab_arena.agentic_environment_generation.workflow.application"
+            and frame.f_code.co_name in {"_generate", "_scene"}
+            and (arg.get("disposition") == "blocked" or arg.get("state") == "stopped")
+        ):
+            assert self.role == "server"
+            write_evidence("join-bounds-blocked.json", dict(
+                case=REQUESTED_CASE, disposition=arg.get("disposition"), state=arg.get("state"),
+                no_redispatch=True, sdk_send_approvals=self.model_send_authorizations,
+            ))
+            return
+        if (
+            event == "return" and arg is True and frame.f_code.co_name == "_answer_model_send"
+            and frame.f_globals.get("__name__")
+            == "isaaclab_arena_examples.agentic_environment_generation.foreground_scene"
+        ):
+            from isaaclab_arena_examples.agentic_environment_generation.foreground_scene import ForegroundSceneWorker
+
+            assert self.role == "server" and frame.f_code is ForegroundSceneWorker._answer_model_send.__code__
+            assert len(self.model_send_authorizations) < 8
+            self.model_send_authorizations.append(dict(pid=frame.f_locals["owned"].process.pid, **frame.f_locals["message"]))
+            return
         # Neither this guard nor its base inspects return/C events. Dispatching
         # those through every policy layer dominates cold Pydantic imports.
         if event != "call" or frame.f_code.co_name not in PROFILE_CALL_NAMES:
             return
+        if (
+            REQUESTED_CASE == "prior"
+            and self.role == "server"
+            and frame.f_code.co_name == "set_exception"
+            and frame.f_globals.get("__name__") == "concurrent.futures._base"
+            and not Path("/evidence/join-prior-failure.json").exists()
+        ):
+            failure = frame.f_locals.get("exception")
+            trace = getattr(failure, "__traceback__", None)
+            sites = []
+            while trace is not None and len(sites) < 40:
+                sites.append(
+                    dict(
+                        file=trace.tb_frame.f_code.co_filename,
+                        function=trace.tb_frame.f_code.co_name,
+                        line=trace.tb_lineno,
+                    )
+                )
+                trace = trace.tb_next
+            write_evidence("join-prior-failure.json", dict(error_type=type(failure).__name__, sites=sites))
         if (
             JOIN_CASE == "resume"
             and self.role == "server"
@@ -1362,12 +1489,18 @@ class JoinGuards(base.Guards):
             if loaded is not None and frame.f_code is loaded.query.__code__ and frame.f_globals is loaded.__dict__:
                 now = time.monotonic()
                 operation = frame.f_locals.get("operation")
-                assert frame.f_locals.get("path") == (CLIENT if self.cli_arguments == SUBMIT else READ_CLIENT)
+                expected_client = CLIENT if self.cli_arguments == SUBMIT else READ_CLIENT
+                if JOIN_CASE == "operator":
+                    expected_client = OPERATOR_CLIENT if self.cli_arguments in (OPERATOR_AFTER, READBACK) else CLIENT
+                    if self.cli_arguments == OPERATOR_AFTER and self.http_operations == ["receipt", "status"]:
+                        assert operation == "status"
+                        expected_client = CLIENT  # Exact obsolete bearer negative, after the two fresh reads.
+                assert frame.f_locals.get("path") == expected_client
                 if self.http_started is None:
                     self.http_started = now
                 if self.cli_arguments == SUBMIT:
                     assert operation == "submit" and not self.http_operations
-                elif JOIN_CASE == "cancel" and self.cli_arguments == CANCEL:
+                elif (JOIN_CASE == "cancel" or BOUNDS_NEGATIVE) and self.cli_arguments == CANCEL:
                     assert operation == "cancel" and not self.http_operations
                 elif JOIN_CASE == "resume" and self.cli_arguments == resume_arguments():
                     assert operation == "resume" and not self.http_operations
@@ -1380,6 +1513,8 @@ class JoinGuards(base.Guards):
                 elif self.cli_arguments == CONTROL_CHECK:
                     assert operation in {"status", "receipt", "resume", "cancel"} and len(self.http_operations) < 12
                     assert frame.f_locals.get("identifier") in {RUN_ID, "p1-resume", "p1-cancel", "p1-not-this-run"}
+                elif self.cli_arguments in (OPERATOR_BEFORE, OPERATOR_AFTER):
+                    assert operation in {"submission", "submit", "status", "receipt"} and len(self.http_operations) < 12
                 elif self.cli_arguments == READBACK:
                     assert (
                         operation
@@ -1421,6 +1556,23 @@ class JoinGuards(base.Guards):
                 assert frame.f_locals.get("owner_control") is False
                 self.owner_constructions += 1
                 return
+        if (
+            REQUESTED_CASE == "prior"
+            and frame.f_code.co_name == "retrieve_snapshot"
+            and frame.f_globals.get("__name__")
+            == "isaaclab_arena_examples.agentic_environment_generation.web_api.graph_access"
+        ):
+            from isaaclab_arena_examples.agentic_environment_generation.web_api import graph_access
+            from workflow_graphql_execution_join_fixture import operator_sentinels
+
+            assert self.role == "server" and self.cli_arguments is not None
+            assert self.cli_arguments[4] == INSTANCE and self.prior_reads == 0
+            assert frame.f_code is graph_access.retrieve_snapshot.__code__ and frame.f_globals is graph_access.__dict__
+            supplied = frame.f_locals["config"]
+            assert supplied["user"] == "prior-unit-operator" and supplied["password"] == operator_sentinels()["prior"]
+            assert frame.f_locals["managed_context"] is None and frame.f_locals["settings"] is not None
+            self.prior_reads += 1
+            return
         super().profile(frame, event, arg)
         if (
             event == "call"
@@ -1429,6 +1581,13 @@ class JoinGuards(base.Guards):
             and frame.f_globals.get("__name__") == "neo4j._sync.driver"
         ):
             self.basic_auth_handoffs.append(getattr(frame.f_locals.get("auth"), "scheme", None) == "basic")
+            if REQUESTED_CASE == "prior" and self.prior_reads:
+                from workflow_graphql_execution_join_fixture import operator_sentinels
+
+                auth = frame.f_locals.get("auth")
+                if getattr(auth, "principal", None) == "prior-unit-operator":
+                    assert self.role == "server" and getattr(auth, "credentials", None) == operator_sentinels()["prior"]
+                    self.prior_role_handoffs.append("prior_read")
 
     def private_control(self, sock, address):
         if (
@@ -1443,7 +1602,11 @@ class JoinGuards(base.Guards):
         fd = int(match[1])
         info = os.fstat(fd)
         selected = self.cli_arguments[self.cli_arguments.index("--instance") + 1]
-        assert selected in ({INSTANCE, RESUME_INSTANCE} if JOIN_CASE == "resume" else {INSTANCE})
+        assert selected in (
+            {INSTANCE, OPERATOR_INSTANCE}
+            if JOIN_CASE == "operator"
+            else {INSTANCE, RESUME_INSTANCE} if JOIN_CASE == "resume" else {INSTANCE}
+        )
         directory = Path(f"/tmp/graphql-execution/execution/runtime/instances/{selected}")
         if directory.is_symlink():
             return False
@@ -1730,12 +1893,13 @@ def fresh(arguments, *, private_fd=None):
         checked_pipe(private_fd)
     else:
         assert private_fd is None
-        if arguments not in (STOP, STATUS):
+        stops = (STOP, STOP_C1) if JOIN_CASE == "operator" else (STOP,)
+        if arguments not in (*stops, STATUS):
             expected = COMMANDS[index - 2]
             assert index >= 2 and arguments == (resume_arguments() if expected == RESUME else expected)
         else:
             assert LAUNCH in guard.used
-            assert arguments == STOP or STOP in guard.used
+            assert arguments in stops or STOP in guard.used
     guard.used.append(list(arguments))
     args = [EXECUTABLE, "-I", "-S", "-B", "/source/" + SELF, "--cli", *arguments]
     kwargs = process_kwargs(pass_fds=() if private_fd is None else (private_fd,))
@@ -2002,6 +2166,35 @@ def child():
                     )
                     assert guard.sdk_calls < 2, "extra SDK call exceeds E1 child ceiling"
                     guard.sdk_calls += 1
+                    transport["evidence"]["private_role_delivery"] = list(guard.private_role_delivery)
+                    if REQUESTED_CASE == "prior" and guard.sdk_calls == 2:
+                        from isaaclab_arena.agentic_environment_generation.workflow.scene_engines import (
+                            BoundedSceneModels,
+                        )
+
+                        caller = frame.f_back
+                        for _ in range(40):
+                            if caller is None:
+                                break
+                            if caller.f_code is BoundedSceneModels.generate.__code__:
+                                snapshot = caller.f_locals["snapshot"]
+                                context = snapshot["exact_context"]
+                                body = json.loads(frame.f_locals["request"].content)
+                                texts = []
+                                for message in body["messages"]:
+                                    content = message.get("content", "")
+                                    if isinstance(content, str):
+                                        texts.append(content)
+                                    elif isinstance(content, list):
+                                        texts.extend(p["text"] for p in content if p.get("type") == "text")
+                                assert context and any(context in text for text in texts)
+                                assert "ISOLATED-PRIOR-ORIGINAL" in context
+                                assert not any("ISOLATED-PRIOR-MUTATED" in text for text in texts)
+                                sha = hashlib.sha256(context.encode()).hexdigest()
+                                assert sha == snapshot["context_sha256"]
+                                guard.prior_consumption.append(dict(context_sha256=sha, exact_context_in_payload=True))
+                                break
+                            caller = caller.f_back
                 if (
                     event == "call"
                     and frame.f_code.co_name == "__init__"
@@ -2013,6 +2206,16 @@ def child():
                     }
                 ):
                     assert guard.sdk_ready, "model constructor before synthetic transport installation"
+                    if module == "openai._client" and PRIVATE_ROLES_CASE:
+                        from workflow_graphql_execution_join_fixture import operator_sentinels
+
+                        matches = [
+                            role
+                            for role, key in operator_sentinels(rotated=REQUESTED_CASE == "rotation").items()
+                            if frame.f_locals.get("api_key") == key
+                        ]
+                        assert matches in (["generation"], ["assessment"])
+                        guard.private_role_delivery.extend(matches)
                 return admitted_profile(frame, event, arg)
 
             admitted_profile = production_sdk_profile(guard.profile)
@@ -2020,9 +2223,17 @@ def child():
             threading.setprofile(sdk_profile)
             with contextlib.redirect_stdout(sys.stderr):
                 install_synthetic_sdk(scene=True)
-            install_detachment_transport(
-                transport["transport_type"], transport["original"], transport["evidence"], identity, write_evidence
-            )
+            if not BOUNDS_NEGATIVE or REQUESTED_CASE == "bounds-stale":
+                install_detachment_transport(
+                    transport["transport_type"], transport["original"], transport["evidence"], identity, write_evidence,
+                    after_probe=REQUESTED_CASE == "bounds-stale",
+                )
+            else:
+                from workflow_graphql_execution_join_fixture import install_request_fault
+
+                install_request_fault(
+                    REQUESTED_CASE, transport["transport_type"], transport["original"], transport["evidence"], write_evidence
+                )
             guard.sdk_ready = True
             sdk = read_json(Path(f"/evidence/generation-child-{os.getpid()}-sdk.json"))
             assert sdk["calls"] == 0
@@ -2058,10 +2269,15 @@ def child():
                         "build",
                     },
                     "/source/isaaclab_arena/agentic_environment_generation/workflow/application.py": {
+                        "_admit",
+                        "_preflight",
                         "_generate",
                         "_scene",
                         "_scene_phase",
                         "_drive_scene",
+                    },
+                    "/source/isaaclab_arena_examples/agentic_environment_generation/foreground_authorization.py": {
+                        "_source", "require_workflow_model_bounds", "require_token_cost_bound", "_workflow_sources",
                     },
                     "/source/isaaclab_arena/agentic_environment_generation/workflow/api/client.py": {
                         "query",
@@ -2118,6 +2334,12 @@ def child():
                             lost_response_client()
                         elif arguments == CONTROL_CHECK:
                             control_client()
+                        elif arguments in (OPERATOR_BEFORE, OPERATOR_AFTER):
+                            operator_client(before=arguments == OPERATOR_BEFORE)
+                        elif REQUESTED_CASE in {"rotation", "bounds-stale"} and arguments == ROTATE:
+                            rotation_client()
+                        elif REQUESTED_CASE == "prior" and arguments == PRIOR_CHANGE:
+                            prior_withdrawal_client()
                         else:
                             runpy.run_module(MODULE, run_name="__main__", alter_sys=False)
                 except SystemExit as error:
@@ -2161,12 +2383,17 @@ def child():
             allowed=guard.allowed,
             spawn_records=guard.spawn_records,
             basic_auth_handoffs=guard.basic_auth_handoffs,
+            prior_reads=guard.prior_reads,
+            prior_role_handoffs=guard.prior_role_handoffs,
+            prior_consumption=guard.prior_consumption,
             owner_constructions=guard.owner_constructions,
             sdk_ready=guard.sdk_ready,
             sdk_calls=guard.sdk_calls,
             http_operations=guard.http_operations,
             http_interval_failure=guard.http_interval_failure,
             lost_response_status=guard.lost_response_status,
+            private_role_delivery=guard.private_role_delivery,
+            model_send_authorizations=guard.model_send_authorizations,
         )
         try:
             assert verify_sources() == manifest
@@ -2193,6 +2420,217 @@ def child():
         finally:
             write_evidence(f"join-process-{os.getpid()}.json", record)
             signal.alarm(0)
+
+
+def prior_withdrawal_client():
+    """Withdraw only the prior-read credential through the installed private update pipe."""
+    import io
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import PrivateRoles
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+    from isaaclab_arena.agentic_environment_generation.workflow.cli import main
+
+    config = load(CONFIG)
+    old = PrivateRoles(config)
+    payload = json.loads(json.dumps(old.document))
+    previous = payload.pop("generation")
+    payload["databases"].pop("prior_read")
+    reader, writer = os.pipe()
+    os.fchmod(reader, 0o600)
+    output, errors = io.StringIO(), io.StringIO()
+    try:
+        with os.fdopen(writer, "wb") as stream:
+            stream.write(json.dumps(payload).encode())
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            code = main(["credentials-update", "--config", CONFIG, "--credentials-fd", str(reader)])
+    finally:
+        os.close(reader)
+    screen((output.getvalue() + errors.getvalue()).encode())
+    assert code == 0
+    result = json.loads(output.getvalue())
+    assert result["execution_authorized"] is False and result["credential_generation"] != previous
+    current = PrivateRoles(load(CONFIG))
+    assert current.config.digest == config.digest and current.document["models"] == old.document["models"]
+    try:
+        current.prior_read()
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Prior credential withdrawal ineffective")
+    print(json.dumps(dict(result, configuration_unchanged=True, prior_credential_absent=True), sort_keys=True))
+
+
+def prior_corpus(*, mutate=False):
+    """Seed/change only this case's disposable structural fixture, never runtime or policy evidence."""
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import Resources
+
+    assert REQUESTED_CASE == "prior" and ACTIVE.role == "harness"
+    resources = Resources(load(CONFIG))
+    with (
+        resources.driver() as driver,
+        driver.session(database=resources.config.value["binding"]["database"]) as session,
+    ):
+        if mutate:
+            rows = session.run(
+                "MATCH (e:EnvironmentGraph {name:$name}) SET e.task_description=$task RETURN e.task_description AS"
+                " task",
+                name="isolated-prior-original",
+                task="ISOLATED-PRIOR-MUTATED",
+            ).data()
+            assert rows == [{"task": "ISOLATED-PRIOR-MUTATED"}]
+        else:
+            session.run(
+                "CREATE (e:EnvironmentGraph {name:$name, converged:true, task_description:$task, updated_at:1}) "
+                "CREATE (e)-[:HAS_EMBODIMENT]->(:Embodiment {registry_name:'franka_ik'}) "
+                "CREATE (e)-[:HAS_TERRAIN]->(:Fixture {registry_name:'table'}) "
+                "CREATE (e)-[:CONTAINS_OBJECT]->(:Object {registry_name:'box'}) "
+                "CREATE (e)-[:HAS_REIFIER]->(:ReifiedRelation {relation_type:'OnSupport'}) "
+                "CREATE (:EnvironmentGraph {name:'isolated-ineligible', converged:false, updated_at:2})",
+                name="isolated-prior-original",
+                task="ISOLATED-PRIOR-ORIGINAL",
+            ).consume()
+            row = session.run("MATCH (e:EnvironmentGraph) RETURN count(e) AS n").single()
+            assert row is not None and row["n"] == 2
+
+
+def rotation_client():
+    """Replace sentinel content under unchanged C1 through the installed private pipe."""
+    import io
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import PrivateRoles
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+    from isaaclab_arena.agentic_environment_generation.workflow.cli import main
+    from workflow_graphql_execution_join_fixture import operator_sentinels
+
+    config = load(CONFIG)
+    old = PrivateRoles(config)
+    payload = json.loads(json.dumps(old.document))
+    previous_generation = payload.pop("generation")
+    sentinels = operator_sentinels(rotated=True)
+    for role, item in payload["models"].items():
+        item["api_key"] = sentinels["generation" if role == "repair" else role]
+    payload["databases"]["prior_read"]["password"] = sentinels["prior"]
+    reader, writer = os.pipe()
+    os.fchmod(reader, 0o600)
+    output, errors = io.StringIO(), io.StringIO()
+    try:
+        with os.fdopen(writer, "wb") as stream:
+            stream.write(json.dumps(payload).encode())
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            code = main(["credentials-update", "--config", CONFIG, "--credentials-fd", str(reader)])
+    finally:
+        os.close(reader)
+    screen((output.getvalue() + errors.getvalue()).encode())
+    assert code == 0
+    result = json.loads(output.getvalue())
+    assert result["execution_authorized"] is False and result["credential_generation"] != previous_generation
+    try:
+        old.model_config("generation")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Old private source survived rotation")
+    replacement = PrivateRoles(load(CONFIG))
+    assert replacement.config.digest == config.digest
+    for role in ("generation", "assessment", "repair"):
+        assert replacement.model_config(role)["api_key"] == sentinels["generation" if role == "repair" else role]
+    assert replacement.prior_read()["password"] == sentinels["prior"]
+    print(
+        json.dumps(
+            dict(
+                result,
+                previous_generation=previous_generation,
+                configuration_sha256=config.digest,
+                configuration_unchanged=True,
+                old_source_invalidated=True,
+            ),
+            sort_keys=True,
+        )
+    )
+
+
+def operator_client(*, before):
+    """Exercise installed setup/rotation, exact replay and independent post-handover access."""
+    import io
+    from isaaclab_arena.agentic_environment_generation.workflow.api.client import query
+    from isaaclab_arena.agentic_environment_generation.workflow.cli import main
+
+    def retained_status(client):
+        value = query(client, "status", identifier=RUN_ID)["data"]["workflow"]
+        # This digest includes the fresh permission-observation timestamp, not just retained state.
+        return {key: item for key, item in value.items() if key != "responseRevision"}
+
+    def invoke(arguments, payload=None):
+        output, errors = io.StringIO(), io.StringIO()
+        reader = None
+        try:
+            if payload is not None:
+                reader, writer = os.pipe()
+                os.fchmod(reader, 0o600)
+                with os.fdopen(writer, "wb") as stream:
+                    stream.write(json.dumps(payload).encode())
+                arguments = [*arguments, "--credentials-fd", str(reader)]
+            with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                code = main(arguments)
+            screen((output.getvalue() + errors.getvalue()).encode())
+            return dict(code=code, result=json.loads(output.getvalue()) if output.getvalue() else None)
+        finally:
+            if reader is not None:
+                os.close(reader)
+
+    if before:
+        report = invoke(["setup-readiness", "--config", CONFIG])
+        assert report["code"] == 0 and report["result"]["execution_authorized"] is False
+        assert report["result"]["roles"]["generation"]["public_selection"] == "configured"
+        wrong_control = invoke(["api-stop", "--config", OPERATOR_CONFIG, "--instance", INSTANCE])
+        unresolved = invoke(HANDOVER)
+        assert wrong_control["code"] == unresolved["code"] == 2
+        config = read_json(Path(CONFIG))
+        credential_path = Path(config["credentials_file"])
+        original_bytes = credential_path.read_bytes()
+        credential = json.loads(original_bytes)
+        credential.pop("generation")
+        mismatched = json.loads(json.dumps(credential))
+        mismatched["models"]["assessment"]["alias"] = "not-the-selected-alias"
+        rejected = invoke(["credentials-update", "--config", CONFIG], mismatched)
+        assert rejected["code"] == 2 and credential_path.read_bytes() == original_bytes
+        prior_receipt = query(CLIENT, "receipt", kind="SUBMIT", identifier=OPERATION)["data"]["workflowCommand"]
+        status = retained_status(CLIENT)
+        credential["models"] = {}
+        credential["databases"].pop("prior_read")
+        rotated = invoke(["credentials-update", "--config", CONFIG], credential)
+        assert rotated["code"] == 0 and rotated["result"]["execution_authorized"] is False
+        assert read_json(credential_path)["generation"] != json.loads(original_bytes)["generation"]
+        raw = Path(CONTRACT).read_text()
+        replay = query(CLIENT, "submit", identifier=OPERATION, raw_contract=raw)["data"]["submitWorkflow"]
+        blocked = query(CLIENT, "submit", identifier="p1-operator-new", raw_contract=raw)["data"]["submitWorkflow"]
+        assert replay["__typename"] == "SubmissionReceipt" and blocked["__typename"] == "QueryFailure"
+        assert retained_status(CLIENT) == status
+        outcome = dict(
+            offline=report["result"],
+            wrong_configuration_rejected=True,
+            unresolved_owner_blocked=True,
+            alias_mismatch_rejected=True,
+            rotation=rotated["result"],
+            original_receipt=prior_receipt,
+            status=status,
+            replay=replay,
+            new_execution_blocked=blocked,
+        )
+    else:
+        original = read_json(Path("/evidence/join-operator-before.json"))
+        receipt = query(OPERATOR_CLIENT, "receipt", kind="SUBMIT", identifier=OPERATION)["data"]["workflowCommand"]
+        status = retained_status(OPERATOR_CLIENT)
+        assert receipt == original["original_receipt"] and status == original["status"]
+        try:
+            query(CLIENT, "status", identifier=RUN_ID)
+        except (OSError, ValueError):
+            pass
+        else:
+            raise AssertionError("Old instance token accepted after handover")
+        outcome = dict(
+            receipt=receipt, status=status, stale_token_rejected=True, query_only_without_execution_credentials=True
+        )
+    print(json.dumps(outcome, sort_keys=True))
 
 
 def lost_response_client():
@@ -2334,7 +2772,10 @@ def readback_client():
 
     prior = query(READ_CLIENT, "prior", identifier=RUN_ID)["data"]["workflowPrior"]
     assert prior["__typename"] == "PriorDetail" and prior["runId"] == RUN_ID
-    assert prior["priorCount"] == 0 and prior["status"] == "unavailable"
+    if REQUESTED_CASE == "prior":
+        assert prior["priorCount"] == 1 and prior["status"] == "structural"
+    else:
+        assert prior["priorCount"] == 0 and prior["status"] == "unavailable"
     retained = query(READ_CLIENT, "result", identifier=RUN_ID, operation_id=OPERATION)["data"]["workflow"]
     selected = retained["scene"]["selectedCandidateReference"]
     candidate = query(
@@ -2404,6 +2845,7 @@ def readback_client():
             raw.extend(chunk)
             assert result["eof"] == (len(raw) == int(reference["totalBytes"]))
         assert hashlib.sha256(raw).hexdigest() == reference["sha256"]
+        screen(raw)
         retrieved.append(dict(reference, retrieved_bytes=len(raw), received_sha256=hashlib.sha256(raw).hexdigest()))
     print(
         json.dumps(
@@ -2440,6 +2882,21 @@ def verify_api_readback(value):
     with resources.driver() as driver:
         store = resources.store(driver)
         contract = parse_contract(store.get_run(RUN_ID).contract_json)
+        if REQUESTED_CASE == "prior":
+            frozen = read_json(Path("/evidence/join-restart.json"))["prior"]
+            assert store.get_prior_reference(RUN_ID) == frozen["reference_json"]
+            with driver.session(database=config.value["binding"]["database"]) as session:
+                row = session.run(
+                    "MATCH (e:EnvironmentGraph {name:$name}) RETURN e.task_description AS task",
+                    name="isolated-prior-original",
+                ).single()
+                assert row is not None and row["task"] == "ISOLATED-PRIOR-MUTATED"
+                graph = dict(
+                    nodes=session.run("MATCH (n) RETURN properties(n) AS p LIMIT 513").data(),
+                    relationships=session.run("MATCH ()-[r]->() RETURN properties(r) AS p LIMIT 513").data(),
+                )
+                assert all(len(values) <= 512 for values in graph.values())
+                screen(json.dumps(graph, sort_keys=True).encode())
         candidate = store.get_scene_candidate(value["candidate"]["candidateId"]).candidate
         receipt = store.get_generation_attempt(RUN_ID).receipt
         evidence = store.get_scene_evidence(value["evidence"]["evidenceId"])
@@ -2474,6 +2931,10 @@ def verify_api_readback(value):
     prior = value["prior"]
     assert prior["contractDigest"] == contract_digest(contract) and prior["manifestDigest"] == manifest["digest"]
     assert set(files) == {"prior.json"}
+    if REQUESTED_CASE == "prior":
+        assert hashlib.sha256(files["prior.json"]).hexdigest() == frozen["bytes_sha256"]
+        assert prior["contextSha256"] == frozen["snapshot"]["context_sha256"]
+        assert json.loads(files["prior.json"])["prior_snapshot"] == frozen["snapshot"]
     assert value["candidate"]["digest"] == candidate.digest and value["candidate"]["sourceId"] == candidate.source_id
     expected = {
         ("PRIOR", RUN_ID, "PRIOR_JSON"): files["prior.json"],
@@ -2534,6 +2995,8 @@ def pause_unreleased_claim(frame):
                 forbidden=ACTIVE.forbidden,
                 allowed=ACTIVE.allowed,
                 basic_auth_handoffs=ACTIVE.basic_auth_handoffs,
+                prior_reads=ACTIVE.prior_reads,
+                prior_role_handoffs=ACTIVE.prior_role_handoffs,
                 spawn_records=ACTIVE.spawn_records,
                 owner_constructions=ACTIVE.owner_constructions,
                 sdk_calls=ACTIVE.sdk_calls,
@@ -2565,6 +3028,19 @@ def interrupt_unreleased_server(pid):
     until = min(ACTIVE.deadline, time.monotonic() + 15)
     path = Path("/evidence/join-unreleased.json")
     while not path.exists():
+        if REQUESTED_CASE == "prior" and time.monotonic() >= until:
+            resources = Resources(load(CONFIG))
+            with (
+                resources.driver() as driver,
+                driver.session(database=resources.config.value["binding"]["database"]) as session,
+            ):
+                diagnostic = session.run(
+                    "MATCH (r:ArenaWorkflowRun {run_id:$id}) RETURN r.version AS version, r.state AS state, "
+                    "r.phase AS phase, r.prior_retrieval_state AS retrieval, "
+                    "r.prior_reference_json IS NOT NULL AS linked",
+                    id=RUN_ID,
+                ).data()
+            write_evidence("join-prior-diagnostic.json", dict(retained=diagnostic))
         assert time.monotonic() < until, "Known-unreleased reservation not reached"
         time.sleep(0.02)
     value = read_json(path)
@@ -2580,6 +3056,7 @@ def interrupt_unreleased_server(pid):
         assert time.monotonic() < until, "Exact interrupted server remains live"
         time.sleep(0.02)
     resources = Resources(load(CONFIG))
+    prior_proof = {}
     with resources.driver() as driver:
         store = resources.store(driver)
         attempt = store.get_generation_attempt(RUN_ID)
@@ -2588,9 +3065,39 @@ def interrupt_unreleased_server(pid):
         assert store.get_run(RUN_ID).contract_json == value["contract_json"]
         assert store.pending_generation(RUN_ID)["reservation"].model_dump(mode="json") == value["reservation"]
         assert store.get_owner().model_dump(mode="json") == value["owner"]
+        if REQUESTED_CASE == "prior":
+            from isaaclab_arena.agentic_environment_generation.workflow.contracts import parse_contract
+            from isaaclab_arena.agentic_environment_generation.workflow.prior_artifacts import RetainedPriorArtifacts
+            from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
+
+            config = resources.config
+            reference = store.get_prior_reference(RUN_ID)
+            request = parse_contract(value["contract_json"])
+            with ArtifactArea.open(
+                config.value["artifact_root"],
+                store_id=config.value["binding"]["store_id"],
+                registry_id=config.value["binding"]["registry_id"],
+            ) as area:
+                artifacts = RetainedPriorArtifacts(area)
+                prior_receipt = artifacts.reopen(reference, contract=request, run_id=RUN_ID, protect=resources.protect)
+                files = area.verify(prior_receipt.relative_directory, json.loads(prior_receipt.manifest_json))
+                snapshot = json.loads(files["prior.json"])["prior_snapshot"]
+            assert snapshot["status"] == "structural" and len(snapshot["priors"]) == 1
+            assert "ISOLATED-PRIOR-ORIGINAL" in snapshot["exact_context"]
+            assert "NO evidence that a policy performs well" in snapshot["exact_context"]
+            assert value["guard"]["prior_reads"] == 1 and value["guard"]["prior_role_handoffs"] == ["prior_read"]
+            prior_proof = dict(
+                prior=dict(
+                    reference_json=reference,
+                    snapshot=snapshot,
+                    bytes_sha256=hashlib.sha256(files["prior.json"]).hexdigest(),
+                )
+            )
     write_evidence(
         "join-restart.json",
-        dict(identity=owned, signal=int(signal.SIGKILL), physical_group_absent=True, known_unreleased=True),
+        dict(
+            identity=owned, signal=int(signal.SIGKILL), physical_group_absent=True, known_unreleased=True, **prior_proof
+        ),
     )
 
 
@@ -2620,11 +3127,117 @@ def verify_resume_admission(value):
 
 def server_pid():
     command = RELAUNCH if JOIN_CASE == "resume" and RELAUNCH in ACTIVE.used else LAUNCH
+    if JOIN_CASE == "operator" and HANDOVER in ACTIVE.used:
+        command = HANDOVER
     launchers = [r for r in ACTIVE.spawn_records if r["bootstrap_argv"][6:] == command]
     assert len(launchers) == 1
     launcher = read_json(Path(f"/evidence/join-process-{launchers[0]['pid']}.json"))
     assert len(launcher["spawn_records"]) == 1
     return launcher["spawn_records"][0]["pid"]
+
+
+def await_bounds_blocked():
+    """Wait for the real application to return without redispatch, then read its ledger."""
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import Resources
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+
+    assert BOUNDS_NEGATIVE and ACTIVE.role == "harness"
+    path = Path("/evidence/join-bounds-blocked.json")
+    # Cover sequential cold workers without enlarging worker/authority budgets.
+    until = min(ACTIVE.deadline, time.monotonic() + max(1, len(BOUNDS_SENDS[REQUESTED_CASE])) * 30 + 15)
+    while not path.exists():
+        assert time.monotonic() < until, "Expected bounded application failure did not return"
+        time.sleep(0.02)
+    blocked = read_json(path)
+    resources = Resources(load(CONFIG))
+    with resources.driver() as driver:
+        store = resources.store(driver)
+        inspection = store.get_run_inspection(RUN_ID)
+        attempt = store.get_generation_attempt(RUN_ID)
+        blocked.update(
+            reserved=inspection.budget.reserved.model_dump(mode="json"),
+            deadline=inspection.budget.deadline, admitted_at=inspection.budget.admitted_at,
+            per_operation_ceiling_seconds=inspection.budget.per_operation_ceiling_seconds,
+            attempt=None if attempt is None else attempt.model_dump(mode="json"),
+            submission=store.get_submission_inspection(OPERATION).model_dump(mode="json"),
+        )
+    write_evidence(path.name, blocked)
+
+
+def verify_bounds_result(value, cancellation, raw_contract):
+    """Retain the rejected send, prior probe charge, immutable identity and exact cleanup."""
+    from decimal import Decimal
+
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import Resources
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import contract_digest, parse_contract
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.owned_process_group import group_members
+
+    assert BOUNDS_NEGATIVE and ACTIVE.role == "harness"
+    before = read_json(Path("/evidence/join-bounds-blocked.json"))
+    result, receipt = value["data"]["workflow"], value["data"]["workflowSubmission"]
+    assert receipt == value["data"]["workflowCommand"]
+    assert receipt["acceptedContractDigest"] == contract_digest(parse_contract(raw_contract))
+    assert result["id"] == RUN_ID and result["state"] == ("stopped" if before["state"] == "stopped" else "cancelled")
+    assert cancellation["data"]["cancelWorkflow"]["durable"] == "recorded"
+    resources = Resources(load(CONFIG))
+    with resources.driver() as driver:
+        store = resources.store(driver)
+        inspection = store.get_run_inspection(RUN_ID)
+        attempt = store.get_generation_attempt(RUN_ID)
+        if REQUESTED_CASE == "bounds-cost":
+            assert attempt is None and before["attempt"] is None
+        else:
+            after = attempt.model_dump(mode="json")
+            for key in ("fence", "registration", "contract_json", "authorization", "reservation", "admitted_at", "released_at"):
+                assert after[key] == before["attempt"][key]
+        assert store.get_submission_inspection(OPERATION).model_dump(mode="json") == before["submission"]
+        assert inspection.budget.reserved.model_dump(mode="json") == before["reserved"]
+        for key in ("admitted_at", "deadline", "per_operation_ceiling_seconds"):
+            assert getattr(inspection.budget, key) == before[key]
+        if attempt is not None:
+            assert attempt.released is True and attempt.cleanup is not None
+            assert (attempt.receipt is not None) is (REQUESTED_CASE == "bounds-images")
+        expected_models = len(BOUNDS_SENDS[REQUESTED_CASE])
+        obligations = [item for item in inspection.cleanup.intents if item.registration_id is not None]
+        assert len(obligations) == expected_models
+        registrations, stages = [], []
+        for item in obligations:
+            if attempt is not None and item.intent_id == attempt.fence.intent_id:
+                registration, stage = attempt.registration, "generate"
+            else:
+                intent = store.get_scene_intent(RUN_ID, item.intent_id)
+                registration, stage = intent.worker_registration, intent.action
+            assert not any(row["state"] not in {"Z", "X"} for row in group_members(registration.pgid).values())
+            assert item.cleanup_observation == "owned_process_group_stopped"
+            assert item.cleanup_state == "recorded" and item.retired_owner.dirty is False
+            registrations.append(registration.model_dump(mode="json"))
+            stages.append((registration.pid, stage))
+        assert inspection.cleanup.current_scope_owner is None or not inspection.cleanup.current_scope_owner.dirty
+        accounting = next(p.registration.settings.workflow_accounting for p in resources.config.profiles
+                          if p.registration.profile_id == "generation")
+        assert inspection.budget.reserved.model_calls == 2 * expected_models
+        assert inspection.budget.reserved.model_tokens == 2 * expected_models * accounting.max_tokens
+        assert Decimal(str(inspection.budget.reserved.cost_ceiling_usd)) == 2 * expected_models * Decimal(accounting.max_cost_usd)
+        assert (inspection.budget.reserved.cost_ceiling_usd > 0) is bool(expected_models)
+        # Screen actual node/relationship property values, not just DTO projections.
+        with driver.session(database=resources.config.value["binding"]["database"]) as session:
+            nodes = session.run("MATCH (n) RETURN properties(n) AS p").data()
+            edges = session.run("MATCH ()-[r]->() RETURN properties(r) AS p").data()
+        graph = json.dumps(dict(nodes=nodes, relationships=edges), sort_keys=True).encode()
+        assert len(graph) <= 4 * 1024 * 1024
+        screen(graph)
+        write_evidence("join-retained.json", dict(
+            join_case=REQUESTED_CASE, run_id=RUN_ID,
+            rejected_before_forbidden_send=REQUESTED_CASE != "bounds-uncertain",
+            uncertain_transmission_not_refunded=REQUESTED_CASE == "bounds-uncertain",
+            registrations=registrations, stages=stages,
+            reserved=before["reserved"], admitted_at=before["admitted_at"], deadline=before["deadline"],
+            receipt=receipt, cleanup=inspection.cleanup.model_dump(mode="json"),
+            nodes_screened=len(nodes), relationships_screened=len(edges), sentinel_values_absent=True,
+            whole_worker_reservation_retained=True, actual_provider_billing_verified=False,
+        ))
+    write_evidence("join-http-result.json", dict(result=value, cancellation=cancellation))
 
 
 def verify_result(value, raw_contract):
@@ -2730,7 +3343,13 @@ def verify_result(value, raw_contract):
         assert {r.candidate_digest for r in evidence.observation.evidence} == {candidate.digest}
         assert len({r.cohort.model_dump_json() for r in evidence.observation.evidence}) == 1
         reserved = inspection.budget.reserved
-        assert (reserved.model_calls, reserved.model_tokens, reserved.cost_ceiling_usd) == (8, 80000, 0)
+        from decimal import Decimal
+
+        bounds = [p.registration.settings.workflow_accounting for p in resources.config.profiles]
+        assert reserved.model_calls == 8
+        assert reserved.model_tokens == 4 * sum(p.max_tokens for p in bounds)
+        assert Decimal(str(reserved.cost_ceiling_usd)) == 4 * sum(Decimal(p.max_cost_usd) for p in bounds)
+        assert (reserved.cost_ceiling_usd > 0) is (REQUESTED_CASE == "bounds")
         assert reserved.runtime_allowance_seconds == 120
         write_evidence(
             "join-retained.json",
@@ -2798,15 +3417,18 @@ def verify_children(guard, manifest, *, positive=False):
         assert len(interrupted) == (1 if JOIN_CASE == "resume" else 0)
         completed = [row for row in rows if row not in interrupted]
         assert not missing and len(guard.spawn_records) == CLIENT_LAUNCHES
-        assert len(servers) == (2 if JOIN_CASE == "resume" else 1)
-        assert len(rows) == CLIENT_LAUNCHES + len(servers) + 4
+        assert len(servers) == (2 if JOIN_CASE in {"resume", "operator"} else 1)
+        expected_models = len(BOUNDS_SENDS[REQUESTED_CASE]) if BOUNDS_NEGATIVE else 4
+        assert len(rows) == CLIENT_LAUNCHES + len(servers) + expected_models
+        failed_model = next((r["pid"] for r in reversed(rows) if r["role"] == "model"), None) if BOUNDS_NEGATIVE else None
         assert all(
             row["status"] == "completed"
             and row["returncode"]
             == (
                 3
                 if JOIN_CASE == "resume" and row["argv"][1:] == RECONCILE
-                else 2 if JOIN_CASE == "resume" and row["argv"][1:] == LOST_RESPONSE else 0
+                else 2 if JOIN_CASE == "resume" and row["argv"][1:] == LOST_RESPONSE
+                else 1 if row["pid"] == failed_model else 0
             )
             for row in completed
         )
@@ -2819,20 +3441,20 @@ def verify_children(guard, manifest, *, positive=False):
             for p in Path("/evidence").glob("join-process-*.json")
             if not p.name.endswith("-started.json")
         }
-        server = next(row for row in completed if row["role"] == "server")
-        assert server["owner_constructions"] == 1 and server["allowed"]["child_launch"] == 4
+        server = next(row for row in completed if row["role"] == "server" and row["owner_constructions"] == 1)
+        assert server["owner_constructions"] == 1 and server["allowed"]["child_launch"] == expected_models
+        if JOIN_CASE == "operator":
+            other = next(row for row in servers if row is not server)
+            assert other["owner_constructions"] == other["allowed"]["child_launch"] == 0
         retained = read_json(Path("/evidence/join-retained.json"))
         models = [row for row in rows if row["role"] == "model"]
-        assert len(models) == 4
+        assert len(models) == expected_models
         assert all(row["simulator_registry_prepared"] is False for row in [server, *models])
         assert {r["pid"] for r in retained["registrations"]} == {r["pid"] for r in models}
         stage_by_pid = dict(retained["stages"])
-        assert [stage_by_pid[row["pid"]] for row in server["spawn_records"]] == [
-            "generate",
-            "observe",
-            "repair",
-            "observe",
-        ]
+        assert [stage_by_pid[row["pid"]] for row in server["spawn_records"]] == (
+            ["generate", "observe"][:expected_models] if BOUNDS_NEGATIVE else ["generate", "observe", "repair", "observe"]
+        )
         for row in rows:
             assert not any(r["state"] not in {"Z", "X"} for r in group_members(row["pid"]).values())
             if row["role"] in {"setup", "client", "launcher", "model"}:
@@ -2843,15 +3465,38 @@ def verify_children(guard, manifest, *, positive=False):
                 assert row["basic_auth_handoffs"] and all(row["basic_auth_handoffs"])
         for row in models:
             assert row["parent_pid"] == server["pid"] and row["transport_installed_before_model_construction"] is True
+            if PRIVATE_ROLES_CASE:
+                expected_role = "assessment" if stage_by_pid[row["pid"]] == "observe" else "generation"
+                assert row["private_role_delivery"] == [expected_role]
+            if REQUESTED_CASE == "prior":
+                expected_consumption = []
+                if stage_by_pid[row["pid"]] == "generate":
+                    sha = read_json(Path("/evidence/join-restart.json"))["prior"]["snapshot"]["context_sha256"]
+                    expected_consumption = [dict(context_sha256=sha, exact_context_in_payload=True)]
+                assert row["prior_consumption"] == expected_consumption
+                assert row["prior_reads"] == 0 and row["prior_role_handoffs"] == []
             registration = next(r for r in retained["registrations"] if r["pid"] == row["pid"])
             assert registration["start_ticks"] == row["start_ticks"]
             assert registration["pgid"] == row["pgid"] and registration["sid"] == row["sid"]
             sdk = read_json(Path(f"/evidence/generation-child-{row['pid']}-sdk.json"))
-            assert row["sdk_calls"] == sdk["calls"] == 2
-            assert [r["kind"] for r in sdk["responses"]] == ["ping", "completion"]
+            index = next(i for i, child in enumerate(server["spawn_records"]) if child["pid"] == row["pid"])
+            expected_sends = BOUNDS_SENDS[REQUESTED_CASE][index] if BOUNDS_NEGATIVE else 2
+            assert row["sdk_calls"] == sdk["calls"] == expected_sends
+            approvals = [a for a in server["model_send_authorizations"] if a["pid"] == row["pid"]]
+            assert [a["ordinal"] for a in approvals] == list(range(1, expected_sends + 1))
+            assert [a["request_sha256"] for a in approvals] == [r["request_sha256"] for r in sdk["request_shapes"]]
+            assert [r["kind"] for r in sdk["responses"]] == ["ping", "completion"][:expected_sends]
+            assert [r["output_tokens"] for r in sdk["request_shapes"]] == [8, 64][:expected_sends]
+            if REQUESTED_CASE in {"bounds-routing", "bounds-output"}:
+                assert sdk["injected_after_sdk_serialization"] == REQUESTED_CASE
+            if REQUESTED_CASE == "bounds-uncertain":
+                assert sdk["outcome"] == "potential_transmission_no_response"
+            assert all(r["url"] == "https://api.openai.com/v1/chat/completions" for r in sdk["request_shapes"])
+            assert all(r["text_bytes"] <= 100000 and r["schema_bytes"] <= 100000 for r in sdk["request_shapes"])
+            assert all(r["images"] <= 4 and r["body_bytes"] <= 300000 for r in sdk["request_shapes"])
         assert verify_sources() == manifest
     return {
-        "join_case": JOIN_CASE,
+        "join_case": REQUESTED_CASE,
         "joined_processes": [
             {"pid": row["pid"], "role": row["role"], "returncode": row.get("returncode"), "status": row["status"]}
             for row in rows
@@ -2870,7 +3515,7 @@ def verify_positive():
         assert time.monotonic() < deadline, "stopped server finalization witness missing"
         time.sleep(0.02)
     proof = verify_children(ACTIVE, verify_sources(), positive=True)
-    if JOIN_CASE == "cancel":
+    if JOIN_CASE == "cancel" or BOUNDS_NEGATIVE:
         ACTIVE.positive_complete = True
         write_evidence("join-positive.json", proof)
         return

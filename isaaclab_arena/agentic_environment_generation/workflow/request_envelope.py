@@ -3,10 +3,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Opt-in request assumptions for a trusted universal accounting attestation.
+"""Frozen request assumptions and explicit conservative, conditional price derivations.
 
-This callable contract is not an installed profile, grant, price derivation or
-provider-rate verification. Byte ceilings are not token estimates or billing.
+Neither a registered bound nor a synthetic pricing fixture verifies provider rates
+or grants execution. Byte ceilings alone are not token estimates or billing.
 """
 
 import base64
@@ -17,8 +17,113 @@ import struct
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
+from typing import Annotated, Literal
 
-from .accounting import checked_workflow_accounting
+from pydantic import Field, model_validator
+
+from .accounting import _usd_units, checked_workflow_accounting
+from .contracts import Count, FrozenModel, Identifier, Text
+
+PositiveBound = Annotated[int, Field(strict=True, gt=0, le=1_000_000_000)]
+BoundsVersion = Annotated[int, Field(strict=True, ge=1, le=1)]
+
+
+class RequestLimits(FrozenModel):
+    """Public envelope fields; literal model, endpoint and accounting come from the profile."""
+
+    version: BoundsVersion
+    max_text_bytes: PositiveBound
+    max_schema_bytes: PositiveBound
+    max_request_bytes: PositiveBound
+    output_parameter: Literal["max_tokens", "max_completion_tokens"]
+    max_output_tokens: PositiveBound
+    image_formats: tuple[Literal["png"], ...]
+    max_images: Count
+    max_image_bytes: PositiveBound
+    max_image_width: PositiveBound
+    max_image_height: PositiveBound
+    image_detail: Literal["auto", "low", "high"]
+    permitted_fields: tuple[str, ...]
+    route_policy: Literal["direct-chat-completions-v1"]
+
+
+class PricingBasis(FrozenModel):
+    """Explicit universal upper-bound assumptions; v1 installed evidence is synthetic only.
+
+    The input multiplier must cover all non-image billable input, including
+    message overhead and schema. The additional per-image tokens cover the worst
+    admitted dimensions/detail. Output includes default reasoning. Full price is
+    charged even for failed or uncertain sends, without cache or retry discounts.
+    """
+
+    version: BoundsVersion
+    revision: Identifier
+    kind: Literal["synthetic_fixture"]
+    source: Text
+    provider: Literal["openai"]
+    input_tokens_per_request_byte: PositiveBound
+    image_tokens_per_image: Count
+    input_usd_per_million_tokens: str
+    output_usd_per_million_tokens: str
+    per_request_usd: str
+    assumptions: Annotated[tuple[Text, ...], Field(min_length=1, max_length=16)]
+
+    @model_validator(mode="after")
+    def prices(self):
+        for price in (self.input_usd_per_million_tokens, self.output_usd_per_million_tokens, self.per_request_usd):
+            _usd_units(price)
+        return self
+
+
+class RequestBounds(FrozenModel):
+    """Versioned profile binding of an executable envelope and reviewable price basis."""
+
+    version: BoundsVersion
+    envelope: RequestLimits
+    pricing: PricingBasis
+
+    def accounting(self, *, model, endpoint):
+        """Derive the universal per-send ceiling with exact integer nano-USD rounding."""
+        limits, price = self.envelope, self.pricing
+        if limits.max_images and price.image_tokens_per_image == 0:
+            raise ValueError("Explicit worst-case image token allowance required")
+        inputs = (
+            limits.max_request_bytes * price.input_tokens_per_request_byte
+            + limits.max_images * price.image_tokens_per_image
+        )
+        # Round each positive fractional nano-USD upwards, never down to free.
+        units = _usd_units(price.per_request_usd)
+        units += (inputs * _usd_units(price.input_usd_per_million_tokens) + 999999) // 1000000
+        units += (limits.max_output_tokens * _usd_units(price.output_usd_per_million_tokens) + 999999) // 1000000
+        whole, fraction = divmod(units, 10**9)
+        return checked_workflow_accounting(
+            dict(
+                version=1,
+                attested=True,
+                model=model,
+                endpoint=endpoint,
+                max_tokens=inputs + limits.max_output_tokens,
+                max_cost_usd=f"{whole}.{fraction:09d}",
+            )
+        )
+
+    def bind(self, *, model, endpoint, accounting, inference_policy):
+        """Reject mismatched settings before returning the existing final-request guard."""
+        expected = self.accounting(model=model, endpoint=endpoint)
+        observed = checked_workflow_accounting(accounting, model=model, endpoint=endpoint)
+        if (
+            any(expected[k] != observed[k] for k in expected if k != "max_cost_usd")
+            or _usd_units(expected["max_cost_usd"]) != _usd_units(observed["max_cost_usd"])
+            or type(inference_policy) is not dict
+            or inference_policy.get("provider") != self.pricing.provider
+            or inference_policy.get("model") != model
+            or inference_policy.get("endpoint", "").rstrip("/") != endpoint.rstrip("/")
+            or inference_policy.get("request_policy", {}).get("token_limit_parameter") != self.envelope.output_parameter
+        ):
+            raise ValueError("Request/pricing binding mismatch")
+        return RequestEnvelope(
+            **self.envelope.model_dump(mode="json"), model=model, endpoint=endpoint, accounting=observed
+        )
 
 
 def _json_copy(value):

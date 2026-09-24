@@ -118,6 +118,7 @@ def bounded_client(
     allowance: CallAllowance,
     strict_model_binding: bool = True,
     request_envelope=None,
+    send_guard=None,
 ):
     """Install bounded transport before backend construction in an isolated worker.
 
@@ -128,6 +129,8 @@ def bounded_client(
             to preserve its historical configured-model override.
         request_envelope: Optional frozen v1 callable contract. This is not a
             persisted profile/grant binding or verification of provider prices.
+        send_guard: Optional current-authority check on final bytes before each
+            physical send. Requires an envelope; never called after transmission.
 
     Overlapping global factory patches are rejected rather than queued. The
     caller must disable backend dotenv loading and pass its explicit profile.
@@ -141,6 +144,8 @@ def bounded_client(
     global _managed_active
     if not isinstance(allowance, CallAllowance):
         raise TypeError("allowance must be a CallAllowance")
+    if send_guard is not None and (not callable(send_guard) or request_envelope is None):
+        raise ValueError("Final send authority requires an executable envelope")
     api_key, base_url, model = (config[name] for name in ("api_key", "base_url", "model"))
     if not all(isinstance(value, str) and value for value in (api_key, base_url, model)):
         raise ValueError("Explicit provider configuration required")
@@ -216,6 +221,12 @@ def bounded_client(
                             ):
                                 raise ValueError("request envelope serialized bytes changed")
                             request_envelope.check_http(request, api_key=api_key)
+                            if time.monotonic() >= allowance.deadline:
+                                raise ValueError("Generation send deadline exhausted")
+                            if send_guard is not None:
+                                send_guard(request)
+                            if time.monotonic() >= allowance.deadline:
+                                raise ValueError("Generation send authority expired")
                             pending.admitted = False
                         except ValueError:
                             raise OpenAIError("request envelope rejected before transport") from None

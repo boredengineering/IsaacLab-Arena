@@ -325,7 +325,7 @@ def test_public_selection_rejects_malformed_or_asserted_authority(change):
         (None, None, None, "unresolved", "unresolved"),
     ],
 )
-def test_offline_database_compatibility_is_literal_and_never_claims_prior_slot(
+def test_offline_database_compatibility_is_literal_and_declares_separate_prior_slot(
     endpoint, authentication, tls, transport, auth
 ):
     value = public_selection()
@@ -345,10 +345,10 @@ def test_offline_database_compatibility_is_literal_and_never_claims_prior_slot(
         assert row["endpoint"] == endpoint and row["authentication"] == authentication and row["tls"] == tls
         assert row["transport"] == transport and row["auth"] == auth
     assert report["database_compatibility"]["operational_db"]["installed_credential_slot"] == "databases.operational"
-    assert report["database_compatibility"]["prior_read"]["installed_credential_slot"] is None
+    assert report["database_compatibility"]["prior_read"]["installed_credential_slot"] == "databases.prior_read"
     assert report["installed_boundary"]["admin_credential_slot"] == "databases.operational"
     assert report["installed_boundary"]["distinct_principals_select_distinct_db_logins"] is False
-    assert report["installed_boundary"]["provider_bootstrap"] == "implementation_missing"
+    assert report["installed_boundary"]["provider_bootstrap"] == "private_roles_v2"
     assert report["installed_boundary"]["mode"] == "query-only"
     if "incompatible" in (transport, auth):
         assert any(

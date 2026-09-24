@@ -140,12 +140,25 @@ class RetainedArtifacts:
 
         prompt = intent.contract.source.prompt
         sha = contract_digest(intent.contract)
-        binding = RetainedPriorArtifacts._binding(prompt, sha, run_id)
-        version = digest(canonical(binding))
-        if not self.area.has_final("scene-prior", version):
-            return None
-        manifest = self.area.read_final_manifest("scene-prior", version, binding=binding)
-        receipt = RetainedPriorReceipt(f"final/scene-prior/{version}", json.dumps(manifest, sort_keys=True))
+        if intent.contract.retrieval is not None:
+            reference = self.service.bound_store.get_prior_reference(run_id)
+            if reference is None:
+                raise ValueError("Authoritative prior linkage unavailable")
+            receipt = RetainedPriorArtifacts(self.area).reopen(
+                reference,
+                contract=intent.contract,
+                run_id=run_id,
+                protect=self.protect,
+                enforce_policy=False,
+            )
+            manifest = json.loads(receipt.manifest_json)
+        else:
+            binding = RetainedPriorArtifacts._binding(prompt, sha, run_id)
+            version = digest(canonical(binding))
+            if not self.area.has_final("scene-prior", version):
+                return None
+            manifest = self.area.read_final_manifest("scene-prior", version, binding=binding)
+            receipt = RetainedPriorReceipt(f"final/scene-prior/{version}", json.dumps(manifest, sort_keys=True))
         snapshot = RetainedPriorArtifacts(self.area).verified_snapshot(
             receipt, prompt=prompt, contract_digest=sha, run_id=run_id, protect=self.protect
         )

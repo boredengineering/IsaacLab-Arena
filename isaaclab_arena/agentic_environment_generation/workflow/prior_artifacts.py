@@ -9,9 +9,43 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
+from typing import Annotated, Literal
+
+from pydantic import Field
 
 from ..prior_receipt import validate_prior_snapshot
+from .contracts import FrozenModel, Hash, Identifier, contract_digest
 from .scene_evidence_artifacts import _protected, canonical
+
+PRIOR_REFERENCE_BYTES = 262144
+
+
+class FrozenPriorReference(FrozenModel):
+    """Authoritative run linkage to one immutable selection and its exact prior bytes."""
+
+    schema_version: Literal["1"]
+    run_id: Identifier
+    contract_digest: Hash
+    selection_sha256: Hash
+    disposition: Literal["measured", "structural", "empty", "unavailable"]
+    context_sha256: Hash
+    relative_directory: Annotated[str, Field(strict=True, min_length=1, max_length=128)]
+    manifest_json: Annotated[str, Field(strict=True, min_length=2, max_length=PRIOR_REFERENCE_BYTES)]
+
+
+def checked_prior_reference(raw, *, contract, run_id):
+    """Validate the bounded linkage independently of filesystem access or credentials."""
+    if type(raw) is not str or len(raw.encode()) > PRIOR_REFERENCE_BYTES or contract.retrieval is None:
+        raise ValueError("Prior linkage unavailable")
+    ref = FrozenPriorReference.model_validate_json(raw)
+    if (
+        ref.run_id != run_id
+        or ref.contract_digest != contract_digest(contract)
+        or ref.selection_sha256 != hashlib.sha256(canonical(contract.retrieval.model_dump(mode="json"))).hexdigest()
+        or canonical(ref.model_dump(mode="json"), max_bytes=PRIOR_REFERENCE_BYTES).decode() != raw
+    ):
+        raise ValueError("Prior linkage differs")
+    return ref
 
 
 @dataclass(frozen=True)
@@ -90,3 +124,56 @@ class RetainedPriorArtifacts:
             validate_prior_snapshot(envelope["prior_snapshot"], prompt=prompt)
             self.area.promote(version, "scene-prior", version, manifest)
         return envelope["prior_snapshot"]
+
+    def reference(self, receipt, *, contract, run_id, protect):
+        """Bind the validated retained disposition and context without granting execution."""
+        snapshot = self.verified_snapshot(
+            receipt,
+            prompt=contract.source.prompt,
+            contract_digest=contract_digest(contract),
+            run_id=run_id,
+            protect=protect,
+        )
+        if contract.retrieval is None:
+            raise ValueError("Explicit prior selection required")
+        ref = FrozenPriorReference(
+            schema_version="1",
+            run_id=run_id,
+            contract_digest=contract_digest(contract),
+            selection_sha256=hashlib.sha256(canonical(contract.retrieval.model_dump(mode="json"))).hexdigest(),
+            disposition=snapshot["status"],
+            context_sha256=snapshot["context_sha256"],
+            relative_directory=receipt.relative_directory,
+            manifest_json=receipt.manifest_json,
+        )
+        raw = canonical(ref.model_dump(mode="json"), max_bytes=PRIOR_REFERENCE_BYTES).decode()
+        checked_prior_reference(raw, contract=contract, run_id=run_id)
+        protect(raw)
+        return raw
+
+    def reopen(self, raw, *, contract, run_id, protect, enforce_policy=True):
+        """Reopen only the authoritative bytes; never retrieve, reconstruct or substitute."""
+        ref = checked_prior_reference(raw, contract=contract, run_id=run_id)
+        receipt = RetainedPriorReceipt(ref.relative_directory, ref.manifest_json)
+        snapshot = self.verified_snapshot(
+            receipt,
+            prompt=contract.source.prompt,
+            contract_digest=contract_digest(contract),
+            run_id=run_id,
+            protect=protect,
+        )
+        if snapshot["status"] != ref.disposition or snapshot["context_sha256"] != ref.context_sha256:
+            raise ValueError("Prior linkage content differs")
+        selection = contract.retrieval
+        for key, expected in selection.settings.model_dump(mode="json").items():
+            observed = snapshot["effective_settings"][key]
+            if observed != expected and not (ref.disposition == "unavailable" and observed is None):
+                raise ValueError("Retained prior settings differ")
+        if enforce_policy and (
+            ref.disposition == "unavailable"
+            and selection.required
+            or ref.disposition == "empty"
+            and not selection.allow_empty
+        ):
+            raise ValueError("Frozen prior requirement not satisfied")
+        return receipt

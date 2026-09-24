@@ -64,54 +64,88 @@ def configuration():
         return None
 
 
-def retrieve_snapshot(prompt, config, *, driver_factory=None, managed_context=None):
+def retrieve_snapshot(prompt, config, *, driver_factory=None, managed_context=None, settings=None, read_guard=None):
     """Retrieve through an explicitly configured, owned and bounded driver."""
     from isaaclab_arena.agentic_environment_generation.graph_rag import GraphRAGRetriever
     from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import get_neo4j_driver
 
-    if managed_context is not None:
-        from .managed_retrieval import checked_context
+    retriever_options = {}
+    driver_limits = dict(
+        connection_timeout_seconds=3, connection_acquisition_timeout_seconds=5, max_transaction_retry_time_seconds=0
+    )
+    if settings is not None:
+        from isaaclab_arena.agentic_environment_generation.workflow.contracts import PriorRetrievalSettings
 
+        settings = PriorRetrievalSettings.model_validate(settings.model_dump(mode="json"))
+        retriever_options = {key: getattr(settings, key) for key in ("limit", "min_success_rate", "min_episodes")}
+        driver_limits = {key: getattr(settings, key) for key in driver_limits}
+    managed_open = None
+    cleanup_errors: tuple[type[BaseException], ...] = (GraphCleanupError,)
+    if managed_context is not None:
         if config is None:
             raise ValueError("Managed retrieval requires graph authorization")
+        from .managed_retrieval import ReadCleanupError, checked_context, open_managed_provider
+
+        managed_open = open_managed_provider
+        cleanup_errors += (ReadCleanupError,)
         managed_context = checked_context(managed_context, checked_graph_config(config))
-    unavailable = GraphRAGRetriever().retrieve_prior_snapshot(prompt)
+    unavailable = GraphRAGRetriever().retrieve_prior_snapshot(prompt, **retriever_options)
+    denied = False
+
+    def check(seconds=0.0):
+        nonlocal denied
+        if denied:
+            raise ValueError("Prior read authorization unavailable")
+        if read_guard is not None:
+            try:
+                read_guard(seconds)
+            except Exception:
+                denied = True
+                raise ValueError("Prior read authorization unavailable") from None
+
+    def before_read():
+        check(
+            driver_limits["connection_timeout_seconds"]
+            + driver_limits["connection_acquisition_timeout_seconds"]
+            + unavailable["effective_settings"]["query_timeout_seconds"]
+        )
+
     if config is None:
+        check()
         return unavailable
     config = checked_graph_config(config)
-    unavailable["effective_settings"].update(
-        connection_timeout_seconds=3,
-        connection_acquisition_timeout_seconds=5,
-        max_transaction_retry_time_seconds=0,
-    )
-    from .managed_retrieval import ReadCleanupError, open_managed_provider
-
+    unavailable["effective_settings"].update(driver_limits)
     started = time.monotonic()
     driver = None
     try:
+        before_read()
         driver = (driver_factory or get_neo4j_driver)(
             uri=config["uri"],
             user=config["user"],
             password=config["password"],
-            connection_timeout=3,
-            connection_acquisition_timeout=5,
+            connection_timeout=driver_limits["connection_timeout_seconds"],
+            connection_acquisition_timeout=driver_limits["connection_acquisition_timeout_seconds"],
             max_connection_pool_size=1,
-            max_transaction_retry_time=0,
+            max_transaction_retry_time=driver_limits["max_transaction_retry_time_seconds"],
         )
 
-        attachment = nullcontext(None) if managed_context is None else open_managed_provider(managed_context)
+        attachment = nullcontext(None)
+        if managed_context is not None:
+            assert managed_open is not None, "Explicit managed attachment required"
+            attachment = managed_open(managed_context)
         with attachment as provider:
             snapshot = GraphRAGRetriever(driver).retrieve_prior_snapshot(
-                prompt, database=config["database"], managed_selection_provider=provider
+                prompt,
+                database=config["database"],
+                managed_selection_provider=provider,
+                before_read=before_read if read_guard is not None else None,
+                **retriever_options,
             )
-        snapshot["effective_settings"].update(
-            connection_timeout_seconds=3,
-            connection_acquisition_timeout_seconds=5,
-            max_transaction_retry_time_seconds=0,
-        )
+        check()
+        snapshot["effective_settings"].update(driver_limits)
         reject_secret(snapshot, config["password"])
         return snapshot
-    except (ReadCleanupError, GraphCleanupError):
+    except cleanup_errors:
         raise
     except Exception:
         unavailable["warnings"] = ["retrieval_failed"]
@@ -119,3 +153,4 @@ def retrieve_snapshot(prompt, config, *, driver_factory=None, managed_context=No
         return unavailable
     finally:
         close_graph_resources(driver)
+        check()

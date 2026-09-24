@@ -6,8 +6,11 @@
 # Copyright (c) 2026, The Isaac Lab Arena Project Developers.
 # SPDX-License-Identifier: Apache-2.0
 """Immutable generation files using the existing artifact area, never a queue."""
+import base64
 import hashlib
 import json
+import re
+from dataclasses import dataclass
 
 from ..workbench.research_artifacts import ArtifactArea, ArtifactError
 from .attempts import AttemptFence, WorkerRegistration
@@ -31,6 +34,154 @@ def encoded(value):
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
+
+
+@dataclass(frozen=True)
+class RetainedBundle:
+    """Exact currently verified bytes; the reference never grants path authority."""
+
+    run_id: str
+    kind: str
+    reference_id: str
+    manifest_digest: str | None
+    files: dict[str, bytes]
+    record: object
+    contract_digest: str | None = None
+
+
+class RetainedArtifacts:
+    """Resolve immutable bytes from scoped retained records, never caller paths."""
+
+    def __init__(self, service, area, protect):
+        assert type(area) is ArtifactArea and callable(protect), "Bound artifact area and public protection required"
+        self.service, self.area, self.protect = service, area, protect
+
+    def read(self, principal, run_id, kind, reference_id):
+        if kind not in {"prior", "candidate", "generation", "evidence"} or kind == "prior" and reference_id != run_id:
+            raise ValueError("Unsupported artifact reference")
+        if kind == "evidence" and (
+            type(reference_id) is not str or re.fullmatch(r"[0-9a-f]{128}", reference_id) is None
+        ):
+            raise ValueError("Exact evidence and manifest identities required")
+        intent = self.service.read_run_intent(principal, run_id, protect=self.protect)
+        if intent is None:
+            return None
+        if kind == "evidence":
+            from .evidence import CandidateBinding
+            from .scene_evidence_artifacts import SceneEvidenceArtifacts
+            from .scene_loop import profile_digest
+
+            evidence_id, manifest_digest = reference_id[:64], reference_id[64:]
+            view = self.service.read_scene_evidence(principal, evidence_id, protect=self.protect)
+            if view is None:
+                return None
+            if view.run_id != run_id or view.evidence_id != evidence_id:
+                raise ValueError("Evidence does not belong to selected run")
+            entries = [entry for entry in view.observation.evidence if entry.manifest_digest == manifest_digest]
+            if not entries or manifest_digest not in view.observation.verified_manifest_digests:
+                raise ValueError("Manifest is not a retained verified evidence reference")
+            selected = entries[0]
+            family = "visual-answer" if selected.modality == "visual" else "observation"
+            if any(
+                (entry.candidate_digest, entry.cohort, entry.modality == "visual")
+                != (selected.candidate_digest, selected.cohort, selected.modality == "visual")
+                for entry in entries
+            ):
+                raise ValueError("Ambiguous retained manifest binding")
+            binding = CandidateBinding(
+                candidate_digest=selected.candidate_digest,
+                contract_digest=contract_digest(intent.contract),
+                profile_digest=profile_digest(intent.contract),
+            )
+            receipt = SceneEvidenceArtifacts(self.area).load_receipt(
+                binding,
+                selected.cohort,
+                kind=family,
+                manifest_digest=manifest_digest,
+                protect=self.protect,
+            )
+            files = self.area.verify(receipt.relative_directory, json.loads(receipt.manifest_json))
+            return RetainedBundle(run_id, kind, reference_id, manifest_digest, files, receipt, binding.contract_digest)
+        if kind == "generation":
+            _, attempt, _ = self.service.read_generation_recovery(principal, run_id)
+            if attempt.fence.run_id != run_id or attempt.fence.attempt_id != reference_id:
+                raise ValueError("Generation does not belong to selected run/attempt")
+            receipt = attempt.receipt
+            if receipt is None:
+                return None
+            if (
+                not attempt.released
+                or receipt.fence != attempt.fence
+                or receipt.registration != attempt.registration
+                or receipt.contract_digest != contract_digest(intent.contract)
+            ):
+                raise ValueError("Retained generation receipt binding differs")
+            files = GenerationArtifacts(self.area).verified_bytes(receipt, protect=self.protect)
+            return RetainedBundle(
+                run_id, kind, reference_id, receipt.manifest_sha256, files, receipt, receipt.contract_digest
+            )
+        if kind == "candidate":
+            view = self.service.read_scene_candidate(principal, reference_id, protect=self.protect)
+            if view is None:
+                return None
+            candidate = view.candidate
+            if view.run_id != run_id or candidate.run_id != run_id or candidate.candidate_id != reference_id:
+                raise ValueError("Candidate does not belong to selected run")
+            raw = candidate.scene_json.encode()
+            if len(raw) > 2 * 1024 * 1024 or digest(raw) != candidate.digest:
+                raise ValueError("Retained candidate bytes changed")
+            return RetainedBundle(
+                run_id, kind, reference_id, None, {"candidate.json": raw}, candidate, contract_digest(intent.contract)
+            )
+        if intent.contract.source.kind != "new":
+            return None
+        from .prior_artifacts import RetainedPriorArtifacts, RetainedPriorReceipt
+        from .scene_evidence_artifacts import canonical
+
+        prompt = intent.contract.source.prompt
+        sha = contract_digest(intent.contract)
+        binding = RetainedPriorArtifacts._binding(prompt, sha, run_id)
+        version = digest(canonical(binding))
+        if not self.area.has_final("scene-prior", version):
+            return None
+        manifest = self.area.read_final_manifest("scene-prior", version, binding=binding)
+        receipt = RetainedPriorReceipt(f"final/scene-prior/{version}", json.dumps(manifest, sort_keys=True))
+        snapshot = RetainedPriorArtifacts(self.area).verified_snapshot(
+            receipt, prompt=prompt, contract_digest=sha, run_id=run_id, protect=self.protect
+        )
+        files = self.area.verify(receipt.relative_directory, manifest)
+        return RetainedBundle(run_id, kind, reference_id, manifest["digest"], files, snapshot, sha)
+
+
+def artifact_chunk(bundle, name, expected_sha256, offset, limit):
+    """Return at most 64 KiB of an exact fully verified immutable file."""
+    if (
+        type(name) is not str
+        or name not in bundle.files
+        or type(offset) is not int
+        or offset < 0
+        or type(limit) is not int
+        or not 1 <= limit <= 65536
+        or type(expected_sha256) is not str
+    ):
+        raise ValueError("Invalid bounded artifact selection")
+    raw = bundle.files[name]
+    sha = digest(raw)
+    if expected_sha256 != sha or offset > len(raw):
+        raise ValueError("Artifact identity or range differs")
+    selected = raw[offset : offset + limit]
+    return dict(
+        run_id=bundle.run_id,
+        kind=bundle.kind,
+        reference_id=bundle.reference_id,
+        name=name,
+        sha256=sha,
+        total_bytes=len(raw),
+        offset=offset,
+        length=len(selected),
+        eof=offset + len(selected) == len(raw),
+        data=base64.b64encode(selected).decode("ascii"),
+    )
 
 
 class GenerationArtifacts:

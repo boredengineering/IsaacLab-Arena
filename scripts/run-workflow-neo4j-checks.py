@@ -307,8 +307,11 @@ def validate_client_proof(proof, mode, junit=None, network_manifest=None):
     if mode == JOIN_MODE:
         assert proof["network_manifest"] == network_manifest
         assert proof["children_verified"] is True and not proof["missing_process_witnesses"]
-        assert len(proof["joined_processes"]) == 17
-        assert proof["allowed"]["child_launch"] == 12 and proof["allowed"]["bolt"] > 0
+        case = proof.get("join_case", "happy")
+        assert case in {"happy", "cancel", "resume", "evidence"}
+        processes, launches = {"happy": (17, 12), "cancel": (16, 14), "resume": (24, 18), "evidence": (18, 13)}[case]
+        assert len(proof["joined_processes"]) == processes
+        assert proof["allowed"]["child_launch"] == launches and proof["allowed"]["bolt"] > 0
         assert not any(proof["forbidden"].values())
         assert proof["preimport"]["before_package_imports"] is True
     if mode in ("workflow-graphql", LIFECYCLE_MODE):
@@ -1718,7 +1721,10 @@ def main(argv=None):
     parser.add_argument("--runtime-image")
     parser.add_argument("--provision-manifest", type=Path)
     parser.add_argument("--initialization-case", choices=INITIALIZATION_CASES)
+    parser.add_argument("--joined-case", choices=("happy", "cancel", "resume", "evidence"))
     options = parser.parse_args(argv)
+    if options.joined_case is not None and options.mode != JOIN_MODE:
+        parser.error("--joined-case requires " + JOIN_MODE)
     try:
         initialization_validate_options(options.mode, options.initialization_case)
     except ValueError as error:
@@ -1915,7 +1921,12 @@ def main(argv=None):
                     "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1",
                     "NVIDIA_VISIBLE_DEVICES=void",
                     "CUDA_VISIBLE_DEVICES=",
-                    *(["OPENBLAS_NUM_THREADS=1", "OMP_NUM_THREADS=1", "MKL_NUM_THREADS=1"] if options.mode == JOIN_MODE else []),
+                    *(
+                        ["OPENBLAS_NUM_THREADS=1", "OMP_NUM_THREADS=1", "MKL_NUM_THREADS=1"]
+                        if options.mode == JOIN_MODE
+                        else []
+                    ),
+                    *(["ARENA_WORKFLOW_JOIN_CASE=" + options.joined_case] if options.joined_case else []),
                     "/isaac-sim/python.sh",
                     *(["-I", "-S"] if options.mode in GRAPHQL_BOOTSTRAP_MODES else []),
                     "/source/" + SELF,
@@ -2070,12 +2081,49 @@ def main(argv=None):
         if options.mode == JOIN_MODE:
             from check_proof import graphql_import_contract
 
+            assert proof["join_case"] == options.joined_case
             graphql_import_contract(dict(discovery["provision"], imports=proof["imports"]))
             for row in proof["joined_processes"]:
-                detail = json.loads(read_confined(output / "evidence", f"join-process-{row['pid']}.json"))
+                terminated = row["status"] == "owned_termination"
+                interrupted = row["status"] == "interrupted_known_unreleased"
+                assert not terminated or options.joined_case == "cancel"
+                assert not interrupted or options.joined_case == "resume"
+                name = f"join-process-{row['pid']}{'-started' if terminated or interrupted else ''}.json"
+                detail = json.loads(read_confined(output / "evidence", name))
                 assert detail["source_sha256"] == proof["source_sha256"]
-                assert detail["status"] == "completed" and detail["returncode"] == 0
-                assert not any(detail["forbidden"].values())
+                if terminated:
+                    retained = json.loads(read_confined(output / "evidence", "join-retained.json"))
+                    assert detail["pid"] == retained["registration"]["pid"] == retained["worker_identity"]["pid"]
+                    assert retained["physical_group_absent"] is True
+                elif interrupted:
+                    restart = json.loads(read_confined(output / "evidence", "join-restart.json"))
+                    checkpoint = json.loads(read_confined(output / "evidence", "join-unreleased.json"))
+                    assert row["returncode"] is None and detail["role"] == "server"
+                    assert detail["pid"] == checkpoint["identity"]["pid"] == restart["identity"]["pid"]
+                    assert detail["start_ticks"] == checkpoint["identity"]["start_ticks"]
+                    assert restart["physical_group_absent"] is True and restart["known_unreleased"] is True
+                    assert checkpoint["guard"]["spawn_records"] == [] and not any(
+                        checkpoint["guard"]["forbidden"].values()
+                    )
+                else:
+                    reconciled = options.joined_case == "resume" and detail.get("argv", [])[1:] == [
+                        "api-reconcile",
+                        "--config",
+                        "/tmp/graphql-execution/execution/config/server.json",
+                        "--instance",
+                        "d" * 32,
+                    ]
+                    lost = options.joined_case == "resume" and detail.get("argv", [])[1:] == [
+                        "p1-resume-lost",
+                        "--client",
+                        "/tmp/graphql-execution/execution/runtime/instances/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/client.json",
+                    ]
+                    assert detail["status"] == "completed" and detail["returncode"] == (
+                        3 if reconciled else 2 if lost else 0
+                    )
+                    if lost:
+                        assert detail["lost_response_status"] == 200
+                    assert not any(detail["forbidden"].values())
                 graphql_import_contract(dict(discovery["provision"], imports=detail["imports"]))
             run.proof["captured_source_files"] = len(manifest)
             run.proof["captured_source_bytes"] = sum(len(read_confined(output / "source", name)) for name in manifest)
@@ -2170,9 +2218,22 @@ def main(argv=None):
                 try:
                     with ConfinedRoot(output / "evidence") as evidence:
                         names = sorted(os.listdir(evidence.fd))
-                    assert len(names) <= 55
+                    assert len(names) <= (75 if options.joined_case == "resume" else 55)
                     fixed = {"client-proof.json", "pytest.xml", "join-case.json", "join-detached.json",
                              "join-http-result.json", "join-retained.json", "join-positive.json"}
+                    if options.joined_case == "resume":
+                        fixed |= {
+                            "join-unreleased.json",
+                            "join-restart.json",
+                            "join-resume-receipt.json",
+                            "join-resume-original.json",
+                        }
+                    if options.joined_case in {"resume", "cancel"}:
+                        fixed.add("join-controls.json")
+                    if options.joined_case in {"resume", "evidence"}:
+                        fixed.add("join-api-readback.json")
+                    if options.joined_case == "evidence":
+                        fixed.update({"join-api-readback.json", "join-api-negatives.json"})
                     fixed |= {name + ".pending" for name in fixed if name.startswith("join-")}
                     assert all(name in fixed or re.fullmatch(
                         r"(?:join-process-[1-9][0-9]*(?:-started)?|join-launch-[1-9][0-9]*|generation-child-[1-9][0-9]*-(?:sdk|active))\.json(?:\.pending)?",

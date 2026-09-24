@@ -24,11 +24,20 @@ class ExecutionOwner:
     CLOSE_TIMEOUT = 10.0
 
     def __init__(
-        self, root, area, tokens, protect, *, execution_context: Callable[[], AbstractContextManager] = nullcontext
+        self,
+        root,
+        area,
+        tokens,
+        protect,
+        *,
+        execution_context: Callable[[], AbstractContextManager] = nullcontext,
+        authorize_control: Callable | None = None,
     ):
         self.root, self.area, self.tokens, self.protect = root, area, tokens, protect
         self._execution_context = execution_context
+        self._authorize_control = authorize_control
         self.admissions = OwnedOffload()
+        self.controls = OwnedOffload()
         self._driver = ThreadPoolExecutor(max_workers=1, thread_name_prefix="workflow-drive")
         self._admission_lock = threading.Lock()
         self._drive = None
@@ -78,6 +87,60 @@ class ExecutionOwner:
                 if receipt is not None:
                     self._run_ids.add(receipt.run_id)
                 return receipt
+
+        return await self.admissions.run(lambda: self._run(operation))
+
+    async def cancel(self, auth, operation_id, run_id):
+        """Own keyed stop independently of the drive and the requesting connection."""
+
+        def permission(principal, target):
+            self.tokens.recheck(auth)
+            if principal != auth.principal or not self._accepting or self._authorize_control is None:
+                raise PermissionError("Workflow control unavailable")
+            self._authorize_control("cancel", principal, target)
+
+        def operation():
+            self.tokens.recheck(auth)
+            result = self.root.cancel_keyed(auth.principal, operation_id, run_id, authorize_cancel=permission)
+            if result.receipt is not None and result.receipt.before_version is not None:
+                self._run_ids.add(run_id)
+            return result
+
+        return await self.controls.run(lambda: self._run(operation))
+
+    async def resume(self, auth, operation_id, payload):
+        """Admit once, acknowledge immediately, and retain the existing drive lane."""
+        from ..commands import CommandConflict, ResumePayload, command_json
+
+        def permission(principal, operation, request):
+            self.tokens.recheck(auth)
+            if principal != auth.principal or not self._accepting or self._authorize_control is None:
+                raise PermissionError("Workflow control unavailable")
+            self._authorize_control("resume", principal, request.runId)
+
+        def operation():
+            self.tokens.recheck(auth)
+            validate_operation_id(operation_id)
+            request = ResumePayload.model_validate(payload)
+            with self._admission_lock:
+                self.tokens.recheck(auth)
+                # Read authorization and exact retained payload suffice for replay.
+                retained = self.root.service.read_command(auth.principal, "RESUME", operation_id, protect=self.protect)
+                if retained is not None:
+                    if retained.payload_json != command_json(request.model_dump(mode="json")):
+                        raise CommandConflict("Resume operation ID payload conflict")
+                    return retained
+                if not self._accepting or self._drive is not None and not self._drive.done():
+                    raise Overloaded("Execution capacity unavailable")
+                result, drive = self.root.admit_resume_keyed(
+                    auth.principal, operation_id, payload, check_resume=permission
+                )
+                if drive is not None:
+                    with self._stop_lock:
+                        if self._accepting:
+                            self._drive = self._driver.submit(self._run, drive)
+                            self._run_ids.add(result.receipt.run_id)
+                return result.receipt
 
         return await self.admissions.run(lambda: self._run(operation))
 
@@ -186,6 +249,7 @@ class ExecutionOwner:
         await asyncio.shield(asyncio.wrap_future(self._stop_future))
         self._stopper.shutdown(wait=True)
         await self.admissions.drain()
+        await self.controls.close(None)
 
         def finish():
             # Catch controls published by an admission already running at stop.
@@ -215,3 +279,9 @@ class ExecutionContext:
 
     async def submit(self, operation_id, raw_contract):
         return await self.owner.submit(self.query.auth, operation_id, raw_contract)
+
+    async def cancel(self, operation_id, run_id):
+        return await self.owner.cancel(self.query.auth, operation_id, run_id)
+
+    async def resume(self, operation_id, payload):
+        return await self.owner.resume(self.query.auth, operation_id, payload)

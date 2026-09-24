@@ -89,10 +89,14 @@ class QueryContext:
     composition: "Composition"
     executor: OwnedOffload
     auth: AuthContext | None = None
+    artifact_root: object | None = None
 
     async def call(self, method, *args, **kwargs):
         def operation():
             self.composition.tokens.recheck(self.auth)
+            if method in {"read_retained_bundle", "read_artifact_chunk"}:
+                kwargs["artifact_root"] = self.artifact_root
+                kwargs["artifact_binding"] = self.composition.tokens.binding
             if method == "read_run_inspection":
                 from ..queries import ActionPermissionObservation
 

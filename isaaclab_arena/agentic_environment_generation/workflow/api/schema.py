@@ -52,11 +52,7 @@ class QueryFailure:
 def safe_resolver(function):
     @wraps(function)
     async def resolve(*args, **kwargs):
-        from ..commands import (
-            CorruptCancelReceipt,
-            CorruptResumeReceipt,
-            CorruptResumeSelection,
-        )
+        from ..commands import CorruptCancelReceipt, CorruptResumeReceipt, CorruptResumeSelection
         from ..neo4j_store import ReplayGap, StoreUnavailable
         from ..paging import (
             CorruptPage,
@@ -68,12 +64,7 @@ def safe_resolver(function):
             UnsupportedDecisionCoverage,
         )
         from ..profiles import CorruptProfileRecord
-        from ..queries import (
-            CorruptCleanupRecord,
-            CorruptRunInspection,
-            CorruptRunRecord,
-            CorruptSceneRecord,
-        )
+        from ..queries import CorruptCleanupRecord, CorruptRunInspection, CorruptRunRecord, CorruptSceneRecord
         from .resolvers import Overloaded
 
         try:
@@ -1159,8 +1150,375 @@ class Capabilities:
     observed_execution_readiness: str
 
 
+@strawberry.enum
+class ArtifactKind(Enum):
+    PRIOR = "prior"
+    CANDIDATE = "candidate"
+    GENERATION = "generation"
+    EVIDENCE = "evidence"
+
+
+@strawberry.enum
+class ArtifactName(Enum):
+    PRIOR_JSON = "prior.json"
+    CANDIDATE_JSON = "candidate.json"
+    CANDIDATE_YAML = "candidate.yaml"
+    PROVENANCE_JSON = "provenance.json"
+    EVIDENCE_JSON = "evidence.json"
+
+
+@strawberry.type
+class ArtifactReference:
+    run_id: strawberry.ID
+    kind: ArtifactKind
+    reference_id: strawberry.ID
+    name: ArtifactName
+    sha256: str
+    total_bytes: Counter
+
+
+@strawberry.type
+class ArtifactChunk(ArtifactReference):
+    offset: Counter
+    length: Counter
+    eof: bool
+    data: str
+    encoding: str = "base64"
+
+
+@strawberry.type
+class PriorDetail:
+    run_id: strawberry.ID
+    contract_digest: str
+    manifest_digest: str
+    status: str
+    context_sha256: str
+    prior_count: int
+    warnings: list[str]
+    artifacts: list[ArtifactReference]
+
+
+PriorResult = Annotated[PriorDetail | NotFound | QueryFailure, strawberry.union("PriorResult")]
+ArtifactResult = Annotated[ArtifactChunk | NotFound | QueryFailure, strawberry.union("ArtifactResult")]
+
+
+@strawberry.type
+class CandidateDetail:
+    run_id: strawberry.ID
+    candidate_id: strawberry.ID
+    original_id: strawberry.ID
+    parent_id: strawberry.ID | None
+    source_id: strawberry.ID
+    digest: str
+    contract_digest: str
+    artifacts: list[ArtifactReference]
+
+
+CandidateResult = Annotated[CandidateDetail | NotFound | QueryFailure, strawberry.union("CandidateResult")]
+
+
+@strawberry.type
+class GenerationDetail:
+    run_id: strawberry.ID
+    intent_id: strawberry.ID
+    attempt_id: strawberry.ID
+    generation: Counter
+    owner_id: strawberry.ID
+    owner_epoch: Counter
+    registration_id: strawberry.ID
+    contract_digest: str
+    manifest_digest: str
+    disposition: str
+    artifacts: list[ArtifactReference]
+
+
+GenerationResult = Annotated[GenerationDetail | NotFound | QueryFailure, strawberry.union("GenerationResult")]
+
+
+@strawberry.type
+class RetainedEvidenceCohort:
+    realization_id: str
+    reset_id: str
+    environment_id: str
+    window_id: str
+    frame_id: str
+    contract_digest: str
+    profile_digest: str
+
+
+@strawberry.type
+class CriterionEvidenceDetail:
+    criterion_id: str
+    criterion_digest: str
+    producer_id: str
+    observed_coordinate_frames: list[str]
+    observed_step_window: list[Counter]
+    subject_ids: list[str]
+    modality: str
+    evaluator_version: str
+    rubric_id: str
+    candidate_digest: str
+    cohort: RetainedEvidenceCohort
+    manifest_digest: str
+    verdict: str
+    limitations: list[str]
+
+
+@strawberry.type
+class EvidenceArtifactSelector:
+    kind: ArtifactKind
+    reference_id: strawberry.ID
+    manifest_digest: str
+
+
+@strawberry.type
+class EvidenceDetail:
+    run_id: strawberry.ID
+    evidence_id: strawberry.ID
+    candidate_id: strawberry.ID | None
+    cohort: RetainedEvidenceCohort
+    entries: list[CriterionEvidenceDetail]
+    verified_manifest_digests: list[str]
+    static_failure: str | None
+    artifact_selectors: list[EvidenceArtifactSelector]
+    fresh_artifact_verification: str = "not_performed"
+
+
+@strawberry.type
+class ArtifactInventory:
+    run_id: strawberry.ID
+    kind: ArtifactKind
+    reference_id: strawberry.ID
+    manifest_digest: str | None
+    artifacts: list[ArtifactReference]
+    fresh_artifact_verification: str = "verified_for_this_read"
+
+
+EvidenceResult = Annotated[EvidenceDetail | NotFound | QueryFailure, strawberry.union("EvidenceResult")]
+ArtifactInventoryResult = Annotated[
+    ArtifactInventory | NotFound | QueryFailure, strawberry.union("ArtifactInventoryResult")
+]
+
+
+@strawberry.type
+class AssessmentDetail:
+    run_id: strawberry.ID
+    assessment_id: strawberry.ID
+    candidate_id: strawberry.ID | None
+    evidence_id: strawberry.ID | None
+    status: str
+    missing_ids: list[str]
+    failed_ids: list[str]
+    historical_conflict_ids: list[str]
+    limitations: list[str]
+
+
+AssessmentResult = Annotated[AssessmentDetail | NotFound | QueryFailure, strawberry.union("AssessmentResult")]
+
+
+def artifact_references(bundle):
+    from ..artifacts import digest
+
+    return [
+        ArtifactReference(
+            run_id=bundle.run_id,
+            kind=ArtifactKind(bundle.kind),
+            reference_id=bundle.reference_id,
+            name=ArtifactName(name),
+            sha256=digest(raw),
+            total_bytes=str(len(raw)),
+        )
+        for name, raw in sorted(bundle.files.items())
+    ]
+
+
 @strawberry.type
 class Query:
+    @strawberry.field
+    @safe_resolver
+    async def workflow_assessment(
+        self,
+        info: Info,
+        run_id: strawberry.ID,
+        assessment_id: strawberry.ID,
+    ) -> AssessmentResult:
+        view = await info.context.call("read_scene_assessment", str(assessment_id))
+        if view is None:
+            return NotFound()
+        if view.run_id != str(run_id) or view.assessment_id != str(assessment_id):
+            raise PermissionError("Scoped assessment identity required")
+        assessment = view.assessment
+        return AssessmentDetail(
+            **fields(view, "run_id assessment_id candidate_id evidence_id"),
+            status=assessment.status,
+            missing_ids=list(assessment.missing_ids),
+            failed_ids=list(assessment.failed_ids),
+            historical_conflict_ids=list(assessment.historical_conflict_ids),
+            limitations=list(assessment.limitations),
+        )
+
+    @strawberry.field
+    @safe_resolver
+    async def workflow_evidence(
+        self,
+        info: Info,
+        run_id: strawberry.ID,
+        evidence_id: strawberry.ID,
+    ) -> EvidenceResult:
+        view = await info.context.call("read_scene_evidence", str(evidence_id))
+        if view is None:
+            return NotFound()
+        if view.run_id != str(run_id) or view.evidence_id != str(evidence_id):
+            raise PermissionError("Scoped evidence identity required")
+        observation = view.observation
+        manifests = sorted(
+            {entry.manifest_digest for entry in observation.evidence} & set(observation.verified_manifest_digests)
+        )
+        if len(manifests) > 16:
+            raise ValueError("Retained artifact selection bound exceeded")
+        return EvidenceDetail(
+            run_id=view.run_id,
+            evidence_id=view.evidence_id,
+            candidate_id=view.candidate_id,
+            cohort=RetainedEvidenceCohort(**observation.cohort.model_dump()),
+            entries=[
+                CriterionEvidenceDetail(
+                    **fields(
+                        entry,
+                        "criterion_id criterion_digest producer_id modality evaluator_version rubric_id"
+                        " candidate_digest manifest_digest verdict",
+                    ),
+                    observed_coordinate_frames=list(entry.observed_coordinate_frames),
+                    observed_step_window=[str(step) for step in entry.observed_step_window],
+                    subject_ids=list(entry.subject_ids),
+                    cohort=RetainedEvidenceCohort(**entry.cohort.model_dump()),
+                    limitations=list(entry.limitations),
+                )
+                for entry in observation.evidence
+            ],
+            verified_manifest_digests=list(observation.verified_manifest_digests),
+            static_failure=observation.static_failure,
+            artifact_selectors=[
+                EvidenceArtifactSelector(
+                    kind=ArtifactKind.EVIDENCE, reference_id=view.evidence_id + manifest, manifest_digest=manifest
+                )
+                for manifest in manifests
+            ],
+        )
+
+    @strawberry.field
+    @safe_resolver
+    async def workflow_artifacts(
+        self,
+        info: Info,
+        run_id: strawberry.ID,
+        kind: ArtifactKind,
+        reference_id: strawberry.ID,
+    ) -> ArtifactInventoryResult:
+        bundle = await info.context.call("read_retained_bundle", str(run_id), kind.value, str(reference_id))
+        if bundle is None:
+            return NotFound()
+        return ArtifactInventory(
+            run_id=bundle.run_id,
+            kind=ArtifactKind(bundle.kind),
+            reference_id=bundle.reference_id,
+            manifest_digest=bundle.manifest_digest,
+            artifacts=artifact_references(bundle),
+        )
+
+    @strawberry.field
+    @safe_resolver
+    async def workflow_generation(
+        self,
+        info: Info,
+        run_id: strawberry.ID,
+        attempt_id: strawberry.ID,
+    ) -> GenerationResult:
+        bundle = await info.context.call("read_retained_bundle", str(run_id), "generation", str(attempt_id))
+        if bundle is None:
+            return NotFound()
+        receipt = bundle.record
+        return GenerationDetail(
+            **fields(receipt.fence, "run_id intent_id attempt_id owner_id"),
+            generation=str(receipt.fence.generation),
+            owner_epoch=str(receipt.fence.owner_epoch),
+            registration_id=receipt.registration.registration_id,
+            contract_digest=receipt.contract_digest,
+            manifest_digest=receipt.manifest_sha256,
+            disposition=receipt.disposition,
+            artifacts=artifact_references(bundle),
+        )
+
+    @strawberry.field
+    @safe_resolver
+    async def workflow_candidate(
+        self,
+        info: Info,
+        run_id: strawberry.ID,
+        candidate_id: strawberry.ID,
+    ) -> CandidateResult:
+        bundle = await info.context.call("read_retained_bundle", str(run_id), "candidate", str(candidate_id))
+        if bundle is None:
+            return NotFound()
+        return CandidateDetail(
+            **fields(bundle.record, "run_id candidate_id original_id parent_id source_id digest"),
+            contract_digest=bundle.contract_digest,
+            artifacts=artifact_references(bundle),
+        )
+
+    @strawberry.field
+    @safe_resolver
+    async def workflow_prior(self, info: Info, run_id: strawberry.ID) -> PriorResult:
+        bundle = await info.context.call("read_retained_bundle", str(run_id), "prior", str(run_id))
+        if bundle is None:
+            return NotFound()
+        return PriorDetail(
+            run_id=bundle.run_id,
+            contract_digest=bundle.contract_digest,
+            manifest_digest=bundle.manifest_digest,
+            status=bundle.record["status"],
+            context_sha256=bundle.record["context_sha256"],
+            prior_count=len(bundle.record["priors"]),
+            warnings=bundle.record["warnings"],
+            artifacts=artifact_references(bundle),
+        )
+
+    @strawberry.field
+    @safe_resolver
+    async def workflow_artifact(
+        self,
+        info: Info,
+        run_id: strawberry.ID,
+        kind: ArtifactKind,
+        reference_id: strawberry.ID,
+        name: ArtifactName,
+        expected_sha256: str,
+        offset: Counter,
+        limit: int,
+    ) -> ArtifactResult:
+        value = await info.context.call(
+            "read_artifact_chunk",
+            str(run_id),
+            kind.value,
+            str(reference_id),
+            name.value,
+            expected_sha256,
+            int(offset),
+            limit,
+        )
+        if value is None:
+            return NotFound()
+        return ArtifactChunk(
+            **dict(
+                value,
+                kind=ArtifactKind(value["kind"]),
+                name=ArtifactName(value["name"]),
+                total_bytes=str(value["total_bytes"]),
+                offset=str(value["offset"]),
+                length=str(value["length"]),
+            )
+        )
+
     @strawberry.field
     def capabilities(self) -> Capabilities:
         return Capabilities(
@@ -1175,6 +1533,13 @@ class Query:
                 "workflowEvents",
                 "workflowSubmission",
                 "workflowCommand",
+                "workflowPrior",
+                "workflowArtifact",
+                "workflowCandidate",
+                "workflowGeneration",
+                "workflowEvidence",
+                "workflowArtifacts",
+                "workflowAssessment",
                 "Workflow.decisions",
             ],
             unsupported=[
@@ -1183,9 +1548,6 @@ class Query:
                 "policy",
                 "publication",
                 "other_history",
-                "scene_detail",
-                "generation_detail",
-                "artifact_bytes",
             ],
         )
 

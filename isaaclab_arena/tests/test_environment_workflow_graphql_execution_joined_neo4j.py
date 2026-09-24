@@ -63,6 +63,210 @@ def _detachment_proof_negatives():
     return checked
 
 
+def verify_query_only_boundaries(metadata):
+    """Real scoped Neo4j and ASGI reads with no execution factory or model credentials."""
+    import asyncio
+    import base64
+    import hashlib
+    import httpx
+    import workflow_graphql_execution_join_harness as h
+    from isaaclab_arena.agentic_environment_generation.workflow.api.application import Composition, Settings, create_app
+    from isaaclab_arena.agentic_environment_generation.workflow.api.client import DOCUMENTS
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import Resources
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+    from isaaclab_arena.agentic_environment_generation.workflow.api.security import TokenRegistry
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import parse_contract, contract_digest
+    from isaaclab_arena.agentic_environment_generation.workflow.prior_artifacts import RetainedPriorArtifacts
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import canonical
+
+    config = load(h.CONFIG)
+    resources = Resources(config)
+    with resources.driver() as driver:
+        before = resources.store(driver).get_run(h.RUN_ID)
+    request = parse_contract(before.contract_json)
+    binding = RetainedPriorArtifacts._binding(request.source.prompt, contract_digest(request), h.RUN_ID)
+    version = hashlib.sha256(canonical(binding)).hexdigest()
+    prior_path = Path(config.value["artifact_root"]) / "final" / "scene-prior" / version / "prior.json"
+    original = prior_path.read_bytes()
+    assert hashlib.sha256(original).hexdigest() == metadata["prior"]["artifacts"][0]["sha256"]
+    registry = TokenRegistry(binding=config.binding, instance="p1-read-only", generation=1, clock=time.monotonic)
+    principal = resources.authority.reader
+    good = registry.issue(principal=principal, lifetime=120)
+    wrong = registry.issue(principal="p1-wrong-principal", lifetime=120)
+    stale = registry.issue(principal=principal, lifetime=120)
+    registry.revoke(registry.authenticate(("Bearer " + stale).encode()))
+    foreign = TokenRegistry(
+        binding=config.binding.model_copy(update={"workspace_id": "p1-other-workspace"}),
+        instance="p1-other-scope",
+        generation=1,
+        clock=time.monotonic,
+    )
+    foreign_token = foreign.issue(principal=principal, lifetime=120)
+    composition = Composition(
+        resources.driver,
+        resources.store,
+        resources.authority,
+        resources.authority.admin,
+        principal,
+        resources.protect,
+        registry,
+    )
+    assert composition.execution_factory is None
+    app = create_app(
+        settings=Settings(config.binding, Path(config.value["artifact_root"]), config.profiles), composition=composition
+    )
+    reference = metadata["prior"]["artifacts"][0]
+    artifact_variables = dict(
+        id=h.RUN_ID,
+        kind="PRIOR",
+        reference=h.RUN_ID,
+        name="PRIOR_JSON",
+        sha=reference["sha256"],
+        offset="0",
+        limit=65536,
+    )
+    outcomes = {}
+
+    async def scenario():
+        async with app.router.lifespan_context(app):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://isolated", trust_env=False
+            ) as client:
+
+                async def post(label, operation, variables, *, credential=good, status=200, field=None, typename=None):
+                    response = await client.post(
+                        "/graphql",
+                        json={"query": DOCUMENTS[operation], "variables": variables},
+                        headers={"Authorization": "Bearer " + credential},
+                    )
+                    assert response.status_code == status, "Unexpected bounded read response"
+                    value = response.json()
+                    selected = None if field is None else value["data"][field]
+                    if typename is not None:
+                        assert selected["__typename"] == typename, "Unexpected typed read outcome"
+                    outcomes[label] = dict(
+                        http_status=response.status_code,
+                        typename=None if selected is None else selected.get("__typename"),
+                        code=None if selected is None else selected.get("code"),
+                    )
+                    return selected
+
+                prior = await post(
+                    "read_only_prior", "prior", {"id": h.RUN_ID}, field="workflowPrior", typename="PriorDetail"
+                )
+                assert prior == metadata["prior"]
+                for operation, field, reference_id, expected in (
+                    ("candidate", "workflowCandidate", metadata["candidate"]["candidateId"], metadata["candidate"]),
+                    ("generation", "workflowGeneration", metadata["generation"]["attemptId"], metadata["generation"]),
+                    ("evidence", "workflowEvidence", metadata["evidence"]["evidenceId"], metadata["evidence"]),
+                    (
+                        "assessment",
+                        "workflowAssessment",
+                        metadata["assessment"]["assessmentId"],
+                        metadata["assessment"],
+                    ),
+                ):
+                    value = await post(
+                        "read_only_" + operation,
+                        operation,
+                        {"id": h.RUN_ID, "reference": reference_id},
+                        field=field,
+                        typename=expected["__typename"],
+                    )
+                    assert value == expected
+                chunk = await post(
+                    "read_only_artifact",
+                    "artifact",
+                    artifact_variables,
+                    field="workflowArtifact",
+                    typename="ArtifactChunk",
+                )
+                assert base64.b64decode(chunk["data"], validate=True) == original
+                await post(
+                    "read_only_receipt",
+                    "receipt",
+                    {"kind": "SUBMIT", "id": h.OPERATION},
+                    field="workflowCommand",
+                    typename="SubmissionReceipt",
+                )
+                denied = await post(
+                    "wrong_principal",
+                    "prior",
+                    {"id": h.RUN_ID},
+                    credential=wrong,
+                    field="workflowPrior",
+                    typename="QueryFailure",
+                )
+                assert denied["code"] == "FORBIDDEN"
+                await post("wrong_scope_token", "artifact", artifact_variables, credential=foreign_token, status=401)
+                await post("stale_authority", "artifact", artifact_variables, credential=stale, status=401)
+                await post(
+                    "cross_run_candidate",
+                    "candidate",
+                    {"id": "p1-other-run", "reference": metadata["candidate"]["candidateId"]},
+                    field="workflowCandidate",
+                    typename="NotFound",
+                )
+                await post(
+                    "cross_run_evidence",
+                    "evidence",
+                    {"id": "p1-other-run", "reference": metadata["evidence"]["evidenceId"]},
+                    field="workflowEvidence",
+                    typename="QueryFailure",
+                )
+                await post(
+                    "oversized_chunk",
+                    "artifact",
+                    dict(artifact_variables, limit=65537),
+                    field="workflowArtifact",
+                    typename="QueryFailure",
+                )
+                await post("arbitrary_path", "artifact", dict(artifact_variables, name="../../private"), status=400)
+                await post(
+                    "read_only_mutation",
+                    "resume",
+                    {"id": h.RUN_ID, "operation": "p1-denied-mutation", "version": "1", "renew": True},
+                    status=400,
+                )
+                try:
+                    prior_path.write_bytes(original + b"\n")
+                    await post(
+                        "tampered_artifact",
+                        "artifact",
+                        artifact_variables,
+                        field="workflowArtifact",
+                        typename="QueryFailure",
+                    )
+                finally:
+                    prior_path.write_bytes(original)
+                restored = await post(
+                    "restored_artifact",
+                    "artifact",
+                    artifact_variables,
+                    field="workflowArtifact",
+                    typename="ArtifactChunk",
+                )
+                assert base64.b64decode(restored["data"], validate=True) == original
+                registry.rotate()
+                await post("stale_generation", "prior", {"id": h.RUN_ID}, status=401)
+
+    asyncio.run(scenario())
+    assert hashlib.sha256(prior_path.read_bytes()).hexdigest() == reference["sha256"]
+    with resources.driver() as driver:
+        after = resources.store(driver).get_run(h.RUN_ID)
+    assert after == before, "Read-only acceptance changed operational state or budgets"
+    h.write_evidence(
+        "join-api-negatives.json",
+        {
+            "composition": "query-only",
+            "execution_factory": None,
+            "outcomes": outcomes,
+            "retained_run_unchanged": True,
+            "artifact_restored": True,
+        },
+    )
+
+
 def test_installed_execution_survives_submit_exit():
     """Reach production composition first, then require the whole retained join."""
     import workflow_graphql_execution_join_harness as h
@@ -156,6 +360,24 @@ def test_installed_execution_survives_submit_exit():
         assert admitted["data"]["submitWorkflow"]["runId"] == h.RUN_ID
         assert admitted["data"]["submitWorkflow"]["operationId"] == h.OPERATION
         assert not Path(f"/proc/{result.pid}").exists(), "submit was not reaped"
+        if h.JOIN_CASE == "resume":
+            h.interrupt_unreleased_server(server_pid)
+            launched = False
+            result = invoke(h.RECONCILE)
+            assert result.returncode == 3 and json.loads(result.stdout)["state"] == "exited_unclean"
+            result = invoke(h.RELAUNCH)
+            assert result.returncode == 0 and json.loads(result.stdout)["state"] == "ready"
+            launched = True
+            server_pid = h.server_pid()
+            lost = invoke(h.LOST_RESPONSE)
+            assert lost.returncode == 2, "Lost response body was not exercised"
+            original_resume = h.snapshot_resume_receipt()
+            result = invoke(h.resume_arguments())
+            assert result.returncode == 0, "Installed reauthorized resume unavailable"
+            assert (
+                json.loads(result.stdout)["data"]["resumeWorkflow"]["receiptDigest"] == original_resume.receipt_digest
+            )
+            h.verify_resume_admission(json.loads(result.stdout))
         deadline = min(h.ACTIVE.deadline, time.monotonic() + 15)
         while not list(Path("/evidence").glob("generation-child-*-active.json")):
             assert time.monotonic() < deadline, "actual generation SDK barrier not reached"
@@ -176,6 +398,10 @@ def test_installed_execution_survives_submit_exit():
         server_identity = {key: server[key] for key in IDENTITY_FIELDS}
         worker_live = h.live_identity(worker_identity)
         server_live = h.live_identity(server_identity)
+        if h.JOIN_CASE == "resume":
+            controls = invoke(h.CONTROL_CHECK)
+            assert controls.returncode == 0, "Installed resume replay/control negatives failed"
+            h.verify_control_results(json.loads(controls.stdout))
         observed_at = time.monotonic()
         assert pause.read_bytes() == PAUSE_BYTES
         h.write_evidence(
@@ -191,10 +417,31 @@ def test_installed_execution_survives_submit_exit():
                 "release_requested_at": time.monotonic(),
             },
         )
-        pause.unlink()
-        result = invoke(h.RESULT)
-        assert result.returncode == 0, "Production exact-result HTTP reader missing or incomplete"
-        h.verify_result(json.loads(result.stdout), raw_contract)
+        if h.JOIN_CASE == "cancel":
+            result = invoke(h.CANCEL)
+            assert result.returncode == 0, "Installed keyed cancellation unavailable"
+            cancellation = json.loads(result.stdout)
+            assert (
+                pause.read_bytes() == PAUSE_BYTES
+            ), "Cancellation must stop the active worker, not release the barrier"
+            result = invoke(h.RESULT)
+            assert result.returncode == 0, "Cancelled result/cleanup unavailable through HTTP"
+            h.verify_cancel_result(json.loads(result.stdout), cancellation, worker_identity)
+            controls = invoke(h.CONTROL_CHECK)
+            assert controls.returncode == 0, "Installed terminal cancellation/replay controls failed"
+            h.verify_control_results(json.loads(controls.stdout))
+        else:
+            pause.unlink()
+            result = invoke(h.RESULT)
+            assert result.returncode == 0, "Production exact-result HTTP reader missing or incomplete"
+            h.verify_result(json.loads(result.stdout), raw_contract)
+            if h.JOIN_CASE in {"evidence", "resume"}:
+                result = invoke(h.READBACK)
+                assert result.returncode == 0, "Authenticated retained bytes unavailable to a fresh HTTP client"
+                readback_value = json.loads(result.stdout)
+                h.verify_api_readback(readback_value)
+                if h.JOIN_CASE == "evidence":
+                    verify_query_only_boundaries(readback_value)
         result = invoke(h.STOP)
         assert result.returncode == 0 and json.loads(result.stdout)["state"] == "stopped"
         launched = False

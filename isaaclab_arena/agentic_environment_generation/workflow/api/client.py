@@ -62,10 +62,67 @@ DOCUMENTS["submit"] = (
     + SUBMISSION_SELECTION
     + " } }"
 )
+DOCUMENTS["cancel"] = (
+    "mutation Cancel($id: ID!, $operation: ID!) { cancelWorkflow(runId:$id, operationId:$operation) { "
+    "__typename ... on CancellationResult { durable cleanupStatus remoteEffects "
+    "localStop { delivery remoteEffects durableCancellation } "
+    "receipt { kind operationId runId disposition reason receiptDigest payloadDigest beforeVersion afterVersion } "
+    "cleanup { currentScopeOwner { id epoch dirty } intents { intentId registrationId releaseState cleanupState "
+    "cleanupObservation retiredOwner { id epoch dirty } } } } ... on QueryFailure { code } } }"
+)
+DOCUMENTS["resume"] = (
+    "mutation Resume($operation:ID!,$id:ID!,$version:Revision!,$renew:Boolean!){"
+    "resumeWorkflow(operationId:$operation,runId:$id,expectedVersion:$version,renewAuthorization:$renew){"
+    "__typename ... on ResumeReceipt{kind operationId runId payloadDigest receiptDigest beforeVersion afterVersion "
+    "expectedVersion renewAuthorization contractDigest disposition reason authorizationAction "
+    "selection{version branch intentId contractDigest} events{sequence kind sourceId}} ... on QueryFailure{code}}}"
+)
 DOCUMENTS["result-status"] = (
     "query TerminalStatus($id: ID!) { workflow(id:$id) { __typename ... on Workflow { id operationId state "
     "cleanup { currentScopeOwner { id epoch dirty } intents { registrationId cleanupState retiredOwner { dirty } } } "
     "} ... on NotFound { code } ... on QueryFailure { code } } }"
+)
+DOCUMENTS["prior"] = (
+    "query Prior($id:ID!){workflowPrior(runId:$id){__typename ... on PriorDetail {runId contractDigest manifestDigest"
+    " status contextSha256 priorCount warnings artifacts {runId kind referenceId name sha256 totalBytes}} ... on"
+    " NotFound {code} ... on QueryFailure {code}}}"
+)
+DOCUMENTS["artifact"] = (
+    "query"
+    " Artifact($id:ID!,$kind:ArtifactKind!,$reference:ID!,$name:ArtifactName!,$sha:String!,$offset:Counter!,$limit:Int!){workflowArtifact(runId:$id,kind:$kind,referenceId:$reference,name:$name,expectedSha256:$sha,offset:$offset,limit:$limit){__typename"
+    " ... on ArtifactChunk {runId kind referenceId name sha256 totalBytes offset length eof encoding data}... on"
+    " NotFound {code} ... on QueryFailure {code}}}"
+)
+DOCUMENTS["candidate"] = (
+    "query Candidate($id:ID!,$reference:ID!){workflowCandidate(runId:$id,candidateId:$reference){__typename "
+    "... on CandidateDetail {runId candidateId originalId parentId sourceId digest contractDigest "
+    "artifacts {runId kind referenceId name sha256 totalBytes}} ... on NotFound {code} ... on QueryFailure {code}}}"
+)
+DOCUMENTS["generation"] = (
+    "query Generation($id:ID!,$reference:ID!){workflowGeneration(runId:$id,attemptId:$reference){__typename "
+    "... on GenerationDetail {runId intentId attemptId generation ownerId ownerEpoch registrationId contractDigest "
+    "manifestDigest disposition artifacts {runId kind referenceId name sha256 totalBytes}} "
+    "... on NotFound {code} ... on QueryFailure {code}}}"
+)
+DOCUMENTS["evidence"] = (
+    "query Evidence($id:ID!,$reference:ID!){workflowEvidence(runId:$id,evidenceId:$reference){__typename ... on"
+    " EvidenceDetail {runId evidenceId candidateId staticFailure verifiedManifestDigests freshArtifactVerification"
+    " cohort{realizationId resetId environmentId windowId frameId contractDigest profileDigest} entries{criterionId"
+    " criterionDigest producerId observedCoordinateFrames observedStepWindow subjectIds modality evaluatorVersion"
+    " rubricId candidateDigest manifestDigest verdict limitations cohort{realizationId resetId environmentId windowId"
+    " frameId contractDigest profileDigest}} artifactSelectors{kind referenceId manifestDigest}} ... on NotFound {code}"
+    " ... on QueryFailure {code}}}"
+)
+DOCUMENTS["artifact-inventory"] = (
+    "query"
+    " Artifacts($id:ID!,$kind:ArtifactKind!,$reference:ID!){workflowArtifacts(runId:$id,kind:$kind,referenceId:$reference){__typename"
+    " ... on ArtifactInventory {runId kind referenceId manifestDigest freshArtifactVerification artifacts{runId kind"
+    " referenceId name sha256 totalBytes}} ... on NotFound {code} ... on QueryFailure {code}}}"
+)
+DOCUMENTS["assessment"] = (
+    "query Assessment($id:ID!,$reference:ID!){workflowAssessment(runId:$id,assessmentId:$reference){__typename ... on"
+    " AssessmentDetail {runId assessmentId candidateId evidenceId status missingIds failedIds historicalConflictIds"
+    " limitations} ... on NotFound {code} ... on QueryFailure {code}}}"
 )
 DOCUMENTS["result"] = (
     "query Result($id: ID!, $operation: ID!) { workflow(id:$id) { "
@@ -132,6 +189,13 @@ def query(
     after=None,
     operation_id=None,
     raw_contract=None,
+    expected_version=None,
+    renew_authorization=None,
+    reference_id=None,
+    artifact_name=None,
+    sha256=None,
+    offset="0",
+    limit=65536,
     deadline=None,
 ):
     import httpx
@@ -139,21 +203,74 @@ def query(
     if operation not in DOCUMENTS:
         raise ValueError("Unsupported query")
     variables = {}
-    if operation in {"profile", "status", "submission", "receipt", "submit", "result", "result-status"}:
+    if operation in {
+        "profile",
+        "status",
+        "submission",
+        "receipt",
+        "submit",
+        "cancel",
+        "resume",
+        "result",
+        "result-status",
+        "prior",
+        "artifact",
+        "candidate",
+        "generation",
+        "evidence",
+        "artifact-inventory",
+        "assessment",
+    }:
         if type(identifier) is not str or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", identifier) is None:
             raise ValueError("Invalid query identity")
         variables["id"] = identifier
-    if operation == "profile":
+    if operation in {"profile", "resume"}:
+        revision = expected_version if operation == "resume" else revision
         if (
             type(revision) is not str
             or re.fullmatch(r"[1-9][0-9]{0,18}", revision) is None
             or int(revision) > 2**63 - 1
         ):
             raise ValueError("Invalid exact revision")
-        variables["revision"] = revision
+        variables["version" if operation == "resume" else "revision"] = revision
+    if operation == "resume":
+        if type(renew_authorization) is not bool:
+            raise ValueError("Explicit renewal choice required")
+        variables["renew"] = renew_authorization
     if operation == "receipt":
         if kind not in {"SUBMIT", "CANCEL", "RESUME"}:
             raise ValueError("Invalid command kind")
+        variables["kind"] = kind
+    if operation == "artifact":
+        if (
+            (kind, artifact_name)
+            not in {
+                ("PRIOR", "PRIOR_JSON"),
+                ("CANDIDATE", "CANDIDATE_JSON"),
+                ("GENERATION", "CANDIDATE_JSON"),
+                ("GENERATION", "CANDIDATE_YAML"),
+                ("GENERATION", "PROVENANCE_JSON"),
+                ("EVIDENCE", "EVIDENCE_JSON"),
+            }
+            or type(reference_id) is not str
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", reference_id) is None
+            or type(sha256) is not str
+            or re.fullmatch(r"[a-f0-9]{64}", sha256) is None
+            or type(offset) is not str
+            or re.fullmatch(r"0|[1-9][0-9]{0,18}", offset) is None
+            or int(offset) > 2**63 - 1
+            or type(limit) is not int
+            or not 1 <= limit <= 65536
+        ):
+            raise ValueError("Invalid bounded artifact reference")
+        variables.update(kind=kind, reference=reference_id, name=artifact_name, sha=sha256, offset=offset, limit=limit)
+    if operation in {"candidate", "generation", "evidence", "artifact-inventory", "assessment"}:
+        if type(reference_id) is not str or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", reference_id) is None:
+            raise ValueError("Invalid retained reference")
+        variables["reference"] = reference_id
+    if operation == "artifact-inventory":
+        if kind not in {"PRIOR", "CANDIDATE", "GENERATION", "EVIDENCE"}:
+            raise ValueError("Invalid artifact kind")
         variables["kind"] = kind
     if operation in {"runs", "events"}:
         if type(first) is not int or not 1 <= first <= 1000:
@@ -163,7 +280,7 @@ def query(
         from ..contracts import canonical_json, parse_contract
 
         variables["contract"] = canonical_json(parse_contract(raw_contract))
-    if operation == "result":
+    if operation in {"cancel", "resume", "result"}:
         if type(operation_id) is not str or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", operation_id) is None:
             raise ValueError("Invalid operation identity")
         variables["operation"] = operation_id
@@ -175,7 +292,7 @@ def query(
     deadline = now + 10 if deadline is None else min(deadline, now + 10)
     if deadline <= now:
         raise TimeoutError("Query deadline expired")
-    bounded = operation in {"submit", "result"} or supplied_deadline
+    bounded = operation in {"submit", "cancel", "resume", "result"} or supplied_deadline
     with _transport_deadline(deadline, enabled=bounded) as trace:
         with httpx.Client(
             trust_env=False, follow_redirects=False, timeout=min(5, deadline - now), cookies=None
@@ -259,7 +376,6 @@ def result(path, run_id, *, operation_id, wait_terminal_seconds):
         raise ValueError("Bounded terminal wait required")
     deadline = time.monotonic() + wait_terminal_seconds
     for _ in range(120):
-        started = time.monotonic()
         observed = query(path, "result-status", identifier=run_id, deadline=deadline)
         row = observed["data"].get("workflow", {})
         if row.get("__typename") != "Workflow" or row.get("id") != run_id or row.get("operationId") != operation_id:
@@ -300,8 +416,9 @@ def result(path, run_id, *, operation_id, wait_terminal_seconds):
             if data["workflowSubmission"] != data["workflowCommand"]:
                 raise ValueError("Submission projections differ")
             return value
-        delay = max(0, started + 1 - time.monotonic())
-        if time.monotonic() + delay >= deadline:
+        # Pace from completed observation, not a pre-call timestamp whose
+        # variable entry overhead can put successive requests less than 1 s apart.
+        if time.monotonic() + 1 >= deadline:
             break
-        time.sleep(delay)
+        time.sleep(1.0)
     raise TimeoutError("Terminal result unavailable")

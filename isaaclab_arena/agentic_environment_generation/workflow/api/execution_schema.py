@@ -3,15 +3,31 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Explicit submit-only schema; raw contract codec preserves the domain bounds."""
+"""Explicit installed controls; domain codecs and handlers retain their bounds."""
 
-from typing import NewType
+from typing import Annotated, NewType
 
 import strawberry
 from strawberry.types import Info
 
 from ..contracts import canonical_json, parse_contract
-from .schema import Capabilities, Query, SafeSchema, SubmissionResult, safe_resolver, submission_view
+from .schema import (
+    CancellationReceipt,
+    Capabilities,
+    CommandResult,
+    LocalStop,
+    Query,
+    QueryFailure,
+    Revision,
+    RunCleanup,
+    SafeSchema,
+    SubmissionResult,
+    cleanup_view,
+    command_view,
+    fields,
+    safe_resolver,
+    submission_view,
+)
 
 
 def contract_value(value):
@@ -47,27 +63,71 @@ class ExecutionQuery(Query):
                 "Workflow.decisions",
             ],
             unsupported=[
-                "cancel",
-                "resume",
                 "native",
                 "policy",
                 "publication",
                 "other_history",
-                "scene_detail",
-                "generation_detail",
-                "artifact_bytes",
             ],
         )
+
+
+@strawberry.type
+class CancellationResult:
+    local_stop: LocalStop
+    durable: str
+    receipt: CancellationReceipt | None
+    cleanup_status: str
+    cleanup: RunCleanup | None
+    remote_effects: str
+
+
+CancellationOutcome = Annotated[CancellationResult | QueryFailure, strawberry.union("CancellationOutcome")]
 
 
 @strawberry.type
 class Mutation:
     @strawberry.mutation
     @safe_resolver
+    async def resume_workflow(
+        self,
+        info: Info,
+        operation_id: strawberry.ID,
+        run_id: strawberry.ID,
+        expected_version: Revision,
+        renew_authorization: bool,
+    ) -> CommandResult:
+        return command_view(
+            await info.context.resume(
+                str(operation_id),
+                {
+                    "runId": str(run_id),
+                    "expectedVersion": int(expected_version),
+                    "renewAuthorization": renew_authorization,
+                },
+            )
+        )
+
+    @strawberry.mutation
+    @safe_resolver
     async def submit_workflow(
         self, info: Info, operation_id: strawberry.ID, contract: WorkflowContractJSON
     ) -> SubmissionResult:
         return submission_view(await info.context.submit(str(operation_id), str(contract)))
+
+    @strawberry.mutation
+    @safe_resolver
+    async def cancel_workflow(
+        self, info: Info, operation_id: strawberry.ID, run_id: strawberry.ID
+    ) -> CancellationOutcome:
+        result = await info.context.cancel(str(operation_id), str(run_id))
+        return CancellationResult(
+            local_stop=LocalStop(**fields(result.local_stop, "delivery remote_effects durable_cancellation")),
+            durable=result.durable,
+            receipt=None if result.receipt is None else command_view(result.receipt),
+            cleanup_status=result.cleanup_status,
+            cleanup=None if result.cleanup is None else cleanup_view(result.cleanup),
+            remote_effects=result.remote_effects,
+        )
 
 
 schema = SafeSchema(query=ExecutionQuery, mutation=Mutation)

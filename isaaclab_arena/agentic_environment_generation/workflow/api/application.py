@@ -134,7 +134,7 @@ def create_app(*, settings: Settings, composition: Composition) -> FastAPI:
             except Exception:
                 raise ValueError("Workflow API not ready") from None
             app.state.resources = resources
-            app.state.query_context = QueryContext(service, composition, executor)
+            app.state.query_context = QueryContext(service, composition, executor, artifact_root=settings.artifact_root)
             app.state.execution_owner = owner
             with owner_lock:
                 app.state.ready = not stop_requested.is_set()

@@ -55,6 +55,18 @@ def _add_installed_arguments(commands):
     submit.add_argument("--client", required=True)
     submit.add_argument("--operation-id", required=True)
     submit.add_argument("--contract", required=True)
+    cancel = commands.add_parser(
+        "cancel", help="Request keyed cancellation through the installed owner", allow_abbrev=False
+    )
+    cancel.add_argument("identifier")
+    resume = commands.add_parser("resume", help="Admit an explicitly reauthorized known-unreleased continuation")
+    resume.add_argument("--client", required=True)
+    resume.add_argument("--operation-id", required=True)
+    resume.add_argument("--expected-version", required=True)
+    resume.add_argument("--renew-authorization", action=argparse.BooleanOptionalAction, required=True)
+    resume.add_argument("identifier")
+    cancel.add_argument("--client", required=True)
+    cancel.add_argument("--operation-id", required=True)
     result = commands.add_parser("result", help="Read an exact bounded terminal result over HTTP", allow_abbrev=False)
     result.add_argument("identifier")
     result.add_argument("--client", required=True)
@@ -62,10 +74,36 @@ def _add_installed_arguments(commands):
     result.add_argument("--wait-terminal-seconds", type=int, required=True)
     profiles = commands.add_parser("profiles", help="Query retained profiles over HTTP", allow_abbrev=False)
     profiles.add_argument("--client", required=True)
-    for name in ("profile", "status", "submission", "receipt", "runs", "events"):
+    for name in (
+        "profile",
+        "status",
+        "submission",
+        "receipt",
+        "runs",
+        "events",
+        "prior",
+        "artifact",
+        "candidate",
+        "generation",
+        "evidence",
+        "artifact-inventory",
+        "assessment",
+    ):
         query = commands.add_parser(name, allow_abbrev=False)
         query.add_argument("--client", required=True)
-        if name in {"profile", "status", "submission", "receipt"}:
+        if name in {
+            "profile",
+            "status",
+            "submission",
+            "receipt",
+            "prior",
+            "artifact",
+            "candidate",
+            "generation",
+            "evidence",
+            "artifact-inventory",
+            "assessment",
+        }:
             query.add_argument("identifier")
         if name == "profile":
             query.add_argument("--revision", required=True)
@@ -74,6 +112,21 @@ def _add_installed_arguments(commands):
         if name in {"runs", "events"}:
             query.add_argument("--first", required=True, type=int)
             query.add_argument("--after")
+        if name == "artifact":
+            query.add_argument("--kind", required=True, choices=("PRIOR", "CANDIDATE", "GENERATION", "EVIDENCE"))
+            query.add_argument("--reference-id", required=True)
+            query.add_argument(
+                "--name",
+                required=True,
+                choices=("PRIOR_JSON", "CANDIDATE_JSON", "CANDIDATE_YAML", "PROVENANCE_JSON", "EVIDENCE_JSON"),
+            )
+            query.add_argument("--sha256", required=True)
+            query.add_argument("--offset", default="0")
+            query.add_argument("--limit", type=int, default=65536)
+        if name in {"candidate", "generation", "evidence", "artifact-inventory", "assessment"}:
+            query.add_argument("--reference-id", required=True)
+        if name == "artifact-inventory":
+            query.add_argument("--kind", required=True, choices=("PRIOR", "CANDIDATE", "GENERATION", "EVIDENCE"))
     admin = commands.add_parser("admin", help="Explicit query scope administration", allow_abbrev=False)
     actions = admin.add_subparsers(dest="action", required=True)
     for name in ("initialize-schema", "initialize-scope", "initialize-artifacts", "register-profile"):
@@ -116,12 +169,13 @@ def _run_installed(options):
             return 2
         print(json.dumps(report, sort_keys=True, separators=(",", ":")))
         return 0
-    if options.command in {"submit", "result"}:
+    if options.command in {"submit", "cancel", "resume", "result"}:
         try:
             from .api.client import query
             from .api.client import result as read_result
             from .contracts import canonical_json
 
+            code = 0
             if options.command == "submit":
                 contract = _read_contract(options.contract)
                 result = query(
@@ -134,6 +188,25 @@ def _run_installed(options):
                     or receipt.get("acceptedContractDigest") != contract_digest(contract)
                 ):
                     raise ValueError("Submission unavailable")
+            elif options.command == "cancel":
+                result = query(
+                    options.client, "cancel", identifier=options.identifier, operation_id=options.operation_id
+                )
+                outcome = result["data"].get("cancelWorkflow", {})
+                if outcome.get("__typename") != "CancellationResult":
+                    raise ValueError("Cancellation unavailable")
+                code = 0 if outcome.get("durable") == "recorded" else 2
+            elif options.command == "resume":
+                result = query(
+                    options.client,
+                    "resume",
+                    identifier=options.identifier,
+                    operation_id=options.operation_id,
+                    expected_version=options.expected_version,
+                    renew_authorization=options.renew_authorization,
+                )
+                if result["data"].get("resumeWorkflow", {}).get("__typename") != "ResumeReceipt":
+                    raise ValueError("Resume unavailable")
             else:
                 result = read_result(
                     options.client,
@@ -145,15 +218,44 @@ def _run_installed(options):
             print("workflow: command rejected or result unavailable", file=sys.stderr)
             return 2
         print(json.dumps(result, sort_keys=True, separators=(",", ":")))
-        return 0
-    if options.command in {"profiles", "profile", "status", "submission", "receipt", "runs", "events"}:
+        return code
+    if options.command in {
+        "profiles",
+        "profile",
+        "status",
+        "submission",
+        "receipt",
+        "runs",
+        "events",
+        "prior",
+        "artifact",
+        "candidate",
+        "generation",
+        "evidence",
+        "artifact-inventory",
+        "assessment",
+    }:
         try:
             from .api.client import query
 
             result = query(
                 options.client,
                 options.command,
-                **{key: getattr(options, key, None) for key in ("identifier", "revision", "kind", "first", "after")},
+                **{
+                    key: getattr(options, key, None)
+                    for key in (
+                        "identifier",
+                        "revision",
+                        "kind",
+                        "first",
+                        "after",
+                        "reference_id",
+                        "sha256",
+                        "offset",
+                        "limit",
+                    )
+                },
+                artifact_name=getattr(options, "name", None),
             )
         except Exception:
             print("workflow: query unavailable", file=sys.stderr)

@@ -236,7 +236,7 @@ def validate_document(body, schema, *, execution=False):
                     or counts["roots"] > (1 if mutation else 8)
                     or mutation
                     and at_root
-                    and node.name.value != "submitWorkflow"
+                    and node.name.value not in {"submitWorkflow", "cancelWorkflow", "resumeWorkflow"}
                     or node.name.value in ("__schema", "__type")
                 ):
                     raise ValueError("Request rejected")

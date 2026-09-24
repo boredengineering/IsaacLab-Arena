@@ -745,11 +745,17 @@ class ForegroundWorkflow:
         return result
 
     def resume_keyed(self, principal, operation_id, payload, *, check_resume):
-        """Deliver only this call's acknowledged-fresh admission; lookup/replay never execute.
+        """Synchronously deliver only this call's acknowledged-fresh continuation."""
+        result, drive = self.admit_resume_keyed(principal, operation_id, payload, check_resume=check_resume)
+        return result if drive is None else drive()
+
+    def admit_resume_keyed(self, principal, operation_id, payload, *, check_resume):
+        """Return immutable admission and an owner-only one-shot continuation.
 
         check_resume is explicit trusted permission, not read permission or request
         data. Private eligibility is check-only; no callback is resolved before
-        service replay. Interrupted deliveries require a new explicit command.
+        service replay. Interrupted deliveries require a new explicit command;
+        replay never returns a drive or renews authorization.
         """
         # A synchronous trusted authority callback cannot reenter the service:
         # its receipt read could wait on a control lock whose holder needs the
@@ -786,7 +792,7 @@ class ForegroundWorkflow:
         receipt = admission.receipt
         _protected(receipt.model_dump(mode="json"), self.authority.protect_public)
         if admission.fresh is not True or receipt.disposition == "refused":
-            return self._resume_result(principal, receipt, "not_requested")
+            return self._resume_result(principal, receipt, "not_requested"), None
         key = (
             receipt.scope.database,
             receipt.scope.deployment_id,
@@ -804,79 +810,91 @@ class ForegroundWorkflow:
                 self._resume_deliveries[key] = delivery
                 self._resume_busy.add(receipt.run_id)
         if delivery is None:
-            return self._resume_result(principal, receipt, "blocked", observe=True)
-        execution = "blocked"
-        try:
-            if self._cancellation.stop_requested(self, receipt.run_id):
-                raise ValueError("Resume locally stopped")
-            run = self._resume_pin(receipt)
-            self._start_control(principal, receipt.run_id)
-            if self._cancellation.stop_requested(self, receipt.run_id):
-                raise ValueError("Resume locally stopped")
-            contract = parse_contract(run.contract_json)
-            if receipt.selection.branch == "reconciliation":
-                delivery[0] = True
-                self._resume_reconcile(principal, receipt, local)
-            else:
-                if receipt.selection.branch not in {"generation", "scene"}:
-                    raise ValueError("Resume handoff unavailable")
-                if receipt.selection.branch == "generation":
-                    pending = self.store.pending_generation(run.run_id)
-                    if (
-                        pending is None
-                        or pending["intent_id"] != receipt.selection.intent_id
-                        or pending["reservation"] is None
-                    ):
-                        raise ValueError("Original unclaimed reservation required")
-                    if local is not None and not local.retired:
-                        if (
-                            local.stopped
-                            or local.ports is not None
-                            or (
-                                local.handle is not None
-                                and (local.handle.fence is not None or local.handle.prepared is not None)
-                            )
-                        ):
-                            raise ValueError("Resume local ownership unresolved")
-                        local.coordinator.stop_local(principal)
-                        local.lease.release_never_prepared()
-                        local.retired = True
-                elif local is not None and (local.ports is None or local.retired or local.stopped):
-                    raise ValueError("Resume scene ownership unresolved")
-                # Local retirement/pending reads can outlive the first check.
-                run = self._resume_pin(receipt)
-                # No DB, coordinator, lease or port calls under this authority guard.
-                _resume_authority_context.active = True
-                try:
-                    with self.authority.mutation_guard():
-                        if delivery[0] or self._cancellation.stop_requested(self, receipt.run_id):
-                            raise ValueError("Resume delivery consumed or stopped")
-                        delivery[0] = True
-                        self.authority.apply_resume_authority(
-                            principal,
-                            contract,
-                            run=run,
-                            action=receipt.authorization_action,
-                            catalogue_sha256=self.catalogue_sha256,
-                        )
-                finally:
-                    _resume_authority_context.active = False
-                if receipt.selection.branch == "generation":
-                    self._generate(principal, run, contract, pending=pending, resume_receipt=receipt)
-                elif local is None:
-                    self._scene(principal, run.run_id, contract, continuation=True, resume_receipt=receipt)
-                else:
-                    local.ports.require_held_owner()
-                    local.ports.restore_observations(self.store.result_records(run.run_id), contract)
-                    self._drive_scene(principal, run.run_id, local, resume_receipt=receipt)
-            execution = "returned"
-        except Exception:
-            # Admission is immutable; partial grants/claim/preparation are not rolled back.
-            delivery[0] = True
-        finally:
+            return self._resume_result(principal, receipt, "blocked", observe=True), None
+        started = [False]
+
+        def drive():
+            if getattr(_resume_authority_context, "active", False):
+                raise RuntimeError("Resume authority re-entry unavailable")
             with self._lock:
-                self._resume_busy.discard(receipt.run_id)
-        return self._resume_result(principal, receipt, execution, observe=True)
+                blocked = started[0] or self._closed
+                started[0] = True
+            if blocked:
+                return self._resume_result(principal, receipt, "blocked")
+            execution = "blocked"
+            try:
+                if self._cancellation.stop_requested(self, receipt.run_id):
+                    raise ValueError("Resume locally stopped")
+                run = self._resume_pin(receipt)
+                self._start_control(principal, receipt.run_id)
+                if self._cancellation.stop_requested(self, receipt.run_id):
+                    raise ValueError("Resume locally stopped")
+                contract = parse_contract(run.contract_json)
+                if receipt.selection.branch == "reconciliation":
+                    delivery[0] = True
+                    self._resume_reconcile(principal, receipt, local)
+                else:
+                    if receipt.selection.branch not in {"generation", "scene"}:
+                        raise ValueError("Resume handoff unavailable")
+                    if receipt.selection.branch == "generation":
+                        pending = self.store.pending_generation(run.run_id)
+                        if (
+                            pending is None
+                            or pending["intent_id"] != receipt.selection.intent_id
+                            or pending["reservation"] is None
+                        ):
+                            raise ValueError("Original unclaimed reservation required")
+                        if local is not None and not local.retired:
+                            if (
+                                local.stopped
+                                or local.ports is not None
+                                or (
+                                    local.handle is not None
+                                    and (local.handle.fence is not None or local.handle.prepared is not None)
+                                )
+                            ):
+                                raise ValueError("Resume local ownership unresolved")
+                            local.coordinator.stop_local(principal)
+                            local.lease.release_never_prepared()
+                            local.retired = True
+                    elif local is not None and (local.ports is None or local.retired or local.stopped):
+                        raise ValueError("Resume scene ownership unresolved")
+                    # Local retirement/pending reads can outlive the first check.
+                    run = self._resume_pin(receipt)
+                    # No DB, coordinator, lease or port calls under this authority guard.
+                    _resume_authority_context.active = True
+                    try:
+                        with self.authority.mutation_guard():
+                            if delivery[0] or self._cancellation.stop_requested(self, receipt.run_id):
+                                raise ValueError("Resume delivery consumed or stopped")
+                            delivery[0] = True
+                            self.authority.apply_resume_authority(
+                                principal,
+                                contract,
+                                run=run,
+                                action=receipt.authorization_action,
+                                catalogue_sha256=self.catalogue_sha256,
+                            )
+                    finally:
+                        _resume_authority_context.active = False
+                    if receipt.selection.branch == "generation":
+                        self._generate(principal, run, contract, pending=pending, resume_receipt=receipt)
+                    elif local is None:
+                        self._scene(principal, run.run_id, contract, continuation=True, resume_receipt=receipt)
+                    else:
+                        local.ports.require_held_owner()
+                        local.ports.restore_observations(self.store.result_records(run.run_id), contract)
+                        self._drive_scene(principal, run.run_id, local, resume_receipt=receipt)
+                execution = "returned"
+            except Exception:
+                # Admission is immutable; partial grants/claim/preparation are not rolled back.
+                delivery[0] = True
+            finally:
+                with self._lock:
+                    self._resume_busy.discard(receipt.run_id)
+            return self._resume_result(principal, receipt, execution, observe=True)
+
+        return self._resume_result(principal, receipt, "not_requested"), drive
 
     def _resume_authority(self, principal, run, contract, *, renew_authorization):
         """Capture absent local grants; only explicit renewal replaces old grants."""

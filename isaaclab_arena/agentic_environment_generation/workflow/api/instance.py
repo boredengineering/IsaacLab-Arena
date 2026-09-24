@@ -75,12 +75,14 @@ def state(config, selected):
             else ""
         )
         result = fields(value, " ".join(PUBLIC) + " identity" + extra)
-        if extra and result["capabilities"] != {
-            "mode": "isolated-synthetic-execution-v1",
-            "submit": True,
-            "required_policy": False,
-        }:
-            raise ValueError("Execution capability binding differs")
+        if extra:
+            legacy = {"mode": "isolated-synthetic-execution-v1", "submit": True, "required_policy": False}
+            if result["capabilities"] not in (
+                legacy,
+                {**legacy, "cancel": True},
+                {**legacy, "cancel": True, "resume": True},
+            ):
+                raise ValueError("Execution capability binding differs")
     if (
         type(result["schema_version"]) is not int
         or result["schema_version"] != 1

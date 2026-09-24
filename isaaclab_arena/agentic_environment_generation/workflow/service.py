@@ -149,10 +149,10 @@ class WorkflowService:
         """Discover producer-tagged identities; generation detail is unsupported."""
         from .paging import (
             MAX_PAGE_BYTES,
-            DecisionPage,
-            DecisionCoverageUnavailable,
-            DecisionPosition,
             CursorQueryMismatch,
+            DecisionCoverageUnavailable,
+            DecisionPage,
+            DecisionPosition,
             RunPosition,
             encode_cursor,
         )
@@ -442,6 +442,53 @@ class WorkflowService:
     def read_scene_evidence(self, principal, evidence_id, *, protect) -> SceneEvidenceView | None:
         """Read an exact retained observation; metadata does not reverify artifact bytes."""
         return self._read_scene(principal, evidence_id, "evidence", SceneEvidenceView, protect)
+
+    def read_retained_bundle(self, principal, run_id, kind, reference_id, *, artifact_root, artifact_binding, protect):
+        """Authenticate retained references and verify bytes in the configured private artifact area."""
+        from ..workbench.research_artifacts import ArtifactArea
+        from .artifacts import RetainedArtifacts
+
+        self._authority.require_read(principal)
+        if self._read_scope is None or self._read_scope != artifact_binding or artifact_root is None:
+            raise ValueError("Bound read-only artifact configuration required")
+        validate_operation_id(run_id)
+        validate_operation_id(reference_id)
+        with ArtifactArea.open(
+            artifact_root, store_id=artifact_binding.store_id, registry_id=artifact_binding.registry_id
+        ) as area:
+            return RetainedArtifacts(self, area, protect).read(principal, run_id, kind, reference_id)
+
+    def read_artifact_chunk(
+        self,
+        principal,
+        run_id,
+        kind,
+        reference_id,
+        name,
+        expected_sha256,
+        offset,
+        limit,
+        *,
+        artifact_root,
+        artifact_binding,
+        protect,
+    ):
+        """Return bounded exact bytes, with current read authority and no execution credentials."""
+        from .artifacts import artifact_chunk
+
+        self._authority.require_read(principal)
+        if type(limit) is not int or not 1 <= limit <= 65536 or type(offset) is not int or offset < 0:
+            raise ValueError("Invalid artifact byte range")
+        bundle = self.read_retained_bundle(
+            principal,
+            run_id,
+            kind,
+            reference_id,
+            artifact_root=artifact_root,
+            artifact_binding=artifact_binding,
+            protect=protect,
+        )
+        return None if bundle is None else artifact_chunk(bundle, name, expected_sha256, offset, limit)
 
     def read_generation_recovery(self, principal, run_id, *, expected_fence=None):
         """Authenticate the exact original attempt without issuing execution authority."""

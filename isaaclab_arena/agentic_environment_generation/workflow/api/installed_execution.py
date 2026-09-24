@@ -11,7 +11,7 @@ from pathlib import Path
 from threading import Lock
 
 MODE = "isolated-synthetic-execution-v1"
-CAPABILITIES = {"mode": MODE, "submit": True, "required_policy": False}
+CAPABILITIES = {"mode": MODE, "submit": True, "cancel": True, "resume": True, "required_policy": False}
 
 
 def protect(value):
@@ -43,7 +43,6 @@ def compose(config, *, tokens, auth):
         resolve_inference_profile,
     )
     from isaaclab_arena.agentic_environment_generation.prior_receipt import empty_snapshot
-
     from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
     from isaaclab_arena.agentic_environment_generation.workflow.artifacts import GenerationArtifacts
     from isaaclab_arena.agentic_environment_generation.workflow.attempts import GenerationReservation
@@ -57,7 +56,6 @@ def compose(config, *, tokens, auth):
     from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import SceneEvidenceArtifacts
     from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import ScenePortProfile
     from isaaclab_arena.agentic_environment_generation.workflow.scene_ports import ModelCeiling
-
     from isaaclab_arena_examples.agentic_environment_generation import foreground_cancellation
     from isaaclab_arena_examples.agentic_environment_generation.foreground_authorization import (
         ForegroundAuthority,
@@ -74,7 +72,6 @@ def compose(config, *, tokens, auth):
     )
     from isaaclab_arena_examples.agentic_environment_generation.foreground_scene import ForegroundSceneWorker
     from isaaclab_arena_examples.agentic_environment_generation.foreground_scene_ports import ForegroundScenePorts
-
     from isaaclab_arena_examples.agentic_environment_generation.web_api.execution_grants import ExecutionGrants
 
     from ..application import ForegroundWorkflow
@@ -283,7 +280,23 @@ def compose(config, *, tokens, auth):
                     displacement_tolerance_m=0.001,
                 ),
             )
-            return ExecutionOwner(app, area, tokens, protect_all, execution_context=catalogue.activate)
+
+            def authorize_control(kind, principal, run_id):
+                # Explicit control is granted only to this composition's fixed
+                # operator, independently of model/execution credentials.
+                if kind not in {"cancel", "resume"}:
+                    raise PermissionError("Unsupported installed control")
+                principal_lookup(principal)
+                authority.require_read(principal)
+
+            return ExecutionOwner(
+                app,
+                area,
+                tokens,
+                protect_all,
+                execution_context=catalogue.activate,
+                authorize_control=authorize_control,
+            )
         except BaseException:
             if authority is not None:
                 authority.close()

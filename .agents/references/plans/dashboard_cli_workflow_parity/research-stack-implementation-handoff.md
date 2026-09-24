@@ -4,7 +4,39 @@ This is the single current implementation handoff. The orchestrator pivot below 
 
 ## 1. Current authorization and implementation gate
 
-### Orchestrator pivot — installed isolated workflow verified
+### P1 installed control and authenticated readback — bounded slice verified
+
+The current authorized slice is A04-02/A04-03/A04-14's installed control/readback boundary, not completion of all P1 or Plan 04. It builds on the accepted orchestration pivot below and retains the test-only execution composition guard.
+
+- Installed GraphQL and CLI expose keyed `cancel` and `resume`. Cancellation runs independently of the active drive through the existing stop-first application handler. Resume uses the existing receipt/selection/authorization machinery, split into immutable admission and an owner-only one-shot continuation; replay returns the original receipt without another drive or renewed authority. No second executor architecture or lifecycle database was introduced.
+- Typed `candidate`, `generation`, `assessment`, `evidence`, `prior` and `artifact-inventory` reads expose retained causal identities. `artifact` returns base64 chunks of at most 65,536 bytes, selected by retained run/reference/file-kind and expected content hash, never an arbitrary path. Each read verifies the retained binding and complete immutable file before returning a chunk. Scope/current-read authority and configured artifact-root identity remain mandatory.
+- Query-only composition exposes those reads but no mutations, requires no execution factory/model-role credentials, and neither retrieves new priors nor initializes inference/simulation. The installed synthetic composition still requires its original harness capability; this is not an ordinary production operator launcher.
+- The existing deterministic worker adapter remains in use. Tests exercise real installed HTTP/GraphQL, owned processes and disposable Neo4j. Test-generated model/observation outputs are not simulator-fidelity or model-quality evidence; the retained prior is explicitly unavailable/unconfigured, not a nonempty retrieval claim.
+- The fixed joined cases are `happy`, `cancel`, `resume` and `evidence`. They cover the original accepted workflow; active worker cancellation and terminal refusal; pre-claim restart/reapproval, a lost HTTP response body, immutable replay and unchanged reservations; and retained typed/byte reads plus query-only authorization/integrity negatives. The restart case includes a fresh byte reader after the replacement instance is ready. Active unresolved releases are blocked at the installed owner; existing exact-fence reconciliation regressions cover recovery without regrant, regeneration or automatic scene execution.
+- Test-only role/process/file enumeration was expanded for these explicit cases. The restart case permits 75 evidence files (72 expected); the other cases retain the 55-file cap. Readback clients are limited to 32 HTTP queries and denied artifact filesystem access. Existing 180-second harness/210-second outer watchdogs, worker budgets, token lifetimes, image/device/network isolation, physical-origin checks and exact cleanup remain unchanged.
+
+Final-source verification on 2026-09-24 passed for all four cases. Results are recorded in `outputs/workflow/plan04-implementation/installed-execution/p1-acceptance-results.json`; independent parent verification is `p1-parent-verification.json` alongside it. The parent rehashed all retained evidence, every staged source and all 380 captured repository sources against the checkout, then independently rechecked exact owned-container/network absence. Earlier failed runs remain retained and are not promoted to passes.
+
+| Case | Passing run under `installed-execution/joined-runs/` | Verified result |
+| --- | --- | --- |
+| `happy` | `arena-neo4j-22eb7317f1f04708a4286f0a13437fd5` | Original detached installed workflow returns accepted; Neo4j/provenance/artifact readback and cleanup agree. |
+| `cancel` | `arena-neo4j-cfaac6c5ae9843bab125a32bdc7d5973` | Active owned worker is stopped; durable cancellation/cleanup/retirement, exact replay, changed-payload conflict and terminal-resume refusal agree. |
+| `resume` | `arena-neo4j-e9b229122e9442dc853a5fe23a90b64d` | Original unclaimed reservation survives the exact server interruption; reconciliation and a new instance precede explicit reapproval. A real successful HTTP body is dropped; later clients receive the original committed receipt without duplicate release. Changed payload and another resume during the unresolved active release are blocked. The workflow reaches accepted, and a fresh client retrieves all seven selected artifact files through the replacement server. |
+| `evidence` | `arena-neo4j-b92adee43db8446bb9d353eb0ce719c1` | A filesystem-denied fresh HTTP client reconstructs typed details and all seven selected artifact files. The separate query-only ASGI/Neo4j composition reads the same retained data/receipt without execution credentials; scope/auth/path/size/tamper negatives pass and the disposable artifact is restored. |
+
+Supporting final-source checks passed: 13 focused installed-control/artifact tests, 26 existing resume/authorization/exact-fence reconciliation cases, and seven pivot catalogue/import-boundary regressions. Host Black 24.3.0, isort 5.13.2 and flake8 7.0.0 checks passed on the 15 selected production/new-test files; changed script/test lines have no new flake8 findings, and `git diff --check` passed. Untouched script lint debt was not reformatted away. This is not a full-suite claim: the standalone legacy lifecycle attempt needs its special `/source`/`/evidence` harness, and its dedicated runner currently refuses its outdated frozen source inventory before tests (`lifecycle-runs/arena-neo4j-ecff82ea87054fc38abe2268bf869ebd`, cleanup verified). No inventory/effect guard was bypassed to make that ancillary check pass.
+
+Reproduce any case from the repository root:
+
+```sh
+python3 -B scripts/run-workflow-neo4j-checks.py workflow-graphql-execution-joined --joined-case resume --runtime-image sha256:b94e17024f1e123ac5a42759ab56651a18823fda7c701e765cba31f200154cdd --provision-manifest outputs/workflow/plan03-implementation/graphql-provisioning/implementation/arena-f0-graphql-provision-fea7e278760f/provision-manifest.json
+```
+
+Replace `resume` with `happy`, `cancel` or `evidence` for the other fixed cases. The `evidence` case also runs the real query-only ASGI/Neo4j boundary with no execution factory, tests foreign/revoked/stale credentials, rejects cross-run references, oversized chunks and arbitrary paths, and restores an intentionally tampered disposable artifact in `finally`.
+
+Remaining scope: ordinary operator/provider composition, nonempty prior retrieval and consumed-prior continuation, native/policy calibration, live V1/V2 and production backup/restore remain separate work. Artifact APIs cover the selected retained JSON/YAML files, not a general filesystem/image/video service. Full-suite simulation, model quality and all-P1 completion are not claimed. No commits or pushes are authorized by this checkpoint.
+
+### Preceding orchestrator pivot — installed isolated workflow verified
 
 The authorized goal is complete for the installed orchestration/database slice: real GraphQL submission → existing application/agent and worker adapters → retained result → independent Neo4j and artifact readback. Simulation remains a black box; full simulator registration is not an orchestration prerequisite.
 

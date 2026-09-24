@@ -41,6 +41,8 @@ INSTANCE = "dddddddddddddddddddddddddddddddd"
 CLIENT = f"/tmp/graphql-execution/execution/runtime/instances/{INSTANCE}/client.json"
 CONTRACT = "/tmp/graphql-execution/execution/config/contract.json"
 OPERATION = "e1-submit"
+JOIN_CASE = os.environ.get("ARENA_WORKFLOW_JOIN_CASE", "happy")
+assert JOIN_CASE in {"happy", "cancel", "resume", "evidence"}
 RUN_ID = hashlib.sha256(
     json.dumps(["execution-admission-test", "execution", OPERATION], separators=(",", ":")).encode()
 ).hexdigest()
@@ -61,19 +63,58 @@ ADMIN = [
     ],
 ]
 LAUNCH = ["api-launch", "--config", CONFIG, "--instance", INSTANCE]
+RESUME_INSTANCE = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+RESUME_CLIENT = f"/tmp/graphql-execution/execution/runtime/instances/{RESUME_INSTANCE}/client.json"
+RELAUNCH = ["api-launch", "--config", CONFIG, "--instance", RESUME_INSTANCE]
+RECONCILE = ["api-reconcile", "--config", CONFIG, "--instance", INSTANCE]
+READBACK = ["p1-readback", "--client", CLIENT]
+RESUME = [
+    "resume",
+    RUN_ID,
+    "--client",
+    RESUME_CLIENT,
+    "--operation-id",
+    "p1-resume",
+    "--renew-authorization",
+    "--expected-version",
+    "reserved-version",
+]
+READ_CLIENT = RESUME_CLIENT if JOIN_CASE == "resume" else CLIENT
+READ_INSTANCE = RESUME_INSTANCE if JOIN_CASE == "resume" else INSTANCE
+LOST_RESPONSE = ["p1-resume-lost", "--client", RESUME_CLIENT]
+CONTROL_CHECK = ["p1-control", "--client", READ_CLIENT]
 SUBMIT = ["submit", "--client", CLIENT, "--operation-id", OPERATION, "--contract", CONTRACT]
-RESULT = ["result", RUN_ID, "--client", CLIENT, "--operation-id", OPERATION, "--wait-terminal-seconds", "120"]
-STOP = ["api-stop", "--config", CONFIG, "--instance", INSTANCE]
-STATUS = ["api-status", "--config", CONFIG, "--instance", INSTANCE]
+CANCEL = ["cancel", RUN_ID, "--client", CLIENT, "--operation-id", "p1-cancel"]
+RESULT = ["result", RUN_ID, "--client", READ_CLIENT, "--operation-id", OPERATION, "--wait-terminal-seconds", "120"]
+STOP = ["api-stop", "--config", CONFIG, "--instance", READ_INSTANCE]
+STATUS = ["api-status", "--config", CONFIG, "--instance", READ_INSTANCE]
 THREAD_ENV = {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
 LAUNCH_ENV = {"HOME": "/tmp", "PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"}
-ENV = {**LAUNCH_ENV, **THREAD_ENV}
+ENV = {**LAUNCH_ENV, **THREAD_ENV, **({"ARENA_WORKFLOW_JOIN_CASE": JOIN_CASE} if JOIN_CASE != "happy" else {})}
+COMMANDS = [*ADMIN, LAUNCH, SUBMIT, *([CANCEL] if JOIN_CASE == "cancel" else []), RESULT]
+if JOIN_CASE == "resume":
+    COMMANDS = [*ADMIN, LAUNCH, SUBMIT, RECONCILE, RELAUNCH, LOST_RESPONSE, RESUME, CONTROL_CHECK, RESULT, READBACK]
+if JOIN_CASE == "cancel":
+    COMMANDS.append(CONTROL_CHECK)
+if JOIN_CASE == "evidence":
+    COMMANDS.append(READBACK)
+CLIENT_LAUNCHES = 2 + len(COMMANDS) + 2
 SOURCE_LIMIT = 384  # Exact static closure plus four generated leaves.
 SOURCE_MANIFEST_LIMIT = 65536
 ACTIVE = None
 PROFILE_CALL_NAMES = frozenset({
-    "__init__", "launch", "render", "retrieve_snapshot", "driver", "query",
-    "launch_tiled", "capture_launch", "Open", "OpenMasked", "synthetic_response",
+    "__init__",
+    "launch",
+    "render",
+    "retrieve_snapshot",
+    "driver",
+    "query",
+    "launch_tiled",
+    "capture_launch",
+    "Open",
+    "OpenMasked",
+    "synthetic_response",
+    "claim_intent",
 })
 
 # Bytes-only candidates, NOT import permissions. First five are the existing
@@ -1210,13 +1251,24 @@ def role_for(arguments):
         return "setup"
     if arguments in ADMIN:
         return "admin"
-    if arguments == LAUNCH:
+    if arguments == LAUNCH or JOIN_CASE == "resume" and arguments == RELAUNCH:
         return "launcher"
-    if arguments in (SUBMIT, RESULT, STOP, STATUS):
+    if arguments in (SUBMIT, RESULT, STOP, STATUS) or JOIN_CASE == "cancel" and arguments == CANCEL:
+        return "client"
+    if JOIN_CASE == "resume" and arguments == RECONCILE:
+        return "client"
+    if JOIN_CASE in {"evidence", "resume"} and arguments == READBACK:
+        return "client"
+    if JOIN_CASE in {"cancel", "resume"} and arguments == CONTROL_CHECK:
+        return "client"
+    if JOIN_CASE == "resume" and arguments == LOST_RESPONSE:
+        return "client"
+    if JOIN_CASE == "resume" and arguments[:1] == ["resume"] and arguments == resume_arguments():
         return "client"
     if (
         len(arguments) == 9
-        and arguments[:5] == ["api-serve", "--config", CONFIG, "--instance", INSTANCE]
+        and arguments[:4] == ["api-serve", "--config", CONFIG, "--instance"]
+        and arguments[4] in ({INSTANCE, RESUME_INSTANCE} if JOIN_CASE == "resume" else {INSTANCE})
         and arguments[5] == "--lease-fd"
         and arguments[7] == "--gate-fd"
         and all(re.fullmatch(r"[1-9][0-9]{0,5}", arguments[i]) and int(arguments[i]) >= 3 for i in (6, 8))
@@ -1258,6 +1310,8 @@ class JoinGuards(base.Guards):
         self.http_operations = []
         self.http_started = None
         self.last_status = None
+        self.http_interval_failure = None
+        self.lost_response_status: int | None = None
 
     def deny(self, kind):
         if kind == "blocked_import" and self.role in {"server", "model"}:
@@ -1284,6 +1338,13 @@ class JoinGuards(base.Guards):
         # those through every policy layer dominates cold Pydantic imports.
         if event != "call" or frame.f_code.co_name not in PROFILE_CALL_NAMES:
             return
+        if (
+            JOIN_CASE == "resume"
+            and self.role == "server"
+            and self.cli_arguments[4] == INSTANCE
+            and frame.f_code.co_name == "claim_intent"
+        ):
+            pause_unreleased_claim(frame)
         if getattr(self, "initialization_controls_ready", False) and event == "call":
             module = frame.f_globals.get("__name__", "")
             name = frame.f_code.co_name
@@ -1301,16 +1362,47 @@ class JoinGuards(base.Guards):
             if loaded is not None and frame.f_code is loaded.query.__code__ and frame.f_globals is loaded.__dict__:
                 now = time.monotonic()
                 operation = frame.f_locals.get("operation")
-                assert frame.f_locals.get("path") == CLIENT
+                assert frame.f_locals.get("path") == (CLIENT if self.cli_arguments == SUBMIT else READ_CLIENT)
                 if self.http_started is None:
                     self.http_started = now
                 if self.cli_arguments == SUBMIT:
                     assert operation == "submit" and not self.http_operations
+                elif JOIN_CASE == "cancel" and self.cli_arguments == CANCEL:
+                    assert operation == "cancel" and not self.http_operations
+                elif JOIN_CASE == "resume" and self.cli_arguments == resume_arguments():
+                    assert operation == "resume" and not self.http_operations
+                elif self.cli_arguments == LOST_RESPONSE:
+                    assert (
+                        operation == ("status" if not self.http_operations else "resume")
+                        and len(self.http_operations) < 2
+                    )
+                    assert frame.f_locals.get("identifier") == RUN_ID
+                elif self.cli_arguments == CONTROL_CHECK:
+                    assert operation in {"status", "receipt", "resume", "cancel"} and len(self.http_operations) < 12
+                    assert frame.f_locals.get("identifier") in {RUN_ID, "p1-resume", "p1-cancel", "p1-not-this-run"}
+                elif self.cli_arguments == READBACK:
+                    assert (
+                        operation
+                        in {
+                            "result",
+                            "prior",
+                            "candidate",
+                            "generation",
+                            "evidence",
+                            "assessment",
+                            "artifact-inventory",
+                            "artifact",
+                        }
+                        and len(self.http_operations) < 32
+                    )
+                    assert frame.f_locals.get("identifier") == RUN_ID
                 else:
                     assert self.cli_arguments == RESULT and now - self.http_started < 120
                     assert operation in {"result-status", "result"} and "result" not in self.http_operations
                     if operation == "result-status":
                         assert self.http_operations.count("result-status") < 120
+                        if self.last_status is not None and now - self.last_status < 1:
+                            self.http_interval_failure = now - self.last_status
                         assert self.last_status is None or now - self.last_status >= 1
                         self.last_status = now
                 self.http_operations.append(operation)
@@ -1350,15 +1442,16 @@ class JoinGuards(base.Guards):
             return False
         fd = int(match[1])
         info = os.fstat(fd)
-        directory = Path(f"/tmp/graphql-execution/execution/runtime/instances/{INSTANCE}")
+        selected = self.cli_arguments[self.cli_arguments.index("--instance") + 1]
+        assert selected in ({INSTANCE, RESUME_INSTANCE} if JOIN_CASE == "resume" else {INSTANCE})
+        directory = Path(f"/tmp/graphql-execution/execution/runtime/instances/{selected}")
         if directory.is_symlink():
             return False
         expected = directory.stat()
         if (info.st_dev, info.st_ino) != (expected.st_dev, expected.st_ino):
             return False
         if (
-            os.readlink(f"/proc/self/fd/{fd}")
-            not in ["/tmp/graphql-execution/execution/runtime/instances/" + item for item in (INSTANCE,)]
+            os.readlink(f"/proc/self/fd/{fd}") != "/tmp/graphql-execution/execution/runtime/instances/" + selected
             or info.st_uid != 1000
             or stat.S_IMODE(info.st_mode) != 0o700
         ):
@@ -1373,6 +1466,18 @@ class JoinGuards(base.Guards):
         return executing(module, function.__code__)
 
     def audit(self, event, args):
+        if self.role == "client" and self.cli_arguments == READBACK and event == "open":
+            path = args[0]
+            if isinstance(path, (str, bytes, os.PathLike)):
+                value = os.fsdecode(path)
+                assert not value.startswith("/tmp/graphql-execution/execution/artifacts/") and Path(value).name not in {
+                    "prior.json",
+                    "candidate.json",
+                    "candidate.yaml",
+                    "provenance.json",
+                    "evidence.json",
+                    "manifest.json",
+                }, "HTTP readback client may not read artifact files"
         if event == "import" and getattr(self, "initialization_controls_ready", False):
             top = args[0].split(".")[0]
             if top not in {"sqlite3", "_sqlite3"}:
@@ -1542,7 +1647,9 @@ class JoinGuards(base.Guards):
             ):
                 return self.deny("subprocess")
             with self.lock:
-                if self.allowed["child_launch"] >= 4 or any(Path(f"/proc/{pid}").exists() for pid in self.children):
+                if self.allowed["child_launch"] >= (1 if JOIN_CASE == "cancel" else 4) or any(
+                    Path(f"/proc/{pid}").exists() for pid in self.children
+                ):
                     return self.deny("subprocess")
                 return self.launch(args, kwargs)
         frame = sys._getframe(1)
@@ -1555,7 +1662,7 @@ class JoinGuards(base.Guards):
             or args != permit[0]
             or kwargs != permit[1]
             or any(type(kwargs[k]) is not type(v) for k, v in permit[1].items())
-            or self.allowed["child_launch"] >= 12
+            or self.allowed["child_launch"] >= CLIENT_LAUNCHES
         ):
             return self.deny("subprocess")
         self.permit = None
@@ -1624,7 +1731,8 @@ def fresh(arguments, *, private_fd=None):
     else:
         assert private_fd is None
         if arguments not in (STOP, STATUS):
-            assert arguments == [*ADMIN, LAUNCH, SUBMIT, RESULT][index - 2] and index >= 2
+            expected = COMMANDS[index - 2]
+            assert index >= 2 and arguments == (resume_arguments() if expected == RESUME else expected)
         else:
             assert LAUNCH in guard.used
             assert arguments == STOP or STOP in guard.used
@@ -1930,22 +2038,36 @@ def child():
             sys.argv = [MODULE, *arguments]
             previous_trace = sys.gettrace()
             previous_thread_trace = threading.gettrace()
-            if role == "server":
+            if role in {"server", "client"}:
                 record["startup_exception_sites"] = []
                 startup_lock = threading.RLock()
                 startup_active = [True]
                 startup_main = threading.get_ident()
                 startup_targets = {
-
                     "/source/isaaclab_arena/agentic_environment_generation/workflow/api/server.py": {
-                        "supervise", "serve", "serving",
+                        "supervise",
+                        "serve",
+                        "serving",
                     },
                     "/source/isaaclab_arena/agentic_environment_generation/workflow/api/application.py": {
-                        "boot", "lifespan",
+                        "boot",
+                        "lifespan",
                     },
                     "/source/isaaclab_arena/agentic_environment_generation/workflow/api/installed_execution.py": {
-                        "compose", "build",
+                        "compose",
+                        "build",
                     },
+                    "/source/isaaclab_arena/agentic_environment_generation/workflow/application.py": {
+                        "_generate",
+                        "_scene",
+                        "_scene_phase",
+                        "_drive_scene",
+                    },
+                    "/source/isaaclab_arena/agentic_environment_generation/workflow/api/client.py": {
+                        "query",
+                        "result",
+                    },
+                    "/source/isaaclab_arena/agentic_environment_generation/workflow/cli.py": {"_run_installed"},
                 }
 
                 def startup_trace(frame, event, arg):
@@ -1990,13 +2112,20 @@ def child():
                     output_scope = (contextlib.redirect_stdout(sys.stderr)
                                     if initialization and role == "server" else contextlib.nullcontext())
                     with output_scope:
-                        runpy.run_module(MODULE, run_name="__main__", alter_sys=False)
+                        if arguments == READBACK:
+                            readback_client()
+                        elif arguments == LOST_RESPONSE:
+                            lost_response_client()
+                        elif arguments == CONTROL_CHECK:
+                            control_client()
+                        else:
+                            runpy.run_module(MODULE, run_name="__main__", alter_sys=False)
                 except SystemExit as error:
                     code = error.code
                 else:
                     code = 0
             finally:
-                if role == "server":
+                if role in {"server", "client"}:
                     with startup_lock:
                         startup_active[0] = False
                         threading.settrace(previous_thread_trace)
@@ -2025,7 +2154,9 @@ def child():
             forbidden=guard.forbidden,
             first_blocked_import_sites=getattr(guard, "first_blocked_import_sites", None),
             simulator_registry_prepared=getattr(
-                sys.modules.get("isaaclab_arena.assets.registries"), "_assets_registered", False,
+                sys.modules.get("isaaclab_arena.assets.registries"),
+                "_assets_registered",
+                False,
             ),
             allowed=guard.allowed,
             spawn_records=guard.spawn_records,
@@ -2034,6 +2165,8 @@ def child():
             sdk_ready=guard.sdk_ready,
             sdk_calls=guard.sdk_calls,
             http_operations=guard.http_operations,
+            http_interval_failure=guard.http_interval_failure,
+            lost_response_status=guard.lost_response_status,
         )
         try:
             assert verify_sources() == manifest
@@ -2062,8 +2195,432 @@ def child():
             signal.alarm(0)
 
 
+def lost_response_client():
+    """Close the real successful HTTP stream before consuming its resume body."""
+    import httpx
+    from isaaclab_arena.agentic_environment_generation.workflow.api.client import query
+
+    original = httpx.Response.iter_raw
+
+    def dropped_response(self: httpx.Response, chunk_size: int | None = None):
+        if ACTIVE.http_operations and ACTIVE.http_operations[-1] == "resume":
+            assert self.status_code == 200 and ACTIVE.lost_response_status is None
+            ACTIVE.lost_response_status = self.status_code
+            self.close()
+            raise OSError("Test-only lost resume response body")
+        yield from original(self, chunk_size)
+
+    httpx.Response.iter_raw = dropped_response
+    status = query(RESUME_CLIENT, "status", identifier=RUN_ID)["data"]["workflow"]
+    try:
+        query(
+            RESUME_CLIENT,
+            "resume",
+            identifier=RUN_ID,
+            operation_id="p1-resume",
+            expected_version=status["version"],
+            renew_authorization=True,
+        )
+    except OSError:
+        assert ACTIVE.lost_response_status == 200
+        raise SystemExit(2)
+    raise AssertionError("Expected response body loss was not exercised")
+
+
+def snapshot_resume_receipt():
+    """Read the committed original after the lost body, before replaying it."""
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import Resources
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+
+    resources = Resources(load(CONFIG))
+    with resources.driver() as driver:
+        receipt = resources.store(driver).get_resume_receipt("p1-resume")
+        assert receipt is not None and receipt.disposition == "continuation_admitted"
+    write_evidence("join-resume-original.json", receipt.model_dump(mode="json"))
+    return receipt
+
+
+def control_client():
+    """Exercise immutable replay and blocked alternative commands through HTTP only."""
+    from isaaclab_arena.agentic_environment_generation.workflow.api.client import query
+
+    status = query(READ_CLIENT, "status", identifier=RUN_ID)["data"]["workflow"]
+    kind, operation = ("RESUME", "p1-resume") if JOIN_CASE == "resume" else ("CANCEL", "p1-cancel")
+    original = query(READ_CLIENT, "receipt", kind=kind, identifier=operation)["data"]["workflowCommand"]
+    outcomes = {"original": original}
+    if JOIN_CASE == "resume":
+        expected = original["beforeVersion"]
+        replay = query(
+            READ_CLIENT,
+            "resume",
+            identifier=RUN_ID,
+            operation_id=operation,
+            expected_version=expected,
+            renew_authorization=True,
+        )["data"]["resumeWorkflow"]
+        changed = query(
+            READ_CLIENT,
+            "resume",
+            identifier=RUN_ID,
+            operation_id=operation,
+            expected_version=str(int(expected) + 1),
+            renew_authorization=True,
+        )["data"]["resumeWorkflow"]
+        assert replay["receiptDigest"] == original["receiptDigest"] and changed["__typename"] == "QueryFailure"
+        blocked = query(
+            READ_CLIENT,
+            "resume",
+            identifier=RUN_ID,
+            operation_id="p1-uncertain",
+            expected_version=status["version"],
+            renew_authorization=True,
+        )["data"]["resumeWorkflow"]
+        assert blocked == {"__typename": "QueryFailure", "code": "OVERLOADED"}
+        outcomes.update(replay=replay, changed_payload=changed, active_uncertain_release_blocked=blocked)
+    else:
+        assert status["state"] == "cancelled"
+        replay = query(READ_CLIENT, "cancel", identifier=RUN_ID, operation_id=operation)["data"]["cancelWorkflow"]
+        assert replay["durable"] == "recorded" and replay["receipt"]["receiptDigest"] == original["receiptDigest"]
+        changed = query(READ_CLIENT, "cancel", identifier="p1-not-this-run", operation_id=operation)["data"][
+            "cancelWorkflow"
+        ]
+        assert changed["__typename"] == "CancellationResult" and changed["durable"] == "conflict"
+        terminal = query(
+            READ_CLIENT,
+            "resume",
+            identifier=RUN_ID,
+            operation_id="p1-terminal",
+            expected_version=status["version"],
+            renew_authorization=True,
+        )["data"]["resumeWorkflow"]
+        assert terminal["__typename"] == "ResumeReceipt" and terminal["disposition"] == "refused"
+        after = query(READ_CLIENT, "status", identifier=RUN_ID)["data"]["workflow"]
+        assert after["state"] == "cancelled" and after["version"] == status["version"]
+        outcomes.update(replay=replay, changed_payload=changed, terminal_resume=terminal)
+    print(json.dumps(outcomes, sort_keys=True))
+
+
+def verify_control_results(value):
+    """Independent retained receipts, original release and unchanged reservations."""
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import Resources
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+
+    resources = Resources(load(CONFIG))
+    with resources.driver() as driver:
+        store = resources.store(driver)
+        attempt = store.get_generation_attempt(RUN_ID)
+        reserved = store.get_run_inspection(RUN_ID).budget.reserved
+        before_name = "join-unreleased.json" if JOIN_CASE == "resume" else "join-retained.json"
+        assert reserved.model_dump(mode="json") == read_json(Path("/evidence") / before_name)["reserved"]
+        if JOIN_CASE == "resume":
+            receipt = store.get_resume_receipt("p1-resume")
+            original = read_json(Path("/evidence/join-resume-original.json"))
+            assert receipt.model_dump(mode="json") == original
+            assert attempt.released is True and attempt.receipt is None and attempt.cleanup is None
+            assert store.get_resume_receipt("p1-uncertain") is None
+        else:
+            receipt = store.get_cancel_receipt("p1-cancel")
+            terminal = store.get_resume_receipt("p1-terminal")
+            assert terminal.disposition == "refused" and store.get_run(RUN_ID).state == "cancelled"
+            assert attempt.cleanup is not None
+        assert value["original"]["receiptDigest"] == receipt.receipt_digest
+    write_evidence("join-controls.json", value)
+
+
+def readback_client():
+    """A fresh installed HTTP client; the guard denies artifact filesystem reads."""
+    import base64
+    from isaaclab_arena.agentic_environment_generation.workflow.api.client import query
+
+    prior = query(READ_CLIENT, "prior", identifier=RUN_ID)["data"]["workflowPrior"]
+    assert prior["__typename"] == "PriorDetail" and prior["runId"] == RUN_ID
+    assert prior["priorCount"] == 0 and prior["status"] == "unavailable"
+    retained = query(READ_CLIENT, "result", identifier=RUN_ID, operation_id=OPERATION)["data"]["workflow"]
+    selected = retained["scene"]["selectedCandidateReference"]
+    candidate = query(
+        READ_CLIENT,
+        "candidate",
+        identifier=RUN_ID,
+        reference_id=selected["candidateId"],
+    )[
+        "data"
+    ]["workflowCandidate"]
+    assert candidate["__typename"] == "CandidateDetail" and candidate["digest"] == selected["digest"]
+    generation_ref = retained["generationOutputs"][0]
+    generation = query(READ_CLIENT, "generation", identifier=RUN_ID, reference_id=generation_ref["attemptId"])["data"][
+        "workflowGeneration"
+    ]
+    assert (
+        generation["__typename"] == "GenerationDetail"
+        and generation["manifestDigest"] == generation_ref["manifestSha256"]
+    )
+    evidence = query(READ_CLIENT, "evidence", identifier=RUN_ID, reference_id=retained["scene"]["evidenceId"])["data"][
+        "workflowEvidence"
+    ]
+    assert evidence["__typename"] == "EvidenceDetail" and evidence["candidateId"] == candidate["candidateId"]
+    assessment = query(READ_CLIENT, "assessment", identifier=RUN_ID, reference_id=retained["scene"]["assessmentId"])[
+        "data"
+    ]["workflowAssessment"]
+    assert assessment["__typename"] == "AssessmentDetail" and assessment["status"] == "established"
+    assert assessment["evidenceId"] == evidence["evidenceId"] and assessment["candidateId"] == candidate["candidateId"]
+    inventories = []
+    for selector in evidence["artifactSelectors"]:
+        inventory = query(
+            READ_CLIENT,
+            "artifact-inventory",
+            identifier=RUN_ID,
+            kind=selector["kind"],
+            reference_id=selector["referenceId"],
+        )["data"]["workflowArtifacts"]
+        assert (
+            inventory["__typename"] == "ArtifactInventory" and inventory["manifestDigest"] == selector["manifestDigest"]
+        )
+        inventories.append(inventory)
+    retrieved = []
+    for reference in [
+        *prior["artifacts"],
+        *candidate["artifacts"],
+        *generation["artifacts"],
+        *(item for inventory in inventories for item in inventory["artifacts"]),
+    ]:
+        assert reference["runId"] == RUN_ID
+        raw = bytearray()
+        while len(raw) < int(reference["totalBytes"]):
+            result = query(
+                READ_CLIENT,
+                "artifact",
+                identifier=RUN_ID,
+                kind=reference["kind"],
+                reference_id=reference["referenceId"],
+                artifact_name=reference["name"],
+                sha256=reference["sha256"],
+                offset=str(len(raw)),
+                limit=8192,
+            )["data"]["workflowArtifact"]
+            assert result["__typename"] == "ArtifactChunk" and result["encoding"] == "base64"
+            assert int(result["offset"]) == len(raw) and result["sha256"] == reference["sha256"]
+            chunk = base64.b64decode(result["data"], validate=True)
+            assert len(chunk) == int(result["length"]) and 0 < len(chunk) <= 8192
+            raw.extend(chunk)
+            assert result["eof"] == (len(raw) == int(reference["totalBytes"]))
+        assert hashlib.sha256(raw).hexdigest() == reference["sha256"]
+        retrieved.append(dict(reference, retrieved_bytes=len(raw), received_sha256=hashlib.sha256(raw).hexdigest()))
+    print(
+        json.dumps(
+            dict(
+                prior=prior,
+                candidate=candidate,
+                generation=generation,
+                evidence=evidence,
+                assessment=assessment,
+                inventories=inventories,
+                artifacts=retrieved,
+            ),
+            sort_keys=True,
+        )
+    )
+
+
+def verify_api_readback(value):
+    """Independent database binding and verified immutable bytes agree with HTTP."""
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import Resources
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import parse_contract, contract_digest
+    from isaaclab_arena.agentic_environment_generation.workflow.prior_artifacts import RetainedPriorArtifacts
+    from isaaclab_arena.agentic_environment_generation.workflow.artifacts import GenerationArtifacts
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import (
+        canonical,
+        SceneEvidenceArtifacts,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.evidence import CandidateBinding
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
+
+    config = load(CONFIG)
+    resources = Resources(config)
+    with resources.driver() as driver:
+        store = resources.store(driver)
+        contract = parse_contract(store.get_run(RUN_ID).contract_json)
+        candidate = store.get_scene_candidate(value["candidate"]["candidateId"]).candidate
+        receipt = store.get_generation_attempt(RUN_ID).receipt
+        evidence = store.get_scene_evidence(value["evidence"]["evidenceId"])
+        assessment = store.get_scene_assessment(value["assessment"]["assessmentId"])
+    binding = RetainedPriorArtifacts._binding(contract.source.prompt, contract_digest(contract), RUN_ID)
+    version = hashlib.sha256(canonical(binding)).hexdigest()
+    with ArtifactArea.open(
+        config.value["artifact_root"], store_id=config.binding.store_id, registry_id=config.binding.registry_id
+    ) as area:
+        manifest = area.read_final_manifest("scene-prior", version, binding=binding)
+        files = area.verify(f"final/scene-prior/{version}", manifest)
+        generation_files = GenerationArtifacts(area).verified_bytes(receipt, protect=lambda _: None)
+        evidence_files = {}
+        for entry in evidence.observation.evidence:
+            if entry.manifest_digest in evidence_files:
+                continue
+            binding = CandidateBinding(
+                candidate_digest=entry.candidate_digest,
+                contract_digest=entry.cohort.contract_digest,
+                profile_digest=entry.cohort.profile_digest,
+            )
+            retained_evidence = SceneEvidenceArtifacts(area).load_receipt(
+                binding,
+                entry.cohort,
+                kind="visual-answer" if entry.modality == "visual" else "observation",
+                manifest_digest=entry.manifest_digest,
+                protect=lambda _: None,
+            )
+            evidence_files[entry.manifest_digest] = area.verify(
+                retained_evidence.relative_directory, json.loads(retained_evidence.manifest_json)
+            )["evidence.json"]
+    prior = value["prior"]
+    assert prior["contractDigest"] == contract_digest(contract) and prior["manifestDigest"] == manifest["digest"]
+    assert set(files) == {"prior.json"}
+    assert value["candidate"]["digest"] == candidate.digest and value["candidate"]["sourceId"] == candidate.source_id
+    expected = {
+        ("PRIOR", RUN_ID, "PRIOR_JSON"): files["prior.json"],
+        ("CANDIDATE", candidate.candidate_id, "CANDIDATE_JSON"): candidate.scene_json.encode(),
+    }
+    assert value["generation"]["manifestDigest"] == receipt.manifest_sha256
+    assert value["generation"]["registrationId"] == receipt.registration.registration_id
+    expected.update({
+        ("GENERATION", receipt.fence.attempt_id, name.upper().replace(".", "_")): raw
+        for name, raw in generation_files.items()
+    })
+    assert value["evidence"]["candidateId"] == evidence.candidate_id
+    assert value["assessment"]["candidateId"] == assessment.candidate_id
+    assert value["assessment"]["evidenceId"] == assessment.evidence_id
+    assert value["assessment"]["status"] == assessment.assessment.status
+    assert value["evidence"]["verifiedManifestDigests"] == list(evidence.observation.verified_manifest_digests)
+    expected.update({
+        ("EVIDENCE", evidence.evidence_id + manifest, "EVIDENCE_JSON"): raw for manifest, raw in evidence_files.items()
+    })
+    assert len(value["artifacts"]) == len(expected)
+    observed_keys = set()
+    for observed in value["artifacts"]:
+        key = observed["kind"], observed["referenceId"], observed["name"]
+        assert key not in observed_keys
+        observed_keys.add(key)
+        raw = expected[key]
+        assert observed["received_sha256"] == hashlib.sha256(raw).hexdigest() == observed["sha256"]
+        assert observed["retrieved_bytes"] == len(raw) == int(observed["totalBytes"])
+    assert observed_keys == set(expected)
+    write_evidence("join-api-readback.json", value)
+
+
+def pause_unreleased_claim(frame):
+    """Test-only pause at the real claim entry, after real reservation/owner commits."""
+    from isaaclab_arena.agentic_environment_generation.workflow.neo4j_store import Neo4jWorkflowStore
+
+    assert frame.f_code is Neo4jWorkflowStore.claim_intent.__code__
+    assert frame.f_globals is sys.modules[Neo4jWorkflowStore.__module__].__dict__
+    store = frame.f_locals["self"]
+    run, attempt = store.get_run(RUN_ID), store.get_generation_attempt(RUN_ID)
+    pending, owner = store.pending_generation(RUN_ID), store.get_owner()
+    assert pending["intent_id"] == frame.f_locals["intent_id"]
+    assert owner.owner_id == frame.f_locals["owner_id"] and owner.owner_epoch == frame.f_locals["owner_epoch"]
+    assert attempt is None, "The real claim body has not created any attempt"
+    assert ACTIVE.spawn_records == [] and not any(ACTIVE.forbidden.values())
+    write_evidence(
+        "join-unreleased.json",
+        dict(
+            identity=identity(),
+            run_id=run.run_id,
+            version=run.version,
+            intent_id=pending["intent_id"],
+            contract_json=run.contract_json,
+            reservation=pending["reservation"].model_dump(mode="json"),
+            reserved=store.get_run_inspection(RUN_ID).budget.reserved.model_dump(mode="json"),
+            owner=owner.model_dump(mode="json"),
+            guard=dict(
+                forbidden=ACTIVE.forbidden,
+                allowed=ACTIVE.allowed,
+                basic_auth_handoffs=ACTIVE.basic_auth_handoffs,
+                spawn_records=ACTIVE.spawn_records,
+                owner_constructions=ACTIVE.owner_constructions,
+                sdk_calls=ACTIVE.sdk_calls,
+            ),
+        ),
+    )
+    until = time.monotonic() + 15
+    while time.monotonic() < until:
+        time.sleep(0.02)
+    raise RuntimeError("Test interruption was not observed before its deadline")
+
+
+def resume_arguments():
+    """Bind the fixed resume command to the actual retained pre-claim version."""
+    assert JOIN_CASE == "resume"
+    value = read_json(Path("/evidence/join-unreleased.json"))
+    assert value["run_id"] == RUN_ID and type(value["version"]) is int and value["version"] >= 1
+    return [*RESUME[:-1], str(value["version"])]
+
+
+def interrupt_unreleased_server(pid):
+    """Kill only the exact recorded worker-free server, then read its state independently."""
+    from workflow_graphql_execution_join_fixture import IDENTITY_FIELDS
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import Resources
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.owned_process_group import group_members
+
+    assert JOIN_CASE == "resume" and pid == server_pid()
+    until = min(ACTIVE.deadline, time.monotonic() + 15)
+    path = Path("/evidence/join-unreleased.json")
+    while not path.exists():
+        assert time.monotonic() < until, "Known-unreleased reservation not reached"
+        time.sleep(0.02)
+    value = read_json(path)
+    started = read_json(Path(f"/evidence/join-process-{pid}-started.json"))
+    owned = {key: started[key] for key in IDENTITY_FIELDS}
+    assert value["identity"]["pid"] == pid
+    for key in set(IDENTITY_FIELDS) - {"parent_pid"}:
+        assert value["identity"][key] == owned[key]
+    live_identity(owned)
+    assert not list(Path("/evidence").glob("generation-child-*-sdk.json"))
+    os.killpg(pid, signal.SIGKILL)
+    while any(row["state"] not in {"Z", "X"} for row in group_members(pid).values()):
+        assert time.monotonic() < until, "Exact interrupted server remains live"
+        time.sleep(0.02)
+    resources = Resources(load(CONFIG))
+    with resources.driver() as driver:
+        store = resources.store(driver)
+        attempt = store.get_generation_attempt(RUN_ID)
+        assert attempt is None
+        assert store.get_run(RUN_ID).version == value["version"]
+        assert store.get_run(RUN_ID).contract_json == value["contract_json"]
+        assert store.pending_generation(RUN_ID)["reservation"].model_dump(mode="json") == value["reservation"]
+        assert store.get_owner().model_dump(mode="json") == value["owner"]
+    write_evidence(
+        "join-restart.json",
+        dict(identity=owned, signal=int(signal.SIGKILL), physical_group_absent=True, known_unreleased=True),
+    )
+
+
+def verify_resume_admission(value):
+    """Join fresh-authorization admission to original real identities/reservation."""
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import Resources
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+
+    before = read_json(Path("/evidence/join-unreleased.json"))
+    receipt = value["data"]["resumeWorkflow"]
+    assert receipt["__typename"] == "ResumeReceipt" and receipt["disposition"] == "continuation_admitted"
+    assert receipt["runId"] == RUN_ID and receipt["authorizationAction"] in {"bind", "renew"}
+    assert receipt["expectedVersion"] == str(before["version"]) and receipt["renewAuthorization"] is True
+    assert receipt["selection"]["intentId"] == before["intent_id"]
+    resources = Resources(load(CONFIG))
+    with resources.driver() as driver:
+        store = resources.store(driver)
+        retained = store.get_resume_receipt("p1-resume")
+        assert retained.receipt_digest == receipt["receiptDigest"]
+        assert store.get_run(RUN_ID).contract_json == before["contract_json"]
+        inspection = store.get_run_inspection(RUN_ID)
+        assert inspection.budget.reserved.model_calls == before["reservation"]["model_calls"]
+        assert inspection.budget.reserved.model_tokens == before["reservation"]["model_tokens"]
+        assert store.get_owner().owner_id == before["owner"]["owner_id"]
+        write_evidence("join-resume-receipt.json", dict(http=value, retained=retained.model_dump(mode="json")))
+
+
 def server_pid():
-    launchers = [r for r in ACTIVE.spawn_records if r["bootstrap_argv"][6:] == LAUNCH]
+    command = RELAUNCH if JOIN_CASE == "resume" and RELAUNCH in ACTIVE.used else LAUNCH
+    launchers = [r for r in ACTIVE.spawn_records if r["bootstrap_argv"][6:] == command]
     assert len(launchers) == 1
     launcher = read_json(Path(f"/evidence/join-process-{launchers[0]['pid']}.json"))
     assert len(launcher["spawn_records"]) == 1
@@ -2196,6 +2753,8 @@ def verify_result(value, raw_contract):
 
 def verify_children(guard, manifest, *, positive=False):
     """Preserve partial RED witnesses without claiming the unexecuted positive tree."""
+    if JOIN_CASE == "cancel" and positive:
+        return verify_cancel_children(guard, manifest)
     assert type(guard) is JoinGuards and guard.role == "harness"
     rows, missing = [], []
     pending = [(os.getpid(), row) for row in guard.spawn_records]
@@ -2204,9 +2763,21 @@ def verify_children(guard, manifest, *, positive=False):
         pid = launch["pid"]
         path = Path(f"/evidence/join-process-{pid}.json")
         if not path.exists():
-            missing.append(pid)
-            continue
-        row = read_json(path)
+            if JOIN_CASE == "resume" and Path("/evidence/join-restart.json").exists():
+                restart = read_json(Path("/evidence/join-restart.json"))
+                if pid == restart["identity"]["pid"]:
+                    row = read_json(Path(f"/evidence/join-process-{pid}-started.json"))
+                    checkpoint = read_json(Path("/evidence/join-unreleased.json"))
+                    row.update(checkpoint["guard"], status="interrupted_known_unreleased")
+                    assert not row["spawn_records"] and restart["physical_group_absent"] is True
+                else:
+                    missing.append(pid)
+                    continue
+            else:
+                missing.append(pid)
+                continue
+        else:
+            row = read_json(path)
         assert row["source_sha256"] == manifest and row["parent_pid"] == parent
         assert row["pid"] == row["pgid"] == row["sid"] == pid
         assert row["bootstrap_argv"] == launch["bootstrap_argv"]
@@ -2222,15 +2793,33 @@ def verify_children(guard, manifest, *, positive=False):
     if positive:
         from isaaclab_arena_examples.agentic_environment_generation.web_api.owned_process_group import group_members
 
-        assert not missing and len(guard.spawn_records) == 12 and len(rows) == 17
-        assert all(row["status"] == "completed" and row["returncode"] == 0 for row in rows)
+        servers = [row for row in rows if row["role"] == "server"]
+        interrupted = [row for row in rows if row["status"] == "interrupted_known_unreleased"]
+        assert len(interrupted) == (1 if JOIN_CASE == "resume" else 0)
+        completed = [row for row in rows if row not in interrupted]
+        assert not missing and len(guard.spawn_records) == CLIENT_LAUNCHES
+        assert len(servers) == (2 if JOIN_CASE == "resume" else 1)
+        assert len(rows) == CLIENT_LAUNCHES + len(servers) + 4
+        assert all(
+            row["status"] == "completed"
+            and row["returncode"]
+            == (
+                3
+                if JOIN_CASE == "resume" and row["argv"][1:] == RECONCILE
+                else 2 if JOIN_CASE == "resume" and row["argv"][1:] == LOST_RESPONSE else 0
+            )
+            for row in completed
+        )
+        if JOIN_CASE == "resume":
+            lost = [row for row in completed if row["argv"][1:] == LOST_RESPONSE]
+            assert len(lost) == 1 and lost[0]["lost_response_status"] == 200
         assert all(not any(row["forbidden"].values()) for row in rows)
-        assert {row["pid"] for row in rows} == {
+        assert {row["pid"] for row in completed} == {
             int(p.name.removeprefix("join-process-").removesuffix(".json"))
             for p in Path("/evidence").glob("join-process-*.json")
             if not p.name.endswith("-started.json")
         }
-        server = next(row for row in rows if row["role"] == "server")
+        server = next(row for row in completed if row["role"] == "server")
         assert server["owner_constructions"] == 1 and server["allowed"]["child_launch"] == 4
         retained = read_json(Path("/evidence/join-retained.json"))
         models = [row for row in rows if row["role"] == "model"]
@@ -2262,6 +2851,7 @@ def verify_children(guard, manifest, *, positive=False):
             assert [r["kind"] for r in sdk["responses"]] == ["ping", "completion"]
         assert verify_sources() == manifest
     return {
+        "join_case": JOIN_CASE,
         "joined_processes": [
             {"pid": row["pid"], "role": row["role"], "returncode": row.get("returncode"), "status": row["status"]}
             for row in rows
@@ -2280,6 +2870,10 @@ def verify_positive():
         assert time.monotonic() < deadline, "stopped server finalization witness missing"
         time.sleep(0.02)
     proof = verify_children(ACTIVE, verify_sources(), positive=True)
+    if JOIN_CASE == "cancel":
+        ACTIVE.positive_complete = True
+        write_evidence("join-positive.json", proof)
+        return
     from workflow_graphql_execution_join_fixture import IDENTITY_FIELDS, check_detachment_proof
 
     detached = read_json(Path("/evidence/join-detached.json"))
@@ -2296,6 +2890,105 @@ def verify_positive():
         assert expected == {key: final[key] for key in IDENTITY_FIELDS}
     ACTIVE.positive_complete = True
     write_evidence("join-positive.json", proof)
+
+
+def verify_cancel_result(value, cancellation, worker_identity):
+    """Read cancellation/cleanup independently of the authenticated HTTP client."""
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_composition import Resources
+    from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.owned_process_group import group_members
+
+    result = value["data"]["workflow"]
+    command = cancellation["data"]["cancelWorkflow"]
+    assert result["id"] == RUN_ID and result["state"] == "cancelled"
+    assert command["durable"] == "recorded" and command["localStop"]["delivery"] == "delivered"
+    resources = Resources(load(CONFIG))
+    with resources.driver() as driver:
+        store = resources.store(driver)
+        receipt = store.get_cancel_receipt("p1-cancel")
+        assert receipt.run_id == RUN_ID and receipt.receipt_digest == command["receipt"]["receiptDigest"]
+        inspection = store.get_run_inspection(RUN_ID)
+        assert inspection.intent.state == "cancelled"
+        assert result["version"] == str(inspection.intent.run_version)
+        assert result["retainedRevision"] == inspection.retained_revision
+        assert len(inspection.cleanup.intents) == 1
+        attempt = store.get_generation_attempt(RUN_ID)
+        registration = attempt.registration
+        assert registration.pid == worker_identity["pid"]
+        assert registration.start_ticks == worker_identity["start_ticks"]
+        assert registration.pgid == worker_identity["pgid"] and registration.sid == worker_identity["sid"]
+        cleanup = inspection.cleanup.intents[0]
+        assert cleanup.cleanup_state == "recorded" and cleanup.cleanup_observation == "owned_process_group_stopped"
+        assert cleanup.registration_id == registration.registration_id
+        assert cleanup.retired_owner is not None and not cleanup.retired_owner.dirty
+        assert store.get_retired_owner(cleanup.retired_owner.owner_id) == store.get_owner() == cleanup.retired_owner
+        assert not group_members(registration.pgid)
+        assert inspection.budget.reserved.model_calls == 2
+        write_evidence(
+            "join-retained.json",
+            dict(
+                join_case="cancel",
+                run_id=RUN_ID,
+                receipt=receipt.model_dump(mode="json"),
+                registration=registration.model_dump(mode="json"),
+                cleanup=inspection.cleanup.model_dump(mode="json"),
+                worker_identity=worker_identity,
+                physical_group_absent=True,
+                reserved=inspection.budget.reserved.model_dump(mode="json"),
+            ),
+        )
+    write_evidence("join-http-result.json", {"result": value, "cancellation": cancellation})
+
+
+def verify_cancel_children(guard, manifest):
+    """A terminated worker needs exact parent cleanup, not an invented finally receipt."""
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.owned_process_group import group_members
+    from workflow_graphql_execution_join_fixture import IDENTITY_FIELDS
+
+    retained = read_json(Path("/evidence/join-retained.json"))
+    worker = retained["worker_identity"]
+    rows = []
+    pending = [(os.getpid(), row) for row in guard.spawn_records]
+    while pending:
+        parent, launch = pending.pop(0)
+        pid = launch["pid"]
+        terminated = pid == worker["pid"]
+        name = f"join-process-{pid}{'-started' if terminated else ''}.json"
+        row = read_json(Path("/evidence") / name)
+        assert row["source_sha256"] == manifest and row["parent_pid"] == parent
+        assert row["bootstrap_argv"] == launch["bootstrap_argv"]
+        assert row["pid"] == row["pgid"] == row["sid"] == pid
+        assert row["preimport"]["before_package_imports"] is True
+        assert set(row["preimport"]["kernel_denial"]) == {"2", "10"}
+        if terminated:
+            assert row["role"] == "model" and {k: row[k] for k in IDENTITY_FIELDS} == worker
+            assert row["transport_installed_before_model_construction"] is True
+            active = read_json(Path(f"/evidence/generation-child-{pid}-active.json"))
+            assert active["identity"] == worker and active["phase"] == "waiting"
+            assert active["calls"] == 2 and active["response_returning"] is False
+            assert retained["physical_group_absent"] is True and not group_members(pid)
+        else:
+            assert row["status"] == "completed" and row["returncode"] == 0
+            assert not any(row["forbidden"].values())
+            assert role_for(row["argv"][1:]) == row["role"]
+            assert not any(r["state"] not in {"Z", "X"} for r in group_members(pid).values())
+            pending.extend((pid, child) for child in row["spawn_records"])
+            if row["role"] == "server":
+                assert row["owner_constructions"] == 1 and row["allowed"]["child_launch"] == 1
+                assert row["simulator_registry_prepared"] is False
+        rows.append(
+            dict(
+                pid=pid,
+                role=row["role"],
+                evidence_file=name,
+                status="owned_termination" if terminated else row["status"],
+                returncode=None if terminated else row["returncode"],
+            )
+        )
+    assert len(guard.spawn_records) == CLIENT_LAUNCHES and len(rows) == CLIENT_LAUNCHES + 2
+    assert sum(row["status"] == "owned_termination" for row in rows) == 1
+    assert verify_sources() == manifest
+    return dict(join_case="cancel", joined_processes=rows, missing_process_witnesses=[], children_verified=True)
 
 
 def initialization_pre_readiness(digest):

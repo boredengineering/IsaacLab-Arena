@@ -11,10 +11,11 @@ from enum import Enum
 from numbers import Real
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 from isaaclab_arena.assets.object_type import ObjectType
 from isaaclab_arena.assets.registries import AssetRegistry, ObjectRelationLibraryRegistry, TaskRegistry
+from isaaclab_arena.environment_spec.execution_catalogue import current_catalogue
 
 
 def _extract_asset_usd_path(asset_cls: type, **params: Any) -> str | None:
@@ -70,7 +71,11 @@ class AssetSpec(BaseModel):
 
     @field_validator("registry_name")
     @classmethod
-    def _validate_registry_name(cls, value: str) -> str:
+    def _validate_registry_name(cls, value: str, info: ValidationInfo) -> str:
+        catalogue = current_catalogue(info)
+        if catalogue is not None:
+            assert value in catalogue.asset_names, f"Unknown asset registry_name '{value}'"
+            return value
         registry = AssetRegistry()
         assert registry.is_registered(value), f"Unknown asset registry_name '{value}'"
         return value
@@ -123,9 +128,21 @@ class TaskSpec(BaseModel):
 
     @field_validator("kind")
     @classmethod
-    def _validate_registered_task_type(cls, value: str) -> str:
+    def _validate_registered_task_type(cls, value: str, info: ValidationInfo) -> str:
+        catalogue = current_catalogue(info)
+        if catalogue is not None:
+            assert value in catalogue.task_parameters, f"Unknown task kind '{value}'"
+            return value
         assert TaskRegistry().is_registered(value), f"Unknown task kind '{value}'"
         return value
+
+    @model_validator(mode="after")
+    def _validate_adapter_task_params(self, info: ValidationInfo) -> TaskSpec:
+        catalogue = current_catalogue(info)
+        if catalogue is not None:
+            missing = set(catalogue.task_parameters[self.kind]) - self.params.keys()
+            assert not missing, f"Task '{self.kind}' is missing required params: {sorted(missing)}"
+        return self
 
 
 class TaskCompositionType(str, Enum):
@@ -216,11 +233,17 @@ class SpatialRelationSpec(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _validate_kind_and_arity(self) -> SpatialRelationSpec:
-        registry = ObjectRelationLibraryRegistry()
-        assert registry.is_registered(self.kind), f"Unknown relation kind '{self.kind}'"
-        relation_cls = registry.get_object_relation_by_name(self.kind)
-        if relation_cls.is_unary():
+    def _validate_kind_and_arity(self, info: ValidationInfo) -> SpatialRelationSpec:
+        catalogue = current_catalogue(info)
+        if catalogue is None:
+            registry = ObjectRelationLibraryRegistry()
+            assert registry.is_registered(self.kind), f"Unknown relation kind '{self.kind}'"
+            relation_cls: Any = registry.get_object_relation_by_name(self.kind)
+            unary = relation_cls.is_unary()
+        else:
+            assert self.kind in catalogue.relation_arities, f"Unknown relation kind '{self.kind}'"
+            unary = catalogue.relation_arities[self.kind]
+        if unary:
             assert self.reference is None, f"Relation kind '{self.kind}' must not define relation.reference"
         else:
             assert self.reference is not None, f"Relation kind '{self.kind}' requires relation.reference"

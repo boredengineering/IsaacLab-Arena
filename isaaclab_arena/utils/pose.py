@@ -2,8 +2,8 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
+from __future__ import annotations
 
-import torch
 from dataclasses import dataclass
 
 
@@ -44,6 +44,8 @@ class Pose:
         Returns:
             The pose as a tensor of shape (1, 7).
         """
+        import torch
+
         position_tensor = torch.tensor(self.position_xyz, device=device)
         rotation_tensor = torch.tensor(self.rotation_xyzw, device=device)
         return torch.cat([position_tensor, rotation_tensor])
@@ -60,6 +62,7 @@ class Pose:
 
     def to_transform_matrix(self, device: torch.device) -> torch.Tensor:
         """Convert the pose to a 4x4 homogeneous transform matrix."""
+        import torch
         import isaaclab.utils.math as math_utils
 
         rotation = math_utils.matrix_from_quat(torch.tensor(self.rotation_xyzw, device=device))
@@ -76,6 +79,7 @@ def compose_poses(T_C_B: Pose, T_B_A: Pose) -> Pose:
     Returns:
         The pose taking points from A to C.
     """
+    import torch
     from isaaclab.utils.math import matrix_from_quat, quat_from_matrix
 
     R_B_A = matrix_from_quat(torch.tensor(T_B_A.rotation_xyzw))
@@ -135,6 +139,7 @@ class PoseRange:
         }
 
     def get_midpoint(self) -> Pose:
+        import torch
         from isaaclab.utils.math import quat_from_euler_xyz
 
         roll = torch.tensor((self.rpy_min[0] + self.rpy_max[0]) / 2)

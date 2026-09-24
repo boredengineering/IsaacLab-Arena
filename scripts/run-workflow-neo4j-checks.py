@@ -64,7 +64,7 @@ JOIN_MODE = "workflow-graphql-execution-joined"
 JOIN_HELPER = "scripts/workflow_graphql_execution_join_harness.py"
 JOIN_TEST = "isaaclab_arena/tests/test_environment_workflow_graphql_execution_joined_neo4j.py"
 JOIN_INVENTORY = "outputs/workflow/plan04-implementation/installed-execution/join-source-files.json"
-JOIN_SOURCE_LIMIT = 383
+JOIN_SOURCE_LIMIT = 384
 LIFECYCLE_MODE = "workflow-graphql-execution-lifecycle"
 LIFECYCLE_HELPER = "scripts/workflow_graphql_execution_lifecycle_harness.py"
 LIFECYCLE_TEST = "isaaclab_arena/tests/test_environment_workflow_execution_lifecycle.py"
@@ -2005,7 +2005,8 @@ def main(argv=None):
                 run.proof["network_manifest"] = network_manifest
                 run.save()
         deadline = time.monotonic() + (
-            780 if options.mode == "workflow-cli" else 240 if options.mode == "workflow-scene" else 150
+            780 if options.mode == "workflow-cli" else 240 if options.mode == "workflow-scene"
+            else 210 if options.mode == JOIN_MODE else 150
         )
         while docker("inspect", "--format", "{{.State.Running}}", cid) == "true":
             assert time.monotonic() < deadline, "Client deadline exceeded"

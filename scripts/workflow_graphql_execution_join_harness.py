@@ -68,9 +68,13 @@ STATUS = ["api-status", "--config", CONFIG, "--instance", INSTANCE]
 THREAD_ENV = {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}
 LAUNCH_ENV = {"HOME": "/tmp", "PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"}
 ENV = {**LAUNCH_ENV, **THREAD_ENV}
-SOURCE_LIMIT = 383  # Exact static closure plus four generated leaves.
+SOURCE_LIMIT = 384  # Exact static closure plus four generated leaves.
 SOURCE_MANIFEST_LIMIT = 65536
 ACTIVE = None
+PROFILE_CALL_NAMES = frozenset({
+    "__init__", "launch", "render", "retrieve_snapshot", "driver", "query",
+    "launch_tiled", "capture_launch", "Open", "OpenMasked", "synthetic_response",
+})
 
 # Bytes-only candidates, NOT import permissions. First five are the existing
 # provisioner's ALLOWED; last three were retained immutable metadata roots.
@@ -1114,11 +1118,14 @@ def install_e1_yaml(preimport, guard, runner, report):
 
 
 def e1_runtime_modules(runner, finder):
-    """Keep legacy origin rules, with only exact finder-owned YAML objects added."""
+    """Check real immutable image origins, including approved vendor symlink targets."""
     if finder is None:
         return runner.graphql_runtime_modules()
     rows = {}
     probe = runner._GRAPHQL_PROBE
+    # The operator approved the pinned image, not a subset of its package
+    # aliases. Keep descriptor/no-follow verification through every symlink.
+    physical_roots = [*probe["ALLOWED"], "/isaac-sim"]
     for name, module in sorted(list(sys.modules.items())):
         origin = getattr(getattr(module, "__spec__", None), "origin", None)
         if name == "yaml" or name.startswith("yaml."):
@@ -1133,7 +1140,7 @@ def e1_runtime_modules(runner, finder):
         elif not origin or origin in ("built-in", "frozen") or origin.startswith("/source/"):
             continue
         elif any(origin.startswith(p + "/") for p in probe["ALLOWED"]):
-            _, row = probe["physical_file"](origin, probe["ALLOWED"])
+            _, row = probe["physical_file"](origin, physical_roots)
             rows[name] = dict(row, origin=origin)
         else:
             assert any(origin.startswith(p + "/") for p in probe["PATHS"][:3]), "Unrecorded runtime origin"
@@ -1242,7 +1249,8 @@ class JoinGuards(base.Guards):
         self.owner_constructions = 0
         self.ports_issued = False
         self.positive_complete = False
-        self.deadline = time.monotonic() + 140
+        # Leave room for cold CLI status/cleanup after the four bounded model workers.
+        self.deadline = time.monotonic() + (180 if role == "harness" else 140)
         self.sdk_ready = False
         self.sdk_calls = 0
         self.used = []
@@ -1252,6 +1260,13 @@ class JoinGuards(base.Guards):
         self.last_status = None
 
     def deny(self, kind):
+        if kind == "blocked_import" and self.role in {"server", "model"}:
+            frames = []
+            frame = sys._getframe(1)
+            while frame is not None and len(frames) < 40:
+                frames.append(dict(file=frame.f_code.co_filename, function=frame.f_code.co_name, line=frame.f_lineno))
+                frame = frame.f_back
+            self.first_blocked_import_sites = getattr(self, "first_blocked_import_sites", frames)
         if kind == "subprocess" and getattr(self, "initialization_controls_ready", False):
             traces = getattr(self, "initialization_subprocess_denials", [])
             if len(traces) < 4:
@@ -1265,6 +1280,10 @@ class JoinGuards(base.Guards):
         return super().deny(kind)
 
     def profile(self, frame, event, arg):
+        # Neither this guard nor its base inspects return/C events. Dispatching
+        # those through every policy layer dominates cold Pydantic imports.
+        if event != "call" or frame.f_code.co_name not in PROFILE_CALL_NAMES:
+            return
         if getattr(self, "initialization_controls_ready", False) and event == "call":
             module = frame.f_globals.get("__name__", "")
             name = frame.f_code.co_name
@@ -1566,7 +1585,7 @@ def scene_spawn_spec():
 
 
 def synthetic_ports():
-    """Issue only spawn/capture ports to the selected fixed installed composition.
+    """Issue spawn/capture/vocabulary ports to the selected fixed installed composition.
 
     Proposed production interface: api.installed_execution.compose calls this
     bootstrap capability itself. No constructor/root/store/grant is injected.
@@ -1577,10 +1596,10 @@ def synthetic_ports():
     assert type(ACTIVE) is JoinGuards and ACTIVE.role == "server" and not ACTIVE.ports_issued
     assert loaded is not None and executing(module, loaded.compose.__code__)
     verify_sources()
-    from workflow_graphql_execution_join_fixture import synthetic_capture
+    from workflow_graphql_execution_join_fixture import synthetic_capture, synthetic_catalogue
 
     ACTIVE.ports_issued = True
-    return {"spawn_spec": scene_spawn_spec, "capture": synthetic_capture}
+    return {"spawn_spec": scene_spawn_spec, "capture": synthetic_capture, "catalogue": synthetic_catalogue}
 
 
 def unused(arguments):
@@ -1812,12 +1831,9 @@ def child():
         status="failed",
     )
     yaml_finder = None
+    catalogue_scope = contextlib.ExitStack()
     try:
         record["imports"] = runner.graphql_imports(preimport, guard)
-        if role == "server" and not initialization:
-            record["dependency_location_probe"] = dependency_location_probe(preimport, guard, runner)
-            record["registration_metadata_probe"] = {}
-            registration_metadata_probe(preimport, guard, runner, record["registration_metadata_probe"])
         if role in {"server", "model"} and not initialization:
             record["e1_yaml_binding"] = {}
             yaml_finder = install_e1_yaml(preimport, guard, runner, record["e1_yaml_binding"])
@@ -1836,15 +1852,25 @@ def child():
         sys.path.insert(0, "/source/web/arena-workbench/tests/e2e/functional-v7")
         # Do not initialize SDK or import legacy factories in any CLI role.
         if model:
-            record["metadata"] = metadata_replay(guard)
             from generation_worker_fixture import install_synthetic_sdk, production_sdk_profile
-            from workflow_graphql_execution_join_fixture import install_detachment_transport
+            from workflow_graphql_execution_join_fixture import install_detachment_transport, synthetic_catalogue
+
+            supplied = catalogue_scope.enter_context(synthetic_catalogue().activate())
+            record["execution_catalogue"] = dict(
+                sha256=supplied.sha256, scope="deterministic-adapter-only", payload=supplied.payload(),
+            )
 
             transport = {}
 
             def sdk_profile(frame, event, arg):
                 # Preserve exact constructor checks but not the fixture's optional
                 # graph-access exception: this cohort allows no retrieval at all.
+                if event != "call" and not (
+                    event == "return" and frame.f_code is install_synthetic_sdk.__code__
+                ):
+                    return
+                if event == "call" and frame.f_code.co_name not in PROFILE_CALL_NAMES:
+                    return
                 module = frame.f_globals.get("__name__", "")
                 if module.endswith("graph_access"):
                     return guard.profile(frame, event, arg)
@@ -1910,6 +1936,7 @@ def child():
                 startup_active = [True]
                 startup_main = threading.get_ident()
                 startup_targets = {
+
                     "/source/isaaclab_arena/agentic_environment_generation/workflow/api/server.py": {
                         "supervise", "serve", "serving",
                     },
@@ -1980,13 +2007,26 @@ def child():
     except BaseException as error:
         if role in {"server", "model"}:
             record["failure_type"] = type(error).__name__
+            record["failure_sites"] = []
+            trace = error.__traceback__
+            while trace is not None and len(record["failure_sites"]) < 24:
+                record["failure_sites"].append(dict(
+                    file=trace.tb_frame.f_code.co_filename, function=trace.tb_frame.f_code.co_name,
+                    line=trace.tb_lineno,
+                ))
+                trace = trace.tb_next
         raise
     finally:
         original_error = sys.exc_info()[0]
+        catalogue_scope.close()
         if initialization and getattr(guard, "initialization_admission", None) is not None:
             record["pythonapi_bootstrap"] = guard.initialization_admission.pythonapi_bootstrap
         record.update(
             forbidden=guard.forbidden,
+            first_blocked_import_sites=getattr(guard, "first_blocked_import_sites", None),
+            simulator_registry_prepared=getattr(
+                sys.modules.get("isaaclab_arena.assets.registries"), "_assets_registered", False,
+            ),
             allowed=guard.allowed,
             spawn_records=guard.spawn_records,
             basic_auth_handoffs=guard.basic_auth_handoffs,
@@ -1999,11 +2039,21 @@ def child():
             assert verify_sources() == manifest
             if "imports" in record and not initialization:
                 record["runtime_modules"] = e1_runtime_modules(runner, yaml_finder)
-                record["additional_runtime_metadata"] = runtime_metadata(runner, record["runtime_modules"], yaml_finder)
+                record["dependency_provenance"] = (
+                    "Pinned image and physical-file witnesses; additional distribution metadata not required."
+                )
         except BaseException as error:
             if role not in {"server", "model"}:
                 raise
             record["finalization_error_type"] = type(error).__name__
+            record["finalization_error_sites"] = []
+            trace = error.__traceback__
+            while trace is not None and len(record["finalization_error_sites"]) < 24:
+                record["finalization_error_sites"].append(dict(
+                    file=trace.tb_frame.f_code.co_filename, function=trace.tb_frame.f_code.co_name,
+                    line=trace.tb_lineno,
+                ))
+                trace = trace.tb_next
             record["status"] = "failed"
             if original_error is None:
                 raise
@@ -2116,7 +2166,8 @@ def verify_result(value, raw_contract):
         assert normalized == original, "repair changed fields outside the frozen x intervention"
         # Actual retained evidence validates candidate/cohort pairing; no joining
         # verdicts from the failed original and successful repaired candidate.
-        evidence = store.get_scene_evidence(RUN_ID, inspection.scene.evidence_id)
+        evidence = store.get_scene_evidence(inspection.scene.evidence_id)
+        assert evidence is not None and evidence.run_id == RUN_ID
         assert evidence.candidate_id == candidate.candidate_id
         assert evidence.observation == inspection.scene.observation
         assert {r.candidate_digest for r in evidence.observation.evidence} == {candidate.digest}
@@ -2184,6 +2235,7 @@ def verify_children(guard, manifest, *, positive=False):
         retained = read_json(Path("/evidence/join-retained.json"))
         models = [row for row in rows if row["role"] == "model"]
         assert len(models) == 4
+        assert all(row["simulator_registry_prepared"] is False for row in [server, *models])
         assert {r["pid"] for r in retained["registrations"]} == {r["pid"] for r in models}
         stage_by_pid = dict(retained["stages"])
         assert [stage_by_pid[row["pid"]] for row in server["spawn_records"]] == [

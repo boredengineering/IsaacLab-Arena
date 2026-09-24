@@ -31,14 +31,19 @@ def compose(config, *, tokens, auth):
     if harness is None:
         raise NotImplementedError("Guarded synthetic execution unavailable")
     ports = harness.synthetic_ports()
-    if set(ports) != {"spawn_spec", "capture"} or not all(callable(p) for p in ports.values()):
+    if set(ports) != {"spawn_spec", "capture", "catalogue"} or not all(callable(p) for p in ports.values()):
         raise ValueError("Fixed synthetic ports required")
+    from isaaclab_arena.environment_spec.execution_catalogue import ExecutionCatalogue
+
+    catalogue = ports["catalogue"]()
+    if not isinstance(catalogue, ExecutionCatalogue):
+        raise ValueError("Explicit adapter vocabulary required")
     from isaaclab_arena.agentic_environment_generation.inference_profiles import (
         frozen_builtin_profile,
         resolve_inference_profile,
     )
     from isaaclab_arena.agentic_environment_generation.prior_receipt import empty_snapshot
-    from isaaclab_arena.agentic_environment_generation.workbench.document_yaml import parse_yaml, reject_unknown_fields
+
     from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
     from isaaclab_arena.agentic_environment_generation.workflow.artifacts import GenerationArtifacts
     from isaaclab_arena.agentic_environment_generation.workflow.attempts import GenerationReservation
@@ -52,7 +57,7 @@ def compose(config, *, tokens, auth):
     from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import SceneEvidenceArtifacts
     from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import ScenePortProfile
     from isaaclab_arena.agentic_environment_generation.workflow.scene_ports import ModelCeiling
-    from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+
     from isaaclab_arena_examples.agentic_environment_generation import foreground_cancellation
     from isaaclab_arena_examples.agentic_environment_generation.foreground_authorization import (
         ForegroundAuthority,
@@ -69,7 +74,7 @@ def compose(config, *, tokens, auth):
     )
     from isaaclab_arena_examples.agentic_environment_generation.foreground_scene import ForegroundSceneWorker
     from isaaclab_arena_examples.agentic_environment_generation.foreground_scene_ports import ForegroundScenePorts
-    from isaaclab_arena_examples.agentic_environment_generation.web_api.catalogues import execution_catalogue_sha256
+
     from isaaclab_arena_examples.agentic_environment_generation.web_api.execution_grants import ExecutionGrants
 
     from ..application import ForegroundWorkflow
@@ -212,12 +217,7 @@ def compose(config, *, tokens, auth):
                 )
 
             def validate_document(text):
-                value = parse_yaml(text)
-                reject_unknown_fields(value)
-                return dict(
-                    valid=True,
-                    spec=ArenaEnvGraphSpec.from_dict(value).model_dump(mode="json"),
-                )
+                return catalogue.validate_document(text)
 
             common = dict(
                 model_calls=2,
@@ -248,12 +248,7 @@ def compose(config, *, tokens, auth):
                 )
                 for role in ("runtime", "neo4j", "generation_model", "assessment_model", "capture", "gpu")
             )
-            catalogue_digest = execution_catalogue_sha256()
-            # Only the already authorized one-use harness can expose this
-            # initialization diagnostic. No config field enables a callback.
-            checkpoint = getattr(harness, "initialization_pre_readiness", None)
-            if checkpoint is not None:
-                checkpoint(catalogue_digest)
+            catalogue_digest = catalogue.sha256
             app = ForegroundWorkflow(
                 store=store,
                 authority=authority,
@@ -288,7 +283,7 @@ def compose(config, *, tokens, auth):
                     displacement_tolerance_m=0.001,
                 ),
             )
-            return ExecutionOwner(app, area, tokens, protect_all)
+            return ExecutionOwner(app, area, tokens, protect_all, execution_context=catalogue.activate)
         except BaseException:
             if authority is not None:
                 authority.close()

@@ -1,10 +1,32 @@
 # Research workflow implementation checkpoint
 
-This is the single current implementation handoff. The user has authorized implementing [event-mapping plan 03](../event-mapping-refactoring_plan_03.md) through V0/V1/V2 with bounded implementer/critic/verifier cycles, beginning with M0's original domain/event-modeling records. Earlier study and narrow-fix evidence remain in the [session memory](../../quick_notes/session_memory.md#current-study-and-progress--2026-09-18). Plan 02's completed isolated evidence below remains historical, not fresh plan-03 acceptance.
+This is the single current implementation handoff. The orchestrator pivot below supersedes the former S2 initialization campaign, comprehensive metadata prerequisites and delegated review gates. Older entries are retained as history, not instructions to resume those campaigns.
 
 ## 1. Current authorization and implementation gate
 
-### Active S2 continuation — exporter authority approved, investigation ceilings removed
+### Orchestrator pivot — installed isolated workflow verified
+
+The authorized goal is complete for the installed orchestration/database slice: real GraphQL submission → existing application/agent and worker adapters → retained result → independent Neo4j and artifact readback. Simulation remains a black box; full simulator registration is not an orchestration prerequisite.
+
+- `ExecutionCatalogue` carries only the adapter-supplied vocabulary used by this workflow, with an immutable snapshot and a genuine content digest. Schema, references, relation arity, required task parameters and unknown-field rejection remain enforced. No simulator classes are registered or replaced by test classes.
+- Installed composition and owned execution threads bind that vocabulary; separately launched workers receive the same explicit test vocabulary. Static result JSON decoding no longer eagerly imports the provider SDK. Existing agent/retriever/solver/policy architecture is retained.
+- Latest passing run: `outputs/workflow/plan04-implementation/installed-execution/joined-runs/arena-neo4j-750f875f18d244ecaa5c1772f5dcd27c`. Both the runner and independent parent readback passed. All 380 captured repository-source hashes matched the current checkout at readback.
+- The submitted request outlived its submitter. Generate → observe → repair → observe completed and GraphQL returned `accepted`. Neo4j state, revision, selected-candidate digest, evidence ID, provenance and retained artifact references agreed with the HTTP result. All 17 joined processes completed; the four model-worker processes made eight SDK calls through the deterministic HTTP transport, not live provider requests.
+- Server and model workers finished with `simulator_registry_prepared=false` and zero forbidden-effect counters. Exact owned-container and network absence was rechecked after cleanup. No shared research-data mutation, GPU/simulation workload, commit or push was performed.
+- Seven focused boundary regressions passed, including invalid-document rejection, immutable digest/context isolation, post-submit owner-thread validation and cold JSON decoding without provider/simulator imports. Scoped Black, isort, flake8 and `git diff --check` passed; this is not a full simulator-suite result.
+- Test-only collection allowance is 180 seconds, with a 210-second outer containment watchdog. This corrects a repeat that completed application/readback/stop but exhausted the previous 140-second allowance at final status collection. Worker budgets, token expiry, isolation and exact cleanup rules were not enlarged or bypassed.
+
+Primary evidence in that run is `run-proof.json` and `evidence/{client-proof,join-http-result,join-retained,join-positive,join-detached}.json`. The independent parent verifier is `/root/.hermes/cache/scratch/verify_orchestrator_pivot.py`; that scratch helper is not required to run the integration test.
+
+Reproduce from the repository root with the existing approved pinned image/provision manifest and joined source inventory (which includes `isaaclab_arena/environment_spec/execution_catalogue.py`):
+
+```sh
+python3 -B scripts/run-workflow-neo4j-checks.py workflow-graphql-execution-joined --runtime-image sha256:b94e17024f1e123ac5a42759ab56651a18823fda7c701e765cba31f200154cdd --provision-manifest outputs/workflow/plan03-implementation/graphql-provisioning/implementation/arena-f0-graphql-provision-fea7e278760f/provision-manifest.json
+```
+
+Limitations: model responses and observation outputs are intentionally test-generated through the existing deterministic adapter. This verifies real installed orchestration and real disposable Neo4j persistence/readback, not simulator fidelity, model quality or unrestricted production-provider readiness. Further work requires a new goal; do not reinstate full S2 or catalogue parity as prerequisites.
+
+### Historical S2 continuation — superseded by the orchestrator pivot
 
 **Approved allocation applied; actual retry clears native quota:** user explicitly authorized init-server48 identities/6GiB and each other role5/500MiB, with no further subagent reviews or mock collector tests. Parent changed only the positive budget branch in `InitializationAdmission.__init__`; aggregate63 identities/8,015,314,944 bytes remains below64/8GiB. Staging/diff passed; `resumption/approved-allocation-source-freeze.json` binds H6e0f371e350d1beeb99bc19c72c09795e47cbf4d668a50b63becf498d972b56c to actual `arena-s2-init-d219316e301a4fee808155d12bdddf59`. Runtime reached real PhysX extension initialization, then failed its required `import toml` at exact `/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/toml/__init__.py`. Outer forwarding shim misleadingly requests installing PhysX; actual inner cause is toml admission, not evidence of a missing extension.30native identities/2,572,440,870 read bytes, runtime denials0/first_native_denial null; blocked_import4 remains NONPASS. Schema not complete/no catalogue; initialization_success=false. Only init-server ran. Frozen sources/exported evidence/readback0/exact cleanup verified (`resumption/observed-approved-allocation/{manifest,result}.json`). No new review, collector test, installation or additional admission. Resource approval hold below is superseded; current next concrete blocker is toml.
 

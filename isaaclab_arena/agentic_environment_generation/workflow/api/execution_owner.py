@@ -7,8 +7,9 @@
 
 import asyncio
 import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import suppress
+from contextlib import AbstractContextManager, nullcontext, suppress
 
 from ..contracts import canonical_json, parse_contract
 from ..neo4j_store import validate_operation_id
@@ -22,8 +23,11 @@ class CleanupUnknown(RuntimeError):
 class ExecutionOwner:
     CLOSE_TIMEOUT = 10.0
 
-    def __init__(self, root, area, tokens, protect):
+    def __init__(
+        self, root, area, tokens, protect, *, execution_context: Callable[[], AbstractContextManager] = nullcontext
+    ):
         self.root, self.area, self.tokens, self.protect = root, area, tokens, protect
+        self._execution_context = execution_context
         self.admissions = OwnedOffload()
         self._driver = ThreadPoolExecutor(max_workers=1, thread_name_prefix="workflow-drive")
         self._admission_lock = threading.Lock()
@@ -36,6 +40,11 @@ class ExecutionOwner:
         self._stop_future = None
         self._closing = None
         self.cleanup_unknown = False
+
+    def _run(self, operation):
+        """Bind the adapter context in the owned thread, independently of the HTTP request."""
+        with self._execution_context():
+            return operation()
 
     async def submit(self, auth, operation_id, raw_contract):
         """Shield admission together with retention; response loss never loses a drive."""
@@ -64,13 +73,13 @@ class ExecutionOwner:
                         # has exactly one reserved slot and no fresh-work queue.
                         with self._stop_lock:
                             if self._accepting:
-                                self._drive = self._driver.submit(drive)
+                                self._drive = self._driver.submit(self._run, drive)
                 receipt = self.root.service.read_submission(auth.principal, operation_id, protect=self.protect)
                 if receipt is not None:
                     self._run_ids.add(receipt.run_id)
                 return receipt
 
-        return await self.admissions.run(operation)
+        return await self.admissions.run(lambda: self._run(operation))
 
     def request_stop(self):
         """Refuse immediately; stop on one owned lane independent of DB/HTTP drains."""

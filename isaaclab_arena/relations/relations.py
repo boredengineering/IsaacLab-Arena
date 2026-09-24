@@ -5,11 +5,8 @@
 
 from __future__ import annotations
 
-import torch
 from enum import Enum
 from typing import TYPE_CHECKING, TypeVar
-
-from isaaclab.utils.math import euler_xyz_from_quat
 
 from isaaclab_arena.assets.register import register_object_relation
 from isaaclab_arena.utils.pose import PoseRange  # runtime: constructed in to_pose_range_centered_at()
@@ -370,6 +367,9 @@ class RandomAroundSolution(RelationBase):
             PoseRange spanning ± half-extents around the position and rotation.
         """
         # Convert quaternion to euler angles (roll, pitch, yaw)
+        import torch
+        from isaaclab.utils.math import euler_xyz_from_quat
+
         quat_tensor = torch.tensor([rotation_xyzw])
         roll, pitch, yaw = euler_xyz_from_quat(quat_tensor)
         center_roll = float(roll[0])
@@ -447,7 +447,6 @@ class RotateAroundSolution(RelationBase):
             Quaternion rotation converted from roll/pitch/yaw.
         """
         import torch
-
         from isaaclab.utils.math import quat_from_euler_xyz
 
         roll = torch.tensor(self.roll_rad)

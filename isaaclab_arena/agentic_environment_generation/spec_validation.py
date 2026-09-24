@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from isaaclab_arena.assets.registries import TaskRegistry
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+from isaaclab_arena.environment_spec.execution_catalogue import current_catalogue
 
 
 def required_task_init_param_names(task_cls: type) -> list[str]:
@@ -52,12 +53,20 @@ def format_validation_error(exc: ValidationError) -> list[str]:
 def collect_agent_ready_task_validation_traces(spec: ArenaEnvGraphSpec) -> list[str]:
     """Return agent-only task constraint violations not enforced by ``ArenaEnvGraphSpec``."""
     traces: list[str] = []
+    catalogue = current_catalogue()
     task_registry = TaskRegistry()
     for task in spec.task.subtasks:
-        task_cls = task_registry.get_task_by_name(task.kind)
-        if not getattr(task_cls, "agent_ready", False):
-            traces.append(f"Task {task.kind!r} is not agent-ready")
-        for required_param in required_task_init_param_names(task_cls):
+        if catalogue is None:
+            task_cls = task_registry.get_task_by_name(task.kind)
+            if not getattr(task_cls, "agent_ready", False):
+                traces.append(f"Task {task.kind!r} is not agent-ready")
+            required = required_task_init_param_names(task_cls)
+        else:
+            if task.kind not in catalogue.task_parameters:
+                traces.append(f"Task {task.kind!r} is not agent-ready")
+                continue
+            required = catalogue.task_parameters[task.kind]
+        for required_param in required:
             if required_param not in task.params:
                 traces.append(f"Task {task.kind!r} is missing required param {required_param!r}")
     return traces

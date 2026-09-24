@@ -354,6 +354,8 @@ def install_synthetic_sdk(*, scene=False):
         "responses": [],
         "scope": "synthetic HTTP; real constructors, ping, catalogue and schema; fixed generate_spec",
     }
+    saved_profile = sys.getprofile()
+    saved_thread_profile = threading.getprofile()
     if scene:
         from isaaclab_arena.agentic_environment_generation.spec_wire_adapter import SpecWireAdapter
         from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
@@ -364,6 +366,10 @@ def install_synthetic_sdk(*, scene=False):
         )
         wire = SpecWireAdapter().encode(ArenaEnvGraphSpec.model_validate(fixture_spec).model_dump(mode="json"))
         evidence["scope"] = "synthetic HTTP; real scene model methods, SDK and schema; no native acceptance"
+    if saved_profile is not None and sys.getprofile() is None:
+        sys.setprofile(saved_profile)
+    if saved_thread_profile is not None and threading.getprofile() is None:
+        threading.setprofile(saved_thread_profile)
 
     def synthetic_response(transport, request):
         body = json.loads(request.content)
@@ -377,8 +383,6 @@ def install_synthetic_sdk(*, scene=False):
             # Only synthetic HTTP responses change. Real agent/backend/model
             # constructors, refinement, request serialization and images remain.
             import yaml
-
-            from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import candidate_record
 
             fixture_scene = yaml.safe_load(
                 Path("/source/isaaclab_arena/tests/test_data/pick_and_place_maple_table_env_graph.yaml").read_text()
@@ -396,6 +400,8 @@ def install_synthetic_sdk(*, scene=False):
                     texts.extend(part["text"] for part in value if part.get("type") == "text")
             visual = next((text.split("Request:\n", 1)[1] for text in texts if "Request:\n" in text), None)
             if visual is not None:
+                from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import candidate_record
+
                 pause = Path("/tmp/workflow-cli/pause-visual")
                 if pause.exists():
                     import signal

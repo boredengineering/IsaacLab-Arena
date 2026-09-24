@@ -13,13 +13,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from isaaclab_arena.agentic_environment_generation.graph_cleanup import GraphCleanupError
-from isaaclab_arena.agentic_environment_generation.inference_backend import InferenceBackend
-from isaaclab_arena.agentic_environment_generation.prim_path_inference import PrimPathInference
-from isaaclab_arena.agentic_environment_generation.spec_inference import SpecInference
 from isaaclab_arena.agentic_environment_generation.spec_validation import required_task_init_param_names
 from isaaclab_arena.assets.registries import AssetRegistry, ObjectRelationLibraryRegistry, TaskRegistry
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
-from isaaclab_arena.relations.relations import RelationBase
+from isaaclab_arena.environment_spec.execution_catalogue import current_catalogue
 
 # ---------------------------------------------------------------------------
 # Active Inference Telemetry & Observability
@@ -109,6 +106,10 @@ class EnvironmentGenerationAgent:
                 retry is a fresh API call.
             load_dotenv: Preserve CLI credential discovery; servers should pass False.
         """
+        from isaaclab_arena.agentic_environment_generation.inference_backend import InferenceBackend
+        from isaaclab_arena.agentic_environment_generation.prim_path_inference import PrimPathInference
+        from isaaclab_arena.agentic_environment_generation.spec_inference import SpecInference
+
         inference_backend = InferenceBackend(
             api_key=api_key,
             model=model,
@@ -831,6 +832,9 @@ class AssetCatalogue:
 
 def build_asset_catalogue(registry: AssetRegistry | None = None) -> AssetCatalogue:
     """Collect registered embodiments, backgrounds, and pick-up objects from ``AssetRegistry``."""
+    supplied = current_catalogue()
+    if registry is None and supplied is not None:
+        return supplied.catalogues()[0]
     registry = registry or AssetRegistry()
     catalogue = AssetCatalogue()
     # TODO(qianl): handle optional lights and hdr images.
@@ -889,6 +893,11 @@ class RelationCatalogue:
 
 def build_relation_catalogue(registry: ObjectRelationLibraryRegistry | None = None) -> RelationCatalogue:
     """Collect registered object relations from ``ObjectRelationLibraryRegistry``."""
+    supplied = current_catalogue()
+    if registry is None and supplied is not None:
+        return supplied.catalogues()[1]
+    from isaaclab_arena.relations.relations import RelationBase
+
     registry = registry or ObjectRelationLibraryRegistry()
     catalogue = RelationCatalogue()
     for name in registry.get_all_keys():
@@ -933,6 +942,9 @@ class TaskCatalogue:
 
 def agent_ready_task_names(registry: TaskRegistry | None = None) -> frozenset[str]:
     """Return ``TaskRegistry`` keys for tasks marked with ``@agent_ready``."""
+    supplied = current_catalogue()
+    if registry is None and supplied is not None:
+        return frozenset(supplied.task_parameters)
     registry = registry or TaskRegistry()
     return frozenset(
         name for name in registry.get_all_keys() if getattr(registry.get_task_by_name(name), "agent_ready", False)
@@ -941,6 +953,9 @@ def agent_ready_task_names(registry: TaskRegistry | None = None) -> frozenset[st
 
 def build_task_catalogue(registry: TaskRegistry | None = None) -> TaskCatalogue:
     """Collect agent_ready tasks from ``TaskRegistry``."""
+    supplied = current_catalogue()
+    if registry is None and supplied is not None:
+        return supplied.catalogues()[2]
     registry = registry or TaskRegistry()
     catalogue = TaskCatalogue()
     for name in sorted(agent_ready_task_names(registry)):

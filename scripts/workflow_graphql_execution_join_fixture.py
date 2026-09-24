@@ -1,6 +1,6 @@
 # Copyright (c) 2026, The Isaac Lab Arena Project Developers.
 # SPDX-License-Identifier: Apache-2.0
-"""Fixed E1 input/capture ports only; no owner, grants, service or receipt mocks."""
+"""Fixed E1 input/capture/vocabulary ports; no owner, grants, service or receipt mocks."""
 
 import json
 import os
@@ -13,6 +13,30 @@ PAUSE = Path("/tmp/workflow-cli/e1-pause-generation")
 PAUSE_BYTES = b"e1-owned-generation-barrier\n"
 IDENTITY_FIELDS = ("pid", "parent_pid", "pgid", "sid", "boot", "pid_namespace", "start_ticks")
 LIVE_IDENTITY_FIELDS = tuple(key for key in IDENTITY_FIELDS if key != "parent_pid")
+
+
+def synthetic_catalogue():
+    """Declare only the deterministic adapter's inputs, not a production simulator inventory."""
+    from isaaclab_arena.environment_spec.execution_catalogue import ExecutionCatalogue
+
+    return ExecutionCatalogue({
+        "assets": {
+            "embodiments": [{"name": name, "tags": []} for name in ("franka_ik", "droid_abs_joint_pos")],
+            "backgrounds": [{"name": "maple_table_robolab", "tags": []}],
+            "objects": [{"name": name, "tags": []} for name in (
+                "rubiks_cube_hot3d_robolab", "bowl_ycb_robolab", "mug_ycb_robolab",
+            )],
+        },
+        "relations": {"relations": [
+            {"name": name, "unary": unary, "summary": "Synthetic adapter schema vocabulary only."}
+            for name, unary in (("is_anchor", True), ("on", False), ("position_limits", True), ("at_position", True))
+        ]},
+        "tasks": {"tasks": [{
+            "name": "PickAndPlaceTask",
+            "required_params": ["pick_up_object", "destination_location", "background_scene"],
+            "summary": "Synthetic adapter task; no simulation compatibility claim.",
+        }]},
+    })
 
 
 def check_live_identity(expected, observed):

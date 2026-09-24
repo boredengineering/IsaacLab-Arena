@@ -18,7 +18,6 @@ import json
 import math
 from typing import Any
 
-from isaaclab_arena.agentic_environment_generation.inference_backend import build_strict_schema
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
 MAX_JSON_BYTES = 1024 * 1024
@@ -87,6 +86,8 @@ class SpecWireAdapter:
     """Adapt freeform maps at schema-declared positions, not arbitrary 'params' keys."""
 
     def __init__(self):
+        from isaaclab_arena.agentic_environment_generation.inference_backend import build_strict_schema
+
         self._domain_schema = build_strict_schema(ArenaEnvGraphSpec)
         self.schema = copy.deepcopy(self._domain_schema)
         self._adapt_schema(self.schema)

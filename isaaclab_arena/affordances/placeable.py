@@ -3,17 +3,21 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from __future__ import annotations
+
 import math
 import torch
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import isaaclab.utils.math as math_utils
 import warp as wp
-from isaaclab.assets import RigidObject
-from isaaclab.envs.manager_based_env import ManagerBasedEnv
 from isaaclab.managers import SceneEntityCfg
 
 from isaaclab_arena.affordances.affordance_base import AffordanceBase
+
+if TYPE_CHECKING:
+    from isaaclab.assets import RigidObject
+    from isaaclab.envs.manager_based_env import ManagerBasedEnv
 
 
 class Placeable(AffordanceBase):

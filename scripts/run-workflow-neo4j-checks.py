@@ -807,7 +807,7 @@ def stage_source(root, destination, mode, *, provision=None):
 
 
 INITIALIZATION_MODE = "workflow-graphql-initialization"
-INITIALIZATION_CASES = ("transport", "positive", "failure", "timeout")
+INITIALIZATION_CASES = ("transport", "init-server", "positive", "failure", "timeout")
 INITIALIZATION_TRANSPORT_BYTES = b"arena-s2-tmpfs-transport-v1\x00\xff\n"
 INITIALIZATION_TEST = "isaaclab_arena/tests/test_environment_workflow_initialization_neo4j.py"
 INITIALIZATION_INVENTORY = "outputs/workflow/plan04-implementation/s2-initialization/source-files.json"
@@ -818,7 +818,7 @@ def initialization_validate_options(mode, case):
     """Reject misplaced or absent case selection before any discovery or writes."""
     if mode == INITIALIZATION_MODE:
         if case not in INITIALIZATION_CASES:
-            raise ValueError("S2 requires an explicit transport|positive|failure|timeout case")
+            raise ValueError("S2 requires an explicit transport|init-server|positive|failure|timeout case")
     elif case is not None:
         raise ValueError("--initialization-case is exclusive to " + INITIALIZATION_MODE)
 
@@ -1522,6 +1522,8 @@ def initialization_run(options):
                      export_attempted=False, exporter_launches=0, container_exec_unknown=False,
                      network_id=None, work_deadline=clock.work_deadline,
                      graphql_provision_manifest_sha256=GRAPHQL_MANIFEST_SHA256)
+    if case == "init-server":
+        run.proof.update(scope="init-server preparation only", all_roles_complete=False, readiness_observed=False)
     network = None
     files = None
     accepted = False
@@ -1536,7 +1538,7 @@ def initialization_run(options):
         discovery = discover(root, False, command=command)
         discovery = select_graphql_runtime(discovery, options.runtime_image, options.provision_manifest, command=command)
         assert discovery["selected_runtime_image"] == GRAPHQL_IMAGE
-        for image in ((GRAPHQL_IMAGE,) if case in {"transport", "positive"} else (DB_IMAGE, GRAPHQL_IMAGE)):
+        for image in ((GRAPHQL_IMAGE,) if case in {"transport", "init-server", "positive"} else (DB_IMAGE, GRAPHQL_IMAGE)):
             assert command("image", "inspect", "--format", "{{.Id}}", image) == image
         clock.timeout()
         manifest = stage_source(root, output / "source", INITIALIZATION_MODE, provision=discovery["provision"])
@@ -1546,7 +1548,7 @@ def initialization_run(options):
         host = discovery["host_root"] + "/" + output.relative_to(root).as_posix()
         run.proof["host_root"] = discovery["host_root"]
         run.save()
-        if case not in {"transport", "positive"}:
+        if case not in {"transport", "init-server", "positive"}:
             network = token  # Set before an ambiguous daemon create.
             run.proof["create_attempts"][token] = "attempted"
             run.save()
@@ -1562,7 +1564,7 @@ def initialization_run(options):
             assert not net["Containers"]
             validate_process_network(net)
             run.proof["isolated_network"] = net
-        for role in (("client",) if case in {"transport", "positive"} else ("db", "client")):
+        for role in (("client",) if case in {"transport", "init-server", "positive"} else ("db", "client")):
             clock.timeout()
             name = token + "-" + role
             run.candidates.append(name)
@@ -1682,13 +1684,14 @@ def initialization_run(options):
         finally:
             for sig, handler in previous.items():
                 signal.signal(sig, handler)
-    print(json.dumps({"output": str(output), "status": run.proof["status"], "cleanup_verified": run.proof["cleanup_verified"]}))
+    print(json.dumps({"output": str(output), "status": run.proof["status"], "case": case,
+                      "cleanup_verified": run.proof["cleanup_verified"]}))
     return 0 if run.proof["status"] == "passed" else 1
 
 
 def initialization_main(options):
-    """Release reviewed transport and positive initialization; keep C cases closed."""
-    if getattr(options, "initialization_case", None) not in {"transport", "positive"}:
+    """Select preparation explicitly; the single-role milestone never runs its peers."""
+    if getattr(options, "initialization_case", None) not in {"transport", "init-server", "positive"}:
         raise RuntimeError("S2 execution closed: failure/timeout cases await their release review")
     return initialization_run(options)
 

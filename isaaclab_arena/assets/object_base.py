@@ -7,13 +7,12 @@ from __future__ import annotations
 
 import torch
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 import warp as wp
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
-from isaaclab.envs import ManagerBasedEnv
 from isaaclab.managers import EventTermCfg, SceneEntityCfg
 from isaaclab.sensors.contact_sensor.contact_sensor_cfg import ContactSensorCfg
-from isaaclab_tasks.manager_based.manipulation.stack.mdp.franka_stack_events import randomize_object_pose
 
 # Re-export ObjectType from the lightweight module so existing
 # `from isaaclab_arena.assets.object_base import ObjectType` consumers keep working,
@@ -25,6 +24,9 @@ from isaaclab_arena.terms.events import set_object_pose, set_object_pose_per_env
 from isaaclab_arena.utils.pose import Pose, PosePerEnv, PoseRange
 from isaaclab_arena.utils.velocity import Velocity
 from isaaclab_arena.variations.object_mass_variation import ObjectMassVariation
+
+if TYPE_CHECKING:
+    from isaaclab.envs import ManagerBasedEnv
 
 __all__ = [
     "ObjectBase",
@@ -104,6 +106,8 @@ class ObjectBase(PlaceableAsset, ABC):
                 },
             )
         elif isinstance(initial_pose, PoseRange):
+            from isaaclab_tasks.manager_based.manipulation.stack.mdp.franka_stack_events import randomize_object_pose
+
             return EventTermCfg(
                 func=randomize_object_pose,
                 mode="reset",

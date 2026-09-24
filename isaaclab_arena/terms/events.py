@@ -3,14 +3,19 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from __future__ import annotations
+
 import torch
+from typing import TYPE_CHECKING
 
 import warp as wp
-from isaaclab.envs import ManagerBasedEnv
 from isaaclab.managers import SceneEntityCfg
 
 from isaaclab_arena.utils.pose import Pose
 from isaaclab_arena.utils.velocity import Velocity
+
+if TYPE_CHECKING:
+    from isaaclab.envs import ManagerBasedEnv
 
 
 def set_object_pose(

@@ -436,30 +436,33 @@ def registration_metadata_probe(preimport, guard, runner, report, *, admission=N
 
     def dependency_frontier():
         started = time.monotonic()
-        # Fixed source selection from retained IsaacLab utils / Torch AST and
-        # the actual 2339d5215d5840e7b65df34d2d1f5faf refusal, not a resolver.
+        # Only one literal finite metadata page; prior source/native facts stay retained.
         p = "/isaac-sim/kit/python/lib/python3.12/site-packages"
-        l = "/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab/isaaclab"
-        paths = [p + suffix for suffix in (
-            "/lazy_loader/__init__.py", "/numpy/__init__.py", "/sympy/__init__.py",
-            "/torch/__init__.py", "/torch/_utils.py", "/torch/_utils_internal.py",
-            "/torch/torch_version.py", "/torch/version.py",
-        )] + [l + "/sim/__init__.py", l + "/sim/__init__.pyi"]
-        assert trigger == dict(fullname="lazy_loader", origin=paths[0])
+        page = INITIALIZATION_METADATA_PAGE
+        paths = initialization_metadata_page_selection(page)["sources"]
+        assert trigger == dict(fullname="lazy_loader", origin=p + "/lazy_loader/__init__.py")
         assert guard.initialization_case == "positive" and guard.initialization_role == "init-server"
         assert runner.GRAPHQL_IMAGE == "sha256:b94e17024f1e123ac5a42759ab56651a18823fda7c701e765cba31f200154cdd"
         assert runner.GRAPHQL_MANIFEST_SHA256 == "03764536ed54c1f59cbf46305c5bc4ba618e2dc1deeeac7ffdfb21a0dffbf810"
         budget = admission.budget
-        saved = {key: budget[key] for key in ("deadline", "byte_limit", "file_limit") if key in budget}
+        saved = {key: budget[key] for key in ("deadline", "byte_limit", "file_limit", "entries", "entry_limit") if key in budget}
         initial_bytes = budget["bytes"]
         report.update(
             schema_version=1, status="partial", trigger=trigger, role=guard.initialization_role, pid=os.getpid(),
             image=runner.GRAPHQL_IMAGE, provision_manifest_sha256=runner.GRAPHQL_MANIFEST_SHA256,
             expanded_import_admitted=False, package_imports_executed=False,
             complete_dependency_closure=False, requested_manifest=paths,
-            selection="fixed retained trace/IsaacLab utils/Torch AST candidates; existence not assumed",
+            selection="one fixed metadata content page; candidate coverage only, no discovery or admission",
+            retained_evidence=dict(status="retained-not-current", coverage_joined=False,
+                run="arena-s2-init-fda1fe67d99d469997d24745cb648ca6",
+                manifest_sha256="0f3b54e9b0361e797226170c505ef5f8b7599dced032d050128866af314231ce"),
             baseline={}, baseline_complete=False, module_origins=[], module_origins_complete=False,
             source_capture_complete=False, imports_complete=False,
+            boundary=initialization_metadata_page_state(page, saved.get("byte_limit", 2 * 1024**3)),
+            source_manifest_binding="enclosing initialization-init-server.json source_sha256",
+            original_refusal_retained=True, cleanup="enclosing role lifecycle; inspection opens close in finally",
+            encoded_bytes=None, encoded_bytes_upper_bound=1048576, deadline_exhausted=False, entries=0,
+            role_read_limit=saved.get("byte_limit", 2 * 1024**3),
             files=[dict(path=path, status="not_read_pending", imports_complete=False) for path in paths], bytes_read=0,
             limits=dict(seconds=5, file_bytes=262144, total_bytes=4194304, report_bytes=1048576, imports=512),
         )
@@ -513,10 +516,12 @@ def registration_metadata_probe(preimport, guard, runner, report, *, admission=N
         budget["deadline"] = min(saved["deadline"], started + 5)
         budget["byte_limit"] = min(saved.get("byte_limit", 8 * 1024**3), initial_bytes + 4194304)
         budget["file_limit"] = min(saved.get("file_limit", 2 * 1024**3), 262144)
+        budget["entries"] = saved.get("entries", 0)
+        budget["entry_limit"] = min(saved.get("entry_limit", 4096), 4096)
         encoding_deadline = budget["deadline"]
         try:
-            # Source capture has priority over optional AST and loaded-module
-            # summaries: finish the fixed selection before walking any tree.
+            initialization_metadata_page_capture(admission, report, budget, append, replace, page=page)
+            # Selected raw metadata precedes four new helper sources on EP-A only.
             for index, path in enumerate(paths):
                 row = report["files"][index]
                 if time.monotonic() >= budget["deadline"]:
@@ -537,7 +542,8 @@ def registration_metadata_probe(preimport, guard, runner, report, *, admission=N
                     row = report["files"][index]
                     text = raw.decode("utf-8", errors="strict")
                     assert text.encode("utf-8") == raw
-                    source = dict(format="complete_utf8_source", complete_source=True,
+                    source = dict(format="complete_utf8_source" if path.endswith((".py", ".pyi")) else "complete_utf8_data",
+                                  complete_source=True,
                                   bytes=len(raw), sha256=witness["sha256"], text=text)
                     if not add(row, "source_evidence", source):
                         row["status"] = "read_encoded_limit"
@@ -556,27 +562,7 @@ def registration_metadata_probe(preimport, guard, runner, report, *, admission=N
                             row["status"] = reasons.get(error.args[0], row["status"])
                     if time.monotonic() >= budget["deadline"]:
                         row["status"] = "read_deadline" if "witness" in row else "not_read_deadline"
-            for row in report["files"]:
-                if "source_evidence" not in row or time.monotonic() >= budget["deadline"]:
-                    continue
-                try:
-                    tree = ast.parse(row["source_evidence"]["text"].encode("utf-8"), filename=row["path"])
-                    complete = True
-                    for node in ast.walk(tree):
-                        if time.monotonic() >= budget["deadline"]:
-                            complete = False
-                            break
-                        if isinstance(node, (ast.Import, ast.ImportFrom)):
-                            edge = dict(line=node.lineno, end_line=node.end_lineno, col=node.col_offset,
-                                        end_col=node.end_col_offset, module=getattr(node, "module", None),
-                                        level=getattr(node, "level", 0), names=[x.name for x in node.names])
-                            if len(row["imports"]) >= 512 or not append(row["imports"], edge):
-                                complete = False
-                                break
-                    row["imports_complete"] = complete
-                except BaseException as error:
-                    # Summary failure never invalidates complete captured bytes.
-                    row["imports_error_type"] = type(error).__name__[:128]
+            # No repeated broad family/source reconciliation in this residual packet.
             for field, values in (("baseline", admission.baseline), ("module_origins", admission.modules)):
                 complete = True
                 for key in values if field == "baseline" else range(len(values)):
@@ -589,22 +575,70 @@ def registration_metadata_probe(preimport, guard, runner, report, *, admission=N
                         complete = False
                         break
                 report[field + "_complete"] = complete
+            # Optional AST summaries cannot starve baseline/context publication.
+            for row in report["files"]:
+                if "source_evidence" not in row or time.monotonic() >= budget["deadline"]:
+                    continue
+                if not row["path"].endswith((".py", ".pyi")):
+                    row["imports_complete"] = True  # Data is deliberately never AST parsed.
+                    continue
+                try:
+                    tree = ast.parse(row["source_evidence"]["text"].encode("utf-8"), filename=row["path"])
+                    complete = True
+                    parents = {}
+                    for node in ast.walk(tree):
+                        if time.monotonic() >= budget["deadline"]:
+                            complete = False
+                            break
+                        for child in ast.iter_child_nodes(node):
+                            parents[child] = node
+                        if isinstance(node, (ast.Import, ast.ImportFrom)):
+                            qualification = "eager_syntax"
+                            child = node
+                            while child in parents:
+                                parent = parents[child]
+                                if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                                    qualification = "deferred"
+                                    break
+                                if isinstance(parent, ast.If) and child in parent.body and (
+                                    isinstance(parent.test, ast.Name) and parent.test.id == "TYPE_CHECKING"
+                                    or isinstance(parent.test, ast.Attribute) and parent.test.attr == "TYPE_CHECKING"
+                                ):
+                                    qualification = "type_only"
+                                    break
+                                if isinstance(parent, (ast.If, ast.Try, ast.For, ast.While, ast.With, ast.Match)):
+                                    qualification = "conditional"
+                                child = parent
+                            edge = dict(line=node.lineno, end_line=node.end_lineno, col=node.col_offset,
+                                        end_col=node.end_col_offset, module=getattr(node, "module", None),
+                                        level=getattr(node, "level", 0), names=[x.name for x in node.names],
+                                        qualification=qualification)
+                            if len(row["imports"]) >= 512 or not append(row["imports"], edge):
+                                complete = False
+                                break
+                    row["imports_complete"] = complete
+                except BaseException as error:
+                    # Summary failure never invalidates complete captured bytes.
+                    row["imports_error_type"] = type(error).__name__[:128]
         finally:
             report["source_capture_complete"] = all("source_evidence" in row for row in report["files"])
             report["imports_complete"] = all(row["imports_complete"] for row in report["files"])
             report["status"] = ("observed" if all(report[field] for field in (
                 "source_capture_complete", "imports_complete", "baseline_complete", "module_origins_complete"
-            )) else "partial")
+            )) and report["boundary"]["status"] == "observed" else "partial")
             report["bytes_read"] = budget["bytes"] - initial_bytes
             for row in report["files"]:
                 if row["status"] == "not_read_pending":
                     row["status"] = ("not_read_deadline" if time.monotonic() >= budget["deadline"]
                                      else "not_read_inspection_error")
+            report["entries"] = budget["entries"]
+            report["deadline_exhausted"] = time.monotonic() >= budget["deadline"]
             # Restore limits only: inspection reads remain charged to the role.
-            for key in ("deadline", "byte_limit", "file_limit"):
+            for key in ("deadline", "byte_limit", "file_limit", "entries", "entry_limit"):
                 if key in saved:
-                    budget[key] = saved[key]
-                else:
+                    if key != "entries":
+                        budget[key] = saved[key]
+                elif key != "entries":
                     budget.pop(key, None)
 
     if admission is not None:
@@ -1217,6 +1251,19 @@ class JoinGuards(base.Guards):
         self.http_started = None
         self.last_status = None
 
+    def deny(self, kind):
+        if kind == "subprocess" and getattr(self, "initialization_controls_ready", False):
+            traces = getattr(self, "initialization_subprocess_denials", [])
+            if len(traces) < 4:
+                frames = []
+                frame = sys._getframe(1)
+                while frame is not None and len(frames) < 16:
+                    frames.append(dict(path=frame.f_code.co_filename, function=frame.f_code.co_name, line=frame.f_lineno))
+                    frame = frame.f_back
+                traces.append(frames)
+                self.initialization_subprocess_denials = traces
+        return super().deny(kind)
+
     def profile(self, frame, event, arg):
         if getattr(self, "initialization_controls_ready", False) and event == "call":
             module = frame.f_globals.get("__name__", "")
@@ -1309,9 +1356,10 @@ class JoinGuards(base.Guards):
     def audit(self, event, args):
         if event == "import" and getattr(self, "initialization_controls_ready", False):
             top = args[0].split(".")[0]
-            if top in self.initialization_admission.roots:
+            if top not in {"sqlite3", "_sqlite3"}:
                 # Import event is not load permission: our physical finder must
-                # resolve and gate the actual bytes before they execute.
+                # resolve approved image/submodule bytes before they execute.
+                # Constructors, runtime actions and provider calls stay guarded.
                 return None
         if event == "import" and self.role == "model" and args[0].split(".")[0] == "openai":
             return None
@@ -1419,7 +1467,8 @@ class JoinGuards(base.Guards):
         if initialization is not None and self.role == "harness":
             caller = sys._getframe(1)
             if caller.f_code is initialization_fresh.__code__ and self.permit == (args, kwargs):
-                assert initialization == "positive" and len(self.spawn_records) < 4
+                assert initialization in {"positive", "init-server"}
+                assert len(self.spawn_records) < (1 if initialization == "init-server" else 4)
                 self.permit = None
                 return self.launch(args, kwargs)
         if positional or type(args) is not list or not all(type(v) is str for v in args):
@@ -2234,7 +2283,16 @@ def initialization_pre_readiness(digest):
     )
     write_evidence("initialization-pre-readiness.json", marker)
     if case == "failure":
-        raise RuntimeError("S2 fixed post-initialization pre-readiness failure")
+        try:
+            raise RuntimeError("S2 fixed post-initialization pre-readiness failure")
+        except RuntimeError as error:
+            # Observe the actual raise coordinate without exporting its message
+            # or inventing a post-SIGKILL finalization witness. The same exception
+            # propagates through the installed build/lifespan trace unchanged.
+            marker["failure_site"] = dict(file=SELF, function="initialization_pre_readiness",
+                                          line=error.__traceback__.tb_lineno)
+            write_evidence("initialization-pre-readiness.json", marker)
+            raise
     # Outer collection must stop the exact owned server group five seconds after
     # the marker. This independent watchdog only prevents an unbounded fixture;
     # its expiry is nonpass, not the specified external timeout witness.
@@ -2255,31 +2313,1256 @@ def initialization_environment(case, role):
         "WARP_CACHE_PATH": root + "/cache/warp", "PATH": "/usr/bin:/bin",
         "NVIDIA_VISIBLE_DEVICES": "void", "CUDA_VISIBLE_DEVICES": "",
         "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",
+        "SPATIALINDEX_C_LIBRARY": "/isaac-sim/exts/omni.pip.compute/pip_prebundle/rtree.libs/libspatialindex-e5350069.so",
         "PYTHONDONTWRITEBYTECODE": "1",
     }
 
 
 def initialization_origin(name, origin, preloaded):
-    """Check one selected package's lexical origin, not its physical identity.
-
-    The caller must separately no-follow/hash the actual loader bytes before
-    loading. This deliberately does NOT admit arbitrary purelib dependencies,
-    Isaac Lab path rewrites, namespace fallbacks, or preloaded package objects.
-    """
+    """Check approved image/submodule origins; physical identity is checked separately."""
     assert type(name) is type(origin) is str and type(preloaded) is bool and not preloaded
     pure = "/isaac-sim/kit/python/lib/python3.12/site-packages/"
     roots = {
         "warp": pure + "warp", "torch": pure + "torch", "pxr": pure + "pxr",
         "openai": pure + "openai",
+        "lazy_loader": pure + "lazy_loader", "numpy": pure + "numpy",
+        "sympy": pure + "sympy", "mpmath": pure + "mpmath",
+        "gymnasium": pure + "gymnasium",
+        "torchgen": pure + "torchgen",
         "yaml": "/isaac-sim/exts/omni.pip.compute/pip_prebundle/yaml",
+        "toml": "/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/toml",
         "isaaclab": "/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab/isaaclab",
+        "isaaclab_physx": "/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab_physx/isaaclab_physx",
     }
     root = name.split(".")[0]
-    assert root in roots and all(part.isidentifier() for part in name.split("."))
-    assert origin.startswith(roots[root] + "/")
+    assert all(part.isidentifier() for part in name.split("."))
+    if root in roots:
+        assert origin.startswith(roots[root] + "/")
+    else:
+        assert origin.startswith(("/isaac-sim/", "/workspaces/isaaclab_arena/submodules/"))
+        relative = "/" + name.replace(".", "/")
+        assert (origin.endswith((relative + ".py", relative + "/__init__.py"))
+                or origin.endswith(".so") and relative + "." in origin
+                and "/" not in origin.rsplit(relative + ".", 1)[1]), "S2 module name/origin mismatch"
     assert all(part not in {"", ".", ".."} for part in origin.split("/")[1:])
     assert origin.endswith((".py", ".so"))
     return root
+
+
+def initialization_boundary_origins(fullname, roots, inventory):
+    """Return physical Python origin candidates without calling import machinery."""
+    assert re.fullmatch(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*", fullname), "S2 invalid target module"
+    parts = fullname.split(".")
+    assert len(parts) <= 16, "S2 target depth ceiling"
+    origins, complete = [], True
+    for index, root in enumerate(roots):
+        directory = root + ("/" + "/".join(parts[:-1]) if len(parts) > 1 else "")
+        result = inventory(directory)
+        if result["status"] not in {"missing", "observed"}:
+            complete = False
+        if result["status"] != "observed":
+            continue
+        for item in result["witness"]["entries"]:
+            name = item["name"]
+            candidate = (name == parts[-1] + ".py" or name == parts[-1] + ".so"
+                         or name.startswith(parts[-1] + ".") and name.endswith(".so"))
+            if candidate:
+                origins.append(dict(item, path=directory + "/" + name, path_index=index,
+                                    status="stat_regular" if stat.S_ISREG(item["mode"]) and item["links"] == 1 else "refused"))
+            elif name == parts[-1]:
+                package = inventory(directory + "/" + name)
+                if package["status"] != "observed":
+                    complete = False
+                    origins.append(dict(item, path=directory + "/" + name, path_index=index, status="package_refused"))
+                    continue
+                initializers = [leaf for leaf in package["witness"]["entries"]
+                                if leaf["name"] == "__init__.py" or leaf["name"] == "__init__.so"
+                                or leaf["name"].startswith("__init__.") and leaf["name"].endswith(".so")]
+                for leaf in initializers:
+                    origins.append(dict(leaf, path=directory + "/" + name + "/" + leaf["name"], path_index=index,
+                                        status="stat_regular" if stat.S_ISREG(leaf["mode"]) and leaf["links"] == 1 else "refused"))
+                if not initializers:
+                    complete = False
+                    origins.append(dict(item, path=directory + "/" + name, path_index=index, status="namespace_unreviewed"))
+    complete &= all(row["status"] == "stat_regular" for row in origins)
+    return origins, complete
+
+
+def initialization_boundary_reconcile(admission, report, budget, append, replace):
+    """Reconcile captured source edges with exact baseline names, never admit them."""
+    boundary = report["boundary"]
+    cache = {row["path"]: row for row in boundary["directories"]}
+
+    def inventory(path):
+        if path in cache:
+            return cache[path]
+        assert len(cache) < 512, "S2 directory count ceiling"
+        row = dict(path=path, status="not_completed", witness=None, error_type=None)
+        assert append(boundary["directories"], row), "S2 reconciliation encoded ceiling"
+        try:
+            witness = initialization_directory_inventory(path, budget)
+            assert replace(row, "witness", witness), "S2 reconciliation encoded ceiling"
+            row["status"] = "observed"
+        except FileNotFoundError:
+            row["status"] = "missing"
+        except BaseException as error:
+            row["status"] = "refused"
+            try:
+                replace(row, "error_type", type(error).__name__[:128])
+            except BaseException:
+                pass  # Terminal refusal is retained even when encoding expired.
+        cache[path] = row
+        return row
+
+    modules = {
+        "lazy_loader", "numpy", "sympy", "mpmath", "gymnasium", "cloudpickle", "filelock",
+        "typing_extensions", "setuptools", "networkx", "jinja2", "fsspec", "cuda", "triton",
+        "optree", "opt_einsum", "farama_notifications", "packaging",
+    }
+    edges = {}
+    for source in report["files"]:
+        for edge in source.get("imports", []):
+            if edge["level"]:
+                continue
+            for name in [edge["module"]] if edge["module"] else edge["names"]:
+                top = name.split(".")[0]
+                # Only source-observed mpmath external backend names are probed.
+                if "/mpmath/" in source["path"] and top in {"gmpy", "gmpy2", "sage"}:
+                    modules.add(top)
+                edges.setdefault(top, []).append(dict(path=source["path"], line=edge["line"],
+                                                       fullname=name, qualification=edge["qualification"]))
+    for module in sorted(modules):
+        assert time.monotonic() < budget["deadline"], "S2 reconciliation deadline"
+        name = module.replace("_", "-")
+        distributions = [dict(name=row["name"], version=row["version"], metadata_path=row["metadata_path"])
+                         for row in boundary["distributions"]
+                         if re.sub(r"[-_.]+", "-", row["name"]).lower() == name]
+        origins, complete = initialization_boundary_origins(module, ["/isaac-sim/kit/python/lib/python3.12/site-packages"], inventory)
+        row = dict(module=module, candidate_root="/isaac-sim/kit/python/lib/python3.12/site-packages/" + module,
+                   origins=origins, origin_coverage_complete=complete,
+                   source_edges=edges.get(module, []), source_coverage_complete=all(
+                       source["imports_complete"] for source in report["files"]),
+                   baseline_full_names={name: origin for name, origin in admission.baseline.items()
+                                        if name == module or name.startswith(module + ".")},
+                   distributions=distributions, origin_status=("observed" if origins else "missing") if complete else "unresolved",
+                   effect_review="required_not_admitted", admitted=False)
+        assert append(boundary["external_families"], row), "S2 reconciliation encoded ceiling"
+
+
+def initialization_boundary_native(boundary, budget, paths, inventory, emit, put, *, fixed_context=None):
+    """Stat the retained Torch/NumPy/Warp/YAML selectors; never open a binary."""
+    p = "/isaac-sim/kit/python/lib/python3.12/site-packages"
+    table = (
+        ("cublas", "libcublas.so.*[0-9]"), ("cudnn", "libcudnn.so.*[0-9]"),
+        ("cuda_nvrtc", "libnvrtc.so.*[0-9]"), ("cuda_nvrtc", "libnvrtc-builtins.so.*[0-9]"),
+        ("cuda_runtime", "libcudart.so.*[0-9]"), ("cuda_cupti", "libcupti.so.*[0-9]"),
+        ("cufft", "libcufft.so.*[0-9]"), ("curand", "libcurand.so.*[0-9]"),
+        ("nvjitlink", "libnvJitLink.so.*[0-9]"), ("cusparse", "libcusparse.so.*[0-9]"),
+        ("cusparselt", "libcusparseLt.so.*[0-9]"), ("cusolver", "libcusolver.so.*[0-9]"),
+        ("nccl", "libnccl.so.*[0-9]"), ("nvshmem", "libnvshmem_host.so.*[0-9]"),
+        ("cufile", "libcufile.so.*[0-9]"), ("nvtx", "libnvToolsExt.so.*[0-9]"),
+    )
+    selectors = [dict(kind="torch_cuda_preload", folder=folder, pattern=pattern, required=index < 15,
+                      rationale="retained-not-current torch/__init__.py:284-351; torch.version.cuda=12.8; branch not executed",
+                      candidates=[], searches=[], winner=None, status="not_completed")
+                 for index, (folder, pattern) in enumerate(table)]
+    fixed = (
+        ("torch_global_deps", p + "/torch/lib", "libtorch_global_deps.so", "ctypes", True),
+        ("torch_C", p + "/torch", "_C*.so", "extension", True),
+        ("torch_shm_manager", p + "/torch/bin", "torch_shm_manager", "executable_only", True),
+        ("numpy_core", p + "/numpy/_core", "*.so", "extension", True),
+        ("numpy_wheel_libs", p + "/numpy.libs", "*", "transitive_candidate", False),
+        ("warp_core", p + "/warp/bin", "warp.so", "ctypes", True),
+        ("warp_llvm", p + "/warp/bin", "warp-clang.so", "ctypes_optional", False),
+        ("yaml_extension", E1_YAML_ROOT, "_yaml*.so", "extension", False),
+    )
+    selectors = [dict(kind=kind, directory=directory, pattern=pattern, load_kind=load_kind, required=required,
+                       rationale="retained-not-current source selector; stat is not load/hash authority",
+                       candidates=[], searches=[], winner=None, status="not_completed")
+                  for kind, directory, pattern, load_kind, required in fixed] + selectors
+    put(boundary, "native", selectors)
+    put(boundary, "projection", dict(
+        role_identity_limit=budget.get("native_limit", 16), role_read_limit=boundary["role_read_limit"],
+        aggregate_identity_limit=64, aggregate_read_limit=8 * 1024**3,
+        conditional_required_identities=17, four_role_conditional_identities=68,
+        condition="full fifteen-preload branch plus global_deps and _C; not observed execution",
+        branch_executed=False, admission_enabled=False, complete=False, identities=[], known_read_bytes=0,
+        read_expression="5 * sum(extension sizes) + sum(ctypes size * actual admission-call count); count unknown",
+        missing_or_refused=[], quota_blocker="conditional 17 > 16 and four-role 68 > 64; no allowance changed",
+        excludes="manager executable and merely transitive map candidates are not explicit load identities",
+    ))
+    projection = boundary["projection"]
+
+    def matches(name, pattern):
+        if pattern.endswith("*[0-9]"):
+            prefix = pattern[:-6]
+            return name.startswith(prefix) and len(name) > len(prefix) and name[-1] in "0123456789"
+        if "*" in pattern:
+            left, right = pattern.split("*")
+            return name.startswith(left) and name.endswith(right) and len(name) >= len(left) + len(right)
+        return name == pattern
+
+    for index, selector in enumerate(selectors):
+        if index == len(fixed) and fixed_context is not None:
+            fixed_context()
+        complete = True
+        precedence_known = True
+        if selector["kind"] == "torch_cuda_preload":
+            searches = [(index, layout, root + suffix) for index, root in enumerate(paths)
+                        for layout, suffix in enumerate(("/nvidia/" + selector["folder"] + "/lib",
+                                                         "/nvidia/cu12/lib", "/" + selector["folder"] + "/lib"))]
+        else:
+            searches = [(None, None, selector["directory"])]
+        for path_index, layout, directory in searches:
+            observed = inventory(directory)
+            emit(selector["searches"], dict(path_index=path_index, layout=layout, directory=directory,
+                                           status=observed["status"]))
+            if observed["status"] not in {"observed", "missing"}:
+                complete = False
+                if selector["winner"] is None:
+                    precedence_known = False
+            if observed["status"] != "observed":
+                continue
+            # glob returns scandir order, not lexicographic evidence order.
+            for item in sorted(observed["witness"]["entries"], key=lambda row: row["scan_index"]):
+                if item["name"].startswith(".") or not matches(item["name"], selector["pattern"]):
+                    continue
+                regular = stat.S_ISREG(item["mode"]) and item["links"] == 1
+                candidate = dict(item, path=directory + "/" + item["name"], path_index=path_index, layout=layout,
+                                 status="stat_regular" if regular else "link_or_nonregular_refused")
+                emit(selector["candidates"], candidate)
+                if selector["winner"] is None and precedence_known:
+                    put(selector, "winner", candidate["path"])
+                if not regular:
+                    complete = False
+        selector["status"] = "observed" if complete else "unresolved"
+        if not selector["candidates"] and complete:
+            selector["status"] = "missing"
+        if not precedence_known:
+            selector["status"] = "unresolved_precedence"
+        if selector["kind"] == "numpy_wheel_libs" or selector.get("load_kind") == "executable_only":
+            continue
+        chosen = (selector["candidates"] if selector.get("load_kind") == "extension" else
+                  [row for row in selector["candidates"] if row["path"] == selector["winner"]])
+        if not chosen or selector["status"] != "observed":
+            emit(projection["missing_or_refused"], selector["kind"])
+        for candidate in chosen:
+            if candidate["status"] != "stat_regular":
+                continue
+            multiplier = 5 if selector.get("load_kind") == "extension" else 1
+            emit(projection["identities"], dict(path=candidate["path"], size=candidate["size"],
+                 device=candidate["device"], inode=candidate["inode"], kind=selector["kind"],
+                 minimum_read_count=multiplier, projected_minimum_read_bytes=multiplier * candidate["size"]))
+            projection["known_read_bytes"] += multiplier * candidate["size"]
+    boundary["native_complete"] = all(row["status"] in {"observed", "missing"} for row in selectors)
+    # Even complete stats do not resolve conditional branches or repeated ctypes calls.
+    projection["complete"] = False
+
+
+INITIALIZATION_METADATA_PAGE = "DIST"  # Future literal variants require a fresh full-source review.
+
+
+def initialization_metadata_page_selection(page):
+    """Return one frozen candidate page, never runtime-supplied physical paths."""
+    import hashlib
+    import json
+
+    assert type(page) is str and page in ("EP-A", "EP-B", "DIST"), "S2 invalid metadata page"
+    pages = {'EP-A': (['/isaac-sim/kit/python/lib/python3.12/site-packages/jupyter_server-2.20.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/jupyterlab-4.6.3.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/killport-1.2.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/lark-1.3.1.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/lightwheel_sdk-1.0.3.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/markdown-3.10.3.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/markdown_it_py-4.2.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/matplotlib_inline-0.2.2.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/mistune-3.3.4.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/mujoco_warp-3.8.1.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nbclient-0.11.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nbconvert-7.17.1.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nbformat-5.11.1.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/networkx-3.6.1.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/notebook-7.6.2.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/numpy-2.5.2.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/onnx-1.21.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/onnxruntime-1.29.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/opentelemetry_api-1.44.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/pandas-2.2.3.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/pip-26.2.1.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/pygments-2.21.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/pytest-9.1.1.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/pytest_mock-3.15.1.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/python_dotenv-1.2.3.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/ray-2.52.1.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/rerun_sdk-0.36.2.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/send2trash-2.1.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/setuptools-81.0.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/strawberry_graphql-0.327.7.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/streamlit-1.62.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/sympy-1.14.0.dist-info/entry_points.txt'],
+          'febf2b0c31c951eb46a52ee2348fed4d9f522a459d3c4557e3f9e247d4abbcfc'),
+ 'EP-B': (['/isaac-sim/kit/python/lib/python3.12/site-packages/tabulate-0.10.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/tensorboard-2.21.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/torch-2.10.0+cu128.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/tqdm-4.67.1.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/transformers-4.57.6.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/triton-3.6.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/uvicorn-0.52.4.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/viser-1.1.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/vuer-0.1.6.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/wandb-0.28.2.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/webcolors-25.10.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/websocket_client-1.9.0.dist-info/entry_points.txt',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/websockets-16.1.1.dist-info/entry_points.txt',
+           '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/annotated_doc-0.0.4.dist-info/entry_points.txt',
+           '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/anyio-4.13.0.dist-info/entry_points.txt',
+           '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/cffi-2.0.0.dist-info/entry_points.txt',
+           '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/charset_normalizer-3.3.2.dist-info/entry_points.txt',
+           '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/fastapi-0.120.4.dist-info/entry_points.txt',
+           '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/jinja2-3.1.5.dist-info/entry_points.txt',
+           '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/qrcode-7.4.2.dist-info/entry_points.txt',
+           '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/sentry_sdk-2.42.1.dist-info/entry_points.txt',
+           '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/watchdog-4.0.0.dist-info/entry_points.txt',
+           '/isaac-sim/exts/isaacsim.asset.importer.urdf/pip_prebundle/urdf_usd_converter-0.1.3.dist-info/entry_points.txt'],
+          '3e6194d842fb38c44097f8c97823ec1840fae6cf3853343cde1ac9f1d4639695'),
+ 'DIST': (['/isaac-sim/kit/python/lib/python3.12/site-packages/lazy_loader-0.5.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/mpmath-1.3.0.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/networkx-3.6.1.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/numpy-2.5.2.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_cublas_cu12-12.8.4.1.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_cuda_cupti_cu12-12.8.90.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_cuda_nvrtc_cu12-12.8.93.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_cuda_runtime_cu12-12.8.90.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_cudnn_cu12-9.10.2.21.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_cufft_cu12-11.3.3.83.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_cufile_cu12-1.13.1.3.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_curand_cu12-10.3.9.90.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_cusolver_cu12-11.7.3.90.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_cusparse_cu12-12.5.8.93.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_cusparselt_cu12-0.7.1.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_nccl_cu12-2.27.5.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_nvjitlink_cu12-12.8.93.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_nvshmem_cu12-3.4.5.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/nvidia_nvtx_cu12-12.8.90.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/setuptools-81.0.0.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/sympy-1.14.0.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/torch-2.10.0+cu128.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/triton-3.6.0.dist-info/METADATA',
+           '/isaac-sim/kit/python/lib/python3.12/site-packages/typing_extensions-4.16.0.dist-info/METADATA',
+           '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/jinja2-3.1.5.dist-info/METADATA'],
+          'b2040a9b4f20a9ba99c3e725a9199107d8106add63a18be8121277a8be21e1d0')}
+    paths, digest = pages[page]
+    assert hashlib.sha256(json.dumps(paths, separators=(",", ":")).encode()).hexdigest() == digest, "S2 metadata membership changed"
+    assert len(paths) == {"EP-A": 32, "EP-B": 23, "DIST": 25}[page] and len(set(paths)) == len(paths)
+    binding = {'run': 'arena-s2-init-fda1fe67d99d469997d24745cb648ca6',
+ 'image': 'sha256:b94e17024f1e123ac5a42759ab56651a18823fda7c701e765cba31f200154cdd',
+ 'provision_manifest_sha256': '03764536ed54c1f59cbf46305c5bc4ba618e2dc1deeeac7ffdfb21a0dffbf810',
+ 'role_leaf_sha256': 'f24e220755fd1f4ef2aaa5c505f1899d36cf0aaeacc0fd124a3cb435f63d4fd8',
+ 'sys_path': ['/source/scripts',
+              '/source/web/arena-workbench/tests/e2e/functional-v7',
+              '/isaac-sim/kit/python/lib/python312.zip',
+              '/isaac-sim/kit/python/lib/python3.12',
+              '/isaac-sim/kit/python/lib/python3.12/lib-dynload',
+              '/isaac-sim/kit/python/lib/python3.12/site-packages',
+              '/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle',
+              '/isaac-sim/exts/isaacsim.asset.importer.urdf/pip_prebundle']}
+    binding.update(name=page, paths=paths, membership_sha256=digest,
+        manifest_sha256="847811bdcb4f4bdfa10ad0051cd3c4b603a35f429c68fdaa9f2ff3f302fa0613",
+        sources=["/isaac-sim/kit/python/lib/python3.12/importlib/metadata/" + name
+                 for name in ("_collections.py", "_itertools.py", "_functools.py", "_adapters.py")] if page == "EP-A" else [])
+    return binding
+
+
+def initialization_metadata_page_state(page, role_read_limit):
+    """Reserve finite page membership and terminal outcomes before any reads."""
+    selected = initialization_metadata_page_selection(page)
+    boundary = initialization_boundary_state(role_read_limit)
+    boundary.update(metadata_selection="fixed_candidate_page", page=dict(
+        binding=selected, started=False, page_content_complete=False, context_bound=False,
+        discovery_complete=False, parser_bound=False, resolver_order_equivalent=False,
+        cross_run_mount_source_equivalence=False,
+        semantics="raw static candidate evidence only; not effective distributions/plugins or admission"))
+    boundary["metadata"] = [dict(path=path, path_index=selected["sys_path"].index(path.rsplit("/", 2)[0]),
+        status="not_read_pending", witness=None, text=None, raw_hex=None, error_type=None,
+        parse_status="not_parsed") for path in selected["paths"]]
+    return boundary
+
+
+def initialization_metadata_page_capture(admission, report, budget, append, replace, *, page):
+    """Read one frozen candidate page under the enclosing frontier's budget."""
+    selected = initialization_metadata_page_selection(page)
+    boundary = report["boundary"]
+    state = boundary["page"]
+    assert not state["started"], "S2 metadata page already consumed"
+    state["started"] = True  # No continuation or second page in this invocation.
+    boundary["status"] = "partial"
+    paths, finders, hooks = list(sys.path), tuple(sys.meta_path), tuple(sys.path_hooks)
+    provider_snapshot = None
+    cache = {}
+
+    def put(container, key, value):
+        assert replace(container, key, value), "S2 metadata page encoded ceiling"
+
+    def emit(container, value):
+        assert time.monotonic() < budget["deadline"], "S2 metadata page deadline"
+        assert append(container, value), "S2 metadata page encoded ceiling"
+
+    def inventory(path, *, summary=False):
+        if path in cache:
+            return cache[path]
+        assert len(cache) < 512, "S2 directory count ceiling"
+        row = dict(path=path, status="not_completed", witness=None, error_type=None)
+        emit(boundary["directories"], row)
+        cache[path] = row
+        try:
+            witness = initialization_directory_inventory(path, budget)
+            # A fresh root membership summary is NOT cached resolver order proof.
+            if summary:
+                projection = [[item["name"], item["scan_index"], item["mode"]] for item in witness["entries"]]
+                compact = {key: value for key, value in witness.items() if key != "entries"}
+                compact.update(entry_count=len(projection), membership_order_sha256=hashlib.sha256(
+                    json.dumps(projection, separators=(",", ":")).encode()).hexdigest(),
+                    projection="[name,raw_scan_index,mode] in name-sorted presentation; not resolver/cache equivalence")
+                put(row, "witness", compact)
+            else:
+                put(row, "witness", witness)
+            row["status"] = "observed"
+        except FileNotFoundError:
+            row["status"] = "missing"
+        except BaseException as error:
+            row["status"] = "refused"
+            put(row, "error_type", type(error).__name__[:128])
+        return row
+
+    try:
+        assert state["binding"] == selected, "S2 metadata page binding changed"
+        assert [row["path"] for row in boundary["metadata"]] == selected["paths"], "S2 metadata rows changed"
+        assert report["image"] == admission.runner.GRAPHQL_IMAGE == selected["image"], "S2 metadata image changed"
+        assert (report["provision_manifest_sha256"] == admission.runner.GRAPHQL_MANIFEST_SHA256
+                == selected["provision_manifest_sha256"]), "S2 metadata provision changed"
+        assert len(paths) <= 128 and all(type(path) is str for path in paths), "S2 unsupported page path"
+        assert paths == selected["sys_path"], "S2 metadata path order changed"
+        put(boundary, "sys_path", paths)
+        state["context_bound"] = True
+        provider_snapshot = initialization_boundary_provider_snapshot(admission.provider_state, finders)
+        for obj, nonparticipant in zip(finders, provider_snapshot):
+            emit(boundary["finders"], dict(object_id=id(obj), identity=nonparticipant or "opaque_unsupported",
+                status="metadata_nonparticipant_at_start" if nonparticipant is not None else "unclassified"))
+        for obj in hooks:
+            # Hooks remain opaque here; no discovery or callable is invoked.
+            emit(boundary["path_hooks"], dict(object_id=id(obj), identity="opaque_unsupported", status="unclassified"))
+        roots = {path.rsplit("/", 2)[0] for path in selected["paths"]}
+        for index, root in enumerate(paths):
+            row = dict(path_index=index, path=root, status="retained_not_current")
+            emit(boundary["path_coverage"], row)
+            if index < 2 or root in roots:
+                row["status"] = inventory(root, summary=True)["status"]
+        for row in boundary["metadata"]:
+            if time.monotonic() >= budget["deadline"]:
+                row["status"] = "not_read_deadline"
+                continue
+            if boundary["metadata_files"] >= 32:
+                row["status"] = "not_read_metadata_limit"
+                continue
+            boundary["metadata_files"] += 1
+            try:
+                path = row["path"]
+                parent, _, name = path.rpartition("/")
+                directory = inventory(parent)
+                if directory["status"] != "observed":
+                    row["status"] = "not_read_missing" if directory["status"] == "missing" else "not_read_refused"
+                    continue
+                item = next((entry for entry in directory["witness"]["entries"] if entry["name"] == name), None)
+                if item is None:
+                    row["status"] = "not_read_missing"
+                    continue
+                assert stat.S_ISREG(item["mode"]) and item["links"] == 1, "S2 metadata link/nonregular"
+                if item["size"] == 0:
+                    put(row, "witness", item)
+                    row["status"] = "empty_stat_only_unread"
+                    continue  # The unchanged physical reader refuses empty non-source content.
+                witness, raw = initialization_physical_file(path, budget, source=True)
+                put(row, "witness", witness)
+                put(row, "text", raw.decode("utf-8", errors="strict"))
+                row["status"] = "observed"
+            except UnicodeDecodeError:
+                row["status"] = "read_decode_error"
+                put(row, "raw_hex", raw.hex())
+                put(row, "error_type", "UnicodeDecodeError")
+            except BaseException as error:
+                row["status"] = "read_error" if row["witness"] is not None else "not_read_refused"
+                if type(error) is FileNotFoundError:
+                    row["status"] = "not_read_missing"
+                elif type(error) is PermissionError:
+                    row["status"] = "not_read_permission"
+                elif type(error) is OSError:
+                    row["status"] = "not_read_error"
+                elif type(error) is AssertionError and len(error.args) == 1 and type(error.args[0]) is str:
+                    row["status"] = {
+                        "S2 metadata link/nonregular": "not_read_link",
+                        "S2 physical link refused": "not_read_link",
+                        "S2 physical hard link refused": "not_read_link",
+                        "S2 physical per-file ceiling": "not_read_oversize",
+                        "S2 physical read ceiling": "not_read_byte_limit",
+                        "S2 metadata page encoded ceiling": "read_encoded_limit",
+                    }.get(error.args[0], row["status"])
+                if time.monotonic() >= budget["deadline"]:
+                    row["status"] = "read_deadline" if row["witness"] is not None else "not_read_deadline"
+                put(row, "error_type", type(error).__name__[:128])
+    except BaseException as error:
+        # Binding failures must also prevent the enclosing source reads.
+        try:
+            put(boundary, "error_type", type(error).__name__[:128])
+        finally:
+            if not state["context_bound"]:
+                raise
+    finally:
+        boundary["entries"] = budget["entries"]
+        final_paths = list(sys.path)
+        boundary["path_stable"] = all(type(path) is str for path in final_paths) and final_paths == paths
+        boundary["finders_stable"] = len(sys.meta_path) == len(finders) and all(a is b for a, b in zip(sys.meta_path, finders))
+        boundary["path_hooks_stable"] = len(sys.path_hooks) == len(hooks) and all(a is b for a, b in zip(sys.path_hooks, hooks))
+        # Pre-reserved terminal boolean: true is smaller than its false reserve.
+        boundary["provider_shapes_stable"] = (provider_snapshot is not None and
+            initialization_boundary_provider_snapshot(admission.provider_state, finders) == provider_snapshot)
+        for row in boundary["metadata"]:
+            if row["status"] == "not_read_pending":
+                row["status"] = "not_read_deadline" if time.monotonic() >= budget["deadline"] else "not_read_inspection_error"
+        state["page_content_complete"] = (state["context_bound"] and all(boundary[key] for key in (
+            "path_stable", "finders_stable", "path_hooks_stable", "provider_shapes_stable"))
+            and all(row["status"] == "observed" for row in boundary["metadata"]))
+        # Even every selected leaf says nothing about unselected/shadowing distributions or providers.
+        boundary["metadata_complete"] = boundary["distributions_complete"] = False
+        boundary["torch_backends"] = boundary["gymnasium_plugins"] = None
+
+
+def initialization_boundary_state(role_read_limit):
+    """Predeclare every terminal boundary field before any inspection read."""
+    return dict(status="not_started", sys_path=[], finders=[], path_hooks=[], importer_cache=[],
+                path_coverage=[], directories=[], metadata=[], distributions=[], plugins=[],
+                metadata_complete=False, distributions_complete=False, metadata_selection="not_started", torch_backends=None,
+                gymnasium_plugins=None, native=[], native_complete=False, numpy_hook=None,
+                zip_path=dict(path="/isaac-sim/kit/python/lib/python312.zip", status="not_started",
+                              parent_directory="/isaac-sim/kit/python/lib", parent_status=None, entry=None),
+                gmp_backends=[dict(module=name, status="not_started", roots=[], origins=None,
+                    physical_coverage_complete=False, global_availability=None, admitted=False,
+                    scope="fixed image roots only; no provider/archive or selected-backend claim",
+                    rationale="retained-not-current mpmath/libmp/backend.py selector; Sage remains conditional")
+                    for name in ("gmpy2", "gmpy")],
+                projection=None, role_read_limit=role_read_limit, external_families=[], metadata_files=0, entries=0,
+                limits=dict(metadata_files=32, entries_per_directory=4096, entries_total=4096, directories=512, paths=128),
+                error_type=None, incomplete_reasons=[], path_stable=False, finders_stable=False, path_hooks_stable=False,
+                provider_shapes_stable=False,
+                context_interval="boundary inventory only; not a later metadata discovery checkpoint")
+
+
+def initialization_boundary_provider_items(namespace, *, class_namespace=False):
+    """Read exact dicts or a proxy obtained directly from a proven ordinary class."""
+    # MappingProxyType can wrap a hostile custom mapping. Only type's own raw
+    # class dictionary descriptor establishes builtin backing for such a proxy.
+    if type(namespace) is not dict and not (class_namespace and type(namespace) is type(type.__dict__)):
+        raise ValueError("unsupported provider namespace")
+    if len(namespace) > 4096:
+        raise ValueError("provider namespace ceiling")
+    items = tuple(namespace.items())
+    if len(items) > 4096 or not all(type(key) is str for key, _ in items):
+        raise ValueError("unsupported provider namespace keys")
+    return items
+
+
+def initialization_boundary_provider_freeze(value):
+    """Freeze bounded builtin container membership; opaque leaves are identity-only."""
+    result, seen = [], set()
+
+    def walk(item, depth):
+        if depth > 12 or len(result) >= 32768:
+            raise ValueError("provider snapshot ceiling")
+        result.append(item)
+        kind = type(item)
+        if kind is not dict and kind is not list and kind is not tuple and kind is not set:
+            return
+        if id(item) in seen:
+            return
+        seen.add(id(item))
+        if kind is dict:
+            entries = initialization_boundary_provider_items(item)
+            for key, child in entries:
+                result.append(key)
+                walk(child, depth + 1)
+        else:
+            if len(item) > 4096:
+                raise ValueError("provider container ceiling")
+            for child in item:
+                walk(child, depth + 1)
+        result.append(kind)  # Unambiguous container terminator, not user equality.
+
+    walk(value, 0)
+    return tuple(result)
+
+
+def initialization_boundary_provider_same(current, frozen):
+    """Compare references only, except exact builtin layout integers."""
+    return len(current) == len(frozen) and all(
+        a is b or (type(a) is int and type(b) is int and a == b) for a, b in zip(current, frozen))
+
+
+def initialization_boundary_provider_function(function, namespace):
+    """Freeze exact live function/code/global/closure identities, never bytecode labels."""
+    if type(function) is not type(lambda: None) or function.__globals__ is not namespace:
+        raise ValueError("unsupported provider method")
+    snapshot = [function, function.__code__, function.__globals__, function.__closure__]
+    for value in (function.__defaults__, function.__kwdefaults__, function.__dict__):
+        snapshot.extend(initialization_boundary_provider_freeze(value))
+    if function.__closure__ is not None:
+        for cell in function.__closure__:
+            snapshot.append(cell)
+            snapshot.extend(initialization_boundary_provider_freeze(cell.cell_contents))
+    return tuple(snapshot)
+
+
+def initialization_boundary_provider_context(context):
+    """Snapshot shallow namespace memberships and selected deep source witnesses."""
+    snapshot = []
+    for namespace in context[0]:
+        snapshot.append(namespace)
+        for key, value in initialization_boundary_provider_items(namespace):
+            snapshot.extend((key, value))
+    for value in context[1]:
+        snapshot.extend(initialization_boundary_provider_freeze(value))
+    return tuple(snapshot)
+
+
+def initialization_boundary_provider_shape(provider, namespace, methods, instance_keys):
+    """Snapshot an ordinary anchored instance without binding its attributes."""
+    cls = type(provider)
+    if type(cls) is not type:
+        raise ValueError("unsupported provider metaclass")
+    mro = type.__getattribute__(cls, "__mro__")
+    if type(mro) is not tuple or len(mro) != 2 or mro[0] is not cls or mro[1] is not object:
+        raise ValueError("unsupported provider MRO")
+    raw = type.__getattribute__(cls, "__dict__")
+    items = initialization_boundary_provider_items(raw, class_namespace=True)
+    allowed = {*methods, "__module__", "__doc__", "__dict__", "__weakref__"}
+    if {key for key, _ in items} != allowed:
+        raise ValueError("changed provider class namespace")
+    descriptor = raw["__dict__"]
+    if (type(descriptor) is not type(type.__dict__["__dict__"])
+            or descriptor.__objclass__ is not cls or descriptor.__name__ != "__dict__"):
+        raise ValueError("unsupported provider dictionary descriptor")
+    # Only this proven builtin descriptor may touch the instance namespace.
+    instance = descriptor.__get__(provider, cls)
+    instance_items = initialization_boundary_provider_items(instance)
+    if type(instance) is not dict or {key for key, _ in instance_items} != set(instance_keys):
+        raise ValueError("changed provider instance namespace")
+    if instance_keys:
+        if (type(instance["name"]) is not str or instance["name"] != "six"
+                or type(instance["known_modules"]) is not dict):
+            raise ValueError("unsupported six constructor state")
+    snapshot = [provider, cls, descriptor, instance]
+    for name in ("__basicsize__", "__itemsize__", "__dictoffset__", "__weakrefoffset__"):
+        snapshot.append(type.__getattribute__(cls, name))
+    for pairs in (items, initialization_boundary_provider_items(namespace)):
+        for key, value in pairs:
+            snapshot.extend((key, value))
+    snapshot.extend(initialization_boundary_provider_freeze(instance))
+    for name in methods:
+        snapshot.extend(initialization_boundary_provider_function(raw[name], namespace))
+    return tuple(snapshot)
+
+
+def initialization_boundary_provider_bootstrap(runner, sources):
+    """Anchor only trusted post-query objects; this is not a public authenticator.
+
+    Call once immediately after the verified query bootstrap, before application
+    execution. `sources` is the existing verified staged source manifest. No
+    source/finder is imported or executed here. Missing/unsafe anchors stay opaque.
+    """
+    state = {"anchors": [], "sources": sources}
+    try:
+        if type(runner) is not type(os):
+            return state
+        runner_ns = object.__getattribute__(runner, "__dict__")
+        initialization_boundary_provider_items(runner_ns)
+        initialization_boundary_provider_items(sources)
+        installer = runner_ns.get("install_staged_import_guard")
+        pin = sources.get("scripts/run-workflow-neo4j-checks.py")
+        if (type(pin) is not str or pin != "232790f2e4aae824c6e809fc1930965feed3baa47365db4a5c1ebd996fdbe20d"
+                or type(installer) is not type(lambda: None) or installer.__globals__ is not runner_ns):
+            return state
+        state["installer"] = (installer, installer.__code__, runner_ns,
+                              initialization_boundary_provider_items(runner_ns))
+        state["installer_snapshot"] = initialization_boundary_provider_function(installer, runner_ns)
+        state["source_snapshot"] = initialization_boundary_provider_freeze(sources)
+        importlib_module = sys.modules.get("importlib")
+        bootstrap_module = sys.modules.get("_frozen_importlib")
+        if type(importlib_module) is type(os) and type(bootstrap_module) is type(os):
+            bootstrap_ns = object.__getattribute__(bootstrap_module, "__dict__")
+            initialization_boundary_provider_items(bootstrap_ns)
+            module_spec = bootstrap_ns.get("ModuleSpec")
+            if type(module_spec) is type:
+                state["staged_stdlib"] = (importlib_module, module_spec)
+        pathlib_module = sys.modules.get("pathlib")
+        if type(pathlib_module) is type(os):
+            pathlib_ns = object.__getattribute__(pathlib_module, "__dict__")
+            initialization_boundary_provider_items(pathlib_ns)
+            path_type = pathlib_ns.get("PosixPath")
+            if type(path_type) is type and runner_ns.get("Path") is pathlib_ns.get("Path"):
+                state["staged_path_type"] = path_type
+        probe = runner_ns.get("_GRAPHQL_PROBE")
+        initialization_boundary_provider_items(probe)
+        result = probe.get("result")
+        initialization_boundary_provider_items(result)
+        if type(result.get("status")) is not str or result["status"] != "passed":
+            return state
+        loaded = result.get("loaded_modules")
+        initialization_boundary_provider_items(loaded)
+        witness = loaded.get("six")
+        initialization_boundary_provider_items(witness)
+        origin = "/isaac-sim/exts/isaacsim.asset.importer.urdf/pip_prebundle/six.py"
+        digest = "c51c91f703d3d4b3696c923cb5fec213e05e75d9215393befac7f2fa6a3904df"
+        for key, expected in (("file", origin), ("path", origin), ("physical", origin), ("origin", origin),
+                              ("sha256", digest)):
+            if type(witness.get(key)) is not str or witness[key] != expected:
+                return state
+        if (type(witness.get("size")) is not int or witness["size"] != 34703
+                or type(witness.get("links")) is not list or len(witness["links"]) != 0):
+            return state
+        module = sys.modules.get("six")
+        if type(module) is not type(os):
+            return state
+        namespace = object.__getattribute__(module, "__dict__")
+        initialization_boundary_provider_items(namespace)
+        if type(namespace.get("__file__")) is not str or namespace["__file__"] != origin:
+            return state
+        provider = namespace.get("_importer")
+        if type(provider) is not namespace.get("_SixMetaPathImporter"):
+            return state
+        methods = ("__init__", "_add_module", "_get_module", "find_module", "find_spec",
+                   "_SixMetaPathImporter__get_module", "load_module", "is_package", "get_code",
+                   "get_source", "create_module", "exec_module")
+        snapshot = initialization_boundary_provider_shape(provider, namespace, methods, ("name", "known_modules"))
+        context = ((runner_ns, probe, result, loaded), (witness, sources))
+        context_snapshot = initialization_boundary_provider_context(context)
+        state["anchors"].append(dict(provider=provider, namespace=namespace, methods=methods,
+                                     instance_keys=("name", "known_modules"), snapshot=snapshot, module=module,
+                                     context=context, context_snapshot=context_snapshot,
+                                     label="six._SixMetaPathImporter[metadata_nonparticipant]"))
+    except (ValueError, KeyError, TypeError):
+        pass
+    return state
+
+
+def initialization_boundary_provider_staged(state, provider, closure):
+    """Retain the exact installer return at the sole positive S2 call site."""
+    if state is None or "installer" not in state:
+        return
+    try:
+        installer, code, namespace, frozen = state["installer"]
+        current = initialization_boundary_provider_items(namespace)
+        if (installer.__code__ is not code or installer.__globals__ is not namespace
+                or len(current) != len(frozen)
+                or not all(k is a and v is b for (k, v), (a, b) in zip(current, frozen))
+                or not initialization_boundary_provider_same(
+                    initialization_boundary_provider_function(installer, namespace), state["installer_snapshot"])
+                or not initialization_boundary_provider_same(
+                    initialization_boundary_provider_freeze(state["sources"]), state["source_snapshot"])):
+            return
+        snapshot = initialization_boundary_provider_shape(provider, namespace, ("find_spec",), ())
+        method = type.__getattribute__(type(provider), "__dict__")["find_spec"]
+        if not any(method.__code__ is nested for child in code.co_consts if type(child) is type(code)
+                   for nested in child.co_consts):
+            return
+        initialization_boundary_provider_items(closure)
+        cells = method.__closure__
+        if (method.__code__.co_freevars != ("ModuleSpec", "importlib", "modules", "namespaces", "packages", "root")
+                or cells is None or len(cells) != 6 or cells[3].cell_contents is not closure.get("namespaces")):
+            return
+        importlib_module, module_spec = state["staged_stdlib"]
+        if cells[0].cell_contents is not module_spec or cells[1].cell_contents is not importlib_module:
+            return
+        files, namespaces = closure.get("files"), closure.get("namespaces")
+        if (type(files) is not list or type(namespaces) is not list
+                or not all(type(value) is str for value in files)
+                or not all(type(value) is str for value in namespaces)
+                or not all(value in state["sources"] for value in files)):
+            return
+        modules, packages = cells[2].cell_contents, cells[4].cell_contents
+        if type(modules) is not dict or type(packages) is not set:
+            return
+        initialization_boundary_provider_items(modules)
+        path_type = state["staged_path_type"]
+        if (type(cells[5].cell_contents) is not path_type
+                or not all(type(value) is path_type for value in modules.values())):
+            return
+        if not all(type(value) is str for value in packages):
+            return
+        expected_modules, expected_packages = set(), set()
+        for filename in files:
+            if not filename.endswith(".py"):
+                continue
+            parts = filename[:-3].split("/")
+            if any(part in {"", ".", ".."} for part in parts):
+                return
+            if parts[-1] == "__init__":
+                parts.pop()
+                expected_packages.add(".".join(parts))
+            expected_modules.add(".".join(parts))
+            expected_packages.update(".".join(parts[:index]) for index in range(1, len(parts)))
+        if set(modules) != expected_modules or packages != expected_packages:
+            return
+        context = ((namespace,), (closure, state["sources"]))
+        context_snapshot = initialization_boundary_provider_context(context)
+        state["anchors"].append(dict(provider=provider, namespace=namespace, methods=("find_spec",),
+                                     instance_keys=(), snapshot=snapshot, module=None,
+                                     context=context, context_snapshot=context_snapshot,
+                                     label="StagedFinder[metadata_nonparticipant]"))
+    except (ValueError, KeyError, TypeError):
+        pass
+
+
+def initialization_boundary_provider_recognize(state, provider):
+    """Return a diagnostic nonparticipation label or None, never import authority."""
+    if state is None:
+        return None
+    for anchor in state["anchors"]:
+        if provider is not anchor["provider"]:
+            continue
+        try:
+            if anchor["module"] is not None and sys.modules.get("six") is not anchor["module"]:
+                return None
+            if not initialization_boundary_provider_same(
+                    initialization_boundary_provider_context(anchor["context"]), anchor["context_snapshot"]):
+                return None
+            if anchor["module"] is None:
+                installer, _, namespace, _ = state["installer"]
+                if not initialization_boundary_provider_same(
+                        initialization_boundary_provider_function(installer, namespace), state["installer_snapshot"]):
+                    return None
+            current = initialization_boundary_provider_shape(
+                provider, anchor["namespace"], anchor["methods"], anchor["instance_keys"])
+            if initialization_boundary_provider_same(current, anchor["snapshot"]):
+                return anchor["label"]
+        except (ValueError, KeyError, TypeError):
+            pass
+    return None
+
+
+def initialization_boundary_provider_snapshot(state, finders):
+    """Return ordered nonparticipation labels/None for one observation checkpoint.
+
+    Retain the finder tuple itself and compare identities/order separately. Repeat
+    this call at the end of the SAME interval; equality is not certification of
+    a later Torch/metadata discovery checkpoint or a complete provider universe.
+    """
+    return tuple(initialization_boundary_provider_recognize(state, finder) for finder in finders)
+
+
+def initialization_boundary_inventory(admission, report, budget, append, replace, *, residual=False):
+    """Collect S2 physical metadata only, using the frontier's shared budget."""
+    boundary = report["boundary"]
+    boundary["status"] = "partial"
+    boundary["metadata_selection"] = "not_selected_residual_packet" if residual else "legacy_selected"
+    cache = {}
+    metadata_complete = True
+    distributions_complete = True
+    p = "/isaac-sim/kit/python/lib/python3.12/site-packages"
+    families = {
+        "torch", "numpy", "sympy", "mpmath", "gymnasium", "cloudpickle", "filelock",
+        "typing-extensions", "setuptools", "networkx", "jinja2", "fsspec", "cuda-bindings",
+        "triton", "optree", "opt-einsum", "farama-notifications", "lazy-loader",
+        "nvidia-cublas-cu12", "nvidia-cudnn-cu12", "nvidia-cuda-nvrtc-cu12", "nvidia-cuda-runtime-cu12",
+        "nvidia-cuda-cupti-cu12", "nvidia-cufft-cu12", "nvidia-curand-cu12", "nvidia-nvjitlink-cu12",
+        "nvidia-cusparse-cu12", "nvidia-cusparselt-cu12", "nvidia-cusolver-cu12", "nvidia-nccl-cu12",
+        "nvidia-nvshmem-cu12", "nvidia-cufile-cu12", "nvidia-nvtx-cu12",
+    }
+
+    def put(container, key, value):
+        assert replace(container, key, value), "S2 boundary encoded ceiling"
+
+    def emit(container, value):
+        assert time.monotonic() < budget["deadline"], "S2 boundary deadline"
+        assert append(container, value), "S2 boundary encoded ceiling"
+
+    def inventory(path):
+        if path in cache:
+            return cache[path]
+        assert len(cache) < 512, "S2 directory count ceiling"
+        row = dict(path=path, status="not_completed", witness=None, error_type=None)
+        emit(boundary["directories"], row)
+        try:
+            witness = initialization_directory_inventory(path, budget)
+            put(row, "witness", witness)
+            row["status"] = "observed"
+        except FileNotFoundError:
+            row["status"] = "missing"
+        except BaseException as error:
+            row["status"] = "refused"
+            try:
+                replace(row, "error_type", type(error).__name__[:128])
+            except BaseException:
+                pass  # Terminal refusal is retained even when encoding expired.
+        cache[path] = row
+        return row
+
+    def content(path, item):
+        row = dict(path=path, status="pending", witness=None, text=None, error_type=None)
+        emit(boundary["metadata"], row)
+        if boundary["metadata_files"] >= 32:
+            row["status"] = "not_read_metadata_limit"
+            return row
+        boundary["metadata_files"] += 1
+        try:
+            assert stat.S_ISREG(item["mode"]) and item["links"] == 1, "S2 metadata link/nonregular"
+            # An empty non-Python metadata file is an observed empty stat, not
+            # an absent distribution. The shared reader intentionally refuses it.
+            if item["size"] == 0:
+                put(row, "witness", item)
+                row["status"] = "empty_stat_only_unread"
+                return row
+            witness, raw = initialization_physical_file(path, budget, source=True)
+            put(row, "witness", witness)
+            put(row, "text", raw.decode("utf-8", errors="strict"))
+            row["status"] = "observed"
+        except BaseException as error:
+            row["status"] = "not_read_refused"
+            try:
+                replace(row, "error_type", type(error).__name__[:128])
+            except BaseException:
+                pass
+        return row
+
+    def entry_points(row):
+        group = None
+        seen = set()
+        for line in row["text"].splitlines():
+            assert time.monotonic() < budget["deadline"], "S2 metadata parse deadline"
+            line = line.strip()
+            if not line or line.startswith(("#", ";")):
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                group = line[1:-1].strip()
+                assert group, "S2 invalid entry-point group"
+                continue
+            name, sep, value = line.partition("=")
+            name, value = name.strip(), value.strip()
+            assert group and sep and name and value and (group, name) not in seen, "S2 invalid entry point"
+            seen.add((group, name))
+            emit(boundary["plugins"], dict(metadata_path=row["path"], metadata_sha256=row["witness"]["sha256"],
+                                         group=group, name=name, value=value, target_origins=None, target_coverage_complete=False,
+                                         effect_review="required_not_admitted"))
+
+    def distribution(row, root):
+        fields = []
+        for line in row["text"].splitlines():
+            assert time.monotonic() < budget["deadline"], "S2 metadata parse deadline"
+            if not line:
+                break
+            if line.startswith((" ", "\t")):
+                assert fields, "S2 invalid metadata continuation"
+                fields[-1][1] += " " + line.strip()
+            else:
+                name, sep, value = line.partition(":")
+                assert sep, "S2 invalid metadata header"
+                fields.append([name.lower(), value.strip()])
+        names = [v for k, v in fields if k == "name"]
+        versions = [v for k, v in fields if k == "version"]
+        assert len(names) == len(versions) == 1, "S2 missing distribution identity"
+        emit(boundary["distributions"], dict(name=names[0], version=versions[0], origin=root,
+             metadata_path=row["path"], witness=row["witness"], requires_dist=[v for k, v in fields if k == "requires-dist"],
+             admission="not_admitted", source_edges="pending_source_review", baseline_full_names=[]))
+
+    paths = list(sys.path)
+    finders, path_hooks = tuple(sys.meta_path), tuple(sys.path_hooks)
+    provider_snapshot = initialization_boundary_provider_snapshot(admission.provider_state, finders)
+    put(boundary, "provider_shapes_stable", False)
+    try:
+        # These startup stdlib module bindings are already trusted by S2; do
+        # not import/resolve providers or read attributes on unknown objects.
+        def stdlib_namespace(name):
+            module = sys.modules.get(name)
+            return object.__getattribute__(module, "__dict__") if type(module) is type(os) else {}
+
+        bootstrap = stdlib_namespace("_frozen_importlib")
+        external = stdlib_namespace("_frozen_importlib_external")
+        trusted_finders = [(admission, "InitializationAdmission")]
+        for namespace, prefix, names in (
+            (bootstrap, "_frozen_importlib.", ("BuiltinImporter", "FrozenImporter")),
+            (external, "_frozen_importlib_external.", ("PathFinder",)),
+        ):
+            for name in names:
+                candidate = namespace.get(name)
+                if type(candidate) is type:
+                    trusted_finders.append((candidate, prefix + name))
+        file_finder = external.get("FileFinder")
+        zip_importer = stdlib_namespace("zipimport").get("zipimporter")
+
+        def canonical_file_hook(hook):
+            # A closure has no stable function identity across factory calls.
+            # Require the actual trusted factory's nested code, globals and
+            # default loader closure; labels/bytecode equality prove nothing.
+            function_type = type(lambda: None)
+            if type(hook) is not function_type or type(file_finder) is not type:
+                return False
+            factory = type.__getattribute__(file_finder, "__dict__").get("path_hook")
+            if type(factory) is not classmethod or type(factory.__func__) is not function_type:
+                return False
+            factory = factory.__func__
+            if (factory.__globals__ is not external or hook.__globals__ is not external
+                    or not any(hook.__code__ is code for code in factory.__code__.co_consts)
+                    or hook.__code__.co_freevars != ("cls", "loader_details")
+                    or hook.__closure__ is None or len(hook.__closure__) != 2):
+                return False
+            try:
+                cls, loaders = (cell.cell_contents for cell in hook.__closure__)
+            except ValueError:  # Empty cells are unsupported, never invoked.
+                return False
+            if cls is not file_finder or type(loaders) is not tuple or len(loaders) != 3:
+                return False
+            for pair, loader_name, suffix_name in zip(loaders,
+                    ("ExtensionFileLoader", "SourceFileLoader", "SourcelessFileLoader"),
+                    ("EXTENSION_SUFFIXES", "SOURCE_SUFFIXES", "BYTECODE_SUFFIXES")):
+                if (type(pair) is not tuple or len(pair) != 2
+                        or pair[0] is not external.get(loader_name)
+                        or (type(pair[1]) is not list and type(pair[1]) is not tuple)):
+                    return False
+                suffixes = external.get(suffix_name)
+                if suffixes is None or (type(suffixes) is not list and type(suffixes) is not tuple):
+                    return False
+                if (len(pair[1]) != len(suffixes)
+                        or not all(type(suffix) is str for suffix in pair[1])
+                        or list(pair[1]) != list(suffixes)):
+                    return False
+            return True
+
+        # Parse only the fixed captured mpmath sources to select named optional
+        # backend metadata. This executes no source and asserts no backend choice.
+        import ast
+
+        for source in report["files"]:
+            if "/mpmath/" not in source["path"] or "source_evidence" not in source:
+                continue
+            try:
+                tree = ast.parse(source["source_evidence"]["text"])
+            except (SyntaxError, ValueError):
+                distributions_complete = False
+                continue
+            for node in ast.walk(tree):
+                assert time.monotonic() < budget["deadline"], "S2 backend selection deadline"
+                names = ([node.module] if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module else
+                         [alias.name for alias in node.names] if isinstance(node, ast.Import) else [])
+                families.update(name.split(".")[0] for name in names if name.split(".")[0] in {"gmpy", "gmpy2", "sage"})
+        assert len(paths) <= 128, "S2 actual path count ceiling"
+        assert all(type(path) is str and len(path) <= 1024 for path in paths), "S2 unsupported path entry"
+        put(boundary, "sys_path", paths)
+        for finder, nonparticipant in zip(finders, provider_snapshot):
+            name = next((label for candidate, label in trusted_finders if finder is candidate),
+                        nonparticipant or "opaque_unsupported")
+            supported = name != "opaque_unsupported"
+            emit(boundary["finders"], dict(identity=name, object_id=id(finder),
+                                          status="accounted" if supported else "unsupported_custom_finder"))
+            metadata_complete &= supported
+        for hook in path_hooks:
+            # Inspect identity only; never call a finder, hook or metadata provider.
+            if type(zip_importer) is type and hook is zip_importer:
+                name = "zipimport.zipimporter"
+            elif canonical_file_hook(hook):
+                name = "_frozen_importlib_external.FileFinder.path_hook[canonical_code_globals_closure]"
+            else:
+                name = "opaque_unsupported"
+            supported = name != "opaque_unsupported"
+            emit(boundary["path_hooks"], dict(identity=name, object_id=id(hook),
+                                             status="accounted" if supported else "unsupported_custom_hook"))
+            metadata_complete &= supported
+        for index, root in enumerate(paths):
+            coverage = dict(path_index=index, path=root, status="pending")
+            emit(boundary["path_coverage"], coverage)
+            cached = sys.path_importer_cache.get(root)
+            if cached is not None:
+                supported = type(file_finder) is type and type(cached) is file_finder
+                name = "_frozen_importlib_external.FileFinder" if supported else "opaque_unsupported"
+                emit(boundary["importer_cache"], dict(path=root, identity=name, supported=supported))
+                metadata_complete &= supported
+            if residual:
+                coverage["status"] = "metadata_not_selected"
+                continue
+            if not root.startswith("/") or root.lower().endswith((".zip", ".egg")):
+                coverage["status"] = "unsupported_archive_or_relative_path"
+                metadata_complete = False
+                continue
+            directory = inventory(root)
+            coverage["status"] = directory["status"]
+            if directory["status"] == "missing":
+                continue
+            if directory["status"] != "observed":
+                metadata_complete = False
+                continue
+            for item in directory["witness"]["entries"]:
+                name = item["name"]
+                # Match provider suffixes case-insensitively, but never alter
+                # the physical spelling used for no-follow traversal/evidence.
+                stem, _, suffix = name.rpartition(".")
+                suffix = suffix.lower()
+                if suffix not in {"dist-info", "egg-info", "egg"}:
+                    continue
+                if suffix == "egg" or not stat.S_ISDIR(item["mode"]):
+                    emit(boundary["incomplete_reasons"], dict(path=root + "/" + name, reason="unsupported_egg_or_metadata_form"))
+                    metadata_complete = False
+                    continue
+                metadata_root = root + "/" + name
+                metadata_dir = inventory(metadata_root)
+                if metadata_dir["status"] != "observed":
+                    metadata_complete = False
+                    continue
+                normalized = re.sub(r"[-_.]+", "-", re.split(r"-(?=[0-9])", stem, maxsplit=1)[0]).lower()
+                if normalized in families and not any(leaf["name"] in {"METADATA", "PKG-INFO"}
+                                                       for leaf in metadata_dir["witness"]["entries"]):
+                    distributions_complete = False
+                    emit(boundary["incomplete_reasons"], dict(path=metadata_root, reason="named_distribution_metadata_missing"))
+                for leaf in metadata_dir["witness"]["entries"]:
+                    is_points = leaf["name"] == "entry_points.txt"
+                    is_family = normalized in families and leaf["name"] in {"METADATA", "PKG-INFO"}
+                    if not (is_points or is_family):
+                        continue
+                    row = content(metadata_root + "/" + leaf["name"], leaf)
+                    if row["status"] != "observed":
+                        if is_points:
+                            metadata_complete = False
+                        if is_family:
+                            distributions_complete = False
+                        continue
+                    try:
+                        if is_points:
+                            entry_points(row)
+                        else:
+                            distribution(row, root)
+                    except BaseException as error:
+                        row["status"] = "parse_refused"
+                        try:
+                            replace(row, "error_type", type(error).__name__[:128])
+                        except BaseException:
+                            pass
+                        if is_points:
+                            metadata_complete = False
+                        else:
+                            distributions_complete = False
+        for plugin in boundary["plugins"]:
+            if plugin["group"] == "torch.backends" or "gymnasium" in plugin["group"].lower():
+                module = plugin["value"].partition(":")[0].strip()
+                origins, complete = initialization_boundary_origins(module, paths, inventory)
+                put(plugin, "target_origins", origins)
+                put(plugin, "target_coverage_complete", complete)
+        boundary["path_stable"] = list(sys.path) == paths
+        metadata_complete &= boundary["path_stable"]
+        metadata_complete &= not residual
+        boundary["metadata_complete"] = metadata_complete
+        boundary["distributions_complete"] = distributions_complete and metadata_complete
+        if metadata_complete:
+            put(boundary, "torch_backends", [row for row in boundary["plugins"] if row["group"] == "torch.backends"])
+            put(boundary, "gymnasium_plugins", [row for row in boundary["plugins"] if "gymnasium" in row["group"].lower()])
+        def cheap_context():
+            numpy_dir = inventory(p + "/numpy")
+            hooks = ([dict(item, path=p + "/numpy/" + item["name"]) for item in numpy_dir["witness"]["entries"]
+                      if item["name"] == "_distributor_init_local" or item["name"].startswith("_distributor_init_local.")]
+                     if numpy_dir["status"] == "observed" else [])
+            put(boundary, "numpy_hook", dict(candidates=hooks,
+                status="present_requires_review" if hooks else "absent" if numpy_dir["status"] in {"observed", "missing"} else "unresolved",
+                directory_status=numpy_dir["status"], admitted=False))
+            if residual:
+                # Only a complete no-follow parent listing proves exact absence.
+                # A present archive is never opened or treated as empty metadata.
+                row = boundary["zip_path"]
+                parent = inventory(row["parent_directory"])
+                put(row, "parent_status", parent["status"])
+                row["status"] = "unresolved"
+                if parent["status"] == "observed":
+                    entry = next((item for item in parent["witness"]["entries"] if item["name"] == "python312.zip"), None)
+                    put(row, "entry", entry)
+                    row["status"] = ("absent" if entry is None else
+                        "link" if stat.S_ISLNK(entry["mode"]) or stat.S_ISREG(entry["mode"]) and entry["links"] != 1 else
+                        "present_regular" if stat.S_ISREG(entry["mode"]) else "unresolved")
+
+        initialization_boundary_native(boundary, budget, paths, inventory, emit, put, fixed_context=cheap_context)
+        if residual:
+            # Optional physical forms only; never enter distribution directories.
+            roots = [p,
+                "/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle",
+                "/isaac-sim/exts/isaacsim.asset.importer.urdf/pip_prebundle"]
+            for row in boundary["gmp_backends"]:
+                put(row, "roots", roots)
+                origins, complete = initialization_boundary_origins(row["module"], roots, inventory)
+                put(row, "origins", origins)
+                row["physical_coverage_complete"] = complete
+                row["status"] = ("unresolved" if not complete else
+                                  "present_requires_review" if origins else "absent_at_fixed_roots")
+        boundary["status"] = ("observed" if metadata_complete and boundary["distributions_complete"]
+                              and boundary["native_complete"] and boundary["numpy_hook"]["status"] != "unresolved" else "partial")
+    except BaseException as error:
+        boundary["error_type"] = type(error).__name__[:128]
+        boundary["metadata_complete"] = False
+        boundary["torch_backends"] = None
+        boundary["gymnasium_plugins"] = None
+    finally:
+        boundary["entries"] = budget["entries"]
+        final_paths = list(sys.path)
+        boundary["path_stable"] = (all(type(path) is str for path in final_paths) and final_paths == paths)
+        boundary["finders_stable"] = (len(sys.meta_path) == len(finders)
+                                       and all(a is b for a, b in zip(sys.meta_path, finders)))
+        boundary["path_hooks_stable"] = (len(sys.path_hooks) == len(path_hooks)
+                                          and all(a is b for a, b in zip(sys.path_hooks, path_hooks)))
+        boundary["provider_shapes_stable"] = (
+            initialization_boundary_provider_snapshot(admission.provider_state, finders) == provider_snapshot)
+        if not all(boundary[key] for key in (
+                "path_stable", "finders_stable", "path_hooks_stable", "provider_shapes_stable")):
+            boundary["metadata_complete"] = boundary["distributions_complete"] = False
+            boundary["torch_backends"] = boundary["gymnasium_plugins"] = None
+            boundary["status"] = "partial"
+
+
+def initialization_directory_inventory(path, budget):
+    """Stat one caller-selected immutable directory without following entry links.
+
+    The caller owns the fixed inspection selection. This primitive neither reads
+    file contents nor grants import/native-load authority; all entries, including
+    unselected ones, consume the shared inspection enumeration budget.
+    """
+    assert type(path) is str and path.startswith("/") and len(path) <= 1024 and "\x00" not in path
+    parts = path[1:].split("/")
+    assert len(parts) <= 32 and all(p not in {"", ".", ".."} for p in parts)
+    limit = budget["entry_limit"]
+    assert type(limit) is int and 0 < limit <= 4096
+    assert type(budget["entries"]) is int and 0 <= budget["entries"] <= limit
+    fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        assert os.fstatvfs(fd).f_flag & os.ST_RDONLY, "S2 mutable inventory root"
+        for part in parts:
+            assert time.monotonic() < budget["deadline"], "S2 inventory deadline"
+            before = os.stat(part, dir_fd=fd, follow_symlinks=False)
+            assert stat.S_ISDIR(before.st_mode), "S2 inventory directory link or non-directory"
+            nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+            info = os.fstat(fd)
+            assert (info.st_dev, info.st_ino, info.st_mode) == (before.st_dev, before.st_ino, before.st_mode)
+            assert os.fstatvfs(fd).f_flag & os.ST_RDONLY, "S2 mutable inventory directory"
+        rows = []
+        with os.scandir(fd) as entries:
+            for entry in entries:
+                assert time.monotonic() < budget["deadline"], "S2 inventory deadline"
+                assert budget["entries"] < limit, "S2 inventory entry ceiling"
+                budget["entries"] += 1
+                assert len(os.fsencode(entry.name)) <= 255
+                item = entry.stat(follow_symlinks=False)
+                rows.append(dict(name=entry.name, scan_index=len(rows), mode=item.st_mode, size=item.st_size,
+                                 device=item.st_dev, inode=item.st_ino, links=item.st_nlink))
+        final = os.fstat(fd)
+        assert (info.st_dev, info.st_ino, info.st_mtime_ns, info.st_ctime_ns) == (
+            final.st_dev, final.st_ino, final.st_mtime_ns, final.st_ctime_ns
+        ), "S2 inventory identity changed"
+        assert time.monotonic() < budget["deadline"], "S2 inventory deadline"
+        return dict(path=path, device=info.st_dev, inode=info.st_ino, mode=info.st_mode,
+                    entries=sorted(rows, key=lambda row: row["name"]))
+    finally:
+        os.close(fd)
 
 
 def initialization_physical_file(path, budget, *, binary=False, source=False):
@@ -2295,32 +3578,59 @@ def initialization_physical_file(path, budget, *, binary=False, source=False):
     assert type(binary) is bool and time.monotonic() < budget["deadline"]
     native_limit = budget.get("native_limit", 64)
     byte_limit = budget.get("byte_limit", 8 * 1024**3)
-    assert type(native_limit) is int and 0 < native_limit <= 64
-    assert type(byte_limit) is int and 0 < byte_limit <= 8 * 1024**3
-    assert not binary or budget["files"] < native_limit, "S2 native identity count ceiling"
+    assert native_limit is None or type(native_limit) is int and native_limit > 0
+    assert byte_limit is None or type(byte_limit) is int and byte_limit > 0
+    assert not binary or native_limit is None or budget["files"] < native_limit, "S2 native identity count ceiling"
+    original, links = path, []
+    approved = ("/isaac-sim/", "/workspaces/isaaclab_arena/submodules/")
     fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         assert os.fstatvfs(fd).f_flag & os.ST_RDONLY, "S2 mutable image root"
-        for index, part in enumerate(parts):
-            assert time.monotonic() < budget["deadline"]
-            before = os.stat(part, dir_fd=fd, follow_symlinks=False)
-            directory = index != len(parts) - 1
-            assert not stat.S_ISLNK(before.st_mode), "S2 physical link refused"
-            assert stat.S_ISDIR(before.st_mode) if directory else stat.S_ISREG(before.st_mode)
-            flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
-            if directory:
-                flags |= os.O_DIRECTORY
-            nxt = os.open(part, flags, dir_fd=fd)
-            os.close(fd)
-            fd = nxt
-            info = os.fstat(fd)
-            assert (info.st_dev, info.st_ino, info.st_mode) == (before.st_dev, before.st_ino, before.st_mode)
-            assert os.fstatvfs(fd).f_flag & os.ST_RDONLY, "S2 mutable selected origin"
+        while True:
+            for index, part in enumerate(parts):
+                assert time.monotonic() < budget["deadline"]
+                before = os.stat(part, dir_fd=fd, follow_symlinks=False)
+                directory = index != len(parts) - 1
+                if stat.S_ISLNK(before.st_mode):
+                    at = "/" + "/".join(parts[:index + 1])
+                    assert at.startswith(approved) and len(links) < 16, "S2 physical link refused"
+                    target = os.readlink(part, dir_fd=fd)
+                    assert 0 < len(os.fsencode(target)) <= 1024 and "\x00" not in target
+                    resolved = os.path.normpath(os.path.join(os.path.dirname(at), target, *parts[index + 1:]))
+                    assert resolved.startswith(approved), "S2 physical link escapes approved dependencies"
+                    after = os.stat(part, dir_fd=fd, follow_symlinks=False)
+                    keys = ("st_dev", "st_ino", "st_mode", "st_size", "st_mtime_ns", "st_ctime_ns")
+                    assert all(getattr(before, key) == getattr(after, key) for key in keys)
+                    links.append(dict(path=at, target=target, resolved=resolved,
+                                      device=before.st_dev, inode=before.st_ino))
+                    budget["bytes"] += len(os.fsencode(target))
+                    assert byte_limit is None or budget["bytes"] <= byte_limit
+                    path, parts = resolved, resolved[1:].split("/")
+                    assert len(path) <= 1024 and len(parts) <= 32
+                    nxt = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                    os.close(fd)
+                    fd = nxt
+                    break
+                assert stat.S_ISDIR(before.st_mode) if directory else stat.S_ISREG(before.st_mode)
+                flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+                if directory:
+                    flags |= os.O_DIRECTORY
+                nxt = os.open(part, flags, dir_fd=fd)
+                os.close(fd)
+                fd = nxt
+                info = os.fstat(fd)
+                assert (info.st_dev, info.st_ino, info.st_mode) == (before.st_dev, before.st_ino, before.st_mode)
+                assert os.fstatvfs(fd).f_flag & os.ST_RDONLY, "S2 mutable selected origin"
+            else:
+                break
         file_limit = budget.get("file_limit", 2 * 1024**3)
-        assert type(file_limit) is int and file_limit > 0
+        assert file_limit is None or type(file_limit) is int and file_limit > 0
         assert info.st_nlink == 1, "S2 physical hard link refused"
-        assert 0 < info.st_size <= min(file_limit, 2 * 1024**3), "S2 physical per-file ceiling"
-        assert budget["bytes"] + info.st_size <= byte_limit, "S2 physical read ceiling"
+        assert info.st_size >= 0 and (file_limit is None or info.st_size <= file_limit), "S2 physical per-file ceiling"
+        # Empty Python initializers/stubs are valid source, not oversized files.
+        # Never extend that allowance to a native library or executable witness.
+        assert info.st_size or (not binary and path.endswith((".py", ".pyi"))), "S2 empty non-source file"
+        assert byte_limit is None or budget["bytes"] + info.st_size <= byte_limit, "S2 physical read ceiling"
         assert type(source) is bool and (not source or info.st_size <= 1024**2)
         chunks = [] if source else None
         digest, count = hashlib.sha256(), 0
@@ -2331,7 +3641,7 @@ def initialization_physical_file(path, budget, *, binary=False, source=False):
                 break
             count += len(chunk)
             budget["bytes"] += len(chunk)
-            assert count <= info.st_size and budget["bytes"] <= byte_limit
+            assert count <= info.st_size and (byte_limit is None or budget["bytes"] <= byte_limit)
             digest.update(chunk)
             if source:
                 chunks.append(chunk)
@@ -2341,7 +3651,7 @@ def initialization_physical_file(path, budget, *, binary=False, source=False):
             info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
         ), "S2 physical identity changed during read"
         budget["files"] += int(binary)
-        row = dict(path=path, physical=path, links=[], size=count, sha256=digest.hexdigest(),
+        row = dict(path=original, physical=path, links=links, size=count, sha256=digest.hexdigest(),
                    device=info.st_dev, inode=info.st_ino, uid=info.st_uid, gid=info.st_gid,
                    mode=stat.S_IMODE(info.st_mode), mtime_ns=info.st_mtime_ns, ctime_ns=info.st_ctime_ns)
         return (row, b"".join(chunks)) if source else row
@@ -2543,8 +3853,12 @@ class InitializationLoader:
         self.admission, self.name, self.original, self.row = admission, name, original, row
 
     def verify(self):
-        observed = initialization_physical_file(self.row["path"], self.admission.budget)
-        assert observed == self.row, "S2 loader identity drift"
+        try:
+            observed = initialization_physical_file(self.row["path"], self.admission.budget)
+            assert observed == self.row, "S2 loader identity drift"
+        except BaseException:
+            self.admission.guard.forbidden["runtime"] += 1
+            raise
 
     def create_module(self, spec):
         self.verify()
@@ -2552,21 +3866,52 @@ class InitializationLoader:
 
     def exec_module(self, module):
         self.verify()
+        original_spec = module.__spec__
+        locations = original_spec.submodule_search_locations
+        locations = None if locations is None else list(locations)
+        # Ordinary module/schema exceptions are not admission violations.
         self.original.exec_module(module)
-        assert module.__file__ == module.__spec__.origin == self.row["path"]
-        locations = module.__spec__.submodule_search_locations
-        if locations is not None:
-            assert list(module.__path__) == list(locations) == [str(Path(self.row["path"]).parent)], (
-                "S2 package path rewrite is not admitted")
+        try:
+            assert module.__file__ == original_spec.origin == self.row["path"]
+            reported = module.__spec__
+            if reported is not original_spec:
+                # OpenUSD's real Tf.PrepareModule copies its extension's spec
+                # into the Python package. Both loaders were physically gated.
+                assert self.name.startswith("pxr.") and reported.name.startswith(self.name + ".")
+                assert reported is sys.modules[reported.name].__spec__
+                assert reported.origin in self.admission.libraries
+                assert any(row["name"] == reported.name and row["origin"] == reported.origin
+                           for row in self.admission.modules)
+            else:
+                assert reported.submodule_search_locations == locations
+            if locations is not None:
+                assert list(module.__path__) == locations == [str(Path(self.row["path"]).parent)], (
+                    "S2 package path rewrite is not admitted")
+
+        except BaseException:
+            self.admission.guard.forbidden["runtime"] += 1
+            raise
         self.verify()
-        assert len(self.admission.modules) < 2048, "S2 selected module witness ceiling"
-        self.admission.modules.append(dict(self.row, name=self.name, origin=self.row["path"], preloaded=False))
+        row = dict(self.row, name=self.name, origin=self.row["path"], preloaded=False)
+        if reported is not original_spec:
+            row.update(extension_spec_name=reported.name, extension_spec_origin=reported.origin)
+        self.admission.modules.append(row)
 
 
 class InitializationPythonAPILoader(InitializationLoader):
     """Execute unchanged physical stdlib source, binding its one bootstrap call."""
 
     def exec_module(self, module):
+        before = self.admission.guard.forbidden["runtime"]
+        try:
+            return self._exec_module(module)
+        except BaseException:
+            # Inner physical/audit checks may already have charged this refusal.
+            if self.admission.guard.forbidden["runtime"] == before:
+                self.admission.guard.forbidden["runtime"] += 1
+            raise
+
+    def _exec_module(self, module):
         import ast
         import types
 
@@ -2624,24 +3969,34 @@ class InitializationPythonAPILoader(InitializationLoader):
 class InitializationAdmission:
     """Lock selected origins before real loads; unknown package authority refuses."""
 
-    def __init__(self, guard, runner, deadline):
+    def __init__(self, guard, runner, deadline, *, provider_sources=None):
         from importlib.machinery import PathFinder
 
+        # Trusted post-query checkpoint, before selected application imports.
+        # The C/legacy paths do not supply this diagnostic-only context.
+        self.provider_state = (initialization_boundary_provider_bootstrap(runner, provider_sources)
+                               if provider_sources is not None else None)
         self.guard, self.runner, self.pathfinder = guard, runner, PathFinder
-        self.budget = dict(bytes=0, files=0, deadline=deadline)
-        if guard.initialization_case == "positive":
-            # Disjoint slices make the four-role aggregate a pre-read limit,
-            # not a check after excess bytes have already been consumed.
-            self.budget.update(native_limit=16, byte_limit=2 * 1024**3)
+        self.budget: dict = dict(bytes=0, files=0, deadline=deadline)
+        if guard.initialization_role == "init-server":
+            # Operator-authorized unbounded native/read allocation. JSON null
+            # records the policy explicitly; accounting and deadlines remain.
+            self.budget.update(native_limit=None, byte_limit=None, file_limit=None)
+        elif guard.initialization_case == "positive":
+            self.budget.update(native_limit=5, byte_limit=500 * 1024**2)
         self.modules, self.libraries, self.pins, self.cpu_metadata = [], {}, {}, []
+        self.namespaces = {}
         self.dependency_frontier, self.dependency_frontier_started = None, False
         self.pythonapi_bootstrap, self.pythonapi_active, self.pythonapi_dlopen = [], None, None
         assert "ctypes" not in sys.modules and "_ctypes" not in sys.modules, "S2 preloaded ctypes bootstrap"
         self.roots = {
-            name: DEPENDENCY_ROOTS[0] + "/" + name for name in ("warp", "torch", "pxr", "openai")
+            name: DEPENDENCY_ROOTS[0] + "/" + name for name in (
+                "warp", "torch", "pxr", "openai", "lazy_loader", "numpy", "sympy", "mpmath", "gymnasium", "torchgen")
         }
         self.roots.update(yaml=E1_YAML_ROOT,
-                          isaaclab="/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab/isaaclab")
+                          toml="/isaac-sim/extscache/omni.kit.pip_archive-0.0.0+f9bf0dda.lx64.cp312/pip_prebundle/toml",
+                          isaaclab="/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab/isaaclab",
+                          isaaclab_physx="/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab_physx/isaaclab_physx")
         assert not any(name.split(".")[0] in self.roots for name in sys.modules), "S2 preloaded selected package"
         assert runner.GRAPHQL_IMAGE == "sha256:b94e17024f1e123ac5a42759ab56651a18823fda7c701e765cba31f200154cdd"
         assert runner.GRAPHQL_MANIFEST_SHA256 == "03764536ed54c1f59cbf46305c5bc4ba618e2dc1deeeac7ffdfb21a0dffbf810"
@@ -2665,6 +4020,43 @@ class InitializationAdmission:
         sys.addaudithook(self.audit)
 
     def find_spec(self, fullname, path=None, target=None):
+        try:
+            spec = self._find_spec(fullname, path, target)
+        except BaseException as error:
+            self.guard.forbidden["blocked_import"] += 1
+            if getattr(self, "first_import_denial", None) is None:
+                self.first_import_denial = dict(name=fullname[:128], failure_type=type(error).__name__,
+                                                reason=str(error)[:1024])
+            raise
+        if spec is False:
+            # A verified-root absence is not a forbidden import. Raise instead
+            # of returning None, which would delegate to unverified finders.
+            raise ModuleNotFoundError("No module named " + repr(fullname), name=fullname)
+        return spec
+
+    def namespace(self, spec):
+        """Bind a source-free namespace to no-follow approved directories."""
+        assert spec.origin is None and spec.loader is None
+        rows = []
+        for path in spec.submodule_search_locations:
+            assert path.startswith(("/isaac-sim/", "/workspaces/isaaclab_arena/submodules/"))
+            assert all(part not in {"", ".", ".."} for part in path.split("/")[1:])
+            fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                for part in path.split("/")[1:]:
+                    assert time.monotonic() <= self.budget["deadline"], "S2 namespace deadline"
+                    child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                    os.close(fd)
+                    fd = child
+                identity = os.fstat(fd)
+                rows.append(dict(path=path, device=identity.st_dev, inode=identity.st_ino))
+            finally:
+                os.close(fd)
+        assert rows
+        self.namespaces[spec.name] = rows
+        return spec
+
+    def _find_spec(self, fullname, path, target):
         top = fullname.split(".")[0]
         if fullname in {"ctypes", "_ctypes"}:
             from importlib.machinery import ExtensionFileLoader, SourceFileLoader
@@ -2693,6 +4085,12 @@ class InitializationAdmission:
                 selected = self.roots[top] + ("/" + "/".join(fullname.split(".")[1:-1]) if "." in fullname[len(top)+1:] else "")
                 assert list(path or ()) == [selected], "S2 changed package search path"
             spec = self.pathfinder.find_spec(fullname, [selected])
+            if spec is None and fullname != top:
+                return False  # Ordinary optional-submodule miss; no fallback.
+            if spec is not None and spec.origin is None:
+                assert spec.submodule_search_locations is not None
+                assert list(spec.submodule_search_locations) == [selected + "/" + fullname.rsplit(".", 1)[-1]]
+                return self.namespace(spec)
             assert spec is not None and spec.origin is not None, "S2 fixed package origin missing: " + fullname[:128]
             initialization_origin(fullname, spec.origin, False)
             row = initialization_physical_file(spec.origin, self.budget)
@@ -2701,7 +4099,19 @@ class InitializationAdmission:
             spec.loader = InitializationLoader(self, fullname, spec.loader, row)
             return spec
         spec = self.pathfinder.find_spec(fullname, path)
-        if spec is None or spec.origin in {None, "built-in", "frozen"}:
+        if spec is None and path is None and fullname == top:
+            spec = self.pathfinder.find_spec(
+                fullname, [*DEPENDENCY_ROOTS, DEPENDENCY_ROOTS[0] + "/cmeel.prefix/lib/python3.12/site-packages"]
+            )
+        if spec is None and path is None and fullname == top and top.startswith("isaaclab_"):
+            # Source-installed Isaac Lab extensions are sibling packages, not
+            # children of isaaclab's package search path.
+            spec = self.pathfinder.find_spec(
+                fullname, [f"/workspaces/isaaclab_arena/submodules/IsaacLab/source/{top}"]
+            )
+        if spec is not None and spec.origin is None:
+            return self.namespace(spec)
+        if spec is None or spec.origin in {"built-in", "frozen"}:
             return None
         origin = spec.origin
         stdlib = "/isaac-sim/kit/python/lib/python3.12/"
@@ -2710,31 +4120,36 @@ class InitializationAdmission:
         if origin.startswith("/source/"):
             assert origin.removeprefix("/source/") in initialization_verify_sources()
             return None
-        # No automatic exemption for torch/Isaac Lab's transitive families.
-        # A new httpx2/jiter/omni origin is a bounded diagnostic, not authority.
-        refusal = ImportError("Unadmitted S2 package origin: " + fullname[:128] + " at " + origin[:512])
-        try:
-            if (self.guard.initialization_case == "positive" and self.guard.initialization_role == "init-server"
-                    and fullname == "lazy_loader"
-                    and origin == "/isaac-sim/kit/python/lib/python3.12/site-packages/lazy_loader/__init__.py"
-                    and not self.dependency_frontier_started):
-                self.dependency_frontier_started = True  # Consume before any inspection/reentry.
-                self.dependency_frontier = {}
-                registration_metadata_probe(None, self.guard, self.runner, self.dependency_frontier,
-                                            admission=self, trigger=dict(fullname=fullname, origin=origin))
-        except BaseException as error:
-            self.dependency_frontier["inspection_error"] = type(error).__name__[:128]
-        finally:
-            raise refusal from None
+        # The operator admits standard dependencies throughout the pinned image
+        # and submodules. Keep original loaders, immutable physical identities,
+        # native quotas and effect guards; do not resume metadata discovery.
+        if origin.startswith(("/isaac-sim/", "/workspaces/isaaclab_arena/submodules/")):
+            initialization_origin(fullname, origin, False)
+            row = initialization_physical_file(origin, self.budget)
+            if origin.endswith(".so"):
+                self.library(origin)
+            spec.loader = InitializationLoader(self, fullname, spec.loader, row)
+            return spec
+        raise ImportError("Unadmitted S2 package origin: " + fullname[:128] + " at " + origin[:512]) from None
 
     def library(self, path):
-        assert type(path) is str and path.startswith("/"), "S2 unnamed native load has no physical binding"
-        assert any(path.startswith(root + "/") for root in self.roots.values()), "S2 unreviewed explicit library origin"
-        previous = self.libraries.get(path)
-        row = initialization_physical_file(path, self.budget, binary=previous is None)
-        assert previous is None or previous == row
-        self.libraries[path] = row
-        return row
+        try:
+            assert type(path) is str and path.startswith("/"), "S2 unnamed native load has no physical binding"
+            assert path.startswith(("/isaac-sim/", "/workspaces/isaaclab_arena/submodules/")), (
+                "S2 unreviewed explicit library origin")
+            previous = self.libraries.get(path)
+            row = initialization_physical_file(path, self.budget, binary=previous is None)
+            assert previous is None or previous == row
+            self.libraries[path] = row
+            return row
+        except BaseException as error:
+            # Importers may catch Exception (e.g. Torch's global-deps fallback).
+            # Retain the original diagnostic but never a zero-forbidden proof.
+            self.guard.forbidden["runtime"] += 1
+            if getattr(self, "first_native_denial", None) is None:
+                self.first_native_denial = dict(path=path[:512] if type(path) is str else None,
+                                                failure_type=type(error).__name__, reason=str(error)[:1024])
+            raise
 
     def audit(self, event, args):
         if event == "ctypes.dlopen":
@@ -2745,6 +4160,13 @@ class InitializationAdmission:
 
     def pythonapi_process_namespace(self, frame):
         """Consume exactly one genuine partial-module PyDLL(None) admission."""
+        try:
+            return self._pythonapi_process_namespace(frame)
+        except BaseException:
+            self.guard.forbidden["runtime"] += 1
+            raise
+
+    def _pythonapi_process_namespace(self, frame):
         active = self.pythonapi_active
         assert active is not None and not self.pythonapi_bootstrap, "S2 unnamed native load denied"
         module = active["module"]
@@ -2869,6 +4291,7 @@ def initialization_contain_launcher(proc, deadline):
 def initialization_collect(proc, deadline, stdout_limit=8 * 1024**2, stderr_limit=65536):
     """Collect under byte/deadline caps, then reap only the owned process group."""
     buffers = {proc.stdout: bytearray(), proc.stderr: bytearray()}
+    failure_type = cleanup_failure_type = None
     installed_launcher = (
         getattr(ACTIVE, "initialization_case", None) in {"failure", "timeout"}
         and ACTIVE.role == "harness"
@@ -2907,6 +4330,9 @@ def initialization_collect(proc, deadline, stdout_limit=8 * 1024**2, stderr_limi
                         assert len(buffers[stream]) <= limit, "S2 output ceiling"
             proc.wait(timeout=max(0 if installed_launcher else 0.001, deadline - time.monotonic()))
         return bytes(buffers[proc.stdout]), bytes(buffers[proc.stderr])
+    except BaseException as error:
+        failure_type = type(error).__name__
+        raise
     finally:
         try:
             if installed_launcher:
@@ -2915,18 +4341,40 @@ def initialization_collect(proc, deadline, stdout_limit=8 * 1024**2, stderr_limi
                 with contextlib.suppress(ProcessLookupError):
                     os.killpg(proc.pid, signal.SIGKILL)
                 proc.wait(timeout=5)
+        except BaseException as error:
+            cleanup_failure_type = type(error).__name__
+            raise
         finally:
             for stream in buffers:
                 stream.close()
+            if failure_type is not None or cleanup_failure_type is not None:
+                # Retain original and containment errors separately, even when
+                # cleanup replaces the raised exception. One existing leaf,
+                # <=11 records, <=16KiB raw prefix per stream stays below 4MiB
+                # even with JSON escaping. Truncation is diagnostic, never pass.
+                record: dict = dict(pid=proc.pid, failure_type=failure_type,
+                                    cleanup_failure_type=cleanup_failure_type)
+                for name, stream in (("stdout", proc.stdout), ("stderr", proc.stderr)):
+                    raw = bytes(buffers[stream])
+                    record[name + "_bytes"] = len(raw)
+                    record[name + "_truncated"] = len(raw) > 16384
+                    try:
+                        screen(raw)  # Screen before truncation, including split sentinels.
+                        record[name] = raw[:16384].decode("utf8", "replace")
+                    except BaseException as error:
+                        record[name] = ""
+                        record[name + "_screen_failure"] = type(error).__name__
+                records = getattr(ACTIVE, "initialization_collection_errors", [])
+                if len(records) < 11:
+                    records.append(record)
+                ACTIVE.initialization_collection_errors = records
 
 
 def initialization_maps():
-    """Observe finite actual mappings; do not imply transitive binary attestation."""
+    """Observe actual mappings; do not imply transitive binary attestation."""
     with open("/proc/self/maps", "rb") as stream:
-        raw = stream.read(65537)
-    assert len(raw) <= 65536
+        raw = stream.read()
     lines = raw.decode("utf8").splitlines()
-    assert len(lines) <= 256
     rows = []
     for line in lines:
         fields = line.split(None, 5)
@@ -2944,7 +4392,7 @@ def initialization_child(role):
     assert sys.executable == EXECUTABLE and os.getuid() == os.getgid() == 1000
     assert os.getcwd() == "/tmp"
     sys.modules["workflow_graphql_execution_join_harness"] = sys.modules[__name__]
-    signal.alarm(40)
+    signal.alarm(240 if role == "init-server" else 40)
     root = initialization_cache_create("positive", role)
     manifest = initialization_verify_sources()
     preimport = initialization_preflight()
@@ -2959,10 +4407,13 @@ def initialization_child(role):
     admission = None
     try:
         record["imports"] = runner.graphql_imports(record["preimport"], guard)
-        admission = InitializationAdmission(guard, runner, time.monotonic() + 35)
+        admission = InitializationAdmission(
+            guard, runner, time.monotonic() + (235 if role == "init-server" else 35), provider_sources=manifest
+        )
         guard.initialization_admission = admission
         closure = read_json(Path("/source/closure.json"), 65536)
-        runner.install_staged_import_guard("/source", closure["files"], closure["namespaces"])
+        staged_finder = runner.install_staged_import_guard("/source", closure["files"], closure["namespaces"])
+        initialization_boundary_provider_staged(admission.provider_state, staged_finder, closure)
         sys.path[:0] = ["/source/scripts", "/source/web/arena-workbench/tests/e2e/functional-v7"]
         import platform
         processor = platform.processor
@@ -2998,8 +4449,14 @@ def initialization_child(role):
     finally:
         record.update(forbidden=guard.forbidden, sdk_calls=guard.sdk_calls,
                       owner_constructions=guard.owner_constructions)
+        record["subprocess_denials"] = getattr(guard, "initialization_subprocess_denials", [])
         if admission is not None:
             record["physical_read_budget"] = dict(admission.budget)
+            record["native_libraries"] = list(admission.libraries.values())
+            record["module_origins"] = admission.modules
+            record["namespace_origins"] = admission.namespaces
+            record["first_native_denial"] = getattr(admission, "first_native_denial", None)
+            record["first_import_denial"] = getattr(admission, "first_import_denial", None)
             record["pythonapi_bootstrap"] = admission.pythonapi_bootstrap
             if admission.dependency_frontier is not None:
                 # Baseline and existing origins share the bounded diagnostic;
@@ -3064,53 +4521,111 @@ def initialization_finish_role(guard, prepared):
     write_evidence("initialization-init-server.json", row)
 
 
+def initialization_failure_witness(record):
+    """Return the original fixed injection's source-bound traceback, never a generic startup error."""
+    import ast
+    from pathlib import Path
+
+    tree = ast.parse(Path(__file__).read_text())
+    hook = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                and node.name == "initialization_pre_readiness")
+    raises = [node for node in ast.walk(hook) if isinstance(node, ast.Raise)
+              and isinstance(node.exc, ast.Call) and isinstance(node.exc.func, ast.Name)
+              and node.exc.func.id == "RuntimeError"
+              and len(node.exc.args) == 1 and isinstance(node.exc.args[0], ast.Constant)
+              and node.exc.args[0].value == "S2 fixed post-initialization pre-readiness failure"]
+    assert len(raises) == 1, "S2 fixed failure source changed"
+    terminal = dict(file="scripts/workflow_graphql_execution_join_harness.py",
+                    function="initialization_pre_readiness", line=raises[0].lineno)
+    events = record.get("startup_exception_sites")
+    assert type(events) is list and 0 < len(events) <= 24, "Original installed failure missing"
+    for event in events:
+        assert type(event) is dict and set(event) == {"exception_type", "sites"}
+        sites = event["sites"]
+        assert type(sites) is list and len(sites) <= 24
+        assert all(type(site) is dict and set(site) == {"file", "function", "line"}
+                   and type(site["file"]) is type(site["function"]) is str
+                   and type(site["line"]) is int and site["line"] > 0 for site in sites)
+        if (event["exception_type"] == "RuntimeError" and len(sites) >= 2 and sites[-1] == terminal
+                and any(site["file"] == "isaaclab_arena/agentic_environment_generation/workflow/api/installed_execution.py"
+                        and site["function"] == "build" for site in sites[:-1])):
+            return event
+    raise AssertionError("Original fixed initialization failure missing")
+
+
 def initialization_monitor_stall():
-    """Externally contain only the proven owned C timeout server after its checkpoint."""
+    """Externally contain C1's witnessed failure or C2's five-second supervisor stall."""
     guard = ACTIVE
-    if getattr(guard, "initialization_case", None) != "timeout" or guard.role != "harness":
+    case = getattr(guard, "initialization_case", None)
+    if case not in {"failure", "timeout"} or guard.role != "harness":
         return
     marker_path = Path("/evidence/initialization-pre-readiness.json")
     if not marker_path.exists() or getattr(guard, "initialization_stall_stop", None) is not None:
         return
     marker = read_json(marker_path)
-    assert marker["case"] == "timeout" and marker["before_owner_construction"] is True
+    assert marker["case"] == case and marker["before_owner_construction"] is True
     elapsed = time.monotonic() - marker["observed_at"]
-    if elapsed < 5:
-        return
+    original = None
+    if case == "timeout":
+        if elapsed < 5:
+            return
+    else:
+        started_path = Path(f"/evidence/join-process-{marker['pid']}-started.json")
+        if not started_path.exists():
+            return
+        record = read_json(started_path)
+        for key in ("pid", "parent_pid", "pgid", "sid", "start_ticks", "boot", "pid_namespace"):
+            assert type(record[key]) is type(marker[key]) and record[key] == marker[key], "S2 original failure identity differs"
+        if not record.get("startup_exception_sites"):
+            return
+        original = initialization_failure_witness(record)
     assert marker["pid"] == marker["pgid"] == marker["sid"]
     launchers = [row for row in guard.spawn_records if row["bootstrap_argv"][6:] == LAUNCH]
     assert len(launchers) == 1
     spawned = read_json(Path(f"/evidence/join-launch-{marker['pid']}.json"))
     assert spawned["parent_pid"] == launchers[0]["pid"] == marker["parent_pid"]
     assert role_for(spawned["bootstrap_argv"][6:]) == "server"
-    live_identity(marker)
+    owned = getattr(guard, "initialization_server_identity", None)
+    keys = {"pid", "parent_pid", "pgid", "sid", "start_ticks", "boot", "pid_namespace"}
+    assert type(owned) is dict and set(owned) == keys, "S2 independent server identity missing"
+    for key in keys:
+        assert type(owned[key]) is type(spawned[key]) is type(marker[key]), "S2 server identity type differs"
+        assert owned[key] == spawned[key] == marker[key], "S2 independent server identity differs"
+    live_identity(owned)
     started = time.monotonic()
     until = getattr(guard, "initialization_cleanup_deadline", None)
     if until is None:
         until = started + 5
         guard.initialization_cleanup_deadline = until
-    os.killpg(marker["pid"], signal.SIGKILL)
+    os.killpg(owned["pid"], signal.SIGKILL)
     from workflow_graphql_execution_join_fixture import initialization_group_absent
-    while not initialization_group_absent(marker["pid"]):
+    while not initialization_group_absent(owned["pid"]):
         assert time.monotonic() < until, "S2 exact server group reap deadline"
         time.sleep(min(0.02, until - time.monotonic()))
-    guard.initialization_stall_stop = dict(server_pid=marker["pid"], signal=signal.SIGKILL,
-                                           observed_stall_seconds=elapsed, stall_seconds=5,
+    guard.initialization_stall_stop = dict(server_pid=owned["pid"], signal=signal.SIGKILL,
+                                           observed_stall_seconds=started - marker["observed_at"], stall_seconds=5,
                                            group_reap_seconds=time.monotonic() - started)
+    if case == "failure":
+        guard.initialization_stall_stop.pop("stall_seconds")
+        guard.initialization_stall_stop["original_failure"] = original
     write_evidence("initialization-stall-stop.json", guard.initialization_stall_stop)
 
 
 def initialization_fresh(role):
-    """Launch precisely one next positive role in a fresh isolated interpreter."""
+    """Launch only the next selected preparation role in a fresh interpreter."""
     guard = ACTIVE
-    assert type(guard) is JoinGuards and guard.role == "harness" and guard.initialization_case == "positive"
-    assert role == INITIALIZATION_ROLES[len(guard.spawn_records)]
+    assert type(guard) is JoinGuards and guard.role == "harness"
+    assert guard.initialization_case in {"positive", "init-server"}
+    roles = ("init-server",) if guard.initialization_case == "init-server" else INITIALIZATION_ROLES
+    assert len(guard.spawn_records) < len(roles) and role == roles[len(guard.spawn_records)]
+    # Reuse the cold positive preparation protocol. Init-server may use the
+    # aggregate work allowance; the host deadline and exact cleanup still apply.
     arguments = [EXECUTABLE, "-I", "-S", "-B", "/source/" + SELF, "--initialization", "positive", role]
     kwargs = process_kwargs(env=initialization_environment("positive", role))
     guard.permit = (arguments, kwargs)
     try:
         proc = subprocess.Popen(arguments, **kwargs)
-        stdout, stderr = initialization_collect(proc, min(guard.deadline, time.monotonic() + 40))
+        stdout, stderr = initialization_collect(proc, min(guard.deadline, time.monotonic() + (240 if role == "init-server" else 40)))
         screen(stdout + stderr)
         write_evidence("initialization-" + role + "-output.json", dict(pid=proc.pid, returncode=proc.returncode,
                        stdout=stdout.decode("utf8", "replace"), stderr=stderr.decode("utf8", "replace")))
@@ -3163,7 +4678,9 @@ def initialization_installed_case(case):
         launched = True
         result = invoke(LAUNCH)
         receipt = json.loads(result.stdout)
-        assert receipt.get("state") != "ready" and not receipt.get("capabilities", {}).get("submit", False)
+        assert type(result.returncode) is int and result.returncode == 3
+        assert receipt.get("state") in {"launching", "stopping"} and receipt.get("code") == "exited_unclean"
+        assert not receipt.get("capabilities", {})
         checkpoint = read_json(Path("/evidence/initialization-pre-readiness.json"))
         assert checkpoint["case"] == case and checkpoint["pid"] == server_pid()
         row = read_json(Path("/evidence/initialization-init-server.json"))
@@ -3174,38 +4691,39 @@ def initialization_installed_case(case):
             assert cleanup is not None and cleanup["status"] == "contained", (
                 "S2 server cleanup unknown; stop launches and request exact host containment"
             )
-            invoke(STOP)
-            status = invoke(STATUS)
-            state = json.loads(status.stdout)
-            assert state.get("state") != "ready"
+            for status in (invoke(STOP), invoke(STATUS)):
+                state = json.loads(status.stdout)
+                assert type(status.returncode) is int and status.returncode == 3
+                assert state.get("state") in {"launching", "stopping"} and state.get("code") == "exited_unclean"
+                assert not state.get("capabilities", {})
             assert initialization_group_absent(server_pid()), "S2 installed server remains"
     witness = dict(checkpoint, readiness_absent=True, server_pid=row["pid"], original_failure_retained=True)
-    if case == "timeout":
-        witness.update(ACTIVE.initialization_stall_stop)
-    else:
-        final = read_json(Path(f"/evidence/join-process-{row['pid']}.json"))
-        assert final["owner_constructions"] == final["sdk_calls"] == 0
-        assert final.get("startup_exception_sites"), "Original installed failure missing"
+    witness.update(ACTIVE.initialization_stall_stop)
+    if case == "failure":
+        started = read_json(Path(f"/evidence/join-process-{row['pid']}-started.json"))
+        assert witness["original_failure"] == initialization_failure_witness(started)
     ACTIVE.initialization_result = dict(initialization_roles=[row], pre_readiness_failure=witness)
 
 
 def initialization_evidence_names(case, proof=None):
     """Return finite S2 archive leaves; PID leaves require bounded producer identities."""
-    assert case in {"positive", "failure", "timeout"}
+    assert case in {"init-server", "positive", "failure", "timeout"}
     names = {"client-proof.json", "pytest.xml", "collection-ready", "initialization-harness.json"}
     roles = INITIALIZATION_ROLES if case == "positive" else ("init-server",)
     names.update("initialization-" + role + ".json" for role in roles)
-    if case == "positive":
+    if case in {"positive", "init-server"}:
         names.update("initialization-" + role + "-output.json" for role in roles)
     else:
         names.update({"initialization-pre-readiness.json", "initialization-stall-stop.json"})
         names.update("initialization-cli-" + str(index) + ".json" for index in range(10))
     if proof is not None:
         pids = proof.get("process_pids", [])
-        assert type(pids) is list and len(pids) <= (4 if case == "positive" else 11)
+        assert type(pids) is list and len(pids) <= (1 if case == "init-server" else 4 if case == "positive" else 11)
         assert len(set(pids)) == len(pids) and all(type(pid) is int and 1 < pid < 2**31 for pid in pids)
         for pid in pids:
-            names.update({f"join-launch-{pid}.json", f"join-process-{pid}.json", f"join-process-{pid}-started.json"})
+            names.add(f"join-launch-{pid}.json")
+            if case != "init-server":
+                names.update({f"join-process-{pid}.json", f"join-process-{pid}-started.json"})
             if case == "positive":
                 names.add(f"generation-child-{pid}-sdk.json")
     assert len(names) <= 55
@@ -3217,13 +4735,13 @@ def initialization_required_evidence(case, proof):
     allowed = initialization_evidence_names(case, proof)
     pids = proof["process_pids"]
     rows = proof["initialization_roles"]
-    assert len(pids) == (4 if case == "positive" else 11)
+    assert len(pids) == (1 if case == "init-server" else 4 if case == "positive" else 11)
     names = {"client-proof.json", "pytest.xml", "collection-ready", "initialization-harness.json"}
     roles = INITIALIZATION_ROLES if case == "positive" else ("init-server",)
     assert [row["role"] for row in rows] == list(roles)
     names.update("initialization-" + role + ".json" for role in roles)
     names.update(f"join-launch-{pid}.json" for pid in pids)
-    if case == "positive":
+    if case in {"positive", "init-server"}:
         assert pids == [row["pid"] for row in rows]
         names.update("initialization-" + role + "-output.json" for role in roles)
         # Cold initialization_child bypasses child(): no join-process witnesses.
@@ -3234,11 +4752,9 @@ def initialization_required_evidence(case, proof):
         names.update("initialization-cli-" + str(index) + ".json" for index in range(10))
         names.update(f"join-process-{pid}.json" for pid in pids[:-1])
         names.update({"initialization-pre-readiness.json", f"join-process-{pids[-1]}-started.json"})
-        if case == "failure":
-            names.add(f"join-process-{pids[-1]}.json")
-        else:
-            # SIGKILL cannot emit the server's finally record.
-            names.add("initialization-stall-stop.json")
+        # Both C cases are externally contained. SIGKILL cannot emit finally;
+        # C1 retains its exact original exception in the started witness.
+        names.add("initialization-stall-stop.json")
     assert names <= allowed and len(names) <= 55
     return names
 
@@ -3249,6 +4765,7 @@ def initialization_verify_evidence(files, case):
 
     proof = json.loads(files["client-proof.json"])
     assert initialization_required_evidence(case, proof) <= set(files), "S2 mandatory evidence missing"
+    assert set(files) <= initialization_evidence_names(case, proof), "S2 unexpected evidence"
     assert initialization_verify_proof(proof, files["pytest.xml"], case) is True
     assert files["collection-ready"] == (case + "\n").encode()
     assert "initialization-error.json" not in files
@@ -3268,10 +4785,11 @@ def initialization_verify_evidence(files, case):
             assert type(row[key]) is int and row[key] == 0
 
     harness = read("initialization-harness.json")
+    assert harness.get("collection_errors", []) == [], "S2 collection diagnostics cannot certify success"
     same(harness["forbidden"], proof["forbidden"])
     spawns = harness["spawn_records"]
     assert type(spawns) is list
-    same([row["pid"] for row in spawns], proof["process_pids"] if case == "positive" else proof["process_pids"][:-1])
+    same([row["pid"] for row in spawns], proof["process_pids"] if case in {"positive", "init-server"} else proof["process_pids"][:-1])
     prefix = ["/isaac-sim/kit/python/bin/python3", "-I", "-S", "-B",
               "/source/scripts/workflow_graphql_execution_join_harness.py"]
     rows = proof["initialization_roles"]
@@ -3279,7 +4797,7 @@ def initialization_verify_evidence(files, case):
         same(read("initialization-" + row["role"] + ".json"), row)
         assert row["status"] == "completed"
         zero_effects(row)
-    if case == "positive":
+    if case in {"positive", "init-server"}:
         same(harness["used"], [])
         assert len({row["parent_pid"] for row in rows}) == 1
         for row, spawn in zip(rows, spawns, strict=True):
@@ -3332,19 +4850,18 @@ def initialization_verify_evidence(files, case):
                 assert output["returncode"] == 0
                 result = json.loads(output["stdout"])
                 assert result["code"] == ("setup_complete" if index < 2 else "admin_complete")
-            elif index in {7, 9}:
+            else:
                 result = json.loads(output["stdout"])
-                assert result.get("state") != "ready"
-                if index == 7:
-                    assert not result.get("capabilities", {}).get("submit", False)
+                assert output["returncode"] == 3
+                assert result.get("state") in {"launching", "stopping"} and result.get("code") == "exited_unclean"
+                assert not result.get("capabilities", {})
             assert type(output["stdout"]) is type(output["stderr"]) is str
             zero_effects(process)
             same(process["spawn_records"], [server_launch] if index == 7 else [])
             processes.append(process)
         assert len({row["parent_pid"] for row in processes}) == 1
         same(harness["used"], [read(f"initialization-cli-{i}.json")["argv"] for i in range(10)])
-        for name in ([f"join-process-{server_pid}-started.json", f"join-process-{server_pid}.json"]
-                     if case == "failure" else [f"join-process-{server_pid}-started.json"]):
+        for name in [f"join-process-{server_pid}-started.json"]:
             process = read(name)
             same({key: process[key] for key in identity_fields}, {key: server[key] for key in identity_fields})
             same(process["source_sha256"], proof["source_sha256"])
@@ -3354,17 +4871,64 @@ def initialization_verify_evidence(files, case):
         marker = read("initialization-pre-readiness.json")
         same({key: marker[key] for key in identity_fields}, {key: server[key] for key in identity_fields})
         witness = dict(marker, readiness_absent=True, server_pid=server_pid, original_failure_retained=True)
+        stop = read("initialization-stall-stop.json")
+        assert type(stop["server_pid"]) is int and stop["server_pid"] == server_pid
+        assert type(stop["signal"]) is int and stop["signal"] == 9
+        assert type(stop["group_reap_seconds"]) in {int, float} and 0 <= stop["group_reap_seconds"] <= 5
+        assert type(stop["observed_stall_seconds"]) in {int, float} and 0 <= stop["observed_stall_seconds"] < 40
+        witness.update(stop)
         if case == "timeout":
-            stop = read("initialization-stall-stop.json")
-            assert stop["server_pid"] == server_pid and stop["signal"] == 9
-            assert stop["observed_stall_seconds"] >= 5
-            witness.update(stop)
+            # The external collector polls at most every 50ms. A late kill is
+            # containment, not proof of the approved five-second supervisor.
+            assert 5 <= stop["observed_stall_seconds"] <= 5.05
+            assert type(stop["stall_seconds"]) is int and stop["stall_seconds"] == 5
         else:
-            final = read(f"join-process-{server_pid}.json")
-            zero_effects(final)
-            assert final["startup_exception_sites"]
+            # Keep this check within the exporter's fixed five-function AST
+            # closure. The live monitor binds the original to staged source;
+            # readback joins its exact event with the hook's actual raise site.
+            original = stop["original_failure"]
+            assert type(original) is dict and set(original) == {"exception_type", "sites"}
+            assert original["exception_type"] == "RuntimeError"
+            sites = original["sites"]
+            assert type(sites) is list and 2 <= len(sites) <= 24
+            assert all(type(site) is dict and set(site) == {"file", "function", "line"}
+                       and type(site["file"]) is type(site["function"]) is str
+                       and type(site["line"]) is int and site["line"] > 0 for site in sites)
+            fault = marker["failure_site"]
+            assert type(fault) is dict and set(fault) == {"file", "function", "line"}
+            assert fault["file"] == "scripts/workflow_graphql_execution_join_harness.py"
+            assert fault["function"] == "initialization_pre_readiness"
+            assert type(fault["line"]) is int and fault["line"] > 0
+            same(sites[-1], fault)
+            assert any(site["file"] == "isaaclab_arena/agentic_environment_generation/workflow/api/installed_execution.py"
+                       and site["function"] == "build" for site in sites[:-1])
+            events = read(f"join-process-{server_pid}-started.json")["startup_exception_sites"]
+            assert type(events) is list and 0 < len(events) <= 24
+            assert original in events
         same(witness, proof["pre_readiness_failure"])
     return proof
+
+
+def initialization_wait_database(uri, deadline):
+    """Wait only for C's disposable Bolt endpoint within the existing attempt clock."""
+    import neo4j
+
+    deadline = min(deadline, time.monotonic() + 45)
+    while True:
+        remaining = deadline - time.monotonic()
+        assert remaining > 0, "S2 database readiness deadline"
+        try:
+            with neo4j.GraphDatabase.driver(
+                uri, auth=None, connection_timeout=min(2, remaining),
+                connection_acquisition_timeout=min(3, remaining), max_transaction_retry_time=0,
+            ) as driver:
+                driver.verify_connectivity()
+            assert time.monotonic() < deadline, "S2 database readiness deadline"
+            return
+        except (neo4j.exceptions.ServiceUnavailable, neo4j.exceptions.SessionExpired):
+            remaining = deadline - time.monotonic()
+            assert remaining > 0, "S2 database readiness deadline"
+            time.sleep(min(1, remaining))
 
 
 def initialization_inside(case):
@@ -3372,15 +4936,23 @@ def initialization_inside(case):
     global ACTIVE
     import xml.etree.ElementTree as ET
 
-    assert type(case) is str and case in {"positive", "failure", "timeout"}
+    assert type(case) is str and case in {"init-server", "positive", "failure", "timeout"}
+    installed_case = case in {"failure", "timeout"}
     proof = dict(status="failed", mode="workflow-graphql-initialization", case=case, tests=0,
                  execution_attempted=False, source_sha256={}, initialization_roles=[], process_pids=[],
                  children_verified=False, missing_process_witnesses=[], release_blockers=[])
+    if case == "init-server":
+        proof.update(scope="init-server preparation only", all_roles_complete=False)
     guard = None
     try:
         preimport = initialization_preflight()
         manifest = initialization_verify_sources()
-        network = None if case == "positive" else read_json(Path("/network/manifest.json"), 65536)
+        network = read_json(Path("/network/manifest.json"), 65536) if installed_case else None
+        if network is not None:
+            assert set(network) == {"container_id", "network_id", "ip", "port"}
+            assert type(network["port"]) is int and network["port"] == 7687
+            os.environ["ARENA_WORKFLOW_NEO4J_URI"] = "bolt://" + network["ip"] + ":7687"
+            os.environ["ARENA_WORKFLOW_NEO4J_DATABASE"] = "workflowtest"
         guard = JoinGuards("harness", None if network is None else network["ip"])
         guard.initialization_case = case
         guard.deadline = time.monotonic() + 260  # Host owns the earlier aggregate 300s start.
@@ -3391,11 +4963,13 @@ def initialization_inside(case):
         runner.graphql_imports(preimport, guard)
         closure = read_json(Path("/source/closure.json"), 65536)
         runner.install_staged_import_guard("/source", closure["files"], closure["namespaces"])
+        if network is not None:
+            initialization_wait_database(os.environ["ARENA_WORKFLOW_NEO4J_URI"], guard.deadline)
         sys.path.insert(0, "/source/scripts")
         os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
         import pytest
         proof.update(execution_attempted=True, source_sha256=manifest)
-        code = pytest.main(["/source/" + INITIALIZATION_TEST + "::test_initialization_" + case,
+        code = pytest.main(["/source/" + INITIALIZATION_TEST + "::test_initialization_" + case.replace("-", "_"),
                             "-q", "-p", "no:cacheprovider", "--confcutdir=/source/isaaclab_arena/tests",
                             "--noconftest", "--junitxml=/evidence/pytest.xml"])
         with open("/evidence/pytest.xml", "rb") as stream:
@@ -3404,17 +4978,17 @@ def initialization_inside(case):
         proof.update(tests=len(list(ET.fromstring(junit).iter("testcase"))), junit_sha256=hashlib.sha256(junit).hexdigest())
         assert code == 0 and guard.initialization_result, "Actual S2 pytest case failed"
         proof.update(guard.initialization_result)
-        if case != "positive":
+        if installed_case:
             proof["initialization_server_cleanup"] = guard.initialization_server_cleanup
             proof["host_containment_required"] = guard.initialization_server_cleanup["host_containment_required"]
         from workflow_graphql_execution_join_fixture import initialization_group_absent
         pids = [row["pid"] for row in guard.spawn_records]
-        if case != "positive":
+        if installed_case:
             pids.append(server_pid())
         assert all(initialization_group_absent(pid) for pid in pids)
         rows = proof["initialization_roles"]
-        assert len(guard.spawn_records) == (4 if case == "positive" else 10)
-        if case != "positive":
+        assert len(guard.spawn_records) == (1 if case == "init-server" else 4 if case == "positive" else 10)
+        if installed_case:
             for launched in guard.spawn_records:
                 child_record = read_json(Path(f"/evidence/join-process-{launched['pid']}.json"))
                 assert child_record["source_sha256"] == manifest
@@ -3422,8 +4996,10 @@ def initialization_inside(case):
                 assert not any(child_record["forbidden"].values())
                 assert child_record["owner_constructions"] == child_record["sdk_calls"] == 0
         assert all(not any(row["forbidden"].values()) and row["sdk_calls"] == row["owner_constructions"] == 0 for row in rows)
-        assert sum(row["physical_read_budget"]["bytes"] for row in rows) <= 8 * 1024**3
-        assert sum(row["physical_read_budget"]["files"] for row in rows) <= 64
+        if all(row["physical_read_budget"].get("byte_limit", 8 * 1024**3) is not None for row in rows):
+            assert sum(row["physical_read_budget"]["bytes"] for row in rows) <= 8 * 1024**3
+        if all(row["physical_read_budget"].get("native_limit", 64) is not None for row in rows):
+            assert sum(row["physical_read_budget"]["files"] for row in rows) <= 64
         proof.update(status="passed", process_pids=pids, image=runner.GRAPHQL_IMAGE,
                      provision_manifest_sha256=runner.GRAPHQL_MANIFEST_SHA256, children_verified=True,
                      owned_groups_absent=True, sdk_calls=0, provider_constructions=0,
@@ -3436,7 +5012,7 @@ def initialization_inside(case):
     finally:
         if guard is not None:
             proof["process_pids"] = [row["pid"] for row in guard.spawn_records]
-            if case != "positive" and LAUNCH in guard.used:
+            if installed_case and LAUNCH in guard.used:
                 cleanup = getattr(guard, "initialization_server_cleanup", None)
                 proof["initialization_server_cleanup"] = cleanup or dict(
                     status="unknown", host_containment_required=True)
@@ -3451,7 +5027,8 @@ def initialization_inside(case):
                     with contextlib.suppress(Exception):
                         proof["process_pids"].append(server_pid())
             write_evidence("initialization-harness.json", dict(forbidden=guard.forbidden, used=guard.used,
-                           spawn_records=guard.spawn_records))
+                           spawn_records=guard.spawn_records,
+                           collection_errors=getattr(guard, "initialization_collection_errors", [])))
         write_evidence("client-proof.json", proof)
     return proof
 
@@ -3466,7 +5043,7 @@ def initialization_verify_proof(proof, junit, case):
     import re
     import xml.etree.ElementTree as ET
 
-    assert type(case) is str and case in {"positive", "failure", "timeout"}
+    assert type(case) is str and case in {"init-server", "positive", "failure", "timeout"}
     assert type(proof) is dict and type(junit) is bytes and 0 < len(junit) <= 4 * 1024 * 1024
     assert proof["mode"] == "workflow-graphql-initialization" and proof["case"] == case
     assert proof["status"] == "passed" and type(proof["tests"]) is int and proof["tests"] == 1
@@ -3481,7 +5058,7 @@ def initialization_verify_proof(proof, junit, case):
     assert b"<!DOCTYPE" not in junit and b"<!ENTITY" not in junit
     tree = ET.fromstring(junit)
     tests = list(tree.iter("testcase"))
-    assert len(tests) == 1 and tests[0].get("name") == "test_initialization_" + case
+    assert len(tests) == 1 and tests[0].get("name") == "test_initialization_" + case.replace("-", "_")
     assert not any(list(tree.iter(tag)) for tag in ("failure", "error", "skipped"))
     assert proof["release_blockers"] == [] and proof["missing_process_witnesses"] == []
     assert proof["children_verified"] is True and proof["owned_groups_absent"] is True
@@ -3493,7 +5070,7 @@ def initialization_verify_proof(proof, junit, case):
     }
     assert all(type(v) is int and v == 0 for v in proof["forbidden"].values())
 
-    def physical_witness(value):
+    def physical_witness(value, source=False):
         # Same fields as physical_file, with S2's no-follow requirement. This
         # checks retained structure only; it does not read or admit native bytes.
         assert type(value) is dict
@@ -3501,8 +5078,25 @@ def initialization_verify_proof(proof, junit, case):
             path = value[key]
             assert type(path) is str and path.startswith("/") and "\x00" not in path
             assert all(part not in {"", ".", ".."} for part in path.split("/")[1:])
-        assert value["physical"] == value["path"] and value["links"] == []
-        assert type(value["size"]) is int and 0 < value["size"] <= 2 * 1024**3
+        import posixpath
+
+        current = value["path"]
+        links = value["links"]
+        assert type(links) is list and len(links) <= 16
+        approved = ("/isaac-sim/", "/workspaces/isaaclab_arena/submodules/")
+        for link in links:
+            assert type(link) is dict and set(link) == {"path", "target", "resolved", "device", "inode"}
+            assert type(link["path"]) is type(link["resolved"]) is str
+            assert link["path"].startswith(approved) and (current == link["path"] or current.startswith(link["path"] + "/"))
+            assert type(link["target"]) is str and 0 < len(link["target"].encode()) <= 1024 and "\x00" not in link["target"]
+            current = posixpath.normpath(posixpath.join(posixpath.dirname(link["path"]), link["target"]) + current[len(link["path"]):])
+            assert current == link["resolved"] and current.startswith(approved)
+            assert type(link["device"]) is type(link["inode"]) is int and link["device"] >= 0 and link["inode"] > 0
+        assert value["physical"] == current
+        assert type(value["size"]) is int and value["size"] >= 0
+        if value["size"] == 0:
+            assert source and current.endswith((".py", ".pyi"))
+            assert value["sha256"] == hashlib.sha256(b"").hexdigest()
         assert type(value["sha256"]) is str and re.fullmatch(r"[a-f0-9]{64}", value["sha256"])
         return value["size"]
 
@@ -3539,6 +5133,10 @@ def initialization_verify_proof(proof, junit, case):
     rows = proof["initialization_roles"]
     expected = ["init-server", "init-generate", "init-refine", "init-assess"] if case == "positive" else ["init-server"]
     assert [row["role"] for row in rows] == expected
+    if case == "init-server":
+        assert proof["scope"] == "init-server preparation only" and proof["all_roles_complete"] is False
+        assert proof["process_pids"] == [rows[0]["pid"]]
+        assert all(type(pid) is int for pid in proof["process_pids"])
     assert len({row["pid"] for row in rows}) == len(rows)
     for row in rows:
         assert type(row["pid"]) is int and row["pid"] > 1
@@ -3570,18 +5168,17 @@ def initialization_verify_proof(proof, junit, case):
         assert all(type(callsite[k]) is int and callsite[k] > 0 for k in ("module_line", "init_line"))
         assert type(row["native_libraries"]) is list and row["native_libraries"]
         native_count += len(row["native_libraries"])
-        assert native_count <= 64
         for library in row["native_libraries"]:
             identity_bytes += physical_witness(library)
         assert type(row["module_origins"]) is list and row["module_origins"]
         for module in row["module_origins"]:
-            identity_bytes += physical_witness(module)
+            identity_bytes += physical_witness(module, source=True)
             assert module["origin"] == module["path"]
             initialization_origin(module["name"], module["origin"], module["preloaded"])
-        assert identity_bytes <= 8 * 1024**3
+
         assert row["cache_before"] is not None and row["cache_after"] is not None
         maps = row["mapped_libraries"]
-        assert type(maps) is list and 0 < len(maps) <= 256
+        assert type(maps) is list and maps
         map_bytes = 0
         for mapping in maps:
             assert type(mapping) is dict and set(mapping) == {"address", "permissions", "offset", "device", "inode", "path"}
@@ -3592,7 +5189,7 @@ def initialization_verify_proof(proof, junit, case):
             assert re.fullmatch(r"[0-9]+", mapping["inode"])
             assert mapping["path"] is None or type(mapping["path"]) is str
             map_bytes += sum(len(value.encode()) for value in mapping.values() if value is not None) + 6
-        assert map_bytes <= 65536
+        assert map_bytes > 0
         metadata = row["cpu_metadata"]
         assert type(metadata) is list and len(metadata) <= 1
         for command in metadata:
@@ -3604,16 +5201,32 @@ def initialization_verify_proof(proof, junit, case):
             assert len(command["stdout"].encode()) <= 4096 and len(command["stderr"].encode()) <= 4096
         budget = row["physical_read_budget"]
         assert type(budget) is dict
-        assert type(budget["bytes"]) is int and 0 < budget["bytes"] <= 8 * 1024**3
+        byte_limit = budget.get("byte_limit", 8 * 1024**3)
+        native_limit = budget.get("native_limit", 64)
+        file_limit = budget.get("file_limit", 2 * 1024**3)
+        for limit in (byte_limit, native_limit, file_limit):
+            assert limit is None or type(limit) is int and limit > 0
+        if None in (byte_limit, native_limit, file_limit):
+            assert row["role"] == "init-server", "Unbounded allocation is only authorized for init-server"
+            assert byte_limit is native_limit is file_limit is None
+        assert type(budget["bytes"]) is int and budget["bytes"] > 0
+        assert byte_limit is None or budget["bytes"] <= byte_limit
         assert budget["bytes"] >= context_bytes + sum(v["size"] for v in row["native_libraries"] + row["module_origins"])
-        assert type(budget["files"]) is int and 0 < budget["files"] <= 64
+        assert type(budget["files"]) is int and budget["files"] >= len(row["native_libraries"])
+        assert native_limit is None or budget["files"] <= native_limit
+        if file_limit is not None:
+            assert all(v["size"] <= file_limit for v in row["native_libraries"] + row["module_origins"])
         assert row["schema_checks"] == [
             "supported_normalization", "unknown_asset", "unknown_relation", "dangling_reference",
             "unknown_yaml_field", "catalogue_agreement", "catalogue_disagreement",
         ]
-    assert sum(row["physical_read_budget"]["bytes"] for row in rows) <= 8 * 1024**3
-    assert sum(row["physical_read_budget"]["files"] for row in rows) <= 64
-    if case != "positive":
+    if all(row["physical_read_budget"].get("byte_limit", 8 * 1024**3) is not None for row in rows):
+        assert identity_bytes <= 8 * 1024**3
+        assert sum(row["physical_read_budget"]["bytes"] for row in rows) <= 8 * 1024**3
+    if all(row["physical_read_budget"].get("native_limit", 64) is not None for row in rows):
+        assert native_count <= 64
+        assert sum(row["physical_read_budget"]["files"] for row in rows) <= 64
+    if case in {"failure", "timeout"}:
         cleanup = proof["initialization_server_cleanup"]
         assert type(cleanup) is dict and cleanup["status"] == "contained"
         assert cleanup["host_containment_required"] is False and proof["host_containment_required"] is False

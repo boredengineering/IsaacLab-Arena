@@ -123,6 +123,7 @@ def initialization_preparation(role):
     from pydantic import ValidationError
 
     from isaaclab_arena.agentic_environment_generation.workbench.document_yaml import parse_yaml, reject_unknown_fields
+    from isaaclab_arena.assets.registries import ensure_assets_registered
     from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
     from isaaclab_arena.environment_spec.arena_env_graph_yaml_loader import load_env_graph_spec_dict
     from isaaclab_arena_examples.agentic_environment_generation.web_api.catalogues import execution_catalogue_sha256
@@ -143,6 +144,9 @@ def initialization_preparation(role):
 
         assert RetainedPriorArtifacts is not None and RetainedPriorReceipt is not None
 
+    # Initialize the real registry once, outside Pydantic's per-field error
+    # aggregation, so a startup failure retains its original traceback.
+    ensure_assets_registered()
     value = load_env_graph_spec_dict(
         Path(__file__).resolve().parents[1] / "isaaclab_arena/tests/test_data/minimal_maple_table_env_graph.yaml"
     )
@@ -191,7 +195,7 @@ def initialization_preparation(role):
     if role != "init-server":
         sdk = harness.read_json(Path(f"/evidence/generation-child-{os.getpid()}-sdk.json"))
         assert sdk["calls"] == 0 and sdk["responses"] == []
-    return dict(schema_checks=checks, normalized=normalized, catalogue_sha256=digest,
+    return dict(schema_checks=checks, normalized=normalized, catalogue_sha256=digest, registries_initialized=True,
                 scope="real component preparation, not installed lifecycle or native acceptance")
 
 

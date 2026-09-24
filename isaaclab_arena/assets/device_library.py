@@ -16,14 +16,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-
-from isaaclab.devices.keyboard import Se3KeyboardCfg
-from isaaclab.devices.spacemouse import Se3SpaceMouseCfg
-from isaaclab_teleop import IsaacTeleopCfg, XrCfg
+from typing import TYPE_CHECKING
 
 from isaaclab_arena.assets.register import register_device
+
+if TYPE_CHECKING:
+    from isaaclab.devices.keyboard import Se3KeyboardCfg
+    from isaaclab.devices.spacemouse import Se3SpaceMouseCfg
+    from isaaclab_teleop import IsaacTeleopCfg
 
 
 class TeleopDeviceBase(ABC):
@@ -48,6 +52,8 @@ class OpenXRCfg(TeleopDeviceBase):
     def get_device_cfg(
         self, pipeline_builder: Callable | None = None, embodiment: object | None = None
     ) -> IsaacTeleopCfg:
+        from isaaclab_teleop import IsaacTeleopCfg, XrCfg
+
         if pipeline_builder is None:
             raise ValueError("OpenXRCfg requires a pipeline_builder (got None)")
         xr_cfg = embodiment.get_xr_cfg() if embodiment is not None else XrCfg()
@@ -72,6 +78,8 @@ class KeyboardCfg(TeleopDeviceBase):
     def get_device_cfg(
         self, pipeline_builder: Callable | None = None, embodiment: object | None = None
     ) -> Se3KeyboardCfg:
+        from isaaclab.devices.keyboard import Se3KeyboardCfg
+
         return Se3KeyboardCfg(
             pos_sensitivity=self.pos_sensitivity,
             rot_sensitivity=self.rot_sensitivity,
@@ -90,6 +98,8 @@ class SpaceMouseCfg(TeleopDeviceBase):
     def get_device_cfg(
         self, pipeline_builder: Callable | None = None, embodiment: object | None = None
     ) -> Se3SpaceMouseCfg:
+        from isaaclab.devices.spacemouse import Se3SpaceMouseCfg
+
         return Se3SpaceMouseCfg(
             pos_sensitivity=self.pos_sensitivity,
             rot_sensitivity=self.rot_sensitivity,

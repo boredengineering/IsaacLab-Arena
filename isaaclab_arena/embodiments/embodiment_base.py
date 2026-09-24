@@ -8,7 +8,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from isaaclab.envs import ManagerBasedRLMimicEnv
 from isaaclab.managers import EventTermCfg
 from isaaclab.managers.recorder_manager import RecorderManagerBaseCfg
 
@@ -21,6 +20,8 @@ from isaaclab_arena.utils.pose import Pose, PosePerEnv, PoseRange
 
 if TYPE_CHECKING:
     import trimesh
+
+    from isaaclab.envs import ManagerBasedRLMimicEnv
 
 
 class EmbodimentBase(PlaceableAsset):

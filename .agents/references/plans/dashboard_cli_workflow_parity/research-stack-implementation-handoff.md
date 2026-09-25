@@ -4,6 +4,58 @@ This is the single current implementation handoff. The orchestrator pivot below 
 
 Bounded next-work plans live in the [Plan 04 implementation index](../plan04_implementation/README.md). The operator-issued [P04-I01 — Native integration defects and bounded revalidation](../plan04_implementation/01-native-integration-defects.md) is verified and parent-closed on 2026-09-25. Its two additional launches and the prior three are consumed; no native authority remains. Verified runtime status remains here.
 
+## Resume after a computer restart
+
+Documentation checkpoint: **2026-09-25; no new Arena execution or lifecycle repair.**
+The immediate next task is further review of the
+[issue-recovery proposal](../plan04_implementation/02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review)
+and its [copyable recovery prompt](../plan04_implementation/02-installed-visual-assessment.md#recovery-and-successor-assessment-prompt--not-issued).
+Both are **PROPOSED — NOT ISSUED**. The proposed successor
+`p04-i02-visibility-r2` was not submitted; reopening this session or document does
+not issue it. P04-I02 remains blocked; P04-I01 remains accepted native-only.
+
+- **Retained runtime checkpoint:** the application/process facts below were last
+  verified at **2026-09-25T16:44:42.311753+00:00**, not during this documentation
+  check. Zero provider sends and three unspent cumulative attempts were recorded;
+  the one-model-call/190-second reservation and expired original window remain.
+  The original worker cause is unknown; the schema-4 cancellation exclusion,
+  sticky `cleanup_unknown` and native-only reconciliation entrypoint are separate
+  recovery boundaries. Same-key submission is replay, not fresh execution.
+- **After reboot:** re-discover the existing checkout container using
+  `.agents/skills/dev-container/SKILL.md` before any subsequently authorized Arena
+  work. Revalidate boot, PID namespace, process start identity and durable ownership;
+  never signal remembered PID 62035 merely because the number appears here. A reboot
+  may remove a process but does not prove cancellation, owner retirement or a clean
+  API drain. Preserve any unclean-exit evidence, private/configuration identities,
+  reservations and consumed native/generation allowances. No automatic repair,
+  service recreation or new submission is authorized by this checkpoint.
+- **Checkout:** `dev/0.3.0-prerelease`, HEAD
+  `0f0bd89649adc93775c4bb281d1e03296afeba89` at this check. The recovery draft and
+  restart/navigation updates are uncommitted documentation changes. Recheck git
+  after resume; preserve the working tree rather than resetting it to this hash.
+- **Session memory:** default-profile session `20260923_174815_e247de` is stored in
+  `/root/.hermes/state.db`; its draft-save exchange and restart request are present,
+  and a read-only SQLite `quick_check` returned `ok`. `MEMORY.md` and `USER.md` exist
+  in `/root/.hermes/memories/`; reusable lessons are saved in the matching skills.
+  Task progress belongs in this handoff and session history, not the small global
+  memory files. CLI resume uses SQLite; a separate JSONL transcript is not required.
+
+After reopening the **same development container/profile**, resume with:
+
+```text
+hermes --resume 20260923_174815_e247de --in /workspaces/IsaacLab-Arena
+```
+
+**Persistence boundary:** the checkout and its local `outputs/` evidence are on a
+host-backed mount. `outputs/` is git-ignored, so a fresh clone is not an evidence
+backup. `/root/.hermes` is currently in the container's writable layer, not a host
+bind mount; an ordinary restart retains it, but container removal/recreation does
+not. Preserve that container or arrange a supported private backup before a rebuild.
+Do not delete `state.db-wal`/`state.db-shm` or copy only the live `state.db` file.
+No credential export, backup, container change or runtime cleanup was performed by
+this checkpoint. If conversation restoration is unavailable, this handoff and the
+linked draft provide the continuation point without granting execution authority.
+
 ## 1. Current authorization and implementation gate
 
 ### P04-I02 — BLOCKED after installed worker release (2026-09-25)
@@ -84,8 +136,11 @@ and [durable state](../../../../outputs/workflow/plan04-implementation/milestone
   intent/cleanup identity, then prove durable cancellation, exact-owner retirement
   and API drain without changing reservations, dispatch count or producer records.
 
-**Exact next decision:** authorize bounded reconciliation/lifecycle repair of this
-admitted unsent run and live stopping API. Preserve registration, cleanup evidence,
+**Exact next decision:** review the
+[unissued recovery proposal](../plan04_implementation/02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review),
+then separately issue bounded reconciliation/lifecycle authority if intended. The
+proposal gates any successor assessment on recovery of this admitted unsent run
+and the exact old API instance. Preserve registration, cleanup evidence,
 reservation, failed records, current private root/configuration digests and cumulative
 allocation; do not force a cancellation/retirement from an empty query or reset state.
 Any later assessment execution needs an explicit new window with the same cumulative

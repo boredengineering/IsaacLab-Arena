@@ -13,9 +13,12 @@ the run is `cancel_requested`, and supported API shutdown returned `cleanup_unkn
 with a live `stopping` process. The 600-second window expired; three provider sends
 are still unspent but a one-call/190-second reservation is retained. No native work,
 allowance reset, visual verdict, completed replay or full Milestone 1 acceptance.
-Next is explicitly bounded lifecycle/reconciliation recovery of this exact run/API,
-not another credential/budget audit or automatic new submission. The canonical
-handoff owns the exact current identities and authorization boundary.
+Next is review of the [issue-recovery proposal](../plan04_implementation/02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review),
+which is **NOT ISSUED**. It proposes bounded lifecycle recovery before a conditional
+successor assessment, not another credential/budget audit or automatic submission.
+The canonical handoff owns the exact identities and authorization boundary; its
+[restart checkpoint](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md#resume-after-a-computer-restart)
+distinguishes the last verified process observations from post-reboot state.
 
 ---
 

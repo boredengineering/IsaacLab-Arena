@@ -34,6 +34,14 @@ zero native/Kit/capture/generation/repair/policy/new-prior work occurred here.
 P04-I01 remains the last accepted runtime boundary; its contract and evidence
 payload were read back unchanged after this attempt.
 
+The [issue-recovery proposal](#issue-recovery-proposal--draft-for-review) below
+records the proposed fix sequence and successor-assessment prompt for further
+review. It is **not issued**; saving it does not change the blocked status or renew authority.
+
+After a computer restart, use the [canonical restart checkpoint](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md#resume-after-a-computer-restart).
+The runtime/process observations here are the retained 2026-09-25 closeout, not a
+post-reboot check; process disappearance alone cannot establish durable retirement.
+
 ## 1. Outcome and exclusions
 
 Make one authenticated installed submission assess a5's exact retained camera
@@ -310,6 +318,145 @@ or a non-retryable failure; thereafter recover retained bytes only, never reset 
 Finish bounded owned cleanup even on failure. Negative or explicitly uncertain
 visual results with complete coverage can satisfy integration; transport failures,
 malformed answers and incomplete coverage cannot. Never fabricate a replacement answer.
+
+## Issue-recovery proposal — draft for review
+
+**Status: PROPOSED — NOT ISSUED.** This special section records the review of the
+installed failure and a proposed recovery goal. Editing, saving or reviewing it
+does not authorize lifecycle repair, private handover, database writes, API/worker
+launches or provider requests. The previously issued goal, expired execution
+window, failed records and [blocked closeout](#issued-revision--installed-ownership-blocker-2026-09-25)
+remain unchanged. The proposed successor `p04-i02-visibility-r2` has not been
+submitted by this documentation change.
+
+### Findings that the recovery prompt must address
+
+1. **Cancellation repair is not the original worker diagnosis.** The schema-4
+   exclusion in [`_finish_known_native_cancel`](../../../../isaaclab_arena/agentic_environment_generation/workflow/neo4j_store.py)
+   is consistent with the later duplicate-cleanup cancellation stall. It does not
+   explain why the released assessment worker produced no retained result or
+   initiating failure envelope. The exception path in
+   [`service.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/service.py)
+   must preserve the first sanitized causal error separately from cleanup errors;
+   the historical cause remains unknown unless actual evidence recovers it.
+2. **An on-disk patch does not repair the already-running API.**
+   [`ExecutionOwner.close`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/execution_owner.py)
+   treats `cleanup_unknown` as sticky, and the existing
+   [`_reconcile_native_cancellation` CLI path](../../../../isaaclab_arena/agentic_environment_generation/workflow/cli.py)
+   is explicitly native-only. The proposed authority must cover the smallest
+   ownership-verified assessment recovery path, not assume that widening one
+   schema guard or repeating shutdown updates the live instance.
+3. **The same operation ID is replay, not fresh execution.**
+   [`application.py` admission](../../../../isaaclab_arena/agentic_environment_generation/workflow/application.py)
+   returns retained status without a new drive for an existing submission.
+   Resubmitting `p04-i02-visibility` cannot grant a new window. Any later execution
+   needs an explicitly linked successor with fresh bounded admission, while the
+   original failed operation, reservation and cumulative provider accounting remain.
+4. **Recovery and acceptance are verified outcomes, not state-setting commands.**
+   Durable cancellation, owner retirement/lease release and API drain must follow
+   existing ownership and cleanup evidence. Historical PID/epoch values alone do
+   not authorize signals or forced state transitions. Zero native work means zero
+   **additional** launches, preserving the consumed 3/3 plus 2/2. Parent closure
+   remains conditional on installed assessment, authenticated byte recovery,
+   no-effect replay and complete cleanup—not on a patch, receipt or critique.
+
+The proposed sequence is non-sending lifecycle recovery, correction of evidenced
+assessment/failure-retention defects, Gate A, one bounded successor assessment,
+then fresh-client readback/replay and final cleanup. The prompt below is the review
+candidate, not an instruction to begin that sequence.
+
+### Recovery and successor-assessment prompt — not issued
+
+Recovery instruction, for after restarting the computer:
+
+```text
+Verified. The conversation is saved, and the continuation documents are synchronized.
+
+- Session history contains the saved draft and your restart request; SQLite integrity check passed.
+- Persistent memory/profile files are present. Reusable lessons are saved in skills; task-specific state is in the canonical handoff.
+- Updated seven planning documents, including both indexes, Plan 04, the work packages and remaining-work guide.
+- Links and document checks passed. Changes remain uncommitted.
+
+Restart instructions:
+/workspaces/IsaacLab-Arena/.agents/references/plans/dashboard_cli_workflow_parity/research-stack-implementation-handoff.md:7
+
+After reopening the same container/default profile, run:
+
+    hermes --resume 20260923_174815_e247de --in /workspaces/IsaacLab-Arena
+
+Important: /root/.hermes is in the container’s writable layer. A normal restart preserves it; deleting or recreating the container does not. The checkout and local evidence are host-backed, but outputs are git-ignored.
+
+P04-I02 remains BLOCKED and the recovery prompt remains NOT ISSUED. Rebooting will not itself resolve durable ownership or certify API cleanup.
+```
+
+---
+
+#### Prompt suggested to fix the issue
+
+```text
+/goal Recover P04-I02’s blocked lifecycle, repair the retained-assessment failure boundary, then complete one installed authenticated visibility assessment.
+
+Read .agents/references/plans/plan04_implementation/02-installed-visual-assessment.md: section 2 for exact inputs, sections 4–6 for restrictions and acceptance, and the final blocked-outcome record. Preserve historical evidence; do not resume obsolete budget or credential audits.
+
+This issuance authorizes the ordered work below. Proceed through satisfied gates without requesting approval after each routine correction. Do not build the full scene workflow.
+
+1. RECOVER THE EXISTING RUN — NO PROVIDER SENDS
+
+Target run:
+0664fc8038961d9ea079f89c6c35cc5d305f2c56a1255d2253c64ce089d33e19
+Target API instance:
+9a8eebfcbe9845498ec26fb81bb049ca
+
+Re-read current state and match the retained owner/process identities. Recorded PID 62035 and owner epoch 6 are historical coordinates, not sufficient authority to signal a process.
+
+Authorize the smallest necessary changes to existing cancellation, reconciliation, owner and installed lifecycle paths. Start with cancel_keyed → finish_cancelled → acknowledge_scene_cleanup and the schema-3-only duplicate-cleanup finalizer. Address assessment-mode recovery restrictions and sticky cleanup_unknown where required.
+
+Do not assume widening the schema guard fixes the already-running API. Recover it through an ownership-verified, non-sending application path. No direct database state-forcing, metadata deletion, forced unlock, unanchored signals or clearing cleanup flags merely to permit restart.
+
+Gate further execution on fresh proof of completed cancellation, exact-worker cleanup, durable owner retirement/lease release, and the old API stopped/drained. Preserve the failed run, its one-model-call/190-second reservation, all failures and producer records. Do not refund or reset anything.
+
+2. ADDRESS THE MISSING FAILURE EVIDENCE
+
+Treat the original released-worker failure as unresolved, separate from cancellation.
+
+Trace the actual private handoff, worker entry, send authorization, receive/validation and error-retention boundary. Recover the original exception from existing evidence if possible. Correct evidenced defects and retain the first sanitized causal error before converting future failures to reconciliation_required; keep cleanup errors separate.
+
+If the historical exception is irrecoverable, record that honestly. Do not make reconstructing it an endless prerequisite or launch an unaccounted diagnostic worker. Ensure the next authorized installed attempt cannot silently lose the initiating error.
+
+3. AUTHORIZE ONE SUCCESSOR ASSESSMENT
+
+After lifecycle recovery and Gate A pass, authorize one successor operation, p04-i02-visibility-r2, explicitly linked to the failed consumer and unchanged p04-i01-native-a5 producer. Check the successor key first; if already admitted, recover it rather than invent another key. Never reopen or rewrite the expired original run.
+
+Use section 2’s exact candidate, evidence and all three unchanged step-180 PNGs. Assess red_block and blue_bin in every frame using the retained rubric, model/profile and finite technical completion allowance. No recapture, cropping, candidate changes or manufactured uncertainty.
+
+Authorize a fresh 600-second operation window beginning at successor admission, after provider-free preparation. Preserve the 570-second assessment-stage limit and per-attempt limits of 180 seconds provider time plus 10 seconds cleanup. One worker at a time; no deadline renewal through restart.
+
+Allow at most THREE cumulative assessment-role gpt-6-astra provider attempts across the original and successor operations. Reconcile actual consumption first; the last verified ledger recorded zero sends. Preserve old reservations and record the successor’s normal application-owned reservations without resetting source-level accounting.
+
+Keep accounting-only policy: no new monetary/token-budget vetoes, fabricated prices or replacement ledger. Preserve RequestEnvelope checks, technical limits and usage/cost reporting.
+
+Apply section 5’s retry policy unchanged: recover retained responses and clean up first; retry only eligible formatting/coverage or transient transport failures within remaining authority. Count failed/uncertain sends. Disable SDK retries, pings and fallbacks. Stop at the first valid complete result, including negative or explicitly uncertain results.
+
+Reuse supported private/configuration handover in the existing approved installation and namespace. Preserve credential secrecy, configuration identities and old lifecycle records.
+
+4. VERIFY APPLICATION ACCEPTANCE
+
+Submit through authenticated installed CLI/GraphQL; the application owns execution and retries. Retain every attempt’s request, response or failure, structured result, lineage and accounting.
+
+Recover exact input and attempt/result bytes through a fresh authenticated client. Replay the completed successor and verify the same retained result with no additional provider request, worker release or allocation mutation. Verify final physical cleanup, durable retirement and API drain.
+
+Use one read-only critic at pre-send and one at final outcome. Parent closes P04-I02 only when every applicable acceptance criterion is verified; otherwise report BLOCKED with the precise remaining boundary. A complete negative/uncertain assessment may satisfy integration, not scene acceptance.
+
+EXECUTION DISCIPLINE
+
+Keep corrections parent-led and narrow. No new or modified tests, mocks, fixtures, harnesses or synthetic campaigns. Run only affected existing simulation-free checks in the discovered checkout container as ubuntu via /isaac-sim/python.sh, plus scoped host lint; then advance to the installed path.
+
+Stop after three unsuccessful provider-free corrections for the same blocker or an actual ownership, provenance, authority or scope blocker. Finish bounded cleanup and report the exact decision needed.
+
+Zero additional native/Kit, capture, generation, scene repair, policy or prior-retrieval work. Preserve consumed allowances and all scientific flags. Keep repository protected paths untouched; no commits, pushes, stashes or resets.
+
+Update the existing operation record, package, index, Plan 04 and canonical handoff. Report lifecycle recovery, assessment integration, visual verdict, readback/replay and final cleanup separately. No broader completion claim.
+```
 
 ## Revised goal prompt
 

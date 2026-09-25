@@ -1,11 +1,17 @@
 # What remains to finish Plan 04?
 
 - Document ID: `P04-GUIDE-01`
-- Updated: 2026-09-25, after the issued P04-I02 installed ownership/cleanup blocker
+- Updated: 2026-09-25, after the P04-I02 recovery draft and restart checkpoint; no new execution
 - Status: Informational & Tracking; no execution authority
 - Parent: [Plan 04](../event_mapping/event-mapping-refactoring_plan_04.md)
 - Current goal: [P04-I02 — blocked after installed worker release](02-installed-visual-assessment.md)
 - Runtime status: [canonical handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)
+
+The next task is review of the [unissued issue-recovery proposal](02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review).
+Runtime/process statements below refer to the last application observation at
+2026-09-25T16:44:42.311753+00:00; they are not refreshed by a computer restart.
+Use the [restart checkpoint](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md#resume-after-a-computer-restart)
+before resuming. No repair or successor assessment has been authorized by these edits.
 
 ---
 
@@ -25,7 +31,7 @@
 
 ```mermaid
 flowchart TD
-    subgraph M1["Milestone 1: Foundational Simulation & Multimodal Evaluation (~75% Complete)"]
+    subgraph M1["Milestone 1: Foundational Simulation & Multimodal Evaluation (native slice verified; assessment blocked)"]
         S1["Stage 1: P04-I01 Native Physical Simulation (PhysX Settling + 3 Cameras)"] -->|100% VERIFIED| S2["Stage 2: P04-I02 Installed Visual Assessment (gpt-6-astra on a5 PNGs)"]
     end
 
@@ -95,9 +101,13 @@ blanket claims that all process entries disappeared are not current evidence.
 
 ## 3. Current blocked package: P04-I02
 
-Read the [revised goal](02-installed-visual-assessment.md#revised-goal-prompt).
-It retains the parent-actor/single-read-only-critic loop and requires installed
-application acceptance, not standalone model/helper execution.
+Review the [issue-recovery proposal and prompt](02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review),
+which is **PROPOSED — NOT ISSUED**. It separates lifecycle repair from the unknown
+worker cause and proposes `p04-i02-visibility-r2` only after recovery and Gate A,
+with a fresh bounded window but no cumulative-accounting reset. The
+[previous revised goal](02-installed-visual-assessment.md#revised-goal-prompt) remains
+issued history with an expired window. Both retain the parent-actor/single-read-only-critic
+method and require installed application acceptance, not standalone model/helper execution.
 
 The revision was issued and the installed operation `p04-i02-visibility` admitted.
 The worker is absent with recorded cleanup, but run state is `cancel_requested`,

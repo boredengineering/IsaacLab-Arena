@@ -5,8 +5,12 @@
 > The proposal/review-script snapshot below is preserved as history, not a new
 > allocation or a reversal of the [verified result](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/LIVE_RESULT.txt)
 > and [parent closeout](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/parent-closeout.json).
-> Successor [P04-I02](02-installed-visual-assessment.md) has a revised prompt without
-> preset monetary/token budgets; execution is paused and no new calls/runs occurred.
+> Successor [P04-I02](02-installed-visual-assessment.md) was issued and is blocked
+> after installed worker release, with no recorded provider send or assessment result.
+> Its execution window expired and durable retirement/API drain remain unresolved.
+> The [issue-recovery proposal](02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review)
+> is saved for further review, **NOT ISSUED**; no recovery or successor execution
+> occurred during documentation work. This does not reopen I01's native allocation.
 > The [canonical handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)
 > owns current status. Unchecked proposal items and “not issued” text below are historical.
 

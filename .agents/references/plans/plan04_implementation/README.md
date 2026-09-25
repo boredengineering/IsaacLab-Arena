@@ -12,6 +12,7 @@ An execution goal must state those permissions explicitly.
 
 1. Read the [canonical implementation handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)
    for the latest measured result, remaining authority and evidence.
+   After a reboot, start with its [restart checkpoint](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md#resume-after-a-computer-restart).
 2. Open the current work package below for its scope, ordered actions and acceptance gates.
 3. Issue its proposed goal separately if its execution authority is intended.
 4. After execution, update the work package and this index, then record verified
@@ -21,6 +22,8 @@ An execution goal must state those permissions explicitly.
 ## Current position
 
 Snapshot: 2026-09-25. This is a navigation summary; the handoff remains authoritative.
+Runtime/process statements below describe the last verified application observation
+at 16:44:42.311753 UTC, not a post-restart status check.
 
 - **P04-I01 is verified:** a5 completed application-owned native capture, numeric
   assessment, retention and cleanup through the installed authenticated interface.
@@ -50,6 +53,12 @@ Snapshot: 2026-09-25. This is a navigation summary; the handoff remains authorit
   generation, repair, policy or new-prior execution occurred. Final critic and parent
   both returned `BLOCKED`; fresh parent observation confirmed the same live API/dirty owner.
   See the [current outcome and recovery decision](02-installed-visual-assessment.md#issued-revision--installed-ownership-blocker-2026-09-25).
+- **Next is prompt review, not execution:** the
+  [issue-recovery proposal](02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review)
+  and full successor-assessment prompt are saved **NOT ISSUED**. They distinguish
+  non-sending lifecycle recovery from the unresolved worker failure, then propose
+  one conditional successor `p04-i02-visibility-r2` with unchanged cumulative
+  accounting. No recovery or successor submission occurred during documentation work.
 - Planning checkout was clean at `de8f03b13827517e605bb32d49ff87ae596b24bf` before
   these documentation edits. P04-I01's earlier uncommitted-source description is
   historical; its captured source/evidence remain the runtime proof.
@@ -59,7 +68,7 @@ Snapshot: 2026-09-25. This is a navigation summary; the handoff remains authorit
 | ID | Plan | Status | Next gate | Execution authority |
 | --- | --- | --- | --- | --- |
 | P04-I01 | [Native integration defects and bounded revalidation](01-native-integration-defects.md) | Verified; parent-closed native-only slice | P04-I02 under separately issued authority | Additional 2/2 consumed; prior 3/3 preserved; zero native launches remain |
-| P04-I02 | [Installed visual assessment of retained native evidence](02-installed-visual-assessment.md) | Parent BLOCKED after final critique: admitted worker, no provider/result; retirement and API drain incomplete | Explicit bounded recovery of exact unsent run/live stopping API; schema-3-only duplicate-cleanup finalizer excludes schema4 | Zero native and zero sends; three unspent, one model-call/190s reservation preserved. Existing run's 600s window expired; no reset or automatic restart |
+| P04-I02 | [Installed visual assessment of retained native evidence](02-installed-visual-assessment.md) | Parent BLOCKED after final critique: admitted worker, no provider/result; retirement and API drain incomplete | Review [unissued recovery/successor proposal](02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review); explicit issuance required before recovery/execution | Last verified: zero additional native work and zero sends; three unspent, one model-call/190s reservation preserved. Original 600s window expired; draft grants no reset or automatic restart |
 | P04-GUIDE-01 | [What remains to finish Plan 04](how-far-to-finish-plan04.md) | Informational; reconciled after a5 | Assessment-only slice, then full scene workflow, then policy | No execution authority; no percentage or fixed ETA asserted |
 
 ## Revised goal and retained checkpoint

@@ -102,24 +102,63 @@ Without these specifics, an executing agent could easily misdiagnose the call ch
 
 ---
 
-### 4. Sticky cleanup_unknown on a Still-Live API Process
+### 4. Multi-Component Shutdown Barriers and Live API Drain (Beyond ExecutionOwner.close)
 
 - **What the prompt currently says:**
-  > "Address assessment-mode recovery restrictions and sticky cleanup_unknown where required."
+  > "In execution_owner.py:225, resolve sticky cleanup_unknown for still-live API processes: ExecutionOwner.close() must check whether the pending background drain task (self._closing) has resolved before immediately raising on the sticky flag."
 - **What is left out & the code reality:**
-  If the host/container was not rebooted and PID 62035 is still running in state `stopping`:
-  - In [`execution_owner.py:225`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/execution_owner.py#L225):
-    ```python
-    if self.cleanup_unknown:
-        raise CleanupUnknown("Execution cleanup unresolved")
-    ```
-  - Once `ExecutionOwner.close()` experiences an initial timeout, `self.cleanup_unknown` is set to `True` permanently. Any subsequent call to `api-stop` or `close()` immediately raises `CleanupUnknown` without ever checking if the underlying background drain task (`self._closing`) has now finished!
-- **The Risk:** Repeated `api-stop` commands will fail perpetually even after the background process finishes cleanly draining.
-- **The Specification Needed:** If recovering a live API, `ExecutionOwner.close()` must check whether the pending `_closing` task has resolved before immediately raising on the sticky flag.
+  "The drain task resolved" is **not** sufficient:
+  1. A completed `self._closing` task may have succeeded, failed, or been cancelled. Only **successful completion**, accompanied by verified cleanup, supports proceeding.
+  2. There are multiple interlocking shutdown barriers across the API stack:
+     - In [`execution_owner.py:237`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/execution_owner.py#L237), there is a second check on the sticky flag:
+       ```python
+       if self.cleanup_unknown:
+           raise CleanupUnknown("Execution cleanup unresolved")
+       ```
+     - In [`workflow/api/application.py:154–172`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/application.py#L154-L172), if `app.state.cleanup_unknown` is set, the application lifespan parks indefinitely:
+       ```python
+       if app.state.cleanup_unknown:
+           import asyncio
+           await asyncio.Future()
+       ```
+     - In [`workflow/api/server.py:103–120`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/server.py#L103-L120) (`retain_unknown`), the supervisor independently parks in an infinite loop:
+       ```python
+       while True:
+           try:
+               await asyncio.Future()
+           except asyncio.CancelledError:
+               continue
+       ```
+  - Consequently, moving or checking the condition at `execution_owner.py:225` alone does **not** make a parked API resume shutdown.
+- **The Risk:** An agent fixing only line 225 will find the API server remains permanently hung waiting on unresolving `asyncio.Future()` instances in the lifespan and supervisor.
+- **The Specification Needed:** Recover timeout-only cleanup uncertainty by observing the exact original drain task to successful completion, not merely checking whether it is done. Failed or cancelled drains remain blocked pending ownership-verified recovery. Address the existing owner, application-lifespan, and supervisor/control paths together so verified cleanup can complete resource closure and produce consistent instance status. Do not reopen admissions, release leases early, or blindly restart a failed drain on already-shut-down executors.
 
 ---
 
-### 5. The Root Cause of Stuck Cancellation in neo4j_store.py:4089
+### 5. Assessment-Compatible Recovery Entrypoint Gap
+
+- **What the prompt currently says:**
+  > "For post-crash recovery, address the existing exited_unclean versus stopped/drained handover restriction through the smallest supported reconciliation/handover change. Require verified physical cleanup and durable retirement before handover..."
+- **What is left out & the code reality:**
+  The prompt describes the required post-crash outcome, but the existing codebase does **not** provide an execution mechanism to retire the old owner for assessment configurations:
+  - In [`workflow/cli.py:208`](../../../../isaaclab_arena/agentic_environment_generation/workflow/cli.py#L208) (`_reconcile_native_cancellation`):
+    ```python
+    if config.value["mode"] != "retained-native-validation-v1":
+        raise ValueError("Exact native configuration required")
+    ...
+    return dict(..., owner_retired=False)
+    ```
+    It accepts *only* native configurations and explicitly returns `owner_retired=False`.
+  - In [`workflow/api/installed_assessment.py:387`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py#L387), the composition explicitly wires:
+    ```python
+    recovery_factory=unavailable,
+    ```
+- **The Risk:** Even if `instance.py:331` is modified to allow handover from `exited_unclean`, there is no callable entrypoint to retire the exact durable owner lease in the database, leaving the lease blocked.
+- **The Specification Needed:** Extend the existing supported recovery entrypoints narrowly for this schema-4 assessment. Using authenticated cleanup authority and the retained configuration, worker registration, and owner fence, reconcile cancellation, verify physical cleanup, retire the exact durable owner, and verify lease release without provider sends. Handover must itself validate matching recovery evidence for the previous instance/configuration; adding `exited_unclean` to an allowed-state condition or accepting an operator assertion is insufficient.
+
+---
+
+### 6. The Root Cause of Stuck Cancellation in neo4j_store.py:4089
 
 - **What the prompt currently says:**
   > "Start with cancel_keyed → finish_cancelled → acknowledge_scene_cleanup and the schema-3-only duplicate-cleanup finalizer."
@@ -141,24 +180,29 @@ Without these specifics, an executing agent could easily misdiagnose the call ch
 
 ---
 
-### 6. Approval Expiry Drift (approval_expires_at)
+### 7. Complementary Approval Expiry Protection (Authoring Headroom + Immediate Pre-Submission Recheck)
 
 - **What the prompt currently says:**
-  > "Immediately before submission, verify the frozen approval, authentication and role-binding lifetimes still cover the intended execution window including cleanup..."
+  > "In installed_assessment.py:285, expires_at = min(auth.expires_at, selected.approval_expires_at): author approval_expires_at in configuration JSON with sufficient buffer (e.g. at least 600s + pre-send preparation headroom, aligned with token expiry) at configuration authoring time..."
 - **What is left out & the code reality:**
-  In [`installed_assessment.py:285`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py#L285):
-  ```python
-  expires_at = min(auth.expires_at, selected.approval_expires_at)
-  ```
-  - When authoring the successor configuration (`p04-i02-visibility-r2`), `approval_expires_at` is set in the configuration JSON.
-  - If pre-send critique, container checks, and preparation take 3–5 minutes, an initial 600-second expiry timestamp will have drifted significantly.
-  - When the worker finally calls the provider, `deadline <= time.time()` in [`foreground_scene_ports.py:256`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_scene_ports.py#L256) will raise `"Scene role deadline expired"`.
-- **The Risk:** The worker will be aborted due to role expiration before it completes the vision evaluation.
-- **The Specification Needed:** The prompt should explicitly specify setting `approval_expires_at` with enough buffer (e.g., at least 600s + pre-send preparation headroom, aligned with token expiry) at configuration authoring time.
+  Replacing the just-before-submission check with a configuration-authoring estimate leaves a dangerous loophole:
+  - Extra `approval_expires_at` headroom cannot compensate for an earlier `auth.expires_at` or another limiting role grant.
+  - Preparation and Gate A critique can take longer than estimated.
+  - In [`installed_assessment.py:285`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py#L285):
+    ```python
+    expires_at = min(auth.expires_at, selected.approval_expires_at)
+    ```
+  - In [`foreground_scene_ports.py:256`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_scene_ports.py#L256):
+    ```python
+    if deadline <= time.time():
+        raise PermissionError("Scene role deadline expired")
+    ```
+- **The Risk:** If pre-send critique exceeds expectations, or if authentication token lifetime is shorter than approval headroom, the worker raises `"Scene role deadline expired"` mid-execution.
+- **The Specification Needed:** Author `approval_expires_at` with sufficient margin in configuration JSON **and** immediately before submission, recheck the effective authentication, approval, and role-grant expiry against the intended execution window including cleanup. At admission, retain the actual `admitted_at` and absolute deadline. Refuse insufficient remaining authority; do not silently extend approvals or edit the old configuration in place. Use supported configuration handover.
 
 ---
 
-### 7. Parent-Side Error Retention Blindspot
+### 8. Parent-Side Error Retention Blindspot
 - **Mechanism:** When `ForegroundGenerationWorker.send()` raises `RuntimeError("Private generation send incomplete") from None`, the initiating `AttributeError` is stripped.
 - **Service Masking:** In [`service.py:758-767`](../../../../isaaclab_arena/agentic_environment_generation/workflow/service.py#L758-L767):
   ```python
@@ -171,22 +215,23 @@ Without these specifics, an executing agent could easily misdiagnose the call ch
 
 ---
 
-### 8. Gate A Blindspot
+### 9. Gate A Blindspot
 - **False Confidence from Preview:** [`installed_assessment.py:114`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py#L114) `preview()` directly constructs `BoundedSceneModels` and invokes `assess()` with a deny hook. It completely bypasses `OwnedAssessmentPorts`, `ForegroundScenePorts`, and `ForegroundGenerationWorker.send`. Gate A passed 100% despite fatal pre-send bugs.
 - **Remedy:** Gate A must explicitly review the actual installed call paths alongside the affected existing checks without creating synthetic test harnesses.
 
 ---
 
-### Summary Checklist of Missing Items to Add to the Prompt
+### Summary Checklist of Targeted Implementation Specifications
 
 | Item | File Anchor | What Needs to be Explicit in Prompt |
 |---|---|---|
-| **Principal Retrieval** | [`retained_assessment.py:131`](../../../../isaaclab_arena/agentic_environment_generation/workflow/retained_assessment.py#L131) | Retrieve via `getattr(self, "principal", None)`; preserve `execute()` signature for `service.py`. |
+| **Principal Retrieval** | [`retained_assessment.py:131`](../../../../isaaclab_arena/agentic_environment_generation/workflow/retained_assessment.py#L131) | Retrieve via `getattr(self, "principal", None)`; preserve `execute()` signature for `service.py:749`. |
 | **ExistingSource Validation** | [`foreground_generation.py:238`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_generation.py#L238) | Validate against `criteria[0].rubric` for `kind == "existing"` (matching `_call_child`). |
 | **Handover Deadlock** | [`instance.py:331`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/instance.py#L331) | Allow transition from `exited_unclean` when physical cleanup and owner retirement are verified. |
-| **Sticky Cleanup Unknown** | [`execution_owner.py:225`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/execution_owner.py#L225) | Re-poll/check `_closing` task resolution instead of permanently failing on stale timeout. |
+| **Multi-Component Shutdown & Drain** | [`execution_owner.py:225, 237`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/execution_owner.py#L225), [`application.py:154-172`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/application.py#L154-L172), [`server.py:103-120`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/server.py#L103-L120) | Observe original drain to successful completion (not merely done). Coordinate owner, lifespan, and supervisor to resume parked shutdown. |
+| **Assessment Recovery Entrypoint** | [`cli.py:208`](../../../../isaaclab_arena/agentic_environment_generation/workflow/cli.py#L208), [`installed_assessment.py:387`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py#L387) | Extend recovery entrypoint for schema-4 assessment to reconcile cancellation, verify physical cleanup, retire durable owner, and release lease without provider sends. |
 | **Schema-4 Cancel Finalizer** | [`neo4j_store.py:4089`](../../../../isaaclab_arena/agentic_environment_generation/workflow/neo4j_store.py#L4089) | Allow `_finish_known_native_cancel` to transition schema-4 runs to `cancelled` on duplicate cleanup. |
-| **Approval Window Drift** | [`installed_assessment.py:285`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py#L285) | Author `approval_expires_at` with sufficient margin so pre-send review does not starve execution. |
+| **Complementary Expiry Protection** | [`installed_assessment.py:285`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py#L285), [`foreground_scene_ports.py:256`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_scene_ports.py#L256) | Author `approval_expires_at` with headroom AND recheck effective auth/role expiry immediately before submission. |
 
 ---
 
@@ -200,8 +245,12 @@ Without these specifics, an executing agent could easily misdiagnose the call ch
 | [`foreground_generation.py`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_generation.py#L269) | 269–270 | Retain sanitized causal failure descriptor before raising `RuntimeError`. | Preserves initiating exception identity before the generic wrapper masks it. |
 | [`service.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/service.py#L758) | 758–767 | Record causal error on intent/run before calling `mark_scene_unknown`. | Prevents silent conversion to `reconciliation_required` without diagnostic cause. |
 | [`neo4j_store.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/neo4j_store.py#L4089) | 4089 | Allow `_finish_known_native_cancel` to accept schema-4 contracts for duplicate cleanup. | Transitions `cancel_requested` to `cancelled`, enabling `retire_cancelled` to release owner. |
-| [`execution_owner.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/execution_owner.py#L225) | 225–238 | Re-check status of background `_closing` task instead of immediately raising on sticky flag. | Allows still-running API process to finish draining cleanly on subsequent stop calls. |
-| [`instance.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/instance.py#L331) | 331–333 | Permit handover from `exited_unclean` if physical cleanup and owner retirement are proven. | Unblocks successor launch after a machine reboot or unclean process termination. |
+| [`execution_owner.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/execution_owner.py#L225) | 225, 237 | Observe `_closing` drain task to successful completion before evaluating sticky flag. | Avoids perpetual lock on timeout when background drain task finishes cleanly. |
+| [`application.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/application.py#L154) | 154–172 | Coordinate lifespan shutdown with successful drain resolution; resume closure when clean. | Prevents application lifespan from hanging indefinitely on parked `asyncio.Future()`. |
+| [`server.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/server.py#L103) | 103–120 | Coordinate supervisor `retain_unknown` with verified drain completion to allow clean exit. | Prevents supervisor from infinitely looping on parked `Future()` when recovery succeeds. |
+| [`instance.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/instance.py#L331) | 328–333 | Permit handover from `exited_unclean` when physical cleanup and owner retirement are proven. | Unblocks successor launch after a machine reboot or unclean process termination. |
+| [`cli.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/cli.py#L208) | 208–228 | Extend `_reconcile_native_cancellation` or provide assessment recovery to retire durable owner. | Provides the required execution mechanism to retire schema-4 durable owners on recovery. |
+| [`installed_assessment.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py#L285) | 285, 387 | Author `approval_expires_at` with headroom, recheck at submission, and wire recovery factory. | Prevents execution starvation and supplies recovery capabilities for assessment mode. |
 
 ---
 
@@ -227,9 +276,9 @@ Re-read current state and match the retained owner/process identities. Recorded 
 
 Authorize the smallest necessary changes to existing cancellation, reconciliation, owner and installed lifecycle paths:
 - In neo4j_store.py:4089 (_finish_known_native_cancel), permit schema-4 contracts so duplicate cleanup acknowledgement transitions run state from cancel_requested to cancelled, allowing retire_cancelled to release the dirty owner lease.
-- In execution_owner.py:225, resolve sticky cleanup_unknown for still-live API processes: ExecutionOwner.close() must check whether the pending background drain task (self._closing) has resolved before immediately raising on the sticky flag.
+- Recover timeout-only cleanup uncertainty by observing the exact original drain task to successful completion, not merely checking whether it is done. Failed or cancelled drains remain blocked pending ownership-verified recovery. Address the existing owner, application-lifespan and supervisor/control paths together (including execution_owner.py:225, 237, application.py:154–172, and server.py:103–120) so verified cleanup can complete resource closure and produce consistent instance status. Do not reopen admissions, release leases early or blindly restart a failed drain on already-shut-down executors.
 - Distinguish a still-live old API from one that exited uncleanly during restart. An on-disk patch does not update a live process; a dead process cannot supply its lost in-memory cleanup capabilities. Recover through an ownership-verified, non-sending application path using the exact retained configuration, run, worker and owner identities.
-- In instance.py:328-333, line 328 already recognizes exited_unclean as an admissible prior state, but line 332 unconditionally rejects exited_unclean when transition is not None. Allow configuration handover from prior state exited_unclean once physical cleanup and durable owner retirement are independently verified. Preserve original unclean-exit history; do not fabricate graceful drain status. No direct database state-forcing, metadata deletion, forced unlock, unanchored signals or clearing/relabeling cleanup flags merely to permit restart.
+- Extend the existing supported recovery entrypoints narrowly for this schema-4 assessment (addressing cli.py:208 native-only restriction and installed_assessment.py:387 recovery_factory=unavailable). Using authenticated cleanup authority and the retained configuration, worker registration and owner fence, reconcile cancellation, verify physical cleanup, retire the exact durable owner and verify lease release without provider sends. Handover must itself validate matching recovery evidence for the previous instance/configuration; adding exited_unclean to an allowed-state condition (in instance.py:328-333) or accepting an operator assertion is insufficient. Preserve original unclean-exit history; do not fabricate graceful drain status. No direct database state-forcing, metadata deletion, forced unlock, unanchored signals or clearing/relabeling cleanup flags merely to permit restart.
 
 Gate further execution on fresh proof of completed cancellation, exact-worker cleanup, durable owner retirement/lease release, and either normal old-API stop/drain or verified post-crash recovery with supported handover. Process absence alone is insufficient. Preserve the failed run, its one-model-call/190-second reservation, all failures and producer records. Do not refund or reset anything.
 
@@ -256,9 +305,9 @@ Only after Gate A and the pre-send critique pass, authorize one successor operat
 
 Use section 2’s exact candidate, evidence and all three unchanged step-180 PNGs. Assess red_block and blue_bin in every frame using the retained rubric, model/profile and finite technical completion allowance. No recapture, cropping, candidate changes or manufactured uncertainty.
 
-Authorize a fresh 600-second operation window beginning only at the successor's successful durable admission, after provider-free preparation and pre-send critique. Record its admitted_at and absolute deadline. In installed_assessment.py:285, expires_at = min(auth.expires_at, selected.approval_expires_at): author approval_expires_at in configuration JSON with sufficient buffer (e.g. at least 600s + pre-send preparation headroom, aligned with token expiry) at configuration authoring time so pre-send review does not starve execution and trigger "Scene role deadline expired" in foreground_scene_ports.py:256. Preview, critique and API startup do not start this operation clock. Retries, replay and restarts do not renew it. Preserve the 570-second assessment-stage limit and per-attempt limits of 180 seconds provider time plus 10 seconds cleanup. One worker at a time.
+Authorize a fresh 600-second operation window beginning only at the successor's successful durable admission, after provider-free preparation and pre-send critique. Record its admitted_at and absolute deadline. In installed_assessment.py:285, expires_at = min(auth.expires_at, selected.approval_expires_at): author approval_expires_at in configuration JSON with sufficient buffer (e.g. at least 600s + pre-send preparation headroom, aligned with token expiry) at configuration authoring time so pre-send review does not starve execution. Immediately before submission, recheck the effective authentication, approval and role-grant expiry against the intended execution window including cleanup. At admission, retain the actual admitted_at and absolute deadline. Refuse insufficient remaining authority; do not silently extend approvals or edit the old configuration in place. Use supported configuration handover. Preview, critique and API startup do not start this operation clock. Retries, replay and restarts do not renew it. Preserve the 570-second assessment-stage limit and per-attempt limits of 180 seconds provider time plus 10 seconds cleanup. One worker at a time.
 
-Allow at most THREE cumulative assessment-role gpt-6-astra provider attempts across the original and successor operations. Reconcile actual consumption first; the last verified ledger recorded zero sends across the producer (3/3 attempts remain). Preserve old reservations and record the successor’s normal application-owned reservations without resetting source-level accounting.
+Allow at most THREE cumulative assessment-role gpt-6-astra provider attempts across the original and successor operations. Reconcile actual consumption first; the last verified ledger recorded zero durably counted assessment sends across consumer operations linked to the producer (3/3 attempts remain). Preserve old reservations and record the successor’s normal application-owned reservations without resetting source-level accounting.
 
 Keep accounting-only policy: no new monetary/token-budget vetoes, fabricated prices or replacement ledger. Preserve RequestEnvelope checks, technical limits and usage/cost reporting.
 

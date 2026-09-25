@@ -337,7 +337,9 @@ submitted by this documentation change.
    explain why the released assessment worker produced no retained result or
    initiating failure envelope. The exception path in
    [`service.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/service.py)
-   must preserve the first sanitized causal error separately from cleanup errors;
+   must preserve the first sanitized causal error separately from cleanup errors,
+   including parent-side authorization and private-packet validation before the
+   child receives anything. A child-only error envelope cannot cover those failures;
    the historical cause remains unknown unless actual evidence recovers it.
 2. **An on-disk patch does not repair the already-running API.**
    [`ExecutionOwner.close`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/execution_owner.py)
@@ -346,6 +348,11 @@ submitted by this documentation change.
    is explicitly native-only. The proposed authority must cover the smallest
    ownership-verified assessment recovery path, not assume that widening one
    schema guard or repeating shutdown updates the live instance.
+   If the API died during restart, its in-memory cleanup capabilities are gone:
+   [`instance.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/instance.py)
+   records `exited_unclean`, while changed-configuration handover requires
+   `stopped`/`drained`. That branch needs supported post-crash reconciliation and
+   verified handover, not a fabricated graceful-drain status.
 3. **The same operation ID is replay, not fresh execution.**
    [`application.py` admission](../../../../isaaclab_arena/agentic_environment_generation/workflow/application.py)
    returns retained status without a new drive for an existing submission.
@@ -353,12 +360,40 @@ submitted by this documentation change.
    needs an explicitly linked successor with fresh bounded admission, while the
    original failed operation, reservation and cumulative provider accounting remain.
 4. **Recovery and acceptance are verified outcomes, not state-setting commands.**
-   Durable cancellation, owner retirement/lease release and API drain must follow
-   existing ownership and cleanup evidence. Historical PID/epoch values alone do
-   not authorize signals or forced state transitions. Zero native work means zero
+   Durable cancellation, owner retirement/lease release and API drain or verified
+   post-crash handover must follow existing ownership and cleanup evidence.
+   Historical PID/epoch values alone do not authorize signals or forced state
+   transitions. Zero native work means zero
    **additional** launches, preserving the consumed 3/3 plus 2/2. Parent closure
    remains conditional on installed assessment, authenticated byte recovery,
    no-effect replay and complete cleanup—not on a patch, receipt or critique.
+5. **Two concrete pre-send defects need correction, not just better diagnostics.**
+   In the installed `OwnedAssessmentPorts` composition,
+   [`RetainedAssessmentPorts.execute`](../../../../isaaclab_arena/agentic_environment_generation/workflow/retained_assessment.py)
+   passes `None` to `require_bounded_capability`; dynamic dispatch reaches
+   [`ForegroundScenePorts`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_scene_ports.py),
+   which forwards that missing principal to authorization instead of the bound
+   assessment operator.
+   Separately, inherited
+   [`ForegroundGenerationWorker.send`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_generation.py)
+   accesses `owned.contract.source.prompt`, but
+   [`ExistingSource`](../../../../isaaclab_arena/agentic_environment_generation/workflow/contracts.py)
+   has no `prompt` field; the scene packet builder uses the criterion rubric for
+   that source variant. Preserve the real principal and exact variant-specific
+   validation; do not accept `None`, fabricate a source field or remove guards.
+6. **The current preview is not proof of owned handoff.**
+   [`installed_assessment.preview`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py)
+   directly constructs model tools and does not exercise those installed
+   capability/send paths. Gate A must cover their actual call chain and parent
+   error retention through scoped source review and affected existing checks,
+   without another diagnostic worker or harness. Start the successor's execution
+   clock only at durable admission after preparation and pre-send critique; verify
+   the remaining approval lifetime covers execution and cleanup.
+
+The relevant principal/source-validation call-chain files matched their entries in
+the failed run's [admission source freeze](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/source-freeze-admission.json)
+at review. These are source-supported defects, not a recovered historical exception
+or a runtime reproduction; the blocked closeout remains unchanged.
 
 The proposed sequence is non-sending lifecycle recovery, correction of evidenced
 assessment/failure-retention defects, Gate A, one bounded successor assessment,
@@ -366,6 +401,214 @@ then fresh-client readback/replay and final cleanup. The prompt below is the rev
 candidate, not an instruction to begin that sequence.
 
 ### Recovery and successor-assessment prompt — not issued
+
+#### Pre-issuance analysis and required prompt amendments
+
+The review below is retained as review history. Its amendments are incorporated
+in the [updated draft prompt](#prompt-suggested-to-fix-the-issue); the prompt remains
+**PROPOSED — NOT ISSUED**.
+
+The recovery strategy is sound, but I would not issue the prompt unchanged. I found two concrete pre-send defects beyond the cancellation problem. Fixing only the schema-4 cleanup guard would leave the assessment blocked.
+
+1. **Name the actual pre-send defects in the repair scope**
+
+   - **Principal propagation:**
+     `RetainedAssessmentPorts.execute` passes `None` into `require_bounded_capability`. In the installed composition, that resolves to `ForegroundScenePorts`’ override, which performs authorization using that `None` principal. The installed authority requires the actual assessment operator.
+     Sources:
+     - [`isaaclab_arena/agentic_environment_generation/workflow/retained_assessment.py:131`](../../../../isaaclab_arena/agentic_environment_generation/workflow/retained_assessment.py)
+     - [`isaaclab_arena_examples/agentic_environment_generation/foreground_scene_ports.py:93`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_scene_ports.py)
+     - [`isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py:266`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py)
+
+   - **Existing-source validation:**
+     The packet builder correctly uses the criterion rubric for an existing-source assessment. However, the inherited `send` method checks it against `owned.contract.source.prompt`. `ExistingSource` has no prompt field.
+     Source:
+     - [`isaaclab_arena_examples/agentic_environment_generation/foreground_generation.py:238`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_generation.py)
+
+   The prompt should explicitly require preserving the real principal and validating the correct source variant—not accepting `None`, inventing a prompt field or removing validation.
+
+   Both defects are present in the source frozen for the failed run. They are strong source-supported explanations, but the missing historical exception prevents claiming a conclusively recovered runtime diagnosis.
+
+2. **Require error retention before the worker receives anything**
+
+   The draft asks for causal-error retention, but it should explicitly cover parent-side authorization and private-packet validation—not just worker entry and response handling.
+
+   Currently, the `send` method replaces exceptions with “Private generation send incomplete”; the service then marks the intent `reconciliation_required` without retaining the initiating exception.
+   Sources:
+   - [`isaaclab_arena_examples/agentic_environment_generation/foreground_generation.py:269`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_generation.py)
+   - [`isaaclab_arena/agentic_environment_generation/workflow/service.py:758`](../../../../isaaclab_arena/agentic_environment_generation/workflow/service.py)
+
+   Add a requirement to retain a bounded, sanitized phase, exception type/reason and run/intent identity before that conversion. Cleanup must still be attempted if error retention fails. Never retain private packets, credentials, locals or unscreened exception text.
+
+3. **Explicitly handle recovery after an unclean restart**
+
+   The prompt correctly says remembered PIDs are not authority. It still needs a clear distinction between:
+   - An old API that is alive and requires ownership-verified shutdown.
+   - An old API that died during restart and has lost its in-memory cleanup capabilities.
+
+   This matters because the current observer records `exited_unclean`, while changed-configuration handover requires `stopped/drained`.
+   Sources:
+   - [`isaaclab_arena/agentic_environment_generation/workflow/api/instance.py:215`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/instance.py)
+   - [`isaaclab_arena/agentic_environment_generation/workflow/api/instance.py:331`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/instance.py)
+
+   Require a supported, ownership-verified recovery path that reconciles the old run, verifies physical cleanup, retires the durable owner and permits handover. Preserve the unclean-exit history; do not manufacture a graceful-drain status to satisfy the guard.
+
+4. **Tighten Gate A and the execution-window start**
+
+   The current request preview directly constructs the model tools. It does not exercise the installed principal propagation or inherited worker-send validation above. That explains why a valid preview is insufficient evidence for this boundary.
+   Source:
+   - [`isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py:114`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py)
+
+   Gate A should explicitly review those actual installed call paths alongside the affected existing checks. This does not require new tests, another harness or an extra diagnostic worker.
+
+   Also specify that the successor’s bounded execution window starts at admission after preparation and pre-send critique. Its absolute approval expiry must leave sufficient time for execution and cleanup; review time must not accidentally exhaust the live window.
+
+**Sufficiency Evaluation:**
+
+Yes—as a bounded execution plan, with those amendments. The existing immutable-input, cumulative-attempt, successor-operation, authenticated readback/replay and cleanup requirements are appropriate. No larger redesign is needed on the evidence reviewed.
+
+It is not a guarantee of success. Completion still requires the installed assessment to return a valid result covering both subjects in every frame, followed by fresh-client recovery, no-effect replay and verified cleanup. A valid negative or uncertain visual verdict remains acceptable integration evidence.
+
+#### Detailed Analysis: 6 Concrete Underspecified Implementation Details
+
+Analysis of the approval expiration indicates a potential issue where the remaining lifetime at worker runtime is shorter than the execution window, leading to insufficient authorization.
+Looking closely at the proposed prompt under [Prompt suggested to fix the issue](#prompt-suggested-to-fix-the-issue) alongside the actual codebase, there are 6 specific, concrete implementation details that are underspecified or left out.
+Without these specifics, an executing agent could easily misdiagnose the call chain, break caller signatures, or get re-blocked.
+
+---
+
+##### 1. How execute() Obtains the Principal (Attribute vs. Signature)
+
+- **What the prompt currently says:**
+  > "RetainedAssessmentPorts.execute passes None through the installed ForegroundScenePorts.require_bounded_capability override into authorization. Preserve the real bound assessment principal through that path..."
+- **What is left out & the code reality:**
+  Look at the caller and callee signatures:
+  - In [`service.py:749`](../../../../isaaclab_arena/agentic_environment_generation/workflow/service.py#L749):
+    ```python
+    output = ports.execute(released.intent, released.candidate, released.original, contract, **stage_args)
+    ```
+    `service.py` does **not** pass `principal` into `ports.execute()`.
+  - In [`RetainedAssessmentPorts.execute`](../../../../isaaclab_arena/agentic_environment_generation/workflow/retained_assessment.py#L131):
+    ```python
+    def execute(self, intent, candidate, original, contract, *, retained_observation):
+        self.require_bounded_capability(None, contract, intent.reservation)
+    ```
+  - In [`OwnedAssessmentPorts`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py#L233), `self.principal` was initialized by [`ForegroundScenePorts.__init__`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_scene_ports.py#L46).
+- **The Risk:** If the prompt doesn't specify that the principal must be accessed via `getattr(self, "principal", None)`, an agent might modify `execute()`'s signature to require a `principal` parameter, breaking `service.py`, or fail to realize that `self.principal` is already attached to `ports`.
+- **The Specification Needed:** The prompt must require retrieving the principal via `getattr(self, "principal", None)` inside `RetainedAssessmentPorts.execute`, strictly preserving `execute()`'s signature for `service.py`.
+
+---
+
+##### 2. Exact Target Field for ExistingSource in ForegroundGenerationWorker.send
+
+- **What the prompt currently says:**
+  > "Inherited ForegroundGenerationWorker.send assumes owned.contract.source.prompt exists. Validate against the authoritative source variant, consistent with the packet builder's existing-source criterion rubric."
+- **What is left out & the code reality:**
+  The prompt does not name the exact match between the packet and the contract:
+  - [`ForegroundScenePorts._call_child`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_scene_ports.py#L271) constructs:
+    ```python
+    prompt=contract.source.prompt if contract.source.kind == "new" else contract.criteria[0].rubric
+    ```
+  - In [`foreground_generation.py:238`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_generation.py#L238), the check is hardcoded:
+    ```python
+    packet["inputs"]["prompt"] != owned.contract.source.prompt
+    ```
+- **The Risk:** An agent might attempt to add a dummy `prompt` property to `ExistingSource` or bypass validation entirely.
+- **The Specification Needed:** The prompt should state the exact conditional check:
+  - If `owned.contract.source.kind == "new"`: check `owned.contract.source.prompt`.
+  - If `owned.contract.source.kind == "existing"`: check `owned.contract.criteria[0].rubric`.
+
+---
+
+##### 3. The Handover Deadlock in instance.py:331
+
+- **What the prompt currently says:**
+  > "For post-crash recovery, address the existing exited_unclean versus stopped/drained handover restriction through the smallest supported reconciliation/handover change."
+- **What is left out & the code reality:**
+  Look at [`instance.py:328-333`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/instance.py#L328-L333):
+  ```python
+  if (prior["identity"] is None or same_process(...) or prior["state"] not in {"stopped", "failed", "exited_unclean"}):
+      raise ValueError("Prior instance unresolved")
+  if transition is not None:
+      if prior["state"] != "stopped" or prior["code"] != "drained":
+          raise ValueError("Prior cleanup unresolved; recover using the previous configuration")
+  ```
+  - Line 328 already recognizes `exited_unclean` as an admissible prior state!
+  - However, line 332 unconditionally rejects `exited_unclean` when `transition` is not `None`.
+- **The Risk:** An agent might try to fabricate a `stopped/drained` record in the database, destroying crash evidence.
+- **The Specification Needed:** The prompt should explicitly note that line 332 is the gate blocking handover after an unclean exit, and that the recovery path must allow transition from `exited_unclean` once physical cleanup and durable owner retirement are independently verified.
+
+---
+
+##### 4. Sticky cleanup_unknown on a Still-Live API Process
+
+- **What the prompt currently says:**
+  > "Address assessment-mode recovery restrictions and sticky cleanup_unknown where required."
+- **What is left out & the code reality:**
+  If the host/container was not rebooted and PID 62035 is still running in state `stopping`:
+  - In [`execution_owner.py:225`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/execution_owner.py#L225):
+    ```python
+    if self.cleanup_unknown:
+        raise CleanupUnknown("Execution cleanup unresolved")
+    ```
+  - Once `ExecutionOwner.close()` experiences an initial timeout, `self.cleanup_unknown` is set to `True` permanently. Any subsequent call to `api-stop` or `close()` immediately raises `CleanupUnknown` without ever checking if the underlying background drain task (`self._closing`) has now finished!
+- **The Risk:** Repeated `api-stop` commands will fail perpetually even after the background process finishes cleanly draining.
+- **The Specification Needed:** If recovering a live API, `ExecutionOwner.close()` must check whether the pending `_closing` task has resolved before immediately raising on the sticky flag.
+
+---
+
+##### 5. The Root Cause of Stuck Cancellation in neo4j_store.py:4089
+
+- **What the prompt currently says:**
+  > "Start with cancel_keyed → finish_cancelled → acknowledge_scene_cleanup and the schema-3-only duplicate-cleanup finalizer."
+- **What is left out & the code reality:**
+  - In [`neo4j_store.py:4071`](../../../../isaaclab_arena/agentic_environment_generation/workflow/neo4j_store.py#L4071):
+    ```python
+    if intent.worker_cleanup is not None:
+        self._finish_known_native_cancel(tx, fence.run_id)
+        return False
+    ```
+  - And `_finish_known_native_cancel` in [`neo4j_store.py:4089`](../../../../isaaclab_arena/agentic_environment_generation/workflow/neo4j_store.py#L4089) has:
+    ```python
+    if run is None or run.state != "cancel_requested" or parse_contract(run.contract_json).schema_version != "3":
+        return False
+    ```
+  - Because schema 4 is excluded, the transaction returns `False` without setting `run.state = 'cancelled'`. As a result, `retire_cancelled()` fails, durable owner epoch 6 remains `dirty=True`, and the API cannot drain.
+- **The Risk:** An agent might try to bypass the lease or force unlock in Cypher instead of fixing the schema guard.
+- **The Specification Needed:** State explicitly that `_finish_known_native_cancel` (or an equivalent schema-4 cancel finalizer) must transition schema-4 runs from `cancel_requested` to `cancelled` upon duplicate cleanup acknowledgement.
+
+---
+
+##### 6. Approval Expiry Drift (approval_expires_at)
+
+- **What the prompt currently says:**
+  > "Immediately before submission, verify the frozen approval, authentication and role-binding lifetimes still cover the intended execution window including cleanup..."
+- **What is left out & the code reality:**
+  In [`installed_assessment.py:285`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py#L285):
+  ```python
+  expires_at = min(auth.expires_at, selected.approval_expires_at)
+  ```
+  - When authoring the successor configuration (`p04-i02-visibility-r2`), `approval_expires_at` is set in the configuration JSON.
+  - If pre-send critique, container checks, and preparation take 3–5 minutes, an initial 600-second expiry timestamp will have drifted significantly.
+  - When the worker finally calls the provider, `deadline <= time.time()` in [`foreground_scene_ports.py:256`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_scene_ports.py#L256) will raise `"Scene role deadline expired"`.
+- **The Risk:** The worker will be aborted due to role expiration before it completes the vision evaluation.
+- **The Specification Needed:** The prompt should explicitly specify setting `approval_expires_at` with enough buffer (e.g., at least 600s + pre-send preparation headroom, aligned with token expiry) at configuration authoring time.
+
+---
+
+##### Summary Checklist of Missing Items to Add to the Prompt
+
+| Item | File Anchor | What Needs to be Explicit in Prompt |
+|---|---|---|
+| **Principal Retrieval** | [`retained_assessment.py:131`](../../../../isaaclab_arena/agentic_environment_generation/workflow/retained_assessment.py#L131) | Retrieve via `getattr(self, "principal", None)`; preserve `execute()` signature for `service.py`. |
+| **ExistingSource Validation** | [`foreground_generation.py:238`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_generation.py#L238) | Validate against `criteria[0].rubric` for `kind == "existing"` (matching `_call_child`). |
+| **Handover Deadlock** | [`instance.py:331`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/instance.py#L331) | Allow transition from `exited_unclean` when physical cleanup and owner retirement are verified. |
+| **Sticky Cleanup Unknown** | [`execution_owner.py:225`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/execution_owner.py#L225) | Re-poll/check `_closing` task resolution instead of permanently failing on stale timeout. |
+| **Schema-4 Cancel Finalizer** | [`neo4j_store.py:4089`](../../../../isaaclab_arena/agentic_environment_generation/workflow/neo4j_store.py#L4089) | Allow `_finish_known_native_cancel` to transition schema-4 runs to `cancelled` on duplicate cleanup. |
+| **Approval Window Drift** | [`installed_assessment.py:285`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_assessment.py#L285) | Author `approval_expires_at` with sufficient margin so pre-send review does not starve execution. |
+
+---
+
+#### Environment restart and session recovery
 
 **Before Rebooting (Optional Clean Exit)**
 
@@ -431,27 +674,38 @@ Target API instance:
 
 Re-read current state and match the retained owner/process identities. Recorded PID 62035 and owner epoch 6 are historical coordinates, not sufficient authority to signal a process.
 
-Authorize the smallest necessary changes to existing cancellation, reconciliation, owner and installed lifecycle paths. Start with cancel_keyed → finish_cancelled → acknowledge_scene_cleanup and the schema-3-only duplicate-cleanup finalizer. Address assessment-mode recovery restrictions and sticky cleanup_unknown where required.
+Authorize the smallest necessary changes to existing cancellation, reconciliation, owner and installed lifecycle paths:
+- In neo4j_store.py:4089 (_finish_known_native_cancel), permit schema-4 contracts so duplicate cleanup acknowledgement transitions run state from cancel_requested to cancelled, allowing retire_cancelled to release the dirty owner lease.
+- In execution_owner.py:225, resolve sticky cleanup_unknown for still-live API processes: ExecutionOwner.close() must check whether the pending background drain task (self._closing) has resolved before immediately raising on the sticky flag.
+- Distinguish a still-live old API from one that exited uncleanly during restart. An on-disk patch does not update a live process; a dead process cannot supply its lost in-memory cleanup capabilities. Recover through an ownership-verified, non-sending application path using the exact retained configuration, run, worker and owner identities.
+- In instance.py:328-333, line 328 already recognizes exited_unclean as an admissible prior state, but line 332 unconditionally rejects exited_unclean when transition is not None. Allow configuration handover from prior state exited_unclean once physical cleanup and durable owner retirement are independently verified. Preserve original unclean-exit history; do not fabricate graceful drain status. No direct database state-forcing, metadata deletion, forced unlock, unanchored signals or clearing/relabeling cleanup flags merely to permit restart.
 
-Do not assume widening the schema guard fixes the already-running API. Recover it through an ownership-verified, non-sending application path. No direct database state-forcing, metadata deletion, forced unlock, unanchored signals or clearing cleanup flags merely to permit restart.
+Gate further execution on fresh proof of completed cancellation, exact-worker cleanup, durable owner retirement/lease release, and either normal old-API stop/drain or verified post-crash recovery with supported handover. Process absence alone is insufficient. Preserve the failed run, its one-model-call/190-second reservation, all failures and producer records. Do not refund or reset anything.
 
-Gate further execution on fresh proof of completed cancellation, exact-worker cleanup, durable owner retirement/lease release, and the old API stopped/drained. Preserve the failed run, its one-model-call/190-second reservation, all failures and producer records. Do not refund or reset anything.
-
-2. ADDRESS THE MISSING FAILURE EVIDENCE
+2. REPAIR PRE-SEND BOUNDARIES AND RETAIN CAUSAL FAILURES
 
 Treat the original released-worker failure as unresolved, separate from cancellation.
 
-Trace the actual private handoff, worker entry, send authorization, receive/validation and error-retention boundary. Recover the original exception from existing evidence if possible. Correct evidenced defects and retain the first sanitized causal error before converting future failures to reconciliation_required; keep cleanup errors separate.
+Trace the actual installed class hierarchy and parent authorization/private-packet preflight, then worker entry, send authorization, receive/validation and error retention. Recheck and narrowly correct the source-supported defects identified in this proposal:
+
+- In retained_assessment.py:131, RetainedAssessmentPorts.execute must pass getattr(self, "principal", None) rather than literal None into require_bounded_capability, preserving the authenticated operator principal attached to OwnedAssessmentPorts (from ForegroundScenePorts.__init__) without altering execute()'s public signature (which is called by service.py:749 without a principal argument). Missing or mismatched authenticated principals must still be refused.
+- In foreground_generation.py:238, ForegroundGenerationWorker.send must validate packet["inputs"]["prompt"] against owned.contract.criteria[0].rubric when owned.contract.source.kind == "existing" (matching ForegroundScenePorts._call_child), and against owned.contract.source.prompt only when kind == "new". Do not fabricate a prompt field, change the retained source or weaken exact-input checks.
+
+For each correction, state the causal hypothesis, smallest change and predicted observation. Check affected callers of the same hooks to preserve native-only, synthetic and other budgeted guards without a general refactor or audit. The source match to the failed admission supports these defects but does not recover the historical initiating exception.
+
+Retain the first sanitized causal failure in parent authorization/private-packet validation as well as child entry and receive, before wrappers replace it with a generic send error or reconciliation_required (in foreground_generation.py:269 and service.py:758). Use bounded phase, exception type/safe reason and existing run/intent/fence identities. Never retain private packets, credentials, locals or unscreened exception text. Keep cleanup errors separate; attempt bounded cleanup even if diagnostic retention itself fails, and report that failure explicitly.
 
 If the historical exception is irrecoverable, record that honestly. Do not make reconstructing it an endless prerequisite or launch an unaccounted diagnostic worker. Ensure the next authorized installed attempt cannot silently lose the initiating error.
 
 3. AUTHORIZE ONE SUCCESSOR ASSESSMENT
 
-After lifecycle recovery and Gate A pass, authorize one successor operation, p04-i02-visibility-r2, explicitly linked to the failed consumer and unchanged p04-i01-native-a5 producer. Check the successor key first; if already admitted, recover it rather than invent another key. Never reopen or rewrite the expired original run.
+After lifecycle recovery, complete section 5's Gate A with explicit coverage of the actual installed capability/principal chain, existing-source private-packet validation and parent error-retention path. The current installed_assessment.preview directly constructs model tools: retain its request/zero-send evidence, but do not claim it exercises owned handoff. Cover the omitted paths through scoped source review and affected existing checks, not new tests, a harness or an extra worker. Only the authorized installed successor can establish live handoff and assessment acceptance.
+
+Only after Gate A and the pre-send critique pass, authorize one successor operation, p04-i02-visibility-r2, explicitly linked to the failed consumer and unchanged p04-i01-native-a5 producer. Check the successor key first; if already admitted, recover it rather than invent another key. Never reopen or rewrite the expired original run.
 
 Use section 2’s exact candidate, evidence and all three unchanged step-180 PNGs. Assess red_block and blue_bin in every frame using the retained rubric, model/profile and finite technical completion allowance. No recapture, cropping, candidate changes or manufactured uncertainty.
 
-Authorize a fresh 600-second operation window beginning at successor admission, after provider-free preparation. Preserve the 570-second assessment-stage limit and per-attempt limits of 180 seconds provider time plus 10 seconds cleanup. One worker at a time; no deadline renewal through restart.
+Authorize a fresh 600-second operation window beginning only at the successor's successful durable admission, after provider-free preparation and pre-send critique. Record its admitted_at and absolute deadline. In installed_assessment.py:285, expires_at = min(auth.expires_at, selected.approval_expires_at): author approval_expires_at in configuration JSON with sufficient buffer (e.g. at least 600s + pre-send preparation headroom, aligned with token expiry) at configuration authoring time so pre-send review does not starve execution and trigger "Scene role deadline expired" in foreground_scene_ports.py:256. Preview, critique and API startup do not start this operation clock. Retries, replay and restarts do not renew it. Preserve the 570-second assessment-stage limit and per-attempt limits of 180 seconds provider time plus 10 seconds cleanup. One worker at a time.
 
 Allow at most THREE cumulative assessment-role gpt-6-astra provider attempts across the original and successor operations. Reconcile actual consumption first; the last verified ledger recorded zero sends. Preserve old reservations and record the successor’s normal application-owned reservations without resetting source-level accounting.
 

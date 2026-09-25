@@ -71,8 +71,8 @@ class ModelProfile(ProfileReference):
 
 
 class ExecutionConfiguration(FrozenModel):
-    generation_model: ModelProfile
-    assessment_model: ModelProfile
+    generation_model: ModelProfile | None
+    assessment_model: ModelProfile | None
     runtime: ProfileReference
     database: ProfileReference
     policy: ProfileReference | None
@@ -224,7 +224,7 @@ class PriorRetrievalSelection(FrozenModel):
 
 
 class WorkflowContract(FrozenModel):
-    schema_version: Literal["1", "2"]
+    schema_version: Literal["1", "2", "3"]
     source: Annotated[NewSource | ExistingSource, Field(discriminator="kind")]
     criteria: Annotated[tuple[Criterion, ...], Field(min_length=1, max_length=256)]
     preserved: Annotated[tuple[PreservationRule, ...], Field(max_length=256)]
@@ -251,6 +251,29 @@ class WorkflowContract(FrozenModel):
 
     @model_validator(mode="after")
     def consistent_intent(self):
+        if self.schema_version == "3":
+            if (
+                self.source.kind != "existing"
+                or self.execution.generation_model is not None
+                or self.execution.assessment_model is not None
+                or self.execution.policy is not None
+                or self.execution.capture is None
+                or self.retrieval is not None
+                or self.allowed_interventions
+                or any(c.kind != "runtime" for c in self.criteria)
+                or self.effects.allow_paid_models
+                or self.effects.allow_database_reads
+                or not self.effects.allow_runtime
+                or not self.effects.allow_operational_writes
+                or self.budget.max_candidates != 1
+                or self.budget.max_revisions
+                or self.budget.max_model_calls
+                or self.budget.max_model_tokens
+                or self.budget.max_cost_usd
+            ):
+                raise ValueError("Schema 3 requires explicit model-free retained-candidate native validation")
+        elif self.execution.generation_model is None or self.execution.assessment_model is None:
+            raise ValueError("Legacy workflow schemas require both explicit model selections")
         if self.schema_version == "2" and (
             self.retrieval is None or self.source.kind != "new" or not self.effects.allow_database_reads
         ):
@@ -287,7 +310,10 @@ class WorkflowContract(FrozenModel):
         elif self.budget.max_policy_episodes or self.budget.max_policy_steps:
             raise ValueError("policy budgets require policy criteria and configuration")
         if (
-            any(m.billing == "paid" for m in (self.execution.generation_model, self.execution.assessment_model))
+            any(
+                m is not None and m.billing == "paid"
+                for m in (self.execution.generation_model, self.execution.assessment_model)
+            )
             and not self.effects.allow_paid_models
         ):
             raise ValueError("paid model requires explicit effects permission")

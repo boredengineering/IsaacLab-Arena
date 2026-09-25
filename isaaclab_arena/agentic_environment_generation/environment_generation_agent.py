@@ -87,6 +87,7 @@ class EnvironmentGenerationAgent:
         max_retries: int = 3,
         load_dotenv: bool = True,
         inference_profile: dict | None = None,
+        probe_connection: bool = True,
     ):
         """Configure the OpenAI-compatible client and validate the model.
 
@@ -105,6 +106,7 @@ class EnvironmentGenerationAgent:
                 (network errors, timeouts, empty responses, malformed JSON). Each
                 retry is a fresh API call.
             load_dotenv: Preserve CLI credential discovery; servers should pass False.
+            probe_connection: Perform a billable constructor probe; disable for single-request trials.
         """
         from isaaclab_arena.agentic_environment_generation.inference_backend import InferenceBackend
         from isaaclab_arena.agentic_environment_generation.prim_path_inference import PrimPathInference
@@ -119,6 +121,7 @@ class EnvironmentGenerationAgent:
             max_retries=max_retries,
             load_dotenv=load_dotenv,
             inference_profile=inference_profile,
+            probe_connection=probe_connection,
         )
         self.inference_backend = inference_backend
         self.spec_inference = SpecInference(inference_backend)

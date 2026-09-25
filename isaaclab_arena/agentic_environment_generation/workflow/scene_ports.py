@@ -106,8 +106,13 @@ class ScenePorts:
         # composition must supply both literal roles; never guess the assessor.
         if (model_ceiling is None) == (model_ceilings is None):
             raise ValueError("choose shared synthetic or exact role model ceilings")
-        if model_ceilings is not None and (
-            type(model_ceilings) is not dict or set(model_ceilings) != {"generation", "assessment"}
+        native_only = (
+            self.profile.codec_version == 2 and self.profile.assurance == "native-unverified" and model_ceilings == {}
+        )
+        if (
+            model_ceilings is not None
+            and not native_only
+            and (type(model_ceilings) is not dict or set(model_ceilings) != {"generation", "assessment"})
         ):
             raise ValueError("complete generation/assessment ceilings required")
 
@@ -130,10 +135,17 @@ class ScenePorts:
 
     def admit(self, contract):
         """Pure support checks; run also at submission before any model construction."""
+        if self.model_ceiling is None and not self.model_ceilings and contract.schema_version != "3":
+            raise ValueError("Model-free ports require the explicit native-only contract")
         project_required_criteria(contract)
         criteria = tuple(admit_criterion(c) for c in contract.criteria)
         windows = {(c.observation_window.start_step, c.observation_window.end_step) for c in criteria}
-        if windows != {self.capture_window()} or type(self.capture_steps) is not int or self.capture_steps < 1:
+        minimum_steps = 0 if contract.schema_version == "3" else 1
+        if (
+            windows != {self.capture_window()}
+            or type(self.capture_steps) is not int
+            or self.capture_steps < minimum_steps
+        ):
             raise ValueError("unsupported capture window")
         visual = [c for c in criteria if c.kind == "visual"]
         if len(visual) > 1:

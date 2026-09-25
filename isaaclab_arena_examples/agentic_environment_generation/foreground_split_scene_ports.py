@@ -98,7 +98,11 @@ class ForegroundSplitScenePorts(ForegroundScenePorts, SplitScenePorts):
 
     def _stage_deadline(self, intent, contract):
         """Pass an absolute wall-clock deadline; the worker enforces it without renewal."""
-        admitted = self.store.get_generation_attempt(self.run_id).admitted_at
+        admitted = (
+            self.store.get_admitted_at(self.run_id)
+            if contract.schema_version == "3"
+            else self.store.get_generation_attempt(self.run_id).admitted_at
+        )
         limit = (
             self.capture_timeout_seconds if intent.action == "capture" else intent.reservation.runtime_allowance_seconds
         )

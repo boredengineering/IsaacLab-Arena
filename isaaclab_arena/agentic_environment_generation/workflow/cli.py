@@ -140,10 +140,17 @@ def _add_installed_arguments(commands):
             action.add_argument("--create", action="store_true")
         if name == "register-profile":
             action.add_argument("--registration", required=True)
+    native_cancel = actions.add_parser("reconcile-native-cancellation", allow_abbrev=False)
+    native_cancel.add_argument("--config", required=True)
+    native_cancel.add_argument("--run-id", required=True)
     for name in ("api-launch", "api-handover", "api-status", "api-stop", "api-reconcile", "api-serve"):
         command = commands.add_parser(name, allow_abbrev=False)
         command.add_argument("--config", required=True)
         command.add_argument("--instance", required=True)
+        if name in {"api-launch", "api-handover", "api-serve"}:
+            command.add_argument(
+                "--authorize-native", action="store_true", help="Approve the exact bounded native selection"
+            )
         if name == "api-handover":
             command.add_argument(
                 "--previous-config", required=True, help="Unchanged C1 used for exact stop/reconciliation"
@@ -160,12 +167,48 @@ def _launch_instance(options, config, selected):
     from .api.instance import instance_id, launch
 
     if options.command == "api-launch":
-        return launch(config, selected)
+        return launch(config, selected, **({"native_authorized": True} if options.authorize_native else {}))
     return launch(
         config,
         selected,
         previous_config=load(options.previous_config),
         previous_instance=instance_id(options.previous_instance),
+        **({"native_authorized": True} if options.authorize_native else {}),
+    )
+
+
+def _serve_instance(options, config, selected):
+    from .api.server import serve
+
+    return serve(
+        config,
+        selected,
+        options.lease_fd,
+        options.gate_fd,
+        **({"native_authorized": True} if options.authorize_native else {}),
+    )
+
+
+def _reconcile_native_cancellation(config, run_id):
+    """Finalize already-recorded native cleanup without retiring its owner."""
+    from .api.installed_composition import Resources
+
+    if config.value["mode"] != "retained-native-validation-v1":
+        raise ValueError("Exact native configuration required")
+    resources = Resources(config)
+    resources.authority.require_admin(config.value["bootstrap_principal"])
+    with resources.driver() as driver:
+        store = resources.store(driver)
+        before = store.get_run(run_id)
+        if before is None or before.operation_id not in config.value["native_validation"]["operation_ids"]:
+            raise ValueError("Run is outside the native approval")
+        retained = store.reconcile_native_cancellation(run_id)
+    return dict(
+        schema_version=1,
+        code="native_cancellation_reconciled",
+        run_id=retained.run_id,
+        state=retained.state,
+        owner_retired=False,
     )
 
 
@@ -300,9 +343,7 @@ def _run_installed(options):
             selected = instance_id(options.instance)
             config = load(options.config)
             if options.command == "api-serve":
-                from .api.server import serve
-
-                return serve(config, selected, options.lease_fd, options.gate_fd)
+                return _serve_instance(options, config, selected)
             if options.command in {"api-launch", "api-handover"}:
                 result, code = _launch_instance(options, config, selected)
             else:
@@ -329,6 +370,8 @@ def _run_installed(options):
                     remove=options.command == "credentials-remove",
                     credential_fd=getattr(options, "credentials_fd", None),
                 )
+            elif options.action == "reconcile-native-cancellation":
+                result = _reconcile_native_cancellation(config, options.run_id)
             else:
                 from .api.installed_composition import administer
 

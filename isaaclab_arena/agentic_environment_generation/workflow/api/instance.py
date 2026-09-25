@@ -22,6 +22,7 @@ from .private_files import Directory, decode, encode, fields
 PUBLIC = ["schema_version", "instance", "config_sha256", "binding_sha256", "endpoint", "generation", "state", "code"]
 STATES = {"launching", "ready", "stopping", "stopped", "failed", "exited_unclean"}
 MODULE = "isaaclab_arena.agentic_environment_generation.workflow.cli"
+EXECUTION_MODES = {"isolated-synthetic-execution-v1", "retained-native-validation-v1"}
 
 
 def instance_id(value):
@@ -69,19 +70,20 @@ def instance_path(config, selected):
 def state(config, selected):
     with Directory(instance_path(config, selected)) as directory:
         value = decode(directory.read("state.json", 16384), 16384)
-        extra = (
-            " capabilities"
-            if config.value["mode"] == "isolated-synthetic-execution-v1" and "capabilities" in value
-            else ""
-        )
+        extra = " capabilities" if config.value["mode"] in EXECUTION_MODES and "capabilities" in value else ""
         result = fields(value, " ".join(PUBLIC) + " identity" + extra)
         if extra:
             legacy = {"mode": "isolated-synthetic-execution-v1", "submit": True, "required_policy": False}
-            if result["capabilities"] not in (
+            allowed = (
                 legacy,
                 {**legacy, "cancel": True},
                 {**legacy, "cancel": True, "resume": True},
-            ):
+            )
+            if config.value["mode"] == "retained-native-validation-v1":
+                from .installed_native import CAPABILITIES
+
+                allowed = (CAPABILITIES,)
+            if result["capabilities"] not in allowed:
                 raise ValueError("Execution capability binding differs")
     if (
         type(result["schema_version"]) is not int
@@ -96,7 +98,7 @@ def state(config, selected):
         or result["code"]
         not in (
             {"launch_pending", "ready", "stop_requested", "drained", "startup_failed", "exited_unclean"}
-            | ({"cleanup_unknown"} if config.value["mode"] == "isolated-synthetic-execution-v1" else set())
+            | ({"cleanup_unknown"} if config.value["mode"] in EXECUTION_MODES else set())
         )
     ):
         raise ValueError("Instance binding differs")
@@ -186,7 +188,7 @@ def control(config, selected, operation, known):
                 or answer["code"]
                 not in (
                     {"ready", "launch_pending", "stop_requested"}
-                    | ({"cleanup_unknown"} if config.value["mode"] == "isolated-synthetic-execution-v1" else set())
+                    | ({"cleanup_unknown"} if config.value["mode"] in EXECUTION_MODES else set())
                 )
             ):
                 raise ValueError("Control response rejected")
@@ -230,12 +232,15 @@ def observe(config, selected, *, stop=False, reconcile=False):
     return receipt(known, code="unknown"), 3
 
 
-def launch(config, selected, *, previous_config=None, previous_instance=None):
+def launch(config, selected, *, previous_config=None, previous_instance=None, native_authorized=False):
     """Launch a fresh instance, or explicitly hand over an exactly drained configuration."""
     from .installed_config import MAX_CONFIG
 
     instance_id(selected)
     transition = None
+    native = config.value["mode"] == "retained-native-validation-v1"
+    if type(native_authorized) is not bool or native_authorized != native:
+        raise ValueError("Separate native approval must match the selected mode")
     if previous_config is not None or previous_instance is not None:
         instance_id(previous_instance)
         if previous_config is None or selected == previous_instance or config.digest == previous_config.digest:
@@ -355,11 +360,23 @@ def launch(config, selected, *, previous_config=None, previous_instance=None):
                 str(gate),
             ]
             operator = config.value["operator"]
+            child_environment = {"HOME": operator["home"], "PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"}
+            if native:
+                from isaaclab_arena_examples.agentic_environment_generation.web_api.provider_security import (
+                    worker_environment,
+                )
+
+                arguments.append("--authorize-native")
+                child_environment.update(worker_environment(None))
+                for key in ("EXP_PATH", "ISAAC_PATH", "CARB_APP_PATH"):
+                    if key in os.environ:
+                        child_environment[key] = os.environ[key]
+                child_environment["OMNICLIENT_HUB_MODE"] = "disabled"
             child = subprocess.Popen(
                 arguments,
                 executable=executable,
                 cwd=operator["cwd"],
-                env={"HOME": operator["home"], "PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"},
+                env=child_environment,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,

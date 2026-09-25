@@ -332,8 +332,8 @@ class ProfileReference:
 
 @strawberry.type
 class ExecutionConfiguration:
-    generation_model: ProfileReference
-    assessment_model: ProfileReference
+    generation_model: ProfileReference | None
+    assessment_model: ProfileReference | None
     runtime: ProfileReference
     database: ProfileReference
     policy: ProfileReference | None

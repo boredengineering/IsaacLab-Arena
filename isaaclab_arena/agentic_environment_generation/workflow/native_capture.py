@@ -14,7 +14,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from .contracts import Count, Criterion, Duration, FrozenModel, Identifier, ObservationWindow, ProfileReference
 from .scene_evidence_artifacts import canonical
@@ -69,6 +69,8 @@ class NativeCaptureSettings(FrozenModel):
     subjects: Annotated[tuple[NativeSubject, ...], Field(min_length=1, max_length=16)]
     contacts: Annotated[tuple[NativeContact, ...], Field(max_length=16)] = ()
     camera_keys: Annotated[tuple[str, ...], Field(max_length=3)] = ()
+    evidence_only: Annotated[bool, Field(strict=True)] = False
+    """Retain ungraded cameras for an explicit model-free validation request."""
     image_transform: NativeImageTransform = NativeImageTransform()
     criteria: Annotated[tuple[Criterion, ...], Field(min_length=1, max_length=32)]
     evaluator_version: Literal["1"] = "1"
@@ -85,7 +87,7 @@ class NativeCaptureSettings(FrozenModel):
         if self.settle_consecutive_steps > self.settle_steps or self.window.start_step != self.settle_steps:
             raise ValueError("fixed settle allocation must end at absolute window start")
         count = self.window.end_step - self.window.start_step + 1
-        if not 2 <= count <= 256:
+        if not (1 if self.evidence_only else 2) <= count <= 256:
             raise ValueError("unsupported capture window")
         if len(set(self.camera_keys)) != len(self.camera_keys) or not set(self.camera_keys) <= {
             "external_camera_rgb",
@@ -112,19 +114,29 @@ class NativeCaptureSettings(FrozenModel):
         if any(c.observation_window != self.window for c in criteria):
             raise ValueError("exact absolute criterion window required")
         visual = [c for c in criteria if c.kind == "visual"]
-        if len(visual) > 1 or set(self.camera_keys) != {k for c in visual for k in c.coordinate_frames}:
+        if self.evidence_only:
+            if visual or any(c.kind != "runtime" for c in criteria):
+                raise ValueError("Evidence-only cameras cannot request visual assessment")
+        elif len(visual) > 1 or set(self.camera_keys) != {k for c in visual for k in c.coordinate_frames}:
             raise ValueError("exact single visual criterion camera coverage required")
         pairs = {(c.subject_id, c.destination_id) for c in self.contacts}
         required = {c.subjects for c in criteria if c.evidence_producer == "scene.filtered-support"}
         if pairs != required or len(pairs) != len(self.contacts):
             raise ValueError("exact explicit contact sensor mappings required")
         for subject in self.subjects:
-            if not subject.prim_path.startswith("/"):
+            if not subject.prim_path.startswith(("/", "{ENV_REGEX_NS}/")):
                 raise ValueError("absolute prim identity required")
             if any(subject.subject_id in pair for pair in pairs) and any(ch in subject.prim_path for ch in "{}*[]"):
                 raise ValueError("templated contact mapping unsupported")
         self.check_evaluator()
         return self
+
+    @model_serializer(mode="wrap")
+    def compatible_bytes(self, serialize):
+        value = serialize(self)
+        if not self.evidence_only:
+            value.pop("evidence_only", None)
+        return value
 
     def check_evaluator(self):
         """Refuse changed evaluator defaults instead of reinterpreting old bytes."""
@@ -250,6 +262,8 @@ class NativeCaptureProducer:
         contract = WorkflowContract.model_validate_json(contract.model_dump_json())
         s = self.settings
         s.check_evaluator()
+        if s.evidence_only and contract.schema_version != "3":
+            raise ValueError("Evidence-only capture requires explicit native-only admission")
         if (
             contract.execution.runtime != s.runtime_reference()
             or contract.execution.capture != s.capture_reference()
@@ -300,6 +314,39 @@ class NativeCaptureProducer:
             or payload.get("diagnostics", {}).get("status") != "complete"
         ):
             raise ValueError("incomplete or mismatched native capture receipt")
+        if contract.schema_version == "3":
+            import math
+
+            report = payload["diagnostics"].get("settle", {})
+            samples = report.get("samples", [])
+            s = self.settings
+            if (
+                report.get("all_objects_settled") is not True
+                or report.get("executed_steps") != s.settle_steps
+                or report.get("linear_speed_limit") != s.settle_linear_m_per_s
+                or report.get("angular_speed_limit") != s.settle_angular_rad_per_s
+                or len(samples) != s.settle_steps
+                or [sample.get("step") for sample in samples] != list(range(1, s.settle_steps + 1))
+            ):
+                raise ValueError("Exact native settling report required")
+            for sample in samples[-s.settle_consecutive_steps :]:
+                if set(sample["subjects"]) != {subject.scene_name for subject in s.subjects}:
+                    raise ValueError("Settling subject coverage differs")
+                for value in sample["subjects"].values():
+                    for field, limit in (
+                        ("linear_velocity_w", s.settle_linear_m_per_s),
+                        ("angular_velocity_w", s.settle_angular_rad_per_s),
+                    ):
+                        vector = value[field]
+                        if len(vector) != 3 or any(type(v) not in (float, int) or not math.isfinite(v) for v in vector):
+                            raise ValueError("Finite native velocity required")
+                        if not math.hypot(*vector) < limit:
+                            raise ValueError("Final native settling window rejected")
+            expected_frames = {
+                (step, camera) for step in range(s.window.start_step, s.window.end_step + 1) for camera in s.camera_keys
+            }
+            if {(frame["step"], frame["camera"]) for frame in payload["frames"]} != expected_frames:
+                raise ValueError("Exact same-cohort native cameras required")
         evidence = tuple(
             evaluate_measurement(
                 c,
@@ -324,11 +371,21 @@ class NativeCaptureProducer:
 
         s = self.settings
         scene = spec.to_dict()
-        if (
-            candidate.scene_json not in (_scene_json(scene), _scene_json(spec.model_dump(mode="json")))
-            or hashlib.sha256(candidate.scene_json.encode()).hexdigest() != candidate.digest
-        ):
+        if hashlib.sha256(candidate.scene_json.encode()).hexdigest() != candidate.digest:
             raise ValueError("validated spec must match exact retained candidate")
+        if candidate.scene_json not in (_scene_json(scene), _scene_json(spec.model_dump(mode="json"))):
+            if not s.evidence_only:
+                raise ValueError("validated spec must match exact retained candidate")
+            from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+
+            # The retained input remains byte-exact. Schema defaults and typed
+            # values can change its serialization; revalidate that exact input
+            # instead of treating the normalized representation as a new scene.
+            if type(spec) is not ArenaEnvGraphSpec:
+                raise ValueError("exact native graph schema required")
+            rebound = ArenaEnvGraphSpec.model_validate_json(candidate.scene_json)
+            if rebound.model_dump(mode="json") != spec.model_dump(mode="json") or rebound.to_dict() != scene:
+                raise ValueError("validated spec differs from exact retained candidate")
         if scene.get("embodiment", {}).get("registry_name") != s.embodiment:
             raise ValueError("unsupported hold embodiment")
         self._check_subject_mapping(scene)
@@ -484,7 +541,10 @@ class NativeCaptureProducer:
             active()
             value = native_sampler(env, step)
             for subject in s.subjects:
-                if value["subjects"][subject.subject_id]["prim_path"] != subject.prim_path:
+                expected_prim = subject.prim_path
+                if "{ENV_REGEX_NS}" in expected_prim:
+                    expected_prim = expected_prim.format(ENV_REGEX_NS=env.unwrapped.scene.env_regex_ns)
+                if value["subjects"][subject.subject_id]["prim_path"] != expected_prim:
                     raise ValueError("native subject prim identity mismatch")
             return value
 
@@ -524,7 +584,7 @@ class NativeCaptureProducer:
                     recorder.add_frame(
                         camera=camera,
                         step=step,
-                        subject_ids=visual.subjects,
+                        subject_ids=visual.subjects if visual is not None else tuple(v.subject_id for v in s.subjects),
                         image_bytes=raw,
                     )
                 else:

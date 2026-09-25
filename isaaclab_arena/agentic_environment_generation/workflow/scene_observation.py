@@ -405,6 +405,10 @@ def make_native_sampler(criteria, *, subject_names, contact_sensors=None):
             raise ValueError("single environment native profile required")
 
         def vector(tensor):
+            if not hasattr(tensor, "detach"):
+                tensor = wp.to_torch(tensor)
+            if tuple(tensor.shape) != (1, 3):
+                raise ValueError("singleton native world vector required")
             return tensor[0].detach().cpu().tolist()
 
         result = {

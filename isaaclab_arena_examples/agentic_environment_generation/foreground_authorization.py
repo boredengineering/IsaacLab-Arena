@@ -115,12 +115,14 @@ class ForegroundAuthority:
         current_config,
         source_guard=None,
         prior_source=None,
+        native_admission=None,
     ):
         self.scope = dict(database=database, deployment_id=deployment_id, workspace_id=workspace_id)
         self.store, self.grants, self.clock = store, grants, clock
         self.principal_lookup, self.current_config = principal_lookup, current_config
         self._source_guard = nullcontext if source_guard is None else source_guard
         self.prior_source = prior_source
+        self.native_admission = native_admission
         self.profiles = copy.deepcopy(profiles)
         self._lock = RLock()
         self._closed = False
@@ -210,8 +212,12 @@ class ForegroundAuthority:
         self.require_read(principal)
         if not isinstance(operation_id, str) or not operation_id:
             raise ValueError("Invalid operation")
-        if contract.source.kind != "new":
+        if contract.source.kind != "new" and contract.schema_version != "3":
             raise ValueError("Foreground refinement and research reads are unsupported")
+        if contract.schema_version == "3" and (
+            not callable(self.native_admission) or self.native_admission(principal, operation_id, contract) is not True
+        ):
+            raise ValueError("Explicit scoped native admission required")
         if contract.effects.allow_database_reads:
             if contract.retrieval is None or self.prior_source is None:
                 raise ValueError("Foreground prior reads are not configured")
@@ -239,6 +245,8 @@ class ForegroundAuthority:
         model_profile = (
             contract.execution.generation_model if role == "generation" else contract.execution.assessment_model
         )
+        if model_profile is None:
+            raise ModelProfileUnavailable("No model selected for native-only execution")
         profile = model_profile.model_dump(mode="json")
         if self.profiles.get(profile["profile_id"]) != profile:
             raise ModelProfileUnavailable("Approved frozen profile required")
@@ -445,11 +453,18 @@ class ForegroundAuthority:
 
     def _issue(self, principal, contract, run_id, operation_id, catalogue, *, workflow_sources=None):
         p = self.require_read(principal)
-        profile, config, credential_expiry = self._source(contract)
+        assert isinstance(p, dict), "Checked principal metadata required"
+        native_only = contract.schema_version == "3"
+        if native_only:
+            profile, config, credential_expiry = contract.execution.runtime.model_dump(mode="json"), {}, p["expires_at"]
+        else:
+            profile, config, credential_expiry = self._source(contract)
         public_intent = {"contract": contract.model_dump(mode="json"), "profile": profile}
         self.protect_public(public_intent)
-        reject_secret(public_intent, config["api_key"])
-        expires = min(_deadline(p["expires_at"]), credential_expiry, _deadline(self.clock()) + 180)
+        if not native_only:
+            reject_secret(public_intent, config["api_key"])
+        lifetime = contract.budget.total_deadline_seconds if native_only else 180
+        expires = min(_deadline(p["expires_at"]), credential_expiry, _deadline(self.clock()) + lifetime)
         binding = _hash(
             dict(
                 version=1,
@@ -460,8 +475,9 @@ class ForegroundAuthority:
                 catalogue=catalogue,
             )
         )
-        public = self.grants.issue(principal, binding, "model", profile, config, expires)
-        capabilities = ["generation_model", "operational_writes"]
+        capability = "native_validation" if native_only else "model"
+        public = self.grants.issue(principal, binding, capability, profile, config, expires)
+        capabilities = ["native_validation" if native_only else "generation_model", "operational_writes"]
         if contract.effects.allow_paid_models:
             capabilities.append("paid_models")
         try:
@@ -651,8 +667,18 @@ class ForegroundAuthority:
                 != snapshot.model_dump(exclude={"grant_ref", "expires_at"})
             ):
                 raise ValueError("Exact retained attempt required")
-        current_profile, current, expires = self._source(contract)
-        config = self.grants.resolve(principal, snapshot.grant_ref, binding, "model")
+        if contract.schema_version == "3":
+            if fence is not None or "native_validation" not in snapshot.capabilities:
+                raise ValueError("Native-only authority cannot authorize generation")
+            current_profile, current, expires = (
+                contract.execution.runtime.model_dump(mode="json"),
+                {},
+                self.require_read(principal)["expires_at"],
+            )
+            config = self.grants.resolve(principal, snapshot.grant_ref, binding, "native_validation")
+        else:
+            current_profile, current, expires = self._source(contract)
+            config = self.grants.resolve(principal, snapshot.grant_ref, binding, "model")
         if current != config or profile != current_profile or self.clock() >= min(expires, snapshot.expires_at):
             raise ValueError("Execution source changed or expired")
         return snapshot

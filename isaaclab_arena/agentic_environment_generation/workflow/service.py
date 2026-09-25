@@ -572,6 +572,32 @@ class WorkflowService:
         from .scene_loop import candidate_record
 
         self._authority.require_read(principal)
+        run = self._store.get_run(run_id)
+        contract = parse_contract(run.contract_json)
+        if contract.schema_version == "3":
+            import hashlib
+
+            from .contracts import contract_digest
+
+            authorization = self._authority.require_scene_execute(principal, contract, run_id=run_id, retained_run=run)
+            assert contract.source.kind == "existing", "Retained native source required"
+            raw = contract.source.content.encode("utf-8")
+            spec = json.loads(raw)
+            if type(spec) is not dict:
+                raise ValueError("Retained candidate must be a JSON object")
+            candidate = candidate_record(run_id, spec, source_id=contract.source.identity)
+            validation = dict(
+                disposition="external_candidate_admitted",
+                source_identity=contract.source.identity,
+                source_bytes_sha256=hashlib.sha256(raw).hexdigest(),
+                candidate_json_sha256=candidate.digest,
+                contract_digest=contract_digest(contract),
+                native_schema_validation_required=True,
+            )
+            protect(validation)
+            return self._store.begin_scene(
+                run_id, run.version, candidate, validation, profile, authorization=authorization
+            )
         run, attempt, _ = self.read_generation_recovery(principal, run_id)
         if type(artifacts) is not GenerationArtifacts or attempt.receipt is None or attempt.cleanup is None:
             raise ValueError("retained generation bytes and cleanup required")

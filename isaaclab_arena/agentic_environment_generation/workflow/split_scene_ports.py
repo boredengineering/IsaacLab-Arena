@@ -283,6 +283,8 @@ class OwnedSceneStageAdapter:
             (model_worker, ("send", "receive")),
             (numeric_worker, ("send_evaluate", "receive_evaluate")),
         ):
+            if worker is None and extra == ("send", "receive"):
+                continue
             if any(
                 not callable(getattr(worker, name, None))
                 for name in ("prepare", "stop_owned", "cleanup_verified", *extra)
@@ -320,6 +322,8 @@ class OwnedSceneStageAdapter:
                 if (intent.action == "repair" or any(c.kind == "visual" for c in contract.criteria))
                 else self.numeric_worker
             )
+            if worker is None:
+                raise ValueError("Model execution is not configured")
         try:
             prepared = worker.prepare(intent.worker_fence, contract, timeout_s=timeout_s)
         except PrepareFailed as exc:

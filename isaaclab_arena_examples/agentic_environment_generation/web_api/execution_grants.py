@@ -13,7 +13,7 @@ import time
 
 from .provider_security import reject_secret
 
-CAPABILITIES = frozenset({"model", "retrieval_read", "publication_write", "reconciliation_read"})
+CAPABILITIES = frozenset({"model", "native_validation", "retrieval_read", "publication_write", "reconciliation_read"})
 MAX_GRANTS = 128
 MAX_TTL_SECONDS = 7200
 MAX_JSON_BYTES = 65536
@@ -110,8 +110,10 @@ def _private_strings(credentials):
         from isaaclab_arena.agentic_environment_generation.workflow.request_envelope import RequestBounds
 
         RequestBounds.model_validate(credentials["request_bounds"]).bind(
-            model=credentials.get("model"), endpoint=credentials.get("base_url"),
-            accounting=credentials.get("workflow_accounting"), inference_policy=credentials.get("inference_profile"),
+            model=credentials.get("model"),
+            endpoint=credentials.get("base_url"),
+            accounting=credentials.get("workflow_accounting"),
+            inference_policy=credentials.get("inference_profile"),
         )
         metadata.add("request_bounds")
     for key, value in credentials.items():

@@ -28,7 +28,7 @@ class AuthorizationSnapshot(FrozenModel):
     contract_digest: Hash
     expires_at: Amount
     capabilities: Annotated[
-        tuple[Literal["generation_model", "operational_writes", "paid_models"], ...],
+        tuple[Literal["generation_model", "operational_writes", "paid_models", "native_validation"], ...],
         Field(min_length=1, max_length=3),
     ]
 

@@ -166,7 +166,7 @@ flowchart TD
 
 ### The 4 Distinct Cold Worker Roles
 
-Instead of running a monolithic process that retains memory across jobs, the pipeline decouples execution into four discrete roles (governed by [event-mapping-plan04-s2-initialization-approval.md](file:///workspaces/IsaacLab-Arena/.agents/references/plans/event-mapping-plan04-s2-initialization-approval.md#L50-L75)):
+Instead of running a monolithic process that retains memory across jobs, the pipeline decouples execution into four discrete roles (governed by [event-mapping-plan04-s2-initialization-approval.md](file:///workspaces/IsaacLab-Arena/.agents/references/plans/event_mapping/event-mapping-plan04-s2-initialization-approval.md#L50-L75)):
 
 1. **`init-server`**:
    - **What it boots**: The GraphQL / ASGI application lifespan (`workflow/api/application.py`).

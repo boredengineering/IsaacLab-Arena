@@ -44,7 +44,22 @@ class _ForegroundStageWorker(ForegroundGenerationWorker):
         args, kwargs = ForegroundGenerationWorker._production_spawn()
         args[2] = "isaaclab_arena_examples.agentic_environment_generation.web_api.native_scene_worker"
         args.extend(("--stage", cls.action))
+        environment = kwargs["env"]
+        assert isinstance(environment, dict), "Private worker environment required"
+        for key in ("EXP_PATH", "ISAAC_PATH", "CARB_APP_PATH"):
+            if key in os.environ:
+                environment[key] = os.environ[key]
+        environment["OMNICLIENT_HUB_MODE"] = "disabled"
         return args, kwargs
+
+    def prepare(self, fence, contract, *, timeout_s):
+        """Leave bounded cleanup time within the native operation's reservation."""
+        limit = timeout_s
+        if contract.schema_version == "3" and self.action == "capture":
+            limit = min(timeout_s - 10, self.settings.max_runtime_seconds)
+        if limit <= 0:
+            raise ValueError("Native operation has no cleanup allowance")
+        return super().prepare(fence, contract, timeout_s=limit)
 
     def send(self, *args, **kwargs):
         raise ValueError("fixed native/numeric send port required; no model envelope")

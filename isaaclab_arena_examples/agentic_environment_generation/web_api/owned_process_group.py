@@ -90,6 +90,11 @@ class OwnedProcessGroup:
         candidates = group_members(self.pid)
         if not candidates:
             return {}
+        if all(stat["state"] in {"Z", "X"} for stat in candidates.values()):
+            # Dead descendants cannot execute or revive. A fresh read-only
+            # verifier needs no signalling authority when every member is dead;
+            # live unanchored groups still fail closed below.
+            return {}
         if self.expected_group != (self.pid, self.pid):
             raise RuntimeError("Recorded process group/session identity does not match the owned leader")
         leader = process_stat(self.pid)

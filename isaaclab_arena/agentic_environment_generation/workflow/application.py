@@ -74,6 +74,7 @@ class ForegroundWorkflow:
         recovery_factory,
         ownership_artifacts_factory,
         cancellation,
+        native_support=None,
     ):
         if authority.store is not store:
             raise ValueError("Exact same-store authority required")
@@ -94,17 +95,35 @@ class ForegroundWorkflow:
             validate_document,
         )
         self.scene_options = dict(scene_options)
-        if not self.scene_options["profile"].owned_worker or self.scene_options["profile"].assurance != "synthetic":
+        profile = self.scene_options["profile"]
+        if not profile.owned_worker:
+            raise ValueError("Owned scene composition required")
+        if native_support is not None:
+            from .split_scene_ports import SplitScenePorts
+
+            if (
+                not isinstance(native_support, SplitScenePorts)
+                or native_support.profile != profile
+                or profile.codec_version != 2
+                or profile.assurance != "native-unverified"
+                or native_support.model_ceilings
+            ):
+                raise ValueError("Explicit model-free native support required")
+        elif profile.assurance != "synthetic":
             raise ValueError("Only explicitly synthetic owned scene composition is supported")
         # Construct only pure admission ports: no worker, backend, SDK or ping.
-        self._support = ScenePorts(
-            **self.scene_options,
-            protect=authority.protect_public,
-            authorize=None,
-            ready=None,
-            refine=None,
-            visual=None,
-            check_active=lambda: None,
+        self._support = (
+            native_support
+            if native_support is not None
+            else ScenePorts(
+                **self.scene_options,
+                protect=authority.protect_public,
+                authorize=None,
+                ready=None,
+                refine=None,
+                visual=None,
+                check_active=lambda: None,
+            )
         )
         self.service = WorkflowService(store, authority, gate, validate_support=self._support.admit)
         self.ownership = ownership_artifacts_factory(artifacts.area)
@@ -138,6 +157,12 @@ class ForegroundWorkflow:
         self._support.admit(contract)
         self.authority.protect_workflow_contract(principal, contract)
         bounds = self.authority.require_workflow_model_bounds(principal, contract)
+        if contract.schema_version == "3":
+            if self._support.profile.assurance != "native-unverified" or bounds:
+                raise ValueError("Native-only application support required")
+            for reservation in (self._support.profile.capture, self._support.profile.assess):
+                self._support.require_bounded_capability(principal, contract, reservation)
+            return
         for role, bound in bounds.items():
             if canonical(self._support.model_ceilings[role].per_call_bound) != canonical(bound):
                 raise ValueError("Frozen role accounting mismatch")
@@ -290,6 +315,8 @@ class ForegroundWorkflow:
                 _resume_authority_context.active = False
             if self.store.get_run(run.run_id) != run:
                 return self.status(principal, run.run_id)
+            if contract.schema_version == "3":
+                return self._scene(principal, run.run_id, contract)
             return self._generate(principal, run, contract)
 
         return drive

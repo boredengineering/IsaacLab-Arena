@@ -13,7 +13,7 @@ class PrivateRoles:
     """Explicit private role snapshot; rotation invalidates release, never read authority."""
 
     def __init__(self, config, *, document=None):
-        if config.value["schema_version"] != 3:
+        if config.value["schema_version"] not in (3, 4):
             raise ValueError("Explicit private role configuration required")
         self.config = config
         self.document = self._read() if document is None else document
@@ -122,12 +122,15 @@ class Resources:
         self.authority = Authority(config)
         document = credential_document(read_private(config.value["credentials_file"], MAX_CREDENTIALS))
         self.credential = document["databases"]["operational"]
-        self.roles = PrivateRoles(config, document=document) if config.value["schema_version"] == 3 else None
+        self.roles = PrivateRoles(config, document=document) if config.value["schema_version"] in (3, 4) else None
 
     def protect(self, value):
         def walk(item):
             if isinstance(item, str):
-                if any(self.credential[key] in item for key in ("username", "password")):
+                # Public database/role labels may equal the default login name;
+                # passwords and all other occurrences remain protected.
+                public_label = item in {self.config.binding.database, "neo4j"}
+                if self.credential["password"] in item or (not public_label and self.credential["username"] in item):
                     raise PermissionError("Public value rejected")
             elif isinstance(item, dict):
                 for key, child in item.items():

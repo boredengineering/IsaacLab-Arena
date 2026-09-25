@@ -1333,6 +1333,22 @@ class Neo4jWorkflowStore:
         ):
             raise ValueError("paid generation denied")
 
+    def _scene_authority(self, contract, authorization, now):
+        """Keep native-only grants separate from the unchanged generation boundary."""
+        if contract.schema_version != "3":
+            return self._generation_authority(contract, authorization, now)
+        authorization = AuthorizationSnapshot.model_validate_json(authorization.model_dump_json())
+        if (
+            authorization.database != self.database
+            or any(getattr(authorization, key) != value for key, value in self.scope.items())
+            or authorization.contract_digest != contract_digest(contract)
+            or authorization.expires_at <= now
+            or set(authorization.capabilities) != {"native_validation", "operational_writes"}
+            or not contract.effects.allow_runtime
+            or not contract.effects.allow_operational_writes
+        ):
+            raise ValueError("native-only scene authority denied")
+
     def _event(self, tx, run_id, kind, source_id, *, command_operation_id=None, command_kind="CANCEL"):
         tx.run(
             _CONTROL
@@ -1763,6 +1779,20 @@ class Neo4jWorkflowStore:
             if fence.run_id != run_id or fence.intent_id != rows[0]["intent"]:
                 raise ValueError("generation recovery binding mismatch")
             return self._attempt_view(tx, fence)
+
+    def get_admitted_at(self, run_id):
+        """Read the original deadline anchor without inventing a generation attempt."""
+        validate_operation_id(run_id)
+        with self._transaction() as tx:
+            row = tx.run(
+                "MATCH (r:ArenaWorkflowRun " + _SCOPE + ") WHERE r.run_id=$id RETURN r.admitted_at AS at",
+                **self.scope,
+                id=run_id,
+            ).single(strict=True)
+            value = row["at"]
+            if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+                raise ValueError("Invalid retained admission time")
+            return value
 
     def get_attempt(self, fence):
         """Read exact retained bindings; this confers no execution authority."""
@@ -3555,8 +3585,38 @@ class Neo4jWorkflowStore:
             reason=decision.reason,
         ).consume()
         self._event(tx, run.run_id, "SceneDecisionRecorded", decision_id)
+        if contract.schema_version == "3":
+            assert contract.source.kind == "existing", "Retained native source required"
+            namespace = json.loads(contract.source.content)["env_name"]
+            # Preserve the original failed graph and its verification flags. This
+            # is a new native-only attempt, never an eligible structural prior.
+            tx.run(
+                "MATCH (r:ArenaWorkflowRun "
+                + _SCOPE
+                + ") WHERE r.run_id=$run "
+                "MATCH (g:EnvironmentGraph {name:$namespace}) "
+                "MERGE (a:NativeValidationAttempt {attempt_id:$run, scene_namespace:$namespace}) "
+                "SET a.candidate_sha256=$source_sha, a.candidate_json_sha256=$candidate_sha, "
+                "a.contract_sha256=$contract_sha, a.settings_sha256=$settings_sha, "
+                "a.native_settled=$settled, a.converged=false, a.verified=false, "
+                "a.provider_calls=0, a.policy_executed=false, a.decision=$decision, "
+                "a.evidence_id=$evidence, a.execution_path='installed-native-validation', "
+                "a.policy_basis='operator-approved revised settling policy, not calibration' "
+                "MERGE (g)-[:HAS_NATIVE_VALIDATION_ATTEMPT]->(a) "
+                "MERGE (r)-[:HAS_NATIVE_VALIDATION_RESULT]->(a)",
+                **self.scope,
+                run=run.run_id,
+                namespace=namespace,
+                source_sha=hashlib.sha256(contract.source.content.encode("utf-8")).hexdigest(),
+                candidate_sha=candidate.digest,
+                contract_sha=contract_digest(contract),
+                settings_sha=contract.execution.runtime.settings_sha256,
+                settled=decision.action == "accept",
+                decision=decision.reason,
+                evidence=selected_evidence_id,
+            ).consume()
 
-    def begin_scene(self, run_id, expected_version, candidate, validation, profile):
+    def begin_scene(self, run_id, expected_version, candidate, validation, profile, *, authorization=None):
         """Commit original validated bytes plus first decision/reservation atomically.
 
         Trusted service supplies actual-byte/schema verification; this store binds
@@ -3587,36 +3647,75 @@ class Neo4jWorkflowStore:
                 if prior["start"] != payload:
                     raise ValueError("conflicting scene start")
                 return candidate.candidate_id
-            if run is None or run.version != expected_version or (run.state, run.phase) != ("running", "validation"):
+            if run is None or run.version != expected_version:
                 raise ValueError("inactive scene start")
-            fence = AttemptFence.model_validate(validation["fence"])
-            retained = self._attempt_view(tx, fence)
-            receipt = retained.receipt
-            if (
-                receipt is None
-                or retained.cleanup is None
-                or retained.status != "produced"
-                or fence.run_id != run_id
-                or candidate.run_id != run_id
-                or candidate.parent_id is not None
-                or candidate.original_id != candidate.candidate_id
-                or candidate.source_id != fence.attempt_id
-                or candidate.digest != receipt.candidate_json_sha256
-                or any(
-                    validation.get(key) != getattr(receipt, key)
-                    for key in (
-                        "contract_digest",
-                        "candidate_yaml_sha256",
-                        "candidate_json_sha256",
-                        "provenance_sha256",
-                        "manifest_sha256",
-                    )
+            contract = parse_contract(run.contract_json)
+            if contract.schema_version == "3":
+                from .scene_loop import candidate_record
+
+                assert contract.source.kind == "existing", "Retained native source required"
+                self._scene_authority(contract, authorization, self._now())
+                expected = candidate_record(
+                    run_id, json.loads(contract.source.content), source_id=contract.source.identity
                 )
-            ):
-                raise ValueError("scene generation binding mismatch")
-            decision = SceneDecision(action="observe", reason="schema_validated")
-            if validation.get("disposition") != "schema_validated":
-                decision = SceneDecision(action="stop", reason="invalid_candidate")
+                if (
+                    run.state != "pending"
+                    or candidate != expected
+                    or profile.codec_version != 2
+                    or profile.assurance != "native-unverified"
+                    or not profile.owned_worker
+                    or validation
+                    != dict(
+                        disposition="external_candidate_admitted",
+                        source_identity=contract.source.identity,
+                        source_bytes_sha256=hashlib.sha256(contract.source.content.encode("utf-8")).hexdigest(),
+                        candidate_json_sha256=candidate.digest,
+                        contract_digest=contract_digest(contract),
+                        native_schema_validation_required=True,
+                    )
+                ):
+                    raise ValueError("external candidate binding mismatch")
+                decision = SceneDecision(action="observe", reason="external_candidate_admitted")
+            else:
+                if (run.state, run.phase) != ("running", "validation"):
+                    raise ValueError("inactive scene start")
+                fence = AttemptFence.model_validate(validation["fence"])
+                retained = self._attempt_view(tx, fence)
+                receipt = retained.receipt
+                if (
+                    receipt is None
+                    or retained.cleanup is None
+                    or retained.status != "produced"
+                    or fence.run_id != run_id
+                    or candidate.run_id != run_id
+                    or candidate.parent_id is not None
+                    or candidate.original_id != candidate.candidate_id
+                    or candidate.source_id != fence.attempt_id
+                    or candidate.digest != receipt.candidate_json_sha256
+                    or any(
+                        validation.get(key) != getattr(receipt, key)
+                        for key in (
+                            "contract_digest",
+                            "candidate_yaml_sha256",
+                            "candidate_json_sha256",
+                            "provenance_sha256",
+                            "manifest_sha256",
+                        )
+                    )
+                ):
+                    raise ValueError("scene generation binding mismatch")
+                decision = SceneDecision(action="observe", reason="schema_validated")
+                if validation.get("disposition") != "schema_validated":
+                    decision = SceneDecision(action="stop", reason="invalid_candidate")
+            if contract.schema_version == "3":
+                tx.run(
+                    "MATCH (r:ArenaWorkflowRun "
+                    + _SCOPE
+                    + ") WHERE r.run_id=$id SET r.native_authorization_json=$auth",
+                    **self.scope,
+                    id=run_id,
+                    auth=authorization.model_dump_json(),
+                ).consume()
             try:
                 contract = parse_contract(run.contract_json)
                 if profile.policy_binding is not None and profile.policy_binding.candidate_digest != candidate.digest:
@@ -3775,6 +3874,7 @@ class Neo4jWorkflowStore:
             if intent.worker_cleanup is not None:
                 if intent.worker_cleanup != evidence:
                     raise ValueError("conflicting scene cleanup")
+                self._finish_known_native_cancel(tx, fence.run_id)
                 return False
             self._write_scene_intent(tx, fence.run_id, intent.model_copy(update={"worker_cleanup": evidence}))
             run = self._run(tx, "run_id", fence.run_id)
@@ -3786,6 +3886,49 @@ class Neo4jWorkflowStore:
                 ).consume()
             self._event(tx, fence.run_id, "SceneWorkerCleanupAcknowledged", fence.attempt_id)
         return True
+
+    def _finish_known_native_cancel(self, tx, run_id):
+        run = self._run(tx, "run_id", run_id)
+        if run is None or run.state != "cancel_requested" or parse_contract(run.contract_json).schema_version != "3":
+            return False
+        from .scene_loop import SceneIntent
+
+        rows = tx.run(
+            "MATCH (i:ArenaExecutionIntent "
+            + _SCOPE
+            + ") WHERE i.run_id=$id AND i.kind='scene' RETURN i.scene_json AS scene",
+            **self.scope,
+            id=run_id,
+        )
+        intents = [SceneIntent.model_validate_json(row["scene"]) for row in rows]
+        if not intents or any(
+            (
+                i.worker_fence is not None
+                and (
+                    i.worker_registration is None
+                    or i.worker_cleanup is None
+                    or i.worker_cleanup.registration != i.worker_registration
+                )
+            )
+            or (i.worker_fence is None and i.status in ("released", "reconciliation_required"))
+            for i in intents
+        ):
+            raise ValueError("Native cancellation still has unresolved physical obligations")
+        tx.run(
+            "MATCH (r:ArenaWorkflowRun " + _SCOPE + ") WHERE r.run_id=$id SET r.state='cancelled'",
+            **self.scope,
+            id=run_id,
+        ).consume()
+        self._event(tx, run_id, "KnownNativeCancellationCompleted", run_id)
+        return True
+
+    def reconcile_native_cancellation(self, run_id):
+        """Complete only already-acknowledged cleanup; never retire or unlock its owner."""
+        validate_operation_id(run_id)
+        with self._transaction() as tx:
+            self._lock(tx)
+            self._finish_known_native_cancel(tx, run_id)
+            return self._run(tx, "run_id", run_id)
 
     def release_scene(
         self,
@@ -3818,18 +3961,27 @@ class Neo4jWorkflowStore:
                 raise ValueError("unexpected scene worker binding")
             contract = parse_contract(snapshot.run.contract_json)
             now = self._now()
-            self._generation_authority(contract, authorization, now)
+            self._scene_authority(contract, authorization, now)
             self._readiness(contract, readiness, now)
             if intent.policy_binding is not None and now >= intent.policy_binding.deadline_unix:
                 raise ValueError("policy trial deadline exhausted")
-            original_auth = tx.run(
-                "MATCH (r:ArenaWorkflowRun "
-                + _SCOPE
-                + ")-[:HAS_INTENT]->(i:ArenaExecutionIntent) "
-                "WHERE r.run_id=$id RETURN i.authorization_json AS auth, r.admitted_at AS at",
-                **self.scope,
-                id=run_id,
-            ).single(strict=True)
+            if contract.schema_version == "3":
+                original_auth = tx.run(
+                    "MATCH (r:ArenaWorkflowRun "
+                    + _SCOPE
+                    + ") WHERE r.run_id=$id RETURN r.native_authorization_json AS auth, r.admitted_at AS at",
+                    **self.scope,
+                    id=run_id,
+                ).single(strict=True)
+            else:
+                original_auth = tx.run(
+                    "MATCH (r:ArenaWorkflowRun "
+                    + _SCOPE
+                    + ")-[:HAS_INTENT]->(i:ArenaExecutionIntent) "
+                    "WHERE r.run_id=$id RETURN i.authorization_json AS auth, r.admitted_at AS at",
+                    **self.scope,
+                    id=run_id,
+                ).single(strict=True)
             if authorization.principal != AuthorizationSnapshot.model_validate_json(original_auth["auth"]).principal:
                 raise ValueError("scene principal mismatch")
             if (
@@ -3897,7 +4049,7 @@ class Neo4jWorkflowStore:
                     raise ValueError("inactive scene worker registration")
             contract = parse_contract(s.run.contract_json)
             now = self._now()
-            self._generation_authority(contract, authorization, now)
+            self._scene_authority(contract, authorization, now)
             self._readiness(contract, readiness, now)
             admitted = tx.run(
                 "MATCH (r:ArenaWorkflowRun " + _SCOPE + ") WHERE r.run_id=$id RETURN r.admitted_at AS at",

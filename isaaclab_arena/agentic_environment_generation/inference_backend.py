@@ -198,6 +198,7 @@ class InferenceBackend:
         max_retries: int = 3,
         load_dotenv: bool = True,
         inference_profile: dict | None = None,
+        probe_connection: bool = True,
     ):
         """Configure an OpenAI-compatible structured-output client.
 
@@ -211,7 +212,9 @@ class InferenceBackend:
             max_retries: Additional attempts after a recoverable failure; must be in
                 ``[0, MAX_RETRIES_LIMIT)``.
             load_dotenv: Load local credential files for legacy CLI callers; disable in servers.
+            probe_connection: Perform the constructor's billable readiness request; disable for count-only trials.
         """
+        assert type(probe_connection) is bool, "probe_connection must be boolean"
         assert (
             0 <= max_retries < MAX_RETRIES_LIMIT
         ), f"max_retries must be in [0, {MAX_RETRIES_LIMIT}), got {max_retries}"
@@ -311,8 +314,9 @@ class InferenceBackend:
         self._max_tokens = max_tokens
         self._max_retries = max_retries
         self._telemetry = InferenceTelemetryTracker()
-        _ping(client, resolved_model, max_tokens=max_tokens, configured_base_url=resolved_base_url,
-              inference_profile=self._explicit_profile, temperature=temperature if self._explicit_profile else 0)
+        if probe_connection:
+            _ping(client, resolved_model, max_tokens=max_tokens, configured_base_url=resolved_base_url,
+                  inference_profile=self._explicit_profile, temperature=temperature if self._explicit_profile else 0)
 
     @property
     def model(self) -> str:

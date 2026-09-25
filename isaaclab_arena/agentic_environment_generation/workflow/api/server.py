@@ -120,7 +120,7 @@ async def retain_unknown(app, config, selected, known):
             continue
 
 
-async def supervise(config, selected, known):
+async def supervise(config, selected, known, *, native_authorized=False):
     import httpx
     import uvicorn
 
@@ -141,6 +141,13 @@ async def supervise(config, selected, known):
             "isaaclab_arena.agentic_environment_generation.workflow.api.installed_execution"
         )
         execution_factory = execution.compose(config, tokens=registry, auth=auth)
+    elif config.value["mode"] == "retained-native-validation-v1":
+        import importlib
+
+        execution = importlib.import_module(
+            "isaaclab_arena.agentic_environment_generation.workflow.api.installed_native"
+        )
+        execution_factory = execution.compose(config, tokens=registry, auth=auth, native_authorized=native_authorized)
     resources = Resources(config)
 
     def protect(value):
@@ -286,11 +293,11 @@ async def supervise(config, selected, known):
     return 0
 
 
-def serve(config, selected, lifetime, gate):
+def serve(config, selected, lifetime, gate, *, native_authorized=False):
     """No operational effects until inherited lease, intent and startup gate agree."""
     known = validate_gate(config, selected, lifetime, gate)
     logging.disable(logging.CRITICAL)
     try:
-        return asyncio.run(supervise(config, selected, known))
+        return asyncio.run(supervise(config, selected, known, native_authorized=native_authorized))
     finally:
         os.close(lifetime)

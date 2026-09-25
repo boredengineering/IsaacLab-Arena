@@ -46,7 +46,9 @@ def capture_trajectory(
         Frame paths, actual executed steps, stop reason and terminal-image unavailability.
         On termination/truncation IsaacLab returns reset images; no terminal image is captured.
     """
-    assert type(num_steps) is int and num_steps > 0, "num_steps must be positive"
+    assert type(num_steps) is int and (
+        num_steps > 0 or (num_steps == 0 and initial_observation is not None and reset_policy is False)
+    ), "Zero-step capture requires an already initialized, non-reset observation"
     assert type(frame_interval) is int and frame_interval > 0, "frame_interval must be positive"
     assert type(step_offset) is int and step_offset >= 0, "step_offset must be nonnegative"
     assert initial_observation is not None or step_offset == 0, "Offset requires initialized observation"
@@ -83,6 +85,8 @@ def capture_trajectory(
     if sample_state is not None:
         sample_state(env, step_offset)
     stop_reason = "step_budget"
+    executed_steps = 0
+    ended = limited = False
     for executed_steps in range(1, num_steps + 1):
         action = policy.get_action(env, obs)
         obs, _, terminated, truncated, _ = env.step(action)

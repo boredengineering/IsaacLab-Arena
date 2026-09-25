@@ -80,7 +80,8 @@ def load(path):
         value,
         "schema_version mode operator private_root credentials_file endpoint bolt_uri binding artifact_root"
         " required_profiles bootstrap_principal read_principal"
-        + (" role_bindings" if type(value) is dict and value.get("schema_version") == 3 else ""),
+        + (" role_bindings" if type(value) is dict and value.get("schema_version") == 3 else "")
+        + (" native_validation" if type(value) is dict and value.get("schema_version") == 4 else ""),
     )
     # Setup selection is never readiness or execution authority. V3 adds explicit
     # private roles, not a production mode or an exemption from the harness guard.
@@ -93,6 +94,7 @@ def load(path):
             (2, "isolated-synthetic-execution-v1"),
             (3, "query-only"),
             (3, "isolated-synthetic-execution-v1"),
+            (4, "retained-native-validation-v1"),
         )
     ):
         raise PrivateFileError("Unsupported configuration")
@@ -135,6 +137,12 @@ def load(path):
         raise PrivateFileError("Duplicate profile identity")
     if value["schema_version"] == 3:
         validate_role_bindings(value["role_bindings"], profiles)
+    elif value["schema_version"] == 4:
+        from .installed_native import NativeSelection
+
+        NativeSelection.model_validate_json(encode(value["native_validation"]))
+        if profiles:
+            raise PrivateFileError("Native-only setup cannot select model profiles")
     return Config(path, value, binding, profiles, hashlib.sha256(encode(value)).hexdigest())
 
 
@@ -237,6 +245,9 @@ def prepare_credentials(config, value):
                 raise PrivateFileError("Private prior binding differs")
             reject_secret(config.value, prior["password"])
             reject_secret(config.value, prior["username"])
+    elif config.value["schema_version"] == 4:
+        if value["schema_version"] != 2 or value["models"] or set(value["databases"]) != {"operational"}:
+            raise PrivateFileError("Native-only setup requires only the operational database binding")
     elif value["schema_version"] != 1:
         raise PrivateFileError("Explicit role configuration required")
     if value["schema_version"] == 2:

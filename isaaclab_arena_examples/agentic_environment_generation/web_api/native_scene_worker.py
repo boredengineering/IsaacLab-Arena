@@ -101,9 +101,10 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None):
             output_root=Path(packet["payload"]["root"]) / "native-capture-work",
         )
         producer.admit(request.contract)
-        app = _initialize_kit(request.settings)
+        app = None
         failure = None
         try:
+            app = _initialize_kit(request.settings)
             active()
             spec = _validate_spec(request.candidate)
             charged = 0
@@ -137,10 +138,35 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None):
                 on_retained(receipt)
         except BaseException as exc:
             failure = exc
+            # Retain static diagnostic coordinates BEFORE Kit close can terminate
+            # the interpreter. No locals, credentials or exception input values.
+            cause = exc.__cause__ if exc.__cause__ is not None else exc
+            frames, cursor = [], cause.__traceback__
+            while cursor is not None and len(frames) < 24:
+                frames.append(
+                    dict(
+                        file=Path(cursor.tb_frame.f_code.co_filename).name,
+                        function=cursor.tb_frame.f_code.co_name,
+                        line=cursor.tb_lineno,
+                    )
+                )
+                cursor = cursor.tb_next
+            diagnostic = dict(
+                outcome="failed", exception_type=type(cause).__name__, wrapper_type=type(exc).__name__, frames=frames
+            )
+            from pydantic import ValidationError
+
+            if isinstance(cause, ValidationError):
+                diagnostic["validation"] = [
+                    dict(location=list(item["loc"]), type=item["type"])
+                    for item in cause.errors(include_input=False, include_context=False, include_url=False)[:24]
+                ]
+            protocol._retain(area, "native-scene-failure", request.binding(), diagnostic, protect)
             raise
         finally:
             try:
-                app.close()
+                if app is not None:
+                    app.close()
             except BaseException:
                 if failure is None:
                     raise

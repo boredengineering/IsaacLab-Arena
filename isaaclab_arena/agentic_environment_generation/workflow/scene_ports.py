@@ -252,7 +252,7 @@ class ScenePorts:
             or candidate.original_id != original.candidate_id
         ):
             raise ValueError("exact fresh released scene intent required")
-        self.require_bounded_capability(None, contract, intent.reservation)
+        self.require_bounded_capability(getattr(self, "principal", None), contract, intent.reservation)
         if intent.reservation != getattr(self.profile, intent.action):
             raise ValueError("action reservation mismatch")
         self._executed.add(intent.intent_id)  # includes failed/uncertain callbacks, never refunded

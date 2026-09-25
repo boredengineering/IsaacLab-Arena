@@ -16,18 +16,19 @@ No callback replaces model engines, workflow routing or retained evidence checks
 """
 
 import json
+import sys
 import time
 from contextlib import contextmanager
 from threading import RLock
 
-from isaaclab_arena.agentic_environment_generation.workflow.contracts import parse_contract
+from isaaclab_arena.agentic_environment_generation.workflow.contracts import contract_digest, parse_contract
 from isaaclab_arena.agentic_environment_generation.workflow.coordinator import PrepareFailed
 from isaaclab_arena.agentic_environment_generation.workflow.evidence import CandidateBinding, EvidenceCohort
 from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import _protected, canonical
 from isaaclab_arena.agentic_environment_generation.workflow.scene_observation import visual_request
 from isaaclab_arena.agentic_environment_generation.workflow.scene_ports import ScenePorts
 
-from .web_api.scene_worker import retain_request
+from .web_api.scene_worker import retain_failure, retain_request, safe_failure
 
 
 class ForegroundScenePorts(ScenePorts):
@@ -47,6 +48,7 @@ class ForegroundScenePorts(ScenePorts):
         self.catalogue_sha256, self.artifact_root = catalogue_sha256, artifact_root
         self._interlock = RLock()
         self._prepared_workers, self._cleanups, self._results = {}, {}, {}
+        self._failure_contracts = {}
         self._previous = None
         self._active = None
         self._stopped = False
@@ -91,6 +93,8 @@ class ForegroundScenePorts(ScenePorts):
         return owner
 
     def require_bounded_capability(self, principal, contract, reservation):
+        if principal is None or principal != self.principal:
+            raise PermissionError("Exact authenticated scene principal required")
         super().require_bounded_capability(principal, contract, reservation)
         self.authority.require_scene_execute(self.principal, contract, run_id=self.run_id)
         bounds = self.authority.require_workflow_model_bounds(self.principal, contract)
@@ -101,6 +105,8 @@ class ForegroundScenePorts(ScenePorts):
 
     def prepare_worker(self, intent, candidate, original, contract, **stage_args):
         """Latch exact claimed fence before spawn; never erase ambiguous preparation."""
+        if contract.schema_version == "4":
+            self._failure_contracts[intent.intent_id] = contract
         with self._interlock:
             if self._stopped:
                 raise ValueError("Scene locally stopped")
@@ -128,7 +134,68 @@ class ForegroundScenePorts(ScenePorts):
                 self._prepared_workers[intent.intent_id] = exc.prepared
                 raise
             self._prepared_workers[intent.intent_id] = prepared
+            if contract.schema_version == "4":
+                self.worker.bind_failure_retention(
+                    prepared, lambda phase, error: self.record_failure(intent, phase, error, contract=contract)
+                )
             return prepared.registration
+
+    def record_failure(self, intent, phase, error, *, contract=None, cleanup=False):
+        """Retain the first screened causal error independently of later cleanup."""
+        contract = contract or self._failure_contracts.get(intent.intent_id)
+        if contract is None or contract.schema_version != "4":
+            return None
+        self._failure_contracts[intent.intent_id] = contract
+        prepared = self._prepared_workers.get(intent.intent_id)
+        registration = intent.worker_registration if prepared is None else prepared.registration
+        fence = intent.worker_fence if registration is None else registration.fence
+        try:
+            reference = retain_failure(
+                self.artifacts.area,
+                run_id=self.run_id,
+                intent_id=intent.intent_id,
+                contract_sha256=contract_digest(contract),
+                fence=None if fence is None else fence.model_dump(mode="json"),
+                registration=None if registration is None else registration.model_dump(mode="json"),
+                phase=phase,
+                error=error,
+                protect=self.protect,
+                cleanup=cleanup,
+            )
+            self.store.record_scene_failure(self.run_id, intent.intent_id, reference, fence=fence, cleanup=cleanup)
+            return reference
+        except Exception as retention_error:
+            report = dict(
+                code="scene_diagnostic_retention_failed",
+                run_id=self.run_id,
+                intent_id=intent.intent_id,
+                initiating=safe_failure(phase, error),
+                retention=safe_failure("parent_retention", retention_error),
+                cleanup=cleanup,
+            )
+            # Detached installed servers deliberately discard stderr. Keep a
+            # protected, first-write notice at the already-owned private root
+            # as an independent diagnostic fallback, never an execution ledger.
+            try:
+                from isaaclab_arena.agentic_environment_generation.workflow.api.private_files import Directory
+
+                raw = _protected(report, self.protect)
+                self.lease.require_held(self.run_id, self.principal)
+                kind = "cleanup" if cleanup else "causal"
+                name = f"retention-failed-{kind}-{intent.intent_id}.json"
+                with Directory(str(self.lease.path)) as directory:
+                    try:
+                        directory.read(name, 16384)
+                    except FileNotFoundError:
+                        directory.write(name, raw)
+            except Exception:
+                # Cleanup must not depend on either diagnostic sink succeeding.
+                try:
+                    sys.stderr.write(_protected(report, self.protect).decode() + "\n")
+                    sys.stderr.flush()
+                except Exception:
+                    pass
+            return None
 
     def _prepare_child(self, intent, candidate, original, contract, **stage_args):
         return self.worker.prepare(

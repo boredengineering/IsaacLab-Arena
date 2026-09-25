@@ -328,8 +328,14 @@ def launch(
                 or prior["state"] not in {"stopped", "failed", "exited_unclean"}
             ):
                 raise ValueError("Prior instance unresolved")
+            recovered = False
+            if prior["state"] == "exited_unclean" and prior_config.value["mode"] == "retained-visual-assessment-v1":
+                from .installed_assessment import verify_recovery
+
+                verify_recovery(prior_config, current["instance"])
+                recovered = True
             if transition is not None:
-                if prior["state"] != "stopped" or prior["code"] != "drained":
+                if not recovered and (prior["state"] != "stopped" or prior["code"] != "drained"):
                     raise ValueError("Prior cleanup unresolved; recover using the previous configuration")
                 with Directory(instance_path(previous_config, previous_instance)) as directory:
                     if decode(directory.read("configuration.json", MAX_CONFIG), MAX_CONFIG) != previous_config.value:

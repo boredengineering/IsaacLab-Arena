@@ -100,19 +100,35 @@ class Control:
         # Consumed instance socket is a tombstone; never unlink another instance.
 
 
-async def retain_unknown(app, config, selected, known):
+async def retain_unknown(app, config, selected, known, *, pending=None):
     """Report uncertainty while retaining resources and the lifetime lease."""
     from contextlib import suppress
 
-    app.state.cleanup_unknown = True
-    owner = getattr(app.state, "execution_owner", None)
-    if owner is not None:
-        owner.cleanup_unknown = True
     known.update(state="stopping", code="cleanup_unknown")
     # Metadata failure cannot authorize lease release; live local control still
     # reports cleanup_unknown without depending on DB/HTTP.
     with suppress(Exception):
         save_state(config, selected, known)
+    if pending is not None:
+        while not pending.done():
+            try:
+                await asyncio.shield(pending)
+            except asyncio.CancelledError:
+                if pending.cancelled():
+                    break
+            except Exception:
+                break
+        owner = getattr(app.state, "execution_owner", None)
+        if (
+            not pending.cancelled()
+            and pending.exception() is None
+            and app.state.cleanup_complete
+            and not app.state.cleanup_unknown
+            and owner is not None
+            and owner._closed
+        ):
+            return
+    app.state.cleanup_unknown = True
     while True:
         try:
             await asyncio.Future()
@@ -221,7 +237,7 @@ async def supervise(config, selected, known, *, native_authorized=False, assessm
             app.state.request_execution_stop()
         server.should_exit = True
         if execution_factory is not None and not await observe_execution_shutdown(task, app):
-            await retain_unknown(app, config, selected, known)
+            await retain_unknown(app, config, selected, known, pending=task)
         await task
 
     try:

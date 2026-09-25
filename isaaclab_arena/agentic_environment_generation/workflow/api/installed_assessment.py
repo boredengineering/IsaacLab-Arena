@@ -72,6 +72,112 @@ def check_contract(config, contract):
     return selected, profile
 
 
+def recover_cancellation(config, run_id, selected_instance):
+    """Recover one exact dead instance without execution grants or provider construction."""
+    from .private_files import Directory
+
+    with (
+        Directory(config.value["private_root"]) as root,
+        root.lease("metadata.lock"),
+        root.lease("lifetime.lock"),
+    ):
+        return _recover_cancellation(config, run_id, selected_instance, verify_only=False)
+
+
+def verify_recovery(config, selected_instance):
+    """Recheck retained proof while the launcher holds metadata and lifetime leases."""
+    from .instance import instance_path
+    from .private_files import Directory, decode
+
+    with Directory(instance_path(config, selected_instance)) as directory:
+        retained = decode(directory.read("recovery.json", 32768), 32768)
+    return _recover_cancellation(config, retained["run_id"], selected_instance, verify_only=True)
+
+
+def _recover_cancellation(config, run_id, selected_instance, *, verify_only):
+    """Require original configuration, physical witnesses and exact durable retirement."""
+    from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
+    from isaaclab_arena_examples.agentic_environment_generation.foreground_recovery import (
+        ForegroundAssessmentRecovery,
+        OwnershipArtifacts,
+    )
+
+    from ..artifacts import GenerationArtifacts
+    from ..contracts import parse_contract
+    from ..service import WorkflowService
+    from .installed_composition import Resources
+    from .installed_config import MAX_CONFIG
+    from .instance import instance_id, instance_path, same_process, state
+    from .private_files import Directory, decode, encode
+
+    selected, _ = selection(config)
+    instance_id(selected_instance)
+    resources = Resources(config)
+    resources.authority.require_admin(config.value["bootstrap_principal"])
+    with Directory(config.value["private_root"]) as root:
+        if decode(root.read("current.json", 4096), 4096) != dict(
+            schema_version=1, instance=selected_instance, config_sha256=config.digest
+        ):
+            raise ValueError("Exact previous instance configuration required")
+    known = state(config, selected_instance)
+    if known["state"] != "exited_unclean" or known["identity"] is None or same_process(known["identity"]):
+        raise ValueError("Reconcile the exact dead instance before assessment recovery")
+    with Directory(instance_path(config, selected_instance)) as directory:
+        if decode(directory.read("configuration.json", MAX_CONFIG), MAX_CONFIG) != config.value:
+            raise ValueError("Retained previous configuration differs")
+        with (
+            resources.driver() as driver,
+            ArtifactArea.open(
+                config.value["artifact_root"], store_id=config.binding.store_id, registry_id=config.binding.registry_id
+            ) as area,
+        ):
+            store = resources.store(driver)
+            store.verify_schema()
+            run = store.get_run(run_id)
+            if (
+                run is None
+                or run.operation_id != selected.operation_id
+                or contract_digest(parse_contract(run.contract_json)) != selected.contract_sha256
+            ):
+                raise ValueError("Run is outside the retained assessment selection")
+            service = WorkflowService(
+                store, resources.authority, None, validate_support=None, read_scope=config.binding
+            )
+            recovery = ForegroundAssessmentRecovery(
+                config.value["private_root"],
+                run_id=run_id,
+                principal=config.value["read_principal"],
+                service=service,
+                ownership_artifacts=OwnershipArtifacts(area),
+                artifacts=GenerationArtifacts(area),
+                protect=resources.protect,
+            )
+            try:
+                result = recovery.recover(previous_identity=known["identity"], verify_only=verify_only)
+            finally:
+                if not recovery.lease._released and recovery.lease._prepared is None:
+                    recovery.lease.release_never_prepared()
+        result.update(
+            schema_version=1,
+            code="assessment_cancellation_recovered",
+            instance=selected_instance,
+            config_sha256=config.digest,
+            binding_sha256=config.binding.body_sha256,
+            identity=known["identity"],
+        )
+        resources.protect(result)
+        try:
+            retained = decode(directory.read("recovery.json", 32768), 32768)
+        except FileNotFoundError:
+            if verify_only:
+                raise ValueError("Retained assessment recovery evidence required") from None
+            directory.write("recovery.json", encode(result))
+        else:
+            if retained != result:
+                raise ValueError("Retained assessment recovery differs")
+        return result
+
+
 def _checked_preview_body(serialized, request, config):
     body = json.loads(serialized)
     limits = config["request_bounds"]["envelope"]
@@ -215,7 +321,10 @@ def compose(config, *, tokens, auth, assessment_authorized=False, private_roles)
     from isaaclab_arena_examples.agentic_environment_generation import foreground_cancellation
     from isaaclab_arena_examples.agentic_environment_generation.foreground_authorization import ForegroundAuthority
     from isaaclab_arena_examples.agentic_environment_generation.foreground_owner import ForegroundOwnerLease
-    from isaaclab_arena_examples.agentic_environment_generation.foreground_recovery import OwnershipArtifacts
+    from isaaclab_arena_examples.agentic_environment_generation.foreground_recovery import (
+        ForegroundAssessmentRecovery,
+        OwnershipArtifacts,
+    )
     from isaaclab_arena_examples.agentic_environment_generation.foreground_scene import ForegroundSceneWorker
     from isaaclab_arena_examples.agentic_environment_generation.foreground_scene_ports import ForegroundScenePorts
     from isaaclab_arena_examples.agentic_environment_generation.web_api.execution_grants import ExecutionGrants
@@ -275,6 +384,9 @@ def compose(config, *, tokens, auth, assessment_authorized=False, private_roles)
                 check_contract(config, contract)
                 if operation_id != selected.operation_id:
                     raise PermissionError("Assessment operation identity changed")
+                expires_at = min(auth.expires_at, selected.approval_expires_at)
+                if time.time() + contract.budget.total_deadline_seconds >= expires_at:
+                    raise PermissionError("Full assessment execution and cleanup authority required at admission")
                 return True
 
             def current_config(profile_id):
@@ -384,7 +496,7 @@ def compose(config, *, tokens, auth, assessment_authorized=False, private_roles)
                 owner_lease_factory=ForegroundOwnerLease,
                 initial_receiver_factory=unavailable,
                 scene_ports_factory=OwnedAssessmentPorts,
-                recovery_factory=unavailable,
+                recovery_factory=ForegroundAssessmentRecovery,
                 ownership_artifacts_factory=OwnershipArtifacts,
                 cancellation=foreground_cancellation,
                 retained_support=support,

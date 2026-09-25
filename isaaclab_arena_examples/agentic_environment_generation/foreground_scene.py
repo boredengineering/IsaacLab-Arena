@@ -66,6 +66,15 @@ class ForegroundSceneWorker(ForegroundGenerationWorker):
             owned.lookup_model_send = lookup_send
 
     def _answer_model_send(self, owned, message):
+        try:
+            return self._authorize_model_send(owned, message)
+        except Exception as exc:
+            retain = getattr(owned, "retain_failure", None)
+            if callable(retain):
+                retain("send_authorization", exc)
+            raise
+
+    def _authorize_model_send(self, owned, message):
         """Consume one reserved send before rechecking authority and replying once."""
         with owned.lock:
             if (
@@ -110,6 +119,9 @@ class ForegroundSceneWorker(ForegroundGenerationWorker):
             try:
                 receipt = ForegroundGenerationReceiver._read(self, owned)
             except Exception as exc:
+                retain = getattr(owned, "retain_failure", None)
+                if callable(retain):
+                    retain("parent_receive", exc)
                 if owned.contract.schema_version != "4" or not callable(owned.lookup_model_send):
                     raise
                 self.stop_owned(prepared, timeout_s=3)
@@ -119,6 +131,7 @@ class ForegroundSceneWorker(ForegroundGenerationWorker):
                         payload,
                         send_record=owned.lookup_model_send(),
                         failure_kind=type(exc).__name__,
+                        diagnostic_retention_failed=getattr(exc, "diagnostic_retention_failed", False) is True,
                         protect=screen,
                     )
             expected = dict(
@@ -141,5 +154,10 @@ class ForegroundSceneWorker(ForegroundGenerationWorker):
                 raise ValueError("Scene result kind mismatch")
             cleanup = self.stop_owned(prepared, timeout_s=3)
             return SceneModelResult(output, receipt, cleanup, value["attempted_calls"])
+        except Exception as exc:
+            retain = getattr(owned, "retain_failure", None)
+            if callable(retain):
+                retain("parent_receive", exc)
+            raise
         finally:
             self.stop_owned(prepared, timeout_s=3)

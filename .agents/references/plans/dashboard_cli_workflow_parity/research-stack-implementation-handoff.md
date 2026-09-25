@@ -6,8 +6,54 @@ Bounded next-work plans live in the [Plan 04 implementation index](../plan04_imp
 
 ## Resume after a computer restart
 
-Documentation checkpoint: **2026-09-25; no new Arena execution or lifecycle repair.**
-The immediate next task is further review of the
+Current execution checkpoint — **2026-09-25, recovery goal separately issued**:
+
+- The original P04-I02 run is now `cancelled`/version 9; exact owner epoch 6 is
+  retired/clean. Supported post-crash handover revalidated physical and durable
+  recovery evidence, leaving the original API `exited_unclean` history intact.
+  The original one-call/190-second reservation and all prior allowances remain.
+- Parent repaired the bound-principal, existing-source packet and causal-error
+  boundaries. Fresh authenticated candidate/evidence/all three step-180 PNG bytes
+  match the unchanged producer; preview is request serialization, not live handoff.
+- Pre-send critic `deleg_100d3f95` identified one retention-to-retry classification
+  gap. Parent confirmed and corrected it; `deleg_e3b2bd0f` returned `CONTINUE`.
+  Affected existing checks/lint passed; no new tests/harnesses or native work.
+- **Assessment integration:** authenticated `p04-i02-visibility-r2`, run
+  `a78483e679c0710ab8534bc455f4b72380ee20c3b38b7d9c3d3ea7ced6999935`,
+  completed one actual `gpt-6-astra` dispatch with HTTP200, retained raw response
+  and complete structured result; application stopped/version 8 without retry.
+- **Visual:** **uncertain**, not scene acceptance. `red_block` uncertain in every
+  frame; `blue_bin` visible in both external cameras, uncertain in the wrist camera.
+  Inputs unchanged; no calibration, recapture or scientific-flag promotion.
+- **Readback/replay:** fresh authenticated exact input/request/response/result bytes
+  match hashes and sealed model phases. Completed same-key replay preserves the
+  entire receipt/result and durable records, with no send/worker/allocation mutation.
+- **Final cleanup:** registered worker PID/group2325 absent, epoch-7 owner
+  `foreground-2136-bfd10f28671d3e95c86ce33ec1139c5d` retired/clean, foreground and
+  API lifetime leases released. API `45d09974234542c9b826f0ba2dabd9c1` on unchanged
+  configuration `a9f9af0c19290d9175353b0d18f728c9847041a4bc8d1abe27940f798967a9d3`
+  is stopped/drained. Admission `21:25:21.544338 UTC`, fixed deadline
+  `21:35:21.544338 UTC`; final verification finished within that original window.
+- **Accounting:** one cumulative provider send; old and successor one-call/190s
+  reservations preserved. Two attempts unused but no further send authorized after
+  the complete result. Usage 1,849 tokens, cost unknown—not free. No refunds/resets.
+- Read `recovery_r2` in the existing
+  [operation record](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/operation-record.json)
+  and its `recovery-r2/fresh-byte-verification.json`,
+  `recovery-r2/no-effect-replay-verification.json` and
+  `recovery-r2/final-cleanup-verification.json`. Source freeze
+  `recovery-r2/source-freeze-retry-retention.json` is unchanged through cleanup.
+  Final critic `deleg_06edd9b3` returned `ACCEPT` with no unmet criteria. After an
+  independent final non-sending readback, the parent **closed P04-I02's bounded
+  software integration slice**. See `recovery-r2/critic-final.json` and
+  `recovery-r2/parent-final-readback.json`. No scene acceptance, full scene workflow,
+  Milestone1 or Plan04 completion. No further send or runtime action is authorized.
+  After a restart, re-observe exact identities; this checkpoint is not PID authority.
+
+### Historical documentation-only restart checkpoint
+
+Documentation checkpoint: **2026-09-25; before the separate recovery issuance.**
+The then-next task was further review of the
 [issue-recovery proposal](../plan04_implementation/02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review)
 and its [copyable recovery prompt](../plan04_implementation/02-installed-visual-assessment.md#recovery-and-successor-assessment-prompt--not-issued).
 Both are **PROPOSED — NOT ISSUED**. The proposed successor
@@ -57,6 +103,9 @@ this checkpoint. If conversation restoration is unavailable, this handoff and th
 linked draft provide the continuation point without granting execution authority.
 
 ## 1. Current authorization and implementation gate
+
+The current issued recovery state is recorded in the restart checkpoint above.
+The following original outcome and older checkpoints are preserved history.
 
 ### P04-I02 — BLOCKED after installed worker release (2026-09-25)
 

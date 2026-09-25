@@ -1312,6 +1312,7 @@ class Neo4jWorkflowStore:
             result = self._replay(self._run(tx, "operation_id", operation_id), request_json)
             if result is None:
                 _canonical(contract_json)
+                self._assessment_predecessor(tx, contract_json)
                 if type(max_pending) is not int or max_pending < 0:
                     raise ValueError("nonnegative integer capacity required")
                 pending = list(
@@ -1361,6 +1362,22 @@ class Neo4jWorkflowStore:
                 )
                 result = RunHandle(**rows[0]["run"])
         return result
+
+    def _assessment_predecessor(self, tx, contract_json):
+        """Bind a successor to its cancelled consumer without changing that consumer or its reservation."""
+        value = json.loads(contract_json)
+        if type(value) is not dict or value.get("predecessor_run_id") is None:
+            return
+        contract = parse_contract(contract_json)
+        previous = self._run(tx, "run_id", contract.predecessor_run_id)
+        if previous is None or previous.state != "cancelled":
+            raise ValueError("Cancelled predecessor assessment required")
+        original = parse_contract(previous.contract_json)
+        if original.schema_version != "4" or contract.model_copy(
+            update={"predecessor_run_id": None}
+        ) != original.model_copy(update={"predecessor_run_id": None}):
+            raise ValueError("Successor assessment inputs or allowances differ")
+        self._require_settled_scope(tx)
 
     def _now(self):
         now = self.clock()
@@ -3457,7 +3474,8 @@ class Neo4jWorkflowStore:
                     + _SCOPE
                     + ") WHERE i.run_id=$id "
                     "RETURN i.intent_id AS intent_id, i.status AS status, i.reservation_json AS reservation, "
-                    "i.scene_json AS scene, i.result_json AS result, i.assessment_send_json AS assessment_send "
+                    "i.scene_json AS scene, i.result_json AS result, i.assessment_send_json AS assessment_send, "
+                    "i.causal_failure_json AS causal_failure, i.cleanup_failure_json AS cleanup_failure "
                     "ORDER BY i.intent_id LIMIT 1001",
                     **self.scope,
                     id=run_id,
@@ -3487,7 +3505,14 @@ class Neo4jWorkflowStore:
                 run=run,
                 scene=self._scene_snapshot(tx, run_id),
                 owner=self._owner_view(tx),
-                intents=[dict(row) for row in intents],
+                intents=[
+                    {
+                        key: value
+                        for key, value in dict(row).items()
+                        if value is not None or key not in {"causal_failure", "cleanup_failure"}
+                    }
+                    for row in intents
+                ],
                 evidence=[dict(row) for row in evidence],
                 evidence_selections=[
                     dict(row)
@@ -4086,7 +4111,11 @@ class Neo4jWorkflowStore:
 
     def _finish_known_native_cancel(self, tx, run_id):
         run = self._run(tx, "run_id", run_id)
-        if run is None or run.state != "cancel_requested" or parse_contract(run.contract_json).schema_version != "3":
+        if (
+            run is None
+            or run.state != "cancel_requested"
+            or parse_contract(run.contract_json).schema_version not in ("3", "4")
+        ):
             return False
         from .scene_loop import SceneIntent
 
@@ -4260,6 +4289,54 @@ class Neo4jWorkflowStore:
             ):
                 raise ValueError("scene deadline exhausted")
             return s.intent
+
+    def record_scene_failure(self, run_id, intent_id, reference, *, fence=None, cleanup=False):
+        """Link the first protected phase artifact; do not authorize retries or erase cleanup."""
+        from .scene_evidence_artifacts import canonical
+
+        with self._transaction() as tx:
+            self._lock(tx)
+            intent = self._retained_scene_intent(tx, run_id, intent_id)
+            contract = parse_contract(self._run(tx, "run_id", run_id).contract_json)
+            expected = dict(
+                codec="scene-model-failure-v1",
+                run_id=run_id,
+                intent_id=intent_id,
+                contract_digest=contract_digest(contract),
+                fence=None if fence is None else fence.model_dump(mode="json"),
+                category="cleanup" if cleanup else "causal",
+            )
+            if (
+                contract.schema_version != "4"
+                or intent.worker_fence != fence
+                or type(reference) is not dict
+                or set(reference) != {"family", "version", "manifest_digest", "binding"}
+                or reference["family"] != "scene-model-phase"
+                or reference["binding"] != expected
+                or reference["version"] != hashlib.sha256(canonical(expected)).hexdigest()
+                or type(reference["manifest_digest"]) is not str
+                or re.fullmatch(r"[a-f0-9]{64}", reference["manifest_digest"]) is None
+            ):
+                raise ValueError("Exact retained failure binding required")
+            if fence is not None:
+                self._fenced_scene(tx, fence)
+            key = "cleanup_failure_json" if cleanup else "causal_failure_json"
+            raw = canonical(reference).decode()
+            retained = self._intent(tx, intent_id).get(key)
+            if retained is not None:
+                if retained != raw:
+                    raise ValueError("First retained failure differs")
+                return False
+            tx.run(
+                "MATCH (i:ArenaExecutionIntent " + _SCOPE + ") WHERE i.intent_id=$id SET i." + key + "=$failure",
+                **self.scope,
+                id=intent_id,
+                failure=raw,
+            ).consume()
+            self._event(
+                tx, run_id, "SceneCleanupFailureRetained" if cleanup else "SceneCausalFailureRetained", intent_id
+            )
+        return True
 
     def mark_scene_unknown(self, run_id, intent_id):
         """Retain uncertain released effects without retry, refund or cleanup claims."""

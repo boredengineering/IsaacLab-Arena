@@ -49,6 +49,16 @@ class _Owned:
     lock: object = field(default_factory=threading.RLock)
 
 
+class DiagnosticRetentionFailed(RuntimeError):
+    """The owned child explicitly reported that its diagnostic could not be retained."""
+
+    diagnostic_retention_failed = True
+
+    def __init__(self, report):
+        super().__init__("Child diagnostic retention failed")
+        self.safe_causal_failure = report
+
+
 class ForegroundGenerationReceiver:
     """Read outside coordinator locks, retain exact output before durable adoption.
 
@@ -97,6 +107,8 @@ class ForegroundGenerationReceiver:
                             raise ValueError("Unbound model send request")
                         handler(frame["model_send"])
                         continue
+                    if set(frame) == {"diagnostic_retention_failed"}:
+                        raise DiagnosticRetentionFailed(frame["diagnostic_retention_failed"])
                     if set(frame) != {"result"}:
                         raise ValueError("Generation worker failed")
                     result = frame["result"]
@@ -219,23 +231,37 @@ class ForegroundGenerationWorker:
     def _allowance(self, packet, owned):
         return workflow_allowance(packet)
 
+    def bind_failure_retention(self, prepared, retain):
+        """Bind a trusted parent diagnostic sink before any private-packet validation."""
+        owned = self._get(prepared)
+        with owned.lock:
+            if not callable(retain) or owned.attempted or hasattr(owned, "retain_failure"):
+                raise ValueError("Fresh owned failure retention required")
+            owned.retain_failure = retain
+
     def send(self, prepared, envelope, *, timeout_s):
         owned = self._get(prepared)
         with owned.lock:
             if owned.attempted:
                 raise RuntimeError("Private send already attempted")
             owned.attempted = True  # Even an ambiguous write is never retried.
+            phase = "parent_packet_validation"
             try:
                 if type(envelope) is not bytes or len(envelope) > 512 * 1024 or not envelope.endswith(b"\n"):
                     raise ValueError
                 packet = json.loads(envelope)
                 allowance = self._allowance(packet, owned)
                 execution = packet["workflow_execution"]
+                expected_prompt = (
+                    owned.contract.source.prompt
+                    if owned.contract.source.kind == "new"
+                    else owned.contract.criteria[0].rubric
+                )
                 if (
                     set(packet) != {"inputs", "config", "graph_config", "workflow_execution"}
                     or execution["registration"] != prepared.registration.model_dump(mode="json")
                     or execution["fence"] != prepared.registration.fence.model_dump(mode="json")
-                    or packet["inputs"]["prompt"] != owned.contract.source.prompt
+                    or packet["inputs"]["prompt"] != expected_prompt
                     or execution["deadline"] > execution["admitted_at"] + owned.contract.budget.total_deadline_seconds
                     or time.monotonic() >= owned.deadline
                     or owned.cleanup is not None
@@ -251,6 +277,7 @@ class ForegroundGenerationWorker:
                     ),
                 )
                 write_deadline = min(owned.deadline, time.monotonic() + timeout_s)
+                phase = "parent_packet_write"
                 fd = owned.process.stdin.fileno()
                 os.set_blocking(fd, False)
                 with selectors.DefaultSelector() as selector:
@@ -266,7 +293,10 @@ class ForegroundGenerationWorker:
                             continue
                 if not callable(getattr(owned, "model_send_handler", None)):
                     owned.process.stdin.close()
-            except Exception:
+            except Exception as exc:
+                retain = getattr(owned, "retain_failure", None)
+                if callable(retain):
+                    retain(phase, exc)
                 raise RuntimeError("Private generation send incomplete") from None
 
     def stop_owned(self, prepared, *, timeout_s):

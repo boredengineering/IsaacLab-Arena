@@ -1,17 +1,19 @@
 # What remains to finish Plan 04?
 
 - Document ID: `P04-GUIDE-01`
-- Updated: 2026-09-25, after the P04-I02 recovery draft and restart checkpoint; no new execution
+- Updated: 2026-09-25, after installed P04-I02 successor result/readback/replay/cleanup
 - Status: Informational & Tracking; no execution authority
 - Parent: [Plan 04](../event_mapping/event-mapping-refactoring_plan_04.md)
-- Current goal: [P04-I02 — blocked after installed worker release](02-installed-visual-assessment.md)
+- Current result: [P04-I02 — parent-closed integration, visual uncertain](02-installed-visual-assessment.md)
 - Runtime status: [canonical handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)
 
-The next task is review of the [unissued issue-recovery proposal](02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review).
-Runtime/process statements below refer to the last application observation at
-2026-09-25T16:44:42.311753+00:00; they are not refreshed by a computer restart.
+The separately issued recovery goal has produced a complete installed uncertain
+visibility assessment, exact-byte readback, no-effect replay and final cleanup.
+Final critic `ACCEPT` and independent parent verification closed the bounded
+integration slice. No further send is authorized after
+this result; no new native work or full scene/Milestone1/Plan04 completion is claimed.
 Use the [restart checkpoint](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md#resume-after-a-computer-restart)
-before resuming. No repair or successor assessment has been authorized by these edits.
+and current operation record; the older blocked entries are preserved history.
 
 ---
 
@@ -20,7 +22,7 @@ before resuming. No repair or successor assessment has been authorized by these 
 | Stage / Package | Goal & Target | Scope & Technical Boundaries | Current Status | Consumed vs. Authorized Resources | Exit Criteria & Key Artifacts |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Stage 1: P04-I01** | **Goal A: Native Simulation Slice** | Real Isaac Sim (PhysX) settling in `isaaclab_arena-latest` on Blackwell GPU; 180 control steps settling ($<0.001\text{ m/s}$ linear, $<0.01\text{ rad/s}$ angular); 3 camera PNG captures at step 180; scratch recovery outside sealed artifacts. | **100% VERIFIED & CLOSED**<br>Critic `ACCEPT` ([`deleg_1acfe8e1`](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/critic-final.json)) | **5/5 lifetime native launches consumed (0 remain)**.<br>$0.00 provider spend. | [`LIVE_RESULT.txt`](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/LIVE_RESULT.txt), [`parent-closeout.json`](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/parent-closeout.json), 3 PNGs, `native_settled=true`. |
-| **Stage 2: P04-I02** | **Goals B & C: Installed Visual Assessment** | Assess a5's 3 retained camera PNGs (`external_camera_rgb`, `external_camera_2_rgb`, `wrist_camera_rgb`) with `gpt-6-astra` via installed GraphQL/ASGI; persist structured visibility result in Neo4j; fresh-client byte recovery and replay without provider send. | **BLOCKED AFTER ADMISSION**<br>Released worker, no model result; owner unretired and API still live/stopping | **0 native launches; 0 provider sends**.<br>3 sends unspent, one model-call/190s reservation retained; 600s window expired. Private binding installed. | Requires exact lifecycle recovery, then a separately bounded execution window with unchanged cumulative cap. No visual/final-result/replay acceptance; this scoped slice alone does not close full Milestone 1. |
+| **Stage 2: P04-I02** | **Goals B & C: Installed Visual Assessment** | Assess a5's 3 unchanged step-180 camera PNGs, both subjects per frame, with `gpt-6-astra` through installed authenticated GraphQL. | **INTEGRATION VERIFIED & PARENT-CLOSED**<br>Final critic ACCEPT; complete uncertain visual result. Exact-byte readback, no-effect replay, retirement and API drain passed. Not scene acceptance. | **0 additional native launches; 1 provider send**.<br>Old and successor one-call/190s reservations preserved. Two attempts unused; complete result ends sending. | All applicable bounded criteria verified. Original 600s deadline honored. No full scene workflow, Milestone1 or Plan04 completion. |
 | **Stage 3: P04-I03** | **Goal D: Full Scene Workflow (Plan 03 V1)** | Single unbroken submission: Prompt $\to$ LLM generation $\to$ schema validation $\to$ native settling/capture $\to$ visual assessment $\to$ bounded repair (if needed) $\to$ scene disposition. | **PENDING**<br>Gated on Stage 2 completion | Requires new explicit cumulative envelope for native + provider launches. | Single GraphQL operation drives full prompt-to-scene lifecycle autonomously; accepted or truthfully rejected scene. |
 | **Stage 4: P04-I04** | **Goal E: Policy Pilot (Plan 03 V2)** | Isaac-GR00T policy co-residency; reference task: *"Grasp yellow banana from right and set onto white plate on left"* across 2 predeclared seeds; goal predicate evaluations. | **PENDING**<br>Gated on Stage 3 completion | Requires dedicated GPU memory allocation and GR00T service deployment. | Episode trajectories, joint action logs, goal predicate success/failure retained; `verified=true/false`. |
 | **Stage 5: P04-P6** | **Audit: Independent Causal Readback** | Fresh-client cryptographic traversal of full causal graph: prompt $\to$ priors $\to$ candidate $\to$ settling $\to$ assessment $\to$ policy trials; leak-free process audit. | **PENDING**<br>Gated on Stage 4 completion | Read-only fresh client audit. | Complete reproducible graph dump; hash-verified evidence store; production handoff sign-off. |
@@ -31,7 +33,7 @@ before resuming. No repair or successor assessment has been authorized by these 
 
 ```mermaid
 flowchart TD
-    subgraph M1["Milestone 1: Foundational Simulation & Multimodal Evaluation (native slice verified; assessment blocked)"]
+    subgraph M1["Milestone 1: Foundational Simulation & Multimodal Evaluation (native verified; assessment integration verified, visual uncertain)"]
         S1["Stage 1: P04-I01 Native Physical Simulation (PhysX Settling + 3 Cameras)"] -->|100% VERIFIED| S2["Stage 2: P04-I02 Installed Visual Assessment (gpt-6-astra on a5 PNGs)"]
     end
 
@@ -53,7 +55,7 @@ flowchart TD
 
 - **Milestone 1**: Proves individual components work end-to-end through the installed application.
   - *Simulation*: Done (180 PhysX control steps, settled, 3 cameras rendered).
-  - *Visual Assessment*: Blocked after admitted worker release, before provider dispatch; durable retirement and API drain remain unresolved.
+  - *Visual Assessment*: Installed integration, byte recovery, replay and cleanup verified and parent-closed after final ACCEPT; visual uncertain, not scene acceptance.
 - **Milestone 2**: Proves autonomous orchestration without manual stage chaining.
 - **Milestone 3**: Proves robot policy execution (Isaac-GR00T) and full scientific auditability.
 
@@ -99,12 +101,21 @@ The old launch punch list is complete and its allocation exhausted. It must not
 be treated as a fresh two-launch allowance. The old unbound-receipt diagnosis and
 blanket claims that all process entries disappeared are not current evidence.
 
-## 3. Current blocked package: P04-I02
+## 3. P04-I02: closed integration, uncertain visual result
 
-Review the [issue-recovery proposal and prompt](02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review),
-which is **PROPOSED — NOT ISSUED**. It separates lifecycle repair from the unknown
-worker cause and proposes `p04-i02-visibility-r2` only after recovery and Gate A,
-with a fresh bounded window but no cumulative-accounting reset. The
+The original lifecycle and the installed successor assessment/readback/replay/
+cleanup gates are verified; final critic `deleg_06edd9b3` returned `ACCEPT`, and
+the parent closed this bounded slice. A complete uncertain verdict is not scene
+acceptance or permission to retry. See the
+[current result](02-installed-visual-assessment.md#current-issued-recovery-result).
+
+### Historical blocker and reviewed recovery proposal
+
+The [issue-recovery proposal and prompt](02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review)
+was saved **PROPOSED — NOT ISSUED** before the separate issuance. It separated
+lifecycle repair from the unknown worker cause and proposed
+`p04-i02-visibility-r2` only after recovery and Gate A, with a fresh bounded window
+but no cumulative-accounting reset. The
 [previous revised goal](02-installed-visual-assessment.md#revised-goal-prompt) remains
 issued history with an expired window. Both retain the parent-actor/single-read-only-critic
 method and require installed application acceptance, not standalone model/helper execution.
@@ -118,7 +129,7 @@ Unspent provider attempts do not extend the expired operation deadline or permit
 resetting its one-call/190-second reservation. No additional credential/budget audit
 is needed; bounded lifecycle recovery is the next decision.
 
-### Implementation guidance (installed acceptance remains blocked)
+### Historical implementation guidance (before the accepted successor)
 
 - Preserve a5's original candidate, producer contract/profile, cohort and image
   hashes. A new visual/paid request needs an explicit consumer link; changing its
@@ -143,7 +154,7 @@ is needed; bounded lifecycle recovery is the next decision.
   modified tests, cases, fixtures, harnesses or synthetic matrices; passing checks lead
   to the installed submission, not a broader readiness campaign.
 
-### One conditional live assessment
+### Historical conditional live-assessment limits (now completed)
 
 The issued revision allowed up to three cumulative `gpt-6-astra` assessment attempts
 after Gate A and zero native work, with no preset dollar, aggregate-token or numeric
@@ -177,8 +188,8 @@ One VLM visibility response is not calibrated 3D grounding or physical validatio
 
 ```mermaid
 flowchart TD
-    A["Verified: P04-I01 native-only a5"] --> B["P04-I02 blocked: admitted unsent run, lifecycle recovery required"]
-    B --> C["Only after explicit recovery/window authority: assessment, cumulative cap 3; readback/replay/cleanup"]
+    A["Verified: P04-I01 native-only a5"] --> B["P04-I02 parent-closed: lifecycle and installed assessment integration verified"]
+    B --> C["Complete uncertain visual verdict; exact-byte readback/replay/cleanup passed; no more sends"]
     C --> D["Remaining scene validation gates under separate authority"]
     D --> E["Full installed prompt-to-scene workflow (Stage 3)"]
     E --> F["If authorized: repair, fresh capture and reassessment"]

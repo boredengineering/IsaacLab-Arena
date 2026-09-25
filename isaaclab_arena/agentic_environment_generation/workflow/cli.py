@@ -148,6 +148,7 @@ def _add_installed_arguments(commands):
     native_cancel = actions.add_parser("reconcile-native-cancellation", allow_abbrev=False)
     native_cancel.add_argument("--config", required=True)
     native_cancel.add_argument("--run-id", required=True)
+    native_cancel.add_argument("--instance", help="Exact dead assessment instance for fenced cleanup and retirement")
     for name in ("api-launch", "api-handover", "api-status", "api-stop", "api-reconcile", "api-serve"):
         command = commands.add_parser(name, allow_abbrev=False)
         command.add_argument("--config", required=True)
@@ -205,10 +206,14 @@ def _serve_instance(options, config, selected):
     )
 
 
-def _reconcile_native_cancellation(config, run_id):
-    """Finalize already-recorded native cleanup without retiring its owner."""
+def _reconcile_native_cancellation(config, run_id, instance=None):
+    """Finalize native cleanup or recover an exact dead assessment instance."""
     from .api.installed_composition import Resources
 
+    if config.value["mode"] == "retained-visual-assessment-v1":
+        from .api.installed_assessment import recover_cancellation
+
+        return recover_cancellation(config, run_id, instance)
     if config.value["mode"] != "retained-native-validation-v1":
         raise ValueError("Exact native configuration required")
     resources = Resources(config)
@@ -403,7 +408,7 @@ def _run_installed(options):
                     credential_fd=getattr(options, "credentials_fd", None),
                 )
             elif options.action == "reconcile-native-cancellation":
-                result = _reconcile_native_cancellation(config, options.run_id)
+                result = _reconcile_native_cancellation(config, options.run_id, options.instance)
             else:
                 from .api.installed_composition import administer
 

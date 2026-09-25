@@ -701,18 +701,11 @@ class WorkflowService:
             if snapshot.intent.worker_fence is not None:
                 return snapshot  # Prepared/ambiguous ownership is never fresh work.
             contract = parse_contract(snapshot.run.contract_json)
-            stage_args = {}
-            if snapshot.intent.action == "assess":
-                stage_args["retained_observation"] = self._store.get_scene_capture(run_id, snapshot.intent.intent_id)
-            auth = ports.authorize(principal, contract, snapshot.intent.action)
-            ready = ports.ready(contract)
-            auth = ports.authorize(principal, contract, snapshot.intent.action)
-            bounded = getattr(ports, "require_bounded_capability", None)
-            if not callable(bounded) or bounded(principal, contract, snapshot.intent.reservation) is not True:
-                raise ValueError("bounded scene port capability required")
+            auth, ready, bounded, stage_args = self._authorize_scene_stage(ports, principal, run_id, snapshot, contract)
             failed = False
             worker_intent = None
             release_args = {}
+            failure_phase = "parent_prepare"
             try:
                 if profile.owned_worker:
                     owner = ports.require_held_owner()
@@ -743,9 +736,11 @@ class WorkflowService:
                     return self._store.scene_snapshot(run_id)
                 released = self._store.scene_snapshot(run_id)
                 # Recheck after committed release; a denial is unresolved, not retry.
+                failure_phase = "parent_authorization"
                 self._check_released_scene(
                     ports, principal, run_id, contract, released, release_args, owner if profile.owned_worker else None
                 )
+                failure_phase = "parent_execute"
                 output = ports.execute(released.intent, released.candidate, released.original, contract, **stage_args)
                 if released.intent.action in ("capture", "assess", "policy"):
                     # Reopen immutable receipt bytes only after the owned child
@@ -755,7 +750,8 @@ class WorkflowService:
                     result = self._verify_scene_result(ports, released, contract, output)
                 if self._store.get_run(run_id).state != "running":
                     raise ValueError("scene cancelled during execution")
-            except Exception:
+            except Exception as exc:
+                self._record_scene_failure(ports, worker_intent or snapshot.intent, contract, failure_phase, exc)
                 if resume_receipt is not None and worker_intent is None:
                     # Stale first-claim rejection must not poison replacement work.
                     # An unknown claim ACK still leaves its durable fence obligation;
@@ -774,15 +770,40 @@ class WorkflowService:
             if result is None:
                 try:
                     result = self._verify_scene_result(ports, released, contract, output)
-                except Exception:
+                except Exception as exc:
+                    self._record_scene_failure(ports, released.intent, contract, "parent_validation", exc)
                     self._store.mark_scene_unknown(run_id, released.intent.intent_id)
                     raise
             try:
                 self._store.finish_scene(run_id, released.intent.intent_id, current.run.version, result)
-            except Exception:
+            except Exception as exc:
+                self._record_scene_failure(ports, released.intent, contract, "parent_retention", exc)
                 if released.intent.action == "policy":
                     self._store.mark_scene_unknown(run_id, released.intent.intent_id)
                 raise
+
+    @staticmethod
+    def _record_scene_failure(ports, intent, contract, phase, error):
+        """Select retained-only causal diagnostics without changing other modes."""
+        if contract.schema_version == "4":
+            ports.record_failure(intent, phase, error, contract=contract)
+
+    def _authorize_scene_stage(self, ports, principal, run_id, snapshot, contract):
+        """Retain parent authorization failures before any claimed worker exists."""
+        try:
+            stage_args = {}
+            if snapshot.intent.action == "assess":
+                stage_args["retained_observation"] = self._store.get_scene_capture(run_id, snapshot.intent.intent_id)
+            auth = ports.authorize(principal, contract, snapshot.intent.action)
+            ready = ports.ready(contract)
+            auth = ports.authorize(principal, contract, snapshot.intent.action)
+            bounded = getattr(ports, "require_bounded_capability", None)
+            if not callable(bounded) or bounded(principal, contract, snapshot.intent.reservation) is not True:
+                raise ValueError("bounded scene port capability required")
+            return auth, ready, bounded, stage_args
+        except Exception as exc:
+            self._record_scene_failure(ports, snapshot.intent, contract, "parent_authorization", exc)
+            raise
 
     @staticmethod
     def _checked_scene_ports(ports):
@@ -829,7 +850,10 @@ class WorkflowService:
             if intent.action in ("capture", "policy"):
                 if ports.release_native_resource(intent, cleanup) is not True:
                     raise ValueError("capture slot release unverified")
-        except Exception:
+        except Exception as exc:
+            record = getattr(ports, "record_failure", None)
+            if callable(record):
+                record(intent, "cleanup", exc, cleanup=True)
             if profile.codec_version == 2:
                 self._store.mark_scene_unknown(run_id, intent.intent_id)
             raise

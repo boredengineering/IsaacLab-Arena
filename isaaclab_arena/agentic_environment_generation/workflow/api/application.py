@@ -148,29 +148,32 @@ def create_app(*, settings: Settings, composition: Composition) -> FastAPI:
                     driver.close()
 
             async def cleanup():
+                import asyncio
+
                 if composition.execution_factory is not None:
                     request_execution_stop()
                 await executor.drain()
-                if app.state.cleanup_unknown:
-                    import asyncio
-
-                    await asyncio.Future()
                 if owner is not None:
-                    try:
-                        await owner.close()
-                    except Exception:
-                        # Unconfirmed cleanup is not a stopped instance. Keep the
-                        # listener teardown/lifespan and lifetime lease unresolved;
-                        # only external operator termination can end this state.
-                        import asyncio
-
-                        app.state.cleanup_unknown = True
-                        await asyncio.Future()
-                if app.state.cleanup_unknown:
-                    import asyncio
-
+                    while not owner._closed:
+                        try:
+                            await owner.close(recover_timeout=True)
+                        except Exception:
+                            app.state.cleanup_unknown = True
+                            pending = owner._closing
+                            if owner._close_failure == "timeout" and pending is not None:
+                                try:
+                                    await asyncio.shield(pending)
+                                except (Exception, asyncio.CancelledError):
+                                    await asyncio.Future()
+                                continue
+                            # Failed cleanup requires fenced recovery; never restart
+                            # a drain after its executors/resources have closed.
+                            await asyncio.Future()
+                elif app.state.cleanup_unknown:
                     await asyncio.Future()
                 await executor.close(close_driver)
+                app.state.cleanup_unknown = False
+                app.state.cleanup_complete = True
 
             try:
                 await finish_cleanup(cleanup())
@@ -180,6 +183,7 @@ def create_app(*, settings: Settings, composition: Composition) -> FastAPI:
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.ready = False
     app.state.cleanup_unknown = False
+    app.state.cleanup_complete = False
     app.state.request_execution_stop = request_execution_stop
 
     app.add_middleware(BearerBoundary, registry=composition.tokens)

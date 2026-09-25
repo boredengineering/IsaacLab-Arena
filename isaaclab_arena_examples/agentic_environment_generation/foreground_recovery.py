@@ -59,7 +59,7 @@ class OwnershipArtifacts:
             self.area.promote(version, "foreground-ownership", version, manifest)
         return version
 
-    def load(self, registration):
+    def load(self, registration, *, previous_identity=None):
         binding = self._binding(registration)
         version = digest(encoded(binding))
         manifest = self.area.read_final_manifest("foreground-ownership", version, binding=binding)
@@ -86,11 +86,27 @@ class OwnershipArtifacts:
             or value["members"].get(str(registration.pid)) != str(registration.start_ticks)
         ):
             raise ValueError("Invalid ownership witness")
+        # A reboot proves old-boot processes cannot execute, but only a checked
+        # original instance may bind that proof to this local retained worker.
+        previous_boot = False
+        if previous_identity is not None:
+            from isaaclab_arena.agentic_environment_generation.workflow.api.instance import same_process
+
+            if (
+                same_process(previous_identity)
+                or previous_identity["boot"] != registration.boot
+                or previous_identity["namespace"] != value["pid_namespace"]
+                or previous_identity["pid"] != previous_identity["pgid"]
+                or previous_identity["pid"] != previous_identity["sid"]
+                or not registration.fence.owner_id.startswith(f"foreground-{previous_identity['pid']}-")
+            ):
+                raise ValueError("Original stopped instance ownership required")
+            previous_boot = registration.boot != boot_id()
         # Mandatory BEFORE construction: OwnedProcessGroup itself scans /proc.
         if (
             registration.host != socket.gethostname()
-            or registration.boot != boot_id()
-            or value["pid_namespace"] != os.readlink("/proc/self/ns/pid")
+            or (not previous_boot and registration.boot != boot_id())
+            or (not previous_boot and value["pid_namespace"] != os.readlink("/proc/self/ns/pid"))
             or registration.pid != registration.pgid
             or registration.pid != registration.sid
         ):
@@ -299,3 +315,85 @@ class ForegroundGenerationRecovery:
         if release_lease:
             self.lease.retire_and_release(store, registration, evidence)
         return CompletionResult(disposition, run, attempt)
+
+
+class ForegroundAssessmentRecovery(ForegroundGenerationRecovery):
+    """Reconcile recorded assessment cleanup under the original scope flock; never send."""
+
+    def recover(self, *, previous_identity, release_lease=True, verify_only=False):
+        from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import SceneIntent
+
+        assert release_lease is True, "Assessment cancellation recovery must retire and release"
+        self.lease.require_held(self._run_id, self._principal)
+        self._service._authority.require_read(self._principal)
+        store = self._service.bound_store
+        records = store.result_records(self._run_id)
+        run = records["run"]
+        contract = parse_contract(run.contract_json)
+        if (
+            contract.schema_version != "4"
+            or run.state not in ("cancel_requested", "cancelled")
+            or not 1 <= len(records["intents"]) <= contract.budget.max_model_calls
+            or any(row["scene"] is None for row in records["intents"])
+        ):
+            raise ValueError("Recorded retained-assessment cancellation required")
+        intents = tuple(SceneIntent.model_validate_json(row["scene"]) for row in records["intents"])
+        owner = store.get_owner()
+        workers = []
+        for intent in intents:
+            registration, cleanup, fence = intent.worker_registration, intent.worker_cleanup, intent.worker_fence
+            if (
+                registration is None
+                or cleanup is None
+                or fence is None
+                or registration.fence != fence
+                or cleanup.registration != registration
+                or fence.run_id != run.run_id
+                or owner is None
+                or (owner.owner_id, owner.owner_epoch) != (fence.owner_id, fence.owner_epoch)
+            ):
+                raise ValueError("Exact recorded assessment worker and owner required")
+            identity = self._ownership.load(registration, previous_identity=previous_identity)
+            group = OwnedProcessGroup(registration.pid, identity)
+            if group.members():
+                raise ValueError("Recorded cleanup has live physical obligations")
+            # stop() rechecks liveness; with no members it sends no signal.
+            group.stop(term_timeout=0, kill_timeout=0)
+            workers.append(
+                dict(registration=registration.model_dump(mode="json"), cleanup=cleanup.model_dump(mode="json"))
+            )
+            self._group, self._observed = group, (registration, cleanup)
+        retired = store.get_retired_owner(owner.owner_id)
+        if verify_only:
+            if run.state != "cancelled" or owner.dirty or retired != owner:
+                raise ValueError("Exact durable assessment retirement required")
+            if release_lease:
+                self.lease.release_never_prepared()
+        else:
+            self.lease.mark_recovery(intents[-1].worker_fence)
+            if run.state == "cancel_requested":
+                if not owner.dirty:
+                    raise ValueError("Pending cancellation has no active original owner")
+                for intent in intents:
+                    store.acknowledge_scene_cleanup(intent.worker_fence, intent.worker_cleanup)
+            if store.get_run(run.run_id).state != "cancelled":
+                raise ValueError("Assessment cancellation remains unresolved")
+            after = store.result_records(run.run_id)
+            if after["intents"] != records["intents"] or after["admitted_at"] != records["admitted_at"]:
+                raise ValueError("Recovery changed retained assessment attempts")
+            if release_lease:
+                self.lease.retire_and_release(store, intents[-1].worker_registration, intents[-1].worker_cleanup)
+            retired = store.get_retired_owner(owner.owner_id)
+            if retired is None or retired.dirty or store.get_owner() != retired:
+                raise ValueError("Assessment retirement readback unresolved")
+        result: dict = dict(
+            run_id=run.run_id,
+            operation_id=run.operation_id,
+            state=store.get_run(run.run_id).state,
+            owner=retired.model_dump(mode="json"),
+            workers=workers,
+            owner_retired=True,
+            lease_released=self.lease._released,
+        )
+        self._protect(result)
+        return result

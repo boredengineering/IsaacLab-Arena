@@ -249,6 +249,8 @@ class WorkflowContract(FrozenModel):
     retrieval: PriorRetrievalSelection | None = None
     """Required in schema 2; omitted from schema 1's unchanged wire representation."""
     retained_evidence: RetainedEvidenceSource | None = None
+    predecessor_run_id: Hash | None = None
+    """Cancelled assessment consumer superseded by this separately admitted schema-4 operation."""
 
     @model_validator(mode="before")
     @classmethod
@@ -264,6 +266,8 @@ class WorkflowContract(FrozenModel):
             value.pop("retrieval", None)
         if self.schema_version != "4":
             value.pop("retained_evidence", None)
+        if self.predecessor_run_id is None:
+            value.pop("predecessor_run_id", None)
         return value
 
     @model_validator(mode="after")
@@ -306,6 +310,7 @@ class WorkflowContract(FrozenModel):
                 raise ValueError("Retained candidate source bytes differ")
         if self.schema_version != "4" and (
             self.retained_evidence is not None
+            or self.predecessor_run_id is not None
             or self.budget.max_model_tokens is None
             or self.budget.max_cost_usd is None
         ):

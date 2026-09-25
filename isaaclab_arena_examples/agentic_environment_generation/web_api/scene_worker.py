@@ -98,6 +98,82 @@ def read_retained(area, reference, *, protect):
     return value
 
 
+def safe_failure(phase, error):
+    """Describe a causal boundary without exception text, packets, locals or arbitrary class names."""
+    phases = {
+        "parent_authorization",
+        "parent_prepare",
+        "parent_execute",
+        "parent_packet_validation",
+        "parent_packet_write",
+        "send_authorization",
+        "parent_receive",
+        "parent_validation",
+        "parent_retention",
+        "child_entry",
+        "child_execute",
+        "cleanup",
+    }
+    assert phase in phases, "Fixed failure phase required"
+    kinds = {
+        "PermissionError",
+        "ValueError",
+        "TypeError",
+        "KeyError",
+        "AttributeError",
+        "AssertionError",
+        "TimeoutError",
+        "OSError",
+        "RuntimeError",
+        "ValidationError",
+        "ConnectionError",
+    }
+    reported = getattr(error, "safe_causal_failure", None)
+    if (
+        type(reported) is dict
+        and set(reported) == {"phase", "exception_type", "reason"}
+        and all(type(value) is str for value in reported.values())
+        and reported["phase"] in phases
+        and reported["exception_type"] in kinds | {"Exception"}
+        and reported["reason"] in {"operation_failed", "diagnostic_retention_failed"}
+    ):
+        return dict(reported, reason="diagnostic_retention_failed")
+    kind = next((item.__name__ for item in type(error).__mro__ if item.__name__ in kinds), "Exception")
+    return dict(
+        phase=phase,
+        exception_type=kind,
+        reason=(
+            "diagnostic_retention_failed"
+            if getattr(error, "diagnostic_retention_failed", False) is True
+            else "operation_failed"
+        ),
+    )
+
+
+def retain_failure(
+    area, *, run_id, intent_id, contract_sha256, fence, registration, phase, error, protect, cleanup=False
+):
+    """Keep the first causal error and first cleanup error in existing phase artifacts."""
+    binding = dict(
+        codec="scene-model-failure-v1",
+        run_id=run_id,
+        intent_id=intent_id,
+        contract_digest=contract_sha256,
+        fence=fence,
+        category="cleanup" if cleanup else "causal",
+    )
+    version = hashlib.sha256(canonical(binding)).hexdigest()
+    if area.has_final("scene-model-phase", version):
+        manifest = area.read_final_manifest("scene-model-phase", version, binding=binding)
+        reference = dict(
+            family="scene-model-phase", version=version, manifest_digest=manifest["digest"], binding=binding
+        )
+        read_retained(area, reference, protect=protect)
+        return reference
+    value = dict(safe_failure(phase, error), binding=binding, registration=registration)
+    return _retain(area, "scene-model-phase", binding, value, protect)
+
+
 def retain_request(area, *, root, registration, contract, action, data, protect):
     """Retain public inputs after prepare; no model construction or private key write.
 
@@ -143,7 +219,7 @@ def retained_response_candidates(record, raw):
     return result + [("worker_projection", raw)]
 
 
-def recover_assessment_output(area, payload, *, send_record, failure_kind, protect):
+def recover_assessment_output(area, payload, *, send_record, failure_kind, protect, diagnostic_retention_failed=False):
     """Recover stopped-owned-worker bytes before considering a counted retry."""
     from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import retryable_http_failure
 
@@ -202,7 +278,7 @@ def recover_assessment_output(area, payload, *, send_record, failure_kind, prote
                 observed_failure=failure_kind,
                 status=None,
                 code=None,
-                retryable=True,
+                retryable=not diagnostic_retention_failed,
                 request_id=None,
             )
         raw = next((text for _, text in retained_response_candidates(record, None) if type(text) is str), None)
@@ -212,7 +288,7 @@ def recover_assessment_output(area, payload, *, send_record, failure_kind, prote
         publication="not_published",
         provider_records=[] if record is None else [record],
         phase_receipts=phases,
-        local_error={"kind": failure_kind},
+        local_error={"kind": failure_kind, "diagnostic_retention_failed": diagnostic_retention_failed},
         recovery="owned_stopped_retained_bytes_no_resend",
     )
     return _retain(
@@ -358,7 +434,24 @@ def execute(packet, allowance, protect, *, send_guard=None):
             except Exception as exc:
                 if not retained:
                     raise
-                error = {"kind": type(exc).__name__}
+                error = safe_failure("child_execute", exc)
+                error["kind"] = error["exception_type"]
+                source = payload["request"]["binding"]
+                try:
+                    retain_failure(
+                        area,
+                        run_id=source["run_id"],
+                        intent_id=source["fence"]["intent_id"],
+                        contract_sha256=source["contract_digest"],
+                        fence=source["fence"],
+                        registration=source["registration"],
+                        phase="child_execute",
+                        error=exc,
+                        protect=protect,
+                    )
+                except Exception:
+                    setattr(exc, "diagnostic_retention_failed", True)
+                    raise exc from None
             if not retained and (type(raw) is not str or not 1 <= len(raw.encode()) <= 65536):
                 raise ValueError("Visual response bound")
             output = {"kind": "raw_visual_response", "raw_response": raw, "publication": "not_published"}
@@ -420,6 +513,8 @@ def main():
         return 1
     channel = sys.stdout
     logging.disable(sys.maxsize)
+    packet = None
+    phase = "child_entry"
     try:
         packet = json.loads(line)
         key = packet["config"]["api_key"]
@@ -454,14 +549,38 @@ def main():
             else None
         )
         with open(os.devnull, "w") as sink, contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
+            phase = "child_execute"
             receipt = execute(packet, allowance, protect, send_guard=send_guard)
         message = {"result": receipt}
         _protected(message, protect)
         channel.write(json.dumps(message, allow_nan=False) + "\n")
         channel.flush()
         return 0
-    except Exception:
-        # No exception text or unscreened diagnostic crosses the private output.
+    except Exception as exc:
+        # The parent can still report a failed diagnostic write and clean up.
+        # Nothing from the private packet or exception message crosses this pipe.
+        diagnostic_retention_failed = getattr(exc, "diagnostic_retention_failed", False) is True
+        try:
+            if packet is not None and packet["config"]["workflow_accounting"]["version"] == 2:
+                payload = packet["inputs"]["scene_payload"]
+                source = payload["request"]["binding"]
+                with open_area(payload) as area:
+                    retain_failure(
+                        area,
+                        run_id=source["run_id"],
+                        intent_id=source["fence"]["intent_id"],
+                        contract_sha256=source["contract_digest"],
+                        fence=source["fence"],
+                        registration=source["registration"],
+                        phase=phase,
+                        error=exc,
+                        protect=protect,
+                    )
+        except Exception:
+            diagnostic_retention_failed = True
+        if diagnostic_retention_failed:
+            channel.write(json.dumps({"diagnostic_retention_failed": safe_failure(phase, exc)}) + "\n")
+            channel.flush()
         return 1
 
 

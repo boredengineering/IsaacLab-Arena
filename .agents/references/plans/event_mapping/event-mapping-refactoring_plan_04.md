@@ -4,7 +4,20 @@ Status: Implementation in progress; the scoped P04-I01 native-only slice is veri
 
 Implementation work packages and goal prompts: [Plan 04 implementation index](../plan04_implementation/README.md). [P04-I01 — Native integration defects and bounded revalidation](../plan04_implementation/01-native-integration-defects.md) is verified after operator-authorized execution; both additional launches are consumed. Saving or reopening a plan grants no new allocation.
 
-Current: [P04-I02 — installed visual assessment of retained native evidence](../plan04_implementation/02-installed-visual-assessment.md)
+Current P04-I02 result: original cancellation/version 9, exact epoch-6 retirement
+and supported post-crash handover passed, preserving old history/reservations.
+Installed authenticated successor `p04-i02-visibility-r2` completed one
+`gpt-6-astra` request and valid **uncertain** visual result. Fresh exact-byte
+readback and no-effect replay passed; exact worker absence, epoch-7 retirement,
+lease release and API stop/drain verified within the unchanged 600-second window.
+Final critic `deleg_06edd9b3` returned `ACCEPT`; the parent reverified and closed
+P04-I02's bounded software integration slice. One cumulative send; two unused
+attempts do not authorize sending after the complete result. No additional native
+work, scene acceptance, scientific-flag promotion or full Milestone1/Plan04 completion.
+The [canonical handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md#resume-after-a-computer-restart)
+and existing operation record contain current evidence and the immediate authority gate.
+
+Historical original outcome: [P04-I02 — installed visual assessment of retained native evidence](../plan04_implementation/02-installed-visual-assessment.md)
 was issued and is **BLOCKED after installed worker release, before any provider
 dispatch/result**. The narrow retained/accounting-only path and named environment
 key binding were installed; gate/review passes did not certify the worker boundary.
@@ -13,8 +26,8 @@ the run is `cancel_requested`, and supported API shutdown returned `cleanup_unkn
 with a live `stopping` process. The 600-second window expired; three provider sends
 are still unspent but a one-call/190-second reservation is retained. No native work,
 allowance reset, visual verdict, completed replay or full Milestone 1 acceptance.
-Next is review of the [issue-recovery proposal](../plan04_implementation/02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review),
-which is **NOT ISSUED**. It proposes bounded lifecycle recovery before a conditional
+The then-next step was review of the [issue-recovery proposal](../plan04_implementation/02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review),
+which was **NOT ISSUED at that checkpoint**. It proposed bounded lifecycle recovery before a conditional
 successor assessment, not another credential/budget audit or automatic submission.
 The canonical handoff owns the exact identities and authorization boundary; its
 [restart checkpoint](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md#resume-after-a-computer-restart)
@@ -23,6 +36,10 @@ distinguishes the last verified process observations from post-reboot state.
 ---
 
 ## Executive Operational Checkpoints
+
+The current accepted recovery/successor result is summarized above. The following
+original blocked assessment checkpoint is preserved historical evidence, not a
+current lifecycle blocker or renewed execution authority.
 
 ### Installed Assessment Checkpoint — 2026-09-25 (P04-I02 BLOCKED)
 

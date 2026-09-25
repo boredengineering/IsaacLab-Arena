@@ -49,6 +49,7 @@ class ExecutionOwner:
         self._stop_future = None
         self._closing = None
         self.cleanup_unknown = False
+        self._close_failure = None
 
     def _run(self, operation):
         """Bind the adapter context in the owned thread, independently of the HTTP request."""
@@ -218,11 +219,13 @@ class ExecutionOwner:
                     if OwnedProcessGroup(registration.pid, identity).members():
                         raise CleanupUnknown("Owned physical processes remain")
 
-    async def close(self):
-        """Bound observation, not worker lifetime; unknown retains the artifact area."""
+    async def close(self, *, recover_timeout=False):
+        """Bound observation; explicitly recover only the exact successful timed-out drain."""
         if self._closed:
             return
-        if self.cleanup_unknown:
+        if self.cleanup_unknown and not (
+            recover_timeout and self._close_failure == "timeout" and self._closing is not None
+        ):
             raise CleanupUnknown("Execution cleanup unresolved")
         self.request_stop()
         if self._closing is None:
@@ -230,19 +233,25 @@ class ExecutionOwner:
             self._closing.add_done_callback(lambda done: None if done.cancelled() else done.exception())
         try:
             await asyncio.wait_for(asyncio.shield(self._closing), timeout=self.CLOSE_TIMEOUT)
-        except Exception:
+        except TimeoutError:
             self.cleanup_unknown = True
+            self._close_failure = "timeout" if not self._closing.done() else "drain"
             raise CleanupUnknown("Execution cleanup unresolved") from None
-        # A prior observer's timeout is sticky even if the owned drain later ends.
-        if self.cleanup_unknown:
-            raise CleanupUnknown("Execution cleanup unresolved")
+        except (Exception, asyncio.CancelledError):
+            self.cleanup_unknown = True
+            self._close_failure = "drain"
+            raise CleanupUnknown("Execution cleanup unresolved") from None
+        # Failed/cancelled tasks are never replaced on shut-down executors.
         if not self._closed:
             try:
                 self.area.close()
             except Exception:
                 self.cleanup_unknown = True
+                self._close_failure = "artifact"
                 raise CleanupUnknown("Artifact close unresolved") from None
             self._closed = True
+            self.cleanup_unknown = False
+            self._close_failure = None
 
     async def _drain(self):
         assert self._stop_future is not None

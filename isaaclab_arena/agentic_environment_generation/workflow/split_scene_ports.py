@@ -130,7 +130,7 @@ class SplitScenePorts(ScenePorts):
             or intent.reservation != getattr(self.profile, intent.action)
         ):
             raise ValueError("exact fresh released scene intent required")
-        self.require_bounded_capability(None, contract, intent.reservation)
+        self.require_bounded_capability(getattr(self, "principal", None), contract, intent.reservation)
         if intent.action == "assess":
             receipt = self.load_retained_capture(intent, retained_observation, contract, candidate)
         elif retained_observation is not None:

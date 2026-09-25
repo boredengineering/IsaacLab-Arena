@@ -21,6 +21,21 @@ An execution goal must state those permissions explicitly.
 
 ## Current position
 
+**Current recovery checkpoint:** original cancellation/version 9, exact epoch-6
+retirement and supported post-crash handover passed, preserving old unclean-exit
+history and reservation. Authenticated successor `p04-i02-visibility-r2` completed
+one `gpt-6-astra` request with a complete **uncertain** visibility assessment.
+Fresh exact-byte readback and no-effect replay passed; its worker is absent,
+epoch-7 owner retired/clean and API stopped/drained within the original 600-second
+window. Final critic `deleg_06edd9b3` returned `ACCEPT`; the parent independently
+verified the final state and **closed this bounded integration slice**. One cumulative send;
+two unused attempts are **not permission to send after the complete result**.
+No new native work, scientific-flag promotion, tests/harnesses or broader completion.
+See [separate outcomes](02-installed-visual-assessment.md#current-issued-recovery-result),
+`recovery_r2` in the existing operation record and the canonical handoff.
+
+**Historical original outcome (not current process authority):**
+
 Snapshot: 2026-09-25. This is a navigation summary; the handoff remains authoritative.
 Runtime/process statements below describe the last verified application observation
 at 16:44:42.311753 UTC, not a post-restart status check.
@@ -53,7 +68,7 @@ at 16:44:42.311753 UTC, not a post-restart status check.
   generation, repair, policy or new-prior execution occurred. Final critic and parent
   both returned `BLOCKED`; fresh parent observation confirmed the same live API/dirty owner.
   See the [current outcome and recovery decision](02-installed-visual-assessment.md#issued-revision--installed-ownership-blocker-2026-09-25).
-- **Next is prompt review, not execution:** the
+- **The historical next step was prompt review, not execution:** the
   [issue-recovery proposal](02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review)
   and full successor-assessment prompt are saved **NOT ISSUED**. They distinguish
   non-sending lifecycle recovery from the unresolved worker failure, then propose
@@ -68,7 +83,7 @@ at 16:44:42.311753 UTC, not a post-restart status check.
 | ID | Plan | Status | Next gate | Execution authority |
 | --- | --- | --- | --- | --- |
 | P04-I01 | [Native integration defects and bounded revalidation](01-native-integration-defects.md) | Verified; parent-closed native-only slice | P04-I02 under separately issued authority | Additional 2/2 consumed; prior 3/3 preserved; zero native launches remain |
-| P04-I02 | [Installed visual assessment of retained native evidence](02-installed-visual-assessment.md) | Parent BLOCKED after final critique: admitted worker, no provider/result; retirement and API drain incomplete | Review [unissued recovery/successor proposal](02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review); explicit issuance required before recovery/execution | Last verified: zero additional native work and zero sends; three unspent, one model-call/190s reservation preserved. Original 600s window expired; draft grants no reset or automatic restart |
+| P04-I02 | [Installed visual assessment of retained native evidence](02-installed-visual-assessment.md) | Parent-closed after final ACCEPT: installed integration/readback/replay/cleanup verified; visual uncertain | No remaining gate for this bounded slice; later scene work needs separate scope/authority | One cumulative provider send; old and successor one-call/190s reservations preserved. Complete result ends sending. Original 600s window honored; zero new native work or resets |
 | P04-GUIDE-01 | [What remains to finish Plan 04](how-far-to-finish-plan04.md) | Informational; reconciled after a5 | Assessment-only slice, then full scene workflow, then policy | No execution authority; no percentage or fixed ETA asserted |
 
 ## Revised goal and retained checkpoint
@@ -94,8 +109,9 @@ three. Reconcile/clean up before eligible retries; stop on the first valid resul
 including negative/uncertain verdicts. Private setup remains mandatory before dispatch.
 
 Development-agent inference is separate from Arena workflow accounting. P04-I01
-remains zero-provider history; I02's ledger records zero sends but its admitted
-run's execution window is now expired. The named `OPENAI_API_KEY` was delivered
+remains zero-provider history; I02's original failed consumer records zero sends
+and an expired window, while the accepted successor records one cumulative send.
+The named `OPENAI_API_KEY` was delivered
 privately through the supported binding path; no key value was exposed and no
 other profile or provider setting was changed. Private setup is not the current
 blocker or renewed dispatch authority. Recovery must preserve the existing

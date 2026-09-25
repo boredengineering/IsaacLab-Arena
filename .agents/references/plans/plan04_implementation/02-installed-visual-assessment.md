@@ -1,12 +1,14 @@
 # P04-I02 — Installed visual assessment of retained native evidence
 
 - Created: 2026-09-25
-- Status: **BLOCKED by parent after final critique: admitted worker, zero provider dispatches; durable retirement/API drain incomplete**
+- Status: **CLOSED by parent: bounded installed integration verified; visual verdict uncertain, not scene acceptance**
 - Parent: [Plan 04](../event_mapping/event-mapping-refactoring_plan_04.md)
 - Status owner: [canonical handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)
 - Predecessor: [P04-I01 — verified native-only acceptance](01-native-integration-defects.md)
 - Method: parent actor, one independent read-only critic at meaningful checkpoints
 - Owner / due date: not assigned
+
+**Historical original attempt — not the current recovery outcome:**
 
 The operator issued the [revised goal](#revised-goal-prompt) on 2026-09-25.
 The narrow retained-assessment/accounting-only path was implemented, the named
@@ -34,13 +36,64 @@ zero native/Kit/capture/generation/repair/policy/new-prior work occurred here.
 P04-I01 remains the last accepted runtime boundary; its contract and evidence
 payload were read back unchanged after this attempt.
 
-The [issue-recovery proposal](#issue-recovery-proposal--draft-for-review) below
-records the proposed fix sequence and successor-assessment prompt for further
-review. It is **not issued**; saving it does not change the blocked status or renew authority.
+## Current issued recovery result
 
-After a computer restart, use the [canonical restart checkpoint](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md#resume-after-a-computer-restart).
-The runtime/process observations here are the retained 2026-09-25 closeout, not a
-post-reboot check; process disappearance alone cannot establish durable retirement.
+The operator separately **issued the reviewed recovery goal on 2026-09-25**.
+The original expired operation and its blocked closeout below remain historical;
+they were not reopened and no accounting was reset. Current recovery is recorded
+under `recovery_r2` in the existing
+[operation record](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/operation-record.json).
+
+Fresh post-reboot application recovery verified the original run as
+`cancelled`/version 9 and exact epoch-6 owner retired/clean, preserving its
+one-model-call/190-second reservation and admission. Supported handover validated
+matching recovery evidence and preserved the original API's `exited_unclean` history.
+
+**Current measured outcome — final critic ACCEPT and parent-closed:**
+
+- **Lifecycle recovery:** passed; exact old cancellation, cleanup, retirement and
+  supported handover verified without provider sends or state-forcing.
+- **Assessment integration:** passed through authenticated installed successor
+  `p04-i02-visibility-r2`, run
+  `a78483e679c0710ab8534bc455f4b72380ee20c3b38b7d9c3d3ea7ced6999935`.
+  One owned worker made one `gpt-6-astra` request; HTTP200 and a complete valid
+  assessment were retained. Application stopped/version 8 at the first result.
+- **Visual verdict:** **uncertain**, not scene acceptance. `red_block` is uncertain
+  in all three frames. `blue_bin` is visible in both external-camera frames and
+  uncertain in the wrist frame. No recapture, crop, changed candidate or flag promotion.
+- **Readback/replay:** fresh authenticated exact candidate/evidence/PNG, request,
+  response and result bytes verified against hashes and sealed artifacts. Completed
+  replay returned identical receipt/result with no worker, allocation or send mutation.
+- **Final cleanup:** worker PID/group2325 absent; owner epoch7 retired/clean;
+  foreground and API lifetime leases released; API
+  `45d09974234542c9b826f0ba2dabd9c1` stopped/drained. Admission at
+  `2026-09-25T21:25:21.544338+00:00`; unchanged deadline
+  `2026-09-25T21:35:21.544338+00:00`. Final drain/readback completed within that window.
+- **Accounting:** one cumulative dispatch; old and successor one-call/190s
+  reservations both preserved. Two attempts unused, but **no further send is
+  authorized after the complete result**. Usage 1,849 tokens; cost unknown, not free.
+  All native allowances remain consumed, with zero additional native work.
+
+Pre-send critic `deleg_100d3f95` found one retention-to-retry classification gap;
+the parent corrected it narrowly and `deleg_e3b2bd0f` returned `CONTINUE`.
+Affected existing checks/lint passed without test/harness changes. The
+`recovery-r2/source-freeze-retry-retention.json` source remained unchanged through
+execution/readback/replay/final cleanup. Final critic `deleg_06edd9b3` returned
+`ACCEPT` with no unmet criteria; the parent independently re-read unchanged durable
+state, exact worker absence, retirement, lease release and stopped/drained API,
+then **closed P04-I02's bounded integration slice on 2026-09-25**. See
+`recovery-r2/critic-final.json` and `recovery-r2/parent-final-readback.json` in the
+existing evidence directory. No scene acceptance, full scene workflow, Milestone1
+or Plan04 completion is claimed, and no further send is permitted.
+
+The original initiating exception was not retained and cannot be recovered from
+the available evidence. The source-supported pre-send defects and the separate
+lifecycle repair are not a recovered historical cause. Review drafts below are
+historical; this separate issuance, not merely saving those drafts, authorizes work.
+
+After a computer restart, use the [canonical restart checkpoint](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md#resume-after-a-computer-restart)
+and the current operation record. Re-observe exact ownership rather than relying
+on either the historical closeout or this checkpoint's process observations.
 
 ## 1. Outcome and exclusions
 

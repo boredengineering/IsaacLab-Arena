@@ -128,7 +128,7 @@ class RetainedAssessmentPorts(ScenePorts):
         self.check_active()
 
     def execute(self, intent, candidate, original, contract, *, retained_observation):
-        self.require_bounded_capability(None, contract, intent.reservation)
+        self.require_bounded_capability(getattr(self, "principal", None), contract, intent.reservation)
         evidence_id, observation, receipt, _, _ = load_retained_source(
             self.source_store, self.artifacts, contract, protect=self.protect
         )
@@ -199,7 +199,9 @@ class RetainedAssessmentPorts(ScenePorts):
                 break
         if structured is not None:
             pass
-        elif record and record.get("retention_error") is not None:
+        elif (record and record.get("retention_error") is not None) or (output_value.get("local_error") or {}).get(
+            "diagnostic_retention_failed"
+        ) is True:
             validation_error = "local_retention_failure"
         elif record and record["dispatched"] and record["transport_error"] is not None:
             validation_error = "transport_failure"

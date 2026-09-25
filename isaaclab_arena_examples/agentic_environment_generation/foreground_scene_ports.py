@@ -77,7 +77,8 @@ class ForegroundScenePorts(ScenePorts):
         self.authority.require_scene_execute(self.principal, parse_contract(run.contract_json), run_id=self.run_id)
 
     def _authorization(self, principal, contract, action):
-        if principal != self.principal or action not in ("observe", "repair"):
+        actions = ("assess",) if self.profile.assurance == "retained-evidence" else ("observe", "repair")
+        if principal != self.principal or action not in actions:
             raise ValueError("Exact scene principal and action required")
         return self.authority.require_scene_execute(principal, contract, run_id=self.run_id)
 
@@ -129,7 +130,7 @@ class ForegroundScenePorts(ScenePorts):
             self._prepared_workers[intent.intent_id] = prepared
             return prepared.registration
 
-    def _prepare_child(self, intent, candidate, original, contract):
+    def _prepare_child(self, intent, candidate, original, contract, **stage_args):
         return self.worker.prepare(
             intent.worker_fence,
             contract,
@@ -238,7 +239,11 @@ class ForegroundScenePorts(ScenePorts):
                 self.authority.private_model_deadline(self.principal, contract, run_id=self.run_id, role=r)
                 for r in bounds
             ]
-            admitted = self.store.get_generation_attempt(self.run_id).admitted_at
+            admitted = (
+                self.store.result_records(self.run_id)["admitted_at"]
+                if contract.schema_version == "4"
+                else self.store.get_generation_attempt(self.run_id).admitted_at
+            )
             ceiling = self.ceiling_for(intent.action)
             deadline = min(
                 *deadlines,
@@ -246,6 +251,8 @@ class ForegroundScenePorts(ScenePorts):
                 intent.released_at + intent.reservation.runtime_allowance_seconds,
                 time.time() + ceiling.timeout_seconds,
             )
+            if contract.schema_version == "4":
+                deadline = min(deadline, admitted + 570 - 10, intent.released_at + 180)
             if deadline <= max(time.time(), self.authority.clock()):
                 raise ValueError("Scene role deadline expired")
             # Restrict child allowance to both the committed reservation and the
@@ -253,13 +260,15 @@ class ForegroundScenePorts(ScenePorts):
             reservation = dict(
                 model_calls=ceiling.max_calls,
                 model_tokens=ceiling.max_tokens,
-                cost_ceiling_usd=float(ceiling.max_cost_usd),
+                cost_ceiling_usd=None if ceiling.max_cost_usd is None else float(ceiling.max_cost_usd),
                 runtime_allowance_seconds=intent.reservation.runtime_allowance_seconds,
             )
+            if contract.schema_version == "4":
+                reservation["accounting_policy"] = "accounting-only-v1"
             packet = dict(
                 inputs=dict(
                     operation="new",
-                    prompt=contract.source.prompt,
+                    prompt=contract.source.prompt if contract.source.kind == "new" else contract.criteria[0].rubric,
                     retrieval_policy="allow_fallback",
                     execution_catalogue_sha256=self.catalogue_sha256,
                     scene_action=action,
@@ -283,7 +292,19 @@ class ForegroundScenePorts(ScenePorts):
             # packets have no SDK-send handshake; bounded packets must bind it.
             if "request_bounds" in config:
                 self.worker.bind_model_send(
-                    prepared, lambda frozen: self._model_send_guard(intent, contract, prepared, role, frozen)
+                    prepared,
+                    lambda frozen: self._model_send_guard(intent, contract, prepared, role, frozen),
+                    **(
+                        dict(
+                            expected_request_sha256=self.expected_request_sha256,
+                            record_send=lambda message: self.store.record_assessment_send(
+                                self.run_id, intent.intent_id, registration, message
+                            ),
+                            lookup_send=lambda: self.store.assessment_send_record(self.run_id, intent.intent_id),
+                        )
+                        if contract.schema_version == "4"
+                        else {}
+                    ),
                 )
             self.worker.send(prepared, encoded, timeout_s=min(2.0, deadline - time.time()))
         result = self.worker.receive(prepared, protect=self.protect)

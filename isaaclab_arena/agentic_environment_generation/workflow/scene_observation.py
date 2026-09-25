@@ -34,6 +34,22 @@ SUPPORT_THRESHOLDS = MappingProxyType({"linear_m_per_s": 0.01, "angular_rad_per_
 def admit_criterion(criterion):
     """Reject unsupported semantics before any native/model callback is invoked."""
     criterion = Criterion.model_validate(criterion.model_dump(mode="python"))
+    if criterion.evaluator_version == "visibility-v2":
+        if (
+            criterion.evidence_producer != "scene.visible"
+            or criterion.kind != "visual"
+            or criterion.required_modalities != ("rgb",)
+            or criterion.limit.unit != "boolean"
+            or criterion.limit.operator != "eq"
+            or criterion.limit.value != 1
+            or criterion.observation_window.start_step != criterion.observation_window.end_step
+            or not 1 <= len(criterion.subjects) <= 16
+            or len(set(criterion.subjects)) != len(criterion.subjects)
+            or not 1 <= len(criterion.coordinate_frames) <= 4
+            or len(set(criterion.coordinate_frames)) != len(criterion.coordinate_frames)
+        ):
+            raise ValueError("Unsupported retained visibility criterion")
+        return criterion
     profile = PRODUCER_REGISTRY.get(criterion.evidence_producer)
     if profile is None or criterion.evaluator_version != EVALUATOR_VERSION:
         raise ValueError("unsupported producer/version")
@@ -235,7 +251,7 @@ def visual_request(criterion, candidate, cohort, artifacts, observation, *, prot
         ):
             raise ValueError("image binding mismatch")
         identities.append({k: frame[k] for k in ("camera", "step", "subjects", "sha256")})
-    return {
+    request = {
         "criterion_id": criterion.criterion_id,
         "criterion_digest": hashlib.sha256(canonical(criterion.model_dump(mode="json"))).hexdigest(),
         "rubric": criterion.rubric,
@@ -245,6 +261,65 @@ def visual_request(criterion, candidate, cohort, artifacts, observation, *, prot
         "step_window": [start, end],
         "frames": identities,
     }
+    if criterion.evaluator_version == "visibility-v2":
+        if [f["camera"] for f in identities] != list(criterion.coordinate_frames):
+            raise ValueError("Retained camera order differs")
+        request["answer_schema"] = "visibility-v2"
+        request["request_sha256"] = hashlib.sha256(canonical(request)).hexdigest()
+    return request
+
+
+def validate_visibility_response(raw, request):
+    """Validate complete per-subject coverage without turning uncertainty into success."""
+
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Duplicate visibility answer key")
+            result[key] = value
+        return result
+
+    value = json.loads(raw, object_pairs_hook=unique)
+    if (
+        type(value) is not dict
+        or set(value) != {"request_sha256", "answers"}
+        or value["request_sha256"] != request["request_sha256"]
+        or type(value["answers"]) is not list
+        or len(value["answers"]) != len(request["frames"])
+    ):
+        raise ValueError("Visibility request identity or frame coverage differs")
+    verdicts = []
+    for answer, frame in zip(value["answers"], request["frames"]):
+        if (
+            type(answer) is not dict
+            or set(answer) != {"camera", "frame_digest", "subjects"}
+            or answer["camera"] != frame["camera"]
+            or answer["frame_digest"] != frame["sha256"]
+            or type(answer["subjects"]) is not list
+            or len(answer["subjects"]) != len(frame["subjects"])
+        ):
+            raise ValueError("Visibility frame or subject coverage differs")
+        for subject, expected in zip(answer["subjects"], frame["subjects"]):
+            if (
+                type(subject) is not dict
+                or set(subject) != {"subject", "verdict", "reason"}
+                or subject["subject"] != expected
+                or subject["verdict"] not in ("visible", "not_visible", "uncertain")
+                or type(subject["reason"]) is not str
+                or not 1 <= len(subject["reason"].strip()) <= 2048
+            ):
+                raise ValueError("Invalid per-subject visibility answer")
+            verdicts.append(subject["verdict"])
+    return dict(
+        **value,
+        verdict="not_visible" if "not_visible" in verdicts else "uncertain" if "uncertain" in verdicts else "visible",
+        limitations=[
+            "retained_images_not_fresh_capture",
+            "visibility_only_not_scene_acceptance",
+            "names_metadata_and_subject_tags_are_not_visual_proof",
+        ],
+    )
 
 
 def retain_visual_answer(criterion, candidate, cohort, artifacts, observation, raw_response, *, protect):

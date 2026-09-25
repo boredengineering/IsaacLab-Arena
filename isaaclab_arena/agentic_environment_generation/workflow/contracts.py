@@ -91,8 +91,8 @@ class WorkflowBudget(FrozenModel):
     max_revisions: Count
     max_runtime_seconds: Amount
     max_model_calls: Count
-    max_model_tokens: Count
-    max_cost_usd: Amount
+    max_model_tokens: Count | None
+    max_cost_usd: Amount | None
     max_realizations: Count
     max_steps: Count
     max_observations: Count
@@ -223,8 +223,22 @@ class PriorRetrievalSelection(FrozenModel):
         return self
 
 
+class RetainedEvidenceSource(FrozenModel):
+    """Immutable producer links for a consumer, not a replacement capture cohort."""
+
+    operation_id: Identifier
+    run_id: Hash
+    candidate_sha256: Hash
+    candidate_digest: Hash
+    contract_digest: Hash
+    profile_digest: Hash
+    observation_manifest_digest: Hash
+    evidence_sha256: Hash
+    frame_sha256: Annotated[tuple[Hash, ...], Field(min_length=1, max_length=16)]
+
+
 class WorkflowContract(FrozenModel):
-    schema_version: Literal["1", "2", "3"]
+    schema_version: Literal["1", "2", "3", "4"]
     source: Annotated[NewSource | ExistingSource, Field(discriminator="kind")]
     criteria: Annotated[tuple[Criterion, ...], Field(min_length=1, max_length=256)]
     preserved: Annotated[tuple[PreservationRule, ...], Field(max_length=256)]
@@ -234,6 +248,7 @@ class WorkflowContract(FrozenModel):
     effects: EffectsPolicy
     retrieval: PriorRetrievalSelection | None = None
     """Required in schema 2; omitted from schema 1's unchanged wire representation."""
+    retained_evidence: RetainedEvidenceSource | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -247,10 +262,54 @@ class WorkflowContract(FrozenModel):
         value = serialize(self)
         if self.schema_version == "1":
             value.pop("retrieval", None)
+        if self.schema_version != "4":
+            value.pop("retained_evidence", None)
         return value
 
     @model_validator(mode="after")
     def consistent_intent(self):
+        if self.schema_version == "4":
+            b = self.budget
+            if (
+                self.source.kind != "existing"
+                or self.retained_evidence is None
+                or self.execution.generation_model is not None
+                or self.execution.assessment_model is None
+                or self.execution.policy is not None
+                or self.execution.capture is not None
+                or self.retrieval is not None
+                or self.allowed_interventions
+                or len(self.criteria) != 1
+                or self.criteria[0].kind != "visual"
+                or self.criteria[0].evaluator_version != "visibility-v2"
+                or self.effects.allow_runtime
+                or self.effects.allow_database_reads
+                or not self.effects.allow_operational_writes
+                or b.max_model_tokens is not None
+                or b.max_cost_usd is not None
+                or not 1 <= b.max_model_calls <= 3
+                or b.max_candidates != 1
+                or any((
+                    b.max_revisions,
+                    b.max_realizations,
+                    b.max_steps,
+                    b.max_observations,
+                    b.max_policy_episodes,
+                    b.max_policy_steps,
+                ))
+                or b.max_runtime_seconds > 570
+                or b.per_operation_timeout_seconds > 190
+                or b.total_deadline_seconds > 600
+            ):
+                raise ValueError("Schema 4 requires explicit accounting-only retained visibility assessment")
+            if hashlib.sha256(self.source.content.encode()).hexdigest() != self.retained_evidence.candidate_sha256:
+                raise ValueError("Retained candidate source bytes differ")
+        if self.schema_version != "4" and (
+            self.retained_evidence is not None
+            or self.budget.max_model_tokens is None
+            or self.budget.max_cost_usd is None
+        ):
+            raise ValueError("Accounting-only retained evidence requires schema 4")
         if self.schema_version == "3":
             if (
                 self.source.kind != "existing"
@@ -272,7 +331,9 @@ class WorkflowContract(FrozenModel):
                 or self.budget.max_cost_usd
             ):
                 raise ValueError("Schema 3 requires explicit model-free retained-candidate native validation")
-        elif self.execution.generation_model is None or self.execution.assessment_model is None:
+        elif self.schema_version != "4" and (
+            self.execution.generation_model is None or self.execution.assessment_model is None
+        ):
             raise ValueError("Legacy workflow schemas require both explicit model selections")
         if self.schema_version == "2" and (
             self.retrieval is None or self.source.kind != "new" or not self.effects.allow_database_reads
@@ -287,7 +348,7 @@ class WorkflowContract(FrozenModel):
                 if a == b or a.startswith(b + "/") or b.startswith(a + "/"):
                     raise ValueError("intervention overlaps a frozen preservation path")
         for criterion in self.criteria:
-            if criterion.observation_window.end_step > self.budget.max_steps:
+            if self.schema_version != "4" and criterion.observation_window.end_step > self.budget.max_steps:
                 raise ValueError("observation window exceeds step budget")
             if "policy_rollout" in criterion.required_modalities and criterion.kind != "policy":
                 raise ValueError("policy_rollout modality requires policy criterion")

@@ -78,13 +78,23 @@ class PricingBasis(FrozenModel):
 class RequestBounds(FrozenModel):
     """Versioned profile binding of an executable envelope and reviewable price basis."""
 
-    version: BoundsVersion
+    version: Annotated[int, Field(strict=True, ge=1, le=2)]
     envelope: RequestLimits
-    pricing: PricingBasis
+    pricing: PricingBasis | None
+
+    @model_validator(mode="after")
+    def explicit_accounting_policy(self):
+        if (self.version == 2) != (self.pricing is None):
+            raise ValueError("V2 records actual usage/unknown cost; V1 requires bounded pricing")
+        return self
 
     def accounting(self, *, model, endpoint):
         """Derive the universal per-send ceiling with exact integer nano-USD rounding."""
         limits, price = self.envelope, self.pricing
+        if self.version == 2:
+            return checked_workflow_accounting(
+                dict(version=2, attested=False, model=model, endpoint=endpoint, max_tokens=None, max_cost_usd=None)
+            )
         if limits.max_images and price.image_tokens_per_image == 0:
             raise ValueError("Explicit worst-case image token allowance required")
         inputs = (
@@ -113,9 +123,9 @@ class RequestBounds(FrozenModel):
         observed = checked_workflow_accounting(accounting, model=model, endpoint=endpoint)
         if (
             any(expected[k] != observed[k] for k in expected if k != "max_cost_usd")
-            or _usd_units(expected["max_cost_usd"]) != _usd_units(observed["max_cost_usd"])
+            or (self.version == 1 and _usd_units(expected["max_cost_usd"]) != _usd_units(observed["max_cost_usd"]))
             or type(inference_policy) is not dict
-            or inference_policy.get("provider") != self.pricing.provider
+            or inference_policy.get("provider") != (self.pricing.provider if self.pricing else "openai")
             or inference_policy.get("model") != model
             or inference_policy.get("endpoint", "").rstrip("/") != endpoint.rstrip("/")
             or inference_policy.get("request_policy", {}).get("token_limit_parameter") != self.envelope.output_parameter
@@ -233,7 +243,7 @@ class RequestEnvelope:
         ):
             raise ValueError("unsupported request envelope fields")
         accounting = checked_workflow_accounting(self.accounting, model=self.model, endpoint=self.endpoint)
-        if self.max_output_tokens > accounting["max_tokens"]:
+        if accounting["version"] == 1 and self.max_output_tokens > accounting["max_tokens"]:
             raise ValueError("request envelope output exceeds attested total")
         object.__setattr__(self, "accounting", MappingProxyType(accounting))
         object.__setattr__(self, "image_formats", tuple(self.image_formats))

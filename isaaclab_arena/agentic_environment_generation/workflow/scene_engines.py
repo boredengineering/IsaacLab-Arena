@@ -60,7 +60,7 @@ class BoundedSceneModels:
         )
         if (
             not isinstance(allowance, CallAllowance)
-            or not allowance.token_cost_bounded
+            or not (allowance.token_cost_bounded or allowance.accounting_only)
             or not math.isfinite(allowance.deadline)
             or allowance._bound != accounting
         ):
@@ -80,7 +80,9 @@ class BoundedSceneModels:
             if not callable(send_guard):
                 raise ValueError("Installed model send authority required")
             envelope = RequestBounds.model_validate(config["request_bounds"]).bind(
-                model=config["model"], endpoint=config["base_url"], accounting=accounting,
+                model=config["model"],
+                endpoint=config["base_url"],
+                accounting=accounting,
                 inference_policy=config["inference_profile"],
             )
             installed = {role: envelope for role in approved_roles}
@@ -100,18 +102,22 @@ class BoundedSceneModels:
                     accounting=accounting,
                 )
 
-    def _config_for(self, role):
+    def _config_for(self, role) -> dict:
         if role not in self._roles:
             raise ValueError("model role not approved")
-        return {k: v for k, v in self._config.items() if k not in {"workflow_accounting", "request_bounds"}} | {
-            "load_dotenv": False,
-            "max_tokens": (
-                self._envelopes[role].max_output_tokens
-                if self._envelopes is not None
-                else min(4096, self._config["workflow_accounting"]["max_tokens"])
-            ),
-            "max_retries": 0,
-        }
+        return (
+            {k: v for k, v in self._config.items() if k not in {"workflow_accounting", "request_bounds"}}
+            | {
+                "load_dotenv": False,
+                "max_tokens": (
+                    self._envelopes[role].max_output_tokens
+                    if self._envelopes is not None
+                    else min(4096, self._config["workflow_accounting"]["max_tokens"])
+                ),
+                "max_retries": 0,
+            }
+            | ({"probe_connection": False} if self.allowance.accounting_only else {})
+        )
 
     def _client(self, role):
         return bounded_client(
@@ -260,6 +266,17 @@ class BoundedSceneModels:
             "Do not claim aggregate success, physics, support or policy performance. Request:\n"
             + canonical(request).decode("utf-8")
         )
+        if criterion.evaluator_version == "visibility-v2":
+            prompt = (
+                "Assess visibility only, using each attached image in the exact frame order below. Use the grounded"
+                " descriptions in the rubric; subject names, identifiers and tags are NOT visual proof. Return ONLY a"
+                " JSON object with request_sha256 copied exactly and answers in frame order. Each answer has camera,"
+                " frame_digest (the frame sha256), and subjects in the listed subject order. Each subject answer has"
+                " subject, verdict (visible, not_visible, or uncertain), and a short visual reason. Use uncertain if"
+                " identity or visibility cannot be determined; never infer visibility from metadata. Do not assess"
+                " physics, task success or calibration. Request:\n"
+                + canonical(request).decode("utf-8")
+            )
         with self._client("assessment"):
             backend = InferenceBackend(**config)
             return backend.multimodal_chat(prompt, images)

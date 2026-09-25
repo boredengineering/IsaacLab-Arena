@@ -89,6 +89,8 @@ class SceneReservation(GenerationReservation):
     @model_serializer(mode="wrap")
     def retain_zero_policy_shape(self, handler):
         value = handler(self)
+        if self.accounting_policy == "bounded-v1":
+            value.pop("accounting_policy", None)
         for key in ("policy_episodes", "policy_steps"):
             if not getattr(self, key):
                 value.pop(key, None)
@@ -121,7 +123,7 @@ class ScenePortProfile(_VersionedSceneModel):
     """V1 synthetic loop or explicit V2 split; neither label proves native validity."""
 
     port_id: Identifier
-    assurance: Literal["synthetic", "native-unverified"]
+    assurance: Literal["synthetic", "native-unverified", "retained-evidence"]
     owned_worker: bool = False
     """Trusted composition capability, not user authorization or physical proof."""
     producer_ids: tuple[Identifier, ...]
@@ -135,7 +137,26 @@ class ScenePortProfile(_VersionedSceneModel):
 
     @model_validator(mode="after")
     def versioned_stages(self):
-        if self.codec_version == 1:
+        if self.assurance == "retained-evidence":
+            if (
+                self.codec_version != 2
+                or not self.owned_worker
+                or self.observe is not None
+                or self.capture is not None
+                or self.assess is None
+                or self.policy is not None
+                or self.assess.model_calls != 1
+                or self.assess.model_tokens is not None
+                or self.assess.cost_ceiling_usd is not None
+                or self.assess.runtime_allowance_seconds > 190
+                or any(
+                    getattr(self.assess, key)
+                    for key in ("candidates", "revisions", "realizations", "steps", "observations")
+                )
+                or any(value for key, value in self.repair.model_dump().items() if key != "accounting_policy")
+            ):
+                raise ValueError("Retained-only assessment profile required")
+        elif self.codec_version == 1:
             if (
                 self.assurance != "synthetic"
                 or self.observe is None
@@ -166,6 +187,12 @@ class ScenePortProfile(_VersionedSceneModel):
         for allocation in (self.observe, self.capture, self.assess, self.repair):
             if allocation is not None and (allocation.policy_episodes or allocation.policy_steps):
                 raise ValueError("non-policy stage cannot reserve policy budget")
+            if (
+                allocation is not None
+                and self.assurance != "retained-evidence"
+                and (allocation.model_tokens is None or allocation.cost_ceiling_usd is None)
+            ):
+                raise ValueError("Legacy scene profiles require bounded accounting")
         return self
 
 
@@ -200,6 +227,18 @@ class SceneIntent(_VersionedSceneModel):
 
 
 class SceneResult(_VersionedSceneModel):
+    retained_assessment_json: str | None = None
+
+    @model_serializer(mode="wrap")
+    def retain_result_shape(self, handler):
+        value = handler(self)
+        if self.retained_assessment_json is None:
+            value.pop("retained_assessment_json", None)
+        if self.codec_version == 1:
+            value.pop("codec_version", None)
+            value.pop("policy_trial", None)
+        return value
+
     policy_trial: PolicyTrialReceipt | None = None
     observation: Observation | None = None
     candidate_json: str | None = None
@@ -244,7 +283,7 @@ def repaired_candidate(contract, original, parent, scene, *, source_id):
 
 def policy_compatible(contract, profile):
     """Check whole-outcome support against exact trusted contract/task pins."""
-    from decimal import Decimal, ROUND_CEILING
+    from decimal import ROUND_CEILING, Decimal
 
     criteria = tuple(c for c in contract.criteria if c.requirement == "required" and c.kind == "policy")
     if len(criteria) != 1:

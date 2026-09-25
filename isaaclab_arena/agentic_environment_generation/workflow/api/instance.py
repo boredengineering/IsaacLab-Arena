@@ -22,7 +22,7 @@ from .private_files import Directory, decode, encode, fields
 PUBLIC = ["schema_version", "instance", "config_sha256", "binding_sha256", "endpoint", "generation", "state", "code"]
 STATES = {"launching", "ready", "stopping", "stopped", "failed", "exited_unclean"}
 MODULE = "isaaclab_arena.agentic_environment_generation.workflow.cli"
-EXECUTION_MODES = {"isolated-synthetic-execution-v1", "retained-native-validation-v1"}
+EXECUTION_MODES = {"isolated-synthetic-execution-v1", "retained-native-validation-v1", "retained-visual-assessment-v1"}
 
 
 def instance_id(value):
@@ -81,6 +81,10 @@ def state(config, selected):
             )
             if config.value["mode"] == "retained-native-validation-v1":
                 from .installed_native import CAPABILITIES
+
+                allowed = (CAPABILITIES,)
+            elif config.value["mode"] == "retained-visual-assessment-v1":
+                from .installed_assessment import CAPABILITIES
 
                 allowed = (CAPABILITIES,)
             if result["capabilities"] not in allowed:
@@ -232,7 +236,29 @@ def observe(config, selected, *, stop=False, reconcile=False):
     return receipt(known, code="unknown"), 3
 
 
-def launch(config, selected, *, previous_config=None, previous_instance=None, native_authorized=False):
+def _execution_environment(operator, *, native, assessment):
+    environment = {"HOME": operator["home"], "PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"}
+    if native or assessment:
+        from isaaclab_arena_examples.agentic_environment_generation.web_api.provider_security import worker_environment
+
+        environment.update(worker_environment(None))
+    if native:
+        for key in ("EXP_PATH", "ISAAC_PATH", "CARB_APP_PATH"):
+            if key in os.environ:
+                environment[key] = os.environ[key]
+        environment["OMNICLIENT_HUB_MODE"] = "disabled"
+    return environment
+
+
+def launch(
+    config,
+    selected,
+    *,
+    previous_config=None,
+    previous_instance=None,
+    native_authorized=False,
+    assessment_authorized=False,
+):
     """Launch a fresh instance, or explicitly hand over an exactly drained configuration."""
     from .installed_config import MAX_CONFIG
 
@@ -241,6 +267,9 @@ def launch(config, selected, *, previous_config=None, previous_instance=None, na
     native = config.value["mode"] == "retained-native-validation-v1"
     if type(native_authorized) is not bool or native_authorized != native:
         raise ValueError("Separate native approval must match the selected mode")
+    assessment = config.value["mode"] == "retained-visual-assessment-v1"
+    if type(assessment_authorized) is not bool or assessment_authorized != assessment:
+        raise ValueError("Separate assessment approval must match the selected mode")
     if previous_config is not None or previous_instance is not None:
         instance_id(previous_instance)
         if previous_config is None or selected == previous_instance or config.digest == previous_config.digest:
@@ -360,18 +389,11 @@ def launch(config, selected, *, previous_config=None, previous_instance=None, na
                 str(gate),
             ]
             operator = config.value["operator"]
-            child_environment = {"HOME": operator["home"], "PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"}
+            child_environment = _execution_environment(operator, native=native, assessment=assessment)
+            if assessment:
+                arguments.append("--authorize-assessment")
             if native:
-                from isaaclab_arena_examples.agentic_environment_generation.web_api.provider_security import (
-                    worker_environment,
-                )
-
                 arguments.append("--authorize-native")
-                child_environment.update(worker_environment(None))
-                for key in ("EXP_PATH", "ISAAC_PATH", "CARB_APP_PATH"):
-                    if key in os.environ:
-                        child_environment[key] = os.environ[key]
-                child_environment["OMNICLIENT_HUB_MODE"] = "disabled"
             child = subprocess.Popen(
                 arguments,
                 executable=executable,

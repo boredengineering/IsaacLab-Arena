@@ -50,6 +50,11 @@ def _add_installed_arguments(commands):
     setup.add_argument("--config", required=True)
     setup.add_argument("--create", action="store_true", required=True)
     setup.add_argument("--credentials-fd", type=int, required=True)
+    preview = commands.add_parser(
+        "assessment-preview", help="Prepare the installed retained request with sends denied", allow_abbrev=False
+    )
+    preview.add_argument("--config", required=True)
+    preview.add_argument("--contract", required=True)
     for name in ("credentials-update", "credentials-remove"):
         credentials = commands.add_parser(name, allow_abbrev=False)
         credentials.add_argument("--config", required=True)
@@ -151,6 +156,11 @@ def _add_installed_arguments(commands):
             command.add_argument(
                 "--authorize-native", action="store_true", help="Approve the exact bounded native selection"
             )
+            command.add_argument(
+                "--authorize-assessment",
+                action="store_true",
+                help="Approve only the frozen retained assessment selection",
+            )
         if name == "api-handover":
             command.add_argument(
                 "--previous-config", required=True, help="Unchanged C1 used for exact stop/reconciliation"
@@ -166,26 +176,32 @@ def _launch_instance(options, config, selected):
     from .api.installed_config import load
     from .api.instance import instance_id, launch
 
+    approval = {"native_authorized": True} if options.authorize_native else {}
+    if getattr(options, "authorize_assessment", False):
+        approval["assessment_authorized"] = True
     if options.command == "api-launch":
-        return launch(config, selected, **({"native_authorized": True} if options.authorize_native else {}))
+        return launch(config, selected, **approval)
     return launch(
         config,
         selected,
         previous_config=load(options.previous_config),
         previous_instance=instance_id(options.previous_instance),
-        **({"native_authorized": True} if options.authorize_native else {}),
+        **approval,
     )
 
 
 def _serve_instance(options, config, selected):
     from .api.server import serve
 
+    approval = {"native_authorized": True} if options.authorize_native else {}
+    if getattr(options, "authorize_assessment", False):
+        approval["assessment_authorized"] = True
     return serve(
         config,
         selected,
         options.lease_fd,
         options.gate_fd,
-        **({"native_authorized": True} if options.authorize_native else {}),
+        **approval,
     )
 
 
@@ -247,6 +263,17 @@ def _run_installed(options):
     """Execute only the explicitly selected installed operation with static errors."""
     if options.command == "setup-readiness":
         return _run_setup_readiness(options)
+    if options.command == "assessment-preview":
+        try:
+            from .api.installed_assessment import preview
+            from .api.installed_config import load
+
+            result = preview(load(options.config), _read_contract(options.contract))
+        except Exception:
+            print("workflow: retained assessment preview unavailable", file=sys.stderr)
+            return 2
+        print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+        return 0
     if options.command in {"submit", "cancel", "resume", "result"}:
         try:
             from .api.client import query

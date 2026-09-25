@@ -81,12 +81,12 @@ class PublicInferencePolicy(FrozenModel):
 
 
 class PublicWorkflowAccounting(FrozenModel):
-    version: Annotated[int, Field(strict=True, ge=1, le=1)]
-    attested: Literal[True]
+    version: Annotated[int, Field(strict=True, ge=1, le=2)]
+    attested: Literal[True, False]
     model: str
     endpoint: str
-    max_tokens: Annotated[int, Field(strict=True, gt=0)]
-    max_cost_usd: str
+    max_tokens: Annotated[int, Field(strict=True, gt=0)] | None
+    max_cost_usd: str | None
 
     @model_validator(mode="before")
     @classmethod

@@ -1,0 +1,506 @@
+# P04-I02 — Installed visual assessment of retained native evidence
+
+- Created: 2026-09-25
+- Status: **BLOCKED by parent after final critique: admitted worker, zero provider dispatches; durable retirement/API drain incomplete**
+- Parent: [Plan 04](../event_mapping/event-mapping-refactoring_plan_04.md)
+- Status owner: [canonical handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)
+- Predecessor: [P04-I01 — verified native-only acceptance](01-native-integration-defects.md)
+- Method: parent actor, one independent read-only critic at meaningful checkpoints
+- Owner / due date: not assigned
+
+The operator issued the [revised goal](#revised-goal-prompt) on 2026-09-25.
+The narrow retained-assessment/accounting-only path was implemented, the named
+environment key was privately bound through supported handover, and the corrected
+production request passed the pre-send gate and independent review. The application
+admitted `p04-i02-visibility` and released one owned model worker, but no provider
+dispatch, raw model response or visual result was retained. The run subsequently
+entered `reconciliation_required`; supported cancellation now leaves it
+`cancel_requested`. See the [current outcome](#issued-revision--installed-ownership-blocker-2026-09-25).
+
+The model worker is absent and its physical cleanup is recorded. Durable owner
+epoch 6 remains dirty/unretired; supported API shutdown returned `cleanup_unknown`
+and the exact API process remains live in `stopping`. The 600-second operation
+deadline expired at **16:22:51.511984 UTC**. No resubmission, source correction,
+deadline extension, forced cleanup or accounting reset was performed after this
+ownership blocker. Final critic `deleg_7682ffd5` returned `BLOCKED`; the parent
+verified the cited source and fresh durable/physical state and retained the blocked outcome.
+
+The original capped goal and its prerequisite stop remain historical evidence.
+**Zero provider sends are recorded across this producer; all three cumulative
+attempts are unspent**, but that does not renew the expired execution window.
+The one model-call/190-second reservation is retained, not refunded. The previous
+**3/3 plus 2/2 native launches** and earlier generation allowance remain consumed;
+zero native/Kit/capture/generation/repair/policy/new-prior work occurred here.
+P04-I01 remains the last accepted runtime boundary; its contract and evidence
+payload were read back unchanged after this attempt.
+
+## 1. Outcome and exclusions
+
+Make one authenticated installed submission assess a5's exact retained camera
+frames through the existing application owner, bounded model transport, retention
+and readback paths. The application—not the development agent—must own dispatch,
+response validation, persistence and cleanup. Replaying the completed operation
+must return its retained result without another provider request or worker release.
+
+This is an assessment-only integration slice: provider-free preparation followed,
+only after Gate A, by one installed assessment with at most three provider attempts
+under the retry policy below. It covers the
+assessment portion of Plan 04 Goal B and the bounded Goal C witness. Defer XY repair,
+generation, new capture, independent visual calibration and the complete scene
+workflow to later authority; GR00T and the two-seed policy pilot do not gate it.
+
+Keep software acceptance separate from the visual verdict. A valid, source-bound
+negative or inconclusive assessment can establish integration; it does not establish
+a passing scene. A transport failure, malformed answer or missing frame coverage
+is retained failure evidence, not completed application acceptance.
+
+## 2. Verified starting point and immutable source
+
+P04-I01 reached native-only `accepted`; the parent closed it after independent
+`ACCEPT`. Both objects passed the final five of 180 steps, three same-cohort PNGs
+were recovered through authenticated reads, and replay released no worker.
+The [scoped result](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/LIVE_RESULT.txt)
+and [parent closeout](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/parent-closeout.json)
+remain the evidence, not a new simulation claim in this plan.
+
+Planning checkout: `de8f03b13827517e605bb32d49ff87ae596b24bf`, branch
+`dev/0.3.0-prerelease`, clean before these documentation edits. This differs from
+the historical a5 execution baseline; do not rewrite its source manifest or claim
+new-source runtime acceptance. Recheck git state when the goal is issued.
+
+| Source identity | Frozen value |
+| --- | --- |
+| Operation | `p04-i01-native-a5` |
+| Run | `fcc052f890be2d208783f04453d184f7d2455afe948aa8607e92a5a87d79ea48` |
+| Original candidate file | `outputs/workflow/plan04-implementation/milestone1/realize-20260924T232748Z/candidate.json` |
+| Original file SHA-256 | `8dcd08b813236ee0ccdcad1024594a70301d4a6fdcd0af41d013e05f5135a7e8` |
+| Canonical candidate SHA-256 | `2dc9fa1eb2ec06c872366dc10bf709cb412b435b85e1417bc788854091051b53` |
+| Source native contract digest | `c66ee9406a09c1428927ac64efe1d477571c6a3e47037e65404b6d5eb57b2e24` |
+| Source evidence profile digest | `4b21b69b0a6fc9e99728969cafc22b04a4d79134df59c7b092acf1fcf0f09353` |
+| Native settings SHA-256 | `9099687b0a1ea681450adc3d4789dca56da4b867dd33125a6432e1bd69a712b7` |
+| Authenticated evidence artifact SHA-256 | `3647e6b04a5d8be843d9aed008a705402ae4d49494161b23aa86b6efc438ea94` |
+| Evidence cohort | Exact `candidate` and `cohort` objects in `a5-http-evidence_json.json`; do not relabel their contract/profile, realization, reset, environment, window or frame identities |
+| Frame step / subjects | 180 / `red_block`, `blue_bin`, in retained order |
+| Database namespace | `milestone1_live_20260924t232748z_r2` |
+
+| Camera, in retained order | Original PNG SHA-256 |
+| --- | --- |
+| `external_camera_rgb` | `89abb1ab18463b2b1f3440bacf9b64eca9dddefcead766d0e0607979c99b5106` |
+| `external_camera_2_rgb` | `ca221562bb7ed023fcb10ee64ba06127565ed742ef42f98d1ac94be55ee6e7c4` |
+| `wrist_camera_rgb` | `506e044db2ccaddc824f9064d5fbcc2725a9ab5c0c028004c0668a64e7b6d9d6` |
+
+Read artifact reference IDs and hashes from the retained
+[authenticated inventory/readback](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/a5-http-readback.json).
+The local copies are planning/recovery evidence, not a replacement for installed
+artifact resolution. Frames were fresh at a5 capture; reusing them here is retained
+assessment, not a fresh capture or a new native trial.
+
+Preserve a5's limitations: revised settling policy is not calibration; the native
+sampler is not independently validated; shared-cache permission changes prevent a
+sole-cause claim for the private-cache fix. Cleanup established no live owned
+workers, not the disappearance of dead zombie entries. Leave all previous trials,
+flags, immutable artifacts, tombstones and cumulative accounting intact.
+
+## 3. Concrete application seams to inspect
+
+These are source observations, not pre-approved patches or executable commands.
+Read definitions and callers again before implementation.
+
+| Boundary | Current evidence and required behavior |
+| --- | --- |
+| Installed selection | [`installed_native.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_native.py) is deliberately model-free; [`installed_execution.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_execution.py) explicitly selects synthetic execution/pricing. Neither may be relabeled or have its guards relaxed to run live assessment. Add only the smallest explicit assessment-only composition if no supported selection already exists, reusing the same owner/coordinator. |
+| Source versus consumer binding | [`CandidateBinding` / `EvidenceCohort`](../../../../isaaclab_arena/agentic_environment_generation/workflow/evidence.py) bind candidate, contract and profile. [`SplitScenePorts.load_retained_capture` / `_reopen`](../../../../isaaclab_arena/agentic_environment_generation/workflow/split_scene_ports.py) enforce those bindings. A new paid/visual contract cannot silently adopt a5 by rewriting its old receipt. Record a new consumer operation linked explicitly to the unchanged producer binding and verified manifests. |
+| Visual request and verdict | [`visual_request`, `retain_visual_answer`, `evaluate_visual_answer`](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_observation.py) implement exact per-frame visibility coverage; [`BoundedSceneModels.assess`](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_engines.py) uses retained image bytes. This is not a general spatial, support or policy evaluator. Freeze an honest visibility rubric for both subjects and all three frames; do not claim `CandidateBinding` itself provides semantic subject grounding. |
+| Smallest honest answer | The current evaluator accepts one boolean `visible` per frame, not a per-subject uncertainty result. Do not claim the requested coverage/uncertainty already exists. Adapt only the existing request/validation/retention path as needed to distinguish each subject's visibility and explicit uncertainty; preserve old schema behavior through an explicit version where necessary. No new evaluation framework, calibration campaign or confidence benchmark. |
+| Live accounting policy | [`PricingBasis`](../../../../isaaclab_arena/agentic_environment_generation/workflow/request_envelope.py) currently admits only `synthetic_fixture`. Add the smallest explicit live, accounting-only selection through the existing contract/profile/admission/transport/retention paths. Represent no operator monetary/aggregate-token cap explicitly; preserve final-request integrity/size checks and synthetic guards. Retain reported usage and sourced cost estimates; unavailable pricing is unknown, not free and not by itself a dispatch veto. |
+| Authority and lifecycle | Reuse the existing profile registry, private role delivery, request envelope, send guard, durable reservations, execution owner, owned worker and authenticated artifact/query paths. No alternative executor, budget ledger, credential system or direct helper acceptance. |
+
+## 4. Revised authority and limits — not issued
+
+The revised goal removes fixed monetary/token budgets and explicitly amends this
+same package's cumulative provider-attempt limit from one to three. Prior consumed
+attempts still count; restarts, retries and new operation IDs never reset accounting.
+Technical request-validity, authorization and lifecycle controls remain mandatory.
+
+| Effect | Revised policy |
+| --- | --- |
+| Preparation / Gate A | Zero Arena provider requests and zero native launches |
+| Live selection | Assessment role only, `gpt-6-astra`; exact endpoint/profile must be verified and frozen, never inferred from a development-agent setting |
+| Provider attempts | At most **three total** after Gate A for this P04-I02 assessment, counting all prior sends across agents, restarts and operation IDs. The application may retry response JSON/schema/coverage errors or transient network/timeout/rate-limit/5xx errors. No hidden SDK retries, constructor pings, fallback models or separate repair-model calls |
+| Never sent versus uncertain send | A local pre-transport refusal does not count as a send only when transport/durable records prove no dispatch; preserve its history. Every failed or uncertain send consumes one attempt, not the entire allowance. Reconcile retained responses and retire the owned attempt before a permitted retry; do not require proof that the provider never processed a timeout |
+| Token policy | **No preset operator aggregate-token budget or fixed numeric output cap.** Respect the model's technical context/output limits; select and freeze a finite provider-compatible completion allowance sufficient for the full structured answer and reasoning |
+| Workflow cost | **No operator USD ceiling for this one assessment.** Record reported usage and available cost estimates/source/uncertainty; estimated spend or absence of a universal price bound is not an admission veto |
+| Owned assessment worker | One at a time. Each attempt: provider timeout at most 180 seconds plus 10 seconds cleanup reserve, at most 190 seconds. Assessment stage allowance at most 570 seconds; total operation deadline at most 600 seconds including 30 seconds shared orchestration/backoff. Reuse the existing owner/worker boundary |
+| New native work | Zero Kit starts, native launches, steps, resets, recaptures or GPU/policy workloads, including diagnostic tests |
+| Generation / repair / priors | Zero generation, scene/XY repair, separate model-repair calls, candidate revisions, policy episodes or new prior retrieval. Retrying the same assessment for its allowed format/network failures is not a new scene workflow |
+| Input | One exact retained candidate and all three original a5 PNGs; no cropping, rerendering or image substitution to obtain a pass |
+| Writes | Only the new assessment operation and required application-owned records/artifacts, within the existing approved operational binding and namespace; no publication or prior promotion |
+
+Derive text/schema/request-byte and image limits from the actual complete request,
+retained images and provider technical limits. Keep `RequestEnvelope` content,
+model/endpoint, integrity, size and send-time authorization checks. Do not confuse
+serialized base64 byte counts or conservative reservations with actual billed tokens.
+Choose the finite SDK completion allowance for a complete answer, not an arbitrary
+financial budget; freeze it before Gate A critique. Never drop required frames,
+truncate the evidence, change the selected model or fabricate rates to fit a budget.
+
+Where current contracts require numeric monetary/token ceilings, make the smallest
+versioned change to express **not capped by the operator** for this assessment-only
+selection across admission, transport, retention and replay. Do not use dummy huge
+numbers, a zero/free price, infinity sentinels or a new ledger. Preserve all actual
+usage and prior reservations; enforce the three-attempt limit, technical request
+limits and deadlines even when monetary/aggregate-token budget checks are disabled.
+Price information is reporting: record a sourced estimate when available, otherwise
+an explicit unknown with its reason. Do not make inability to prove a universal
+cost bound or absence of a billing quote a new prerequisite investigation.
+
+**Authorized private handover:** bind the assessment role using the existing active
+`OPENAI_API_KEY` configuration from the environment. This is an explicit, narrow
+exception to the earlier prohibition on reusing Hermes credentials. Prefer the
+inherited process environment; if the variable is not exported, the operator-named
+default-profile `~/.hermes/.env` entry may be resolved locally as data for this key
+only. Do not shell-source or dump the file, inspect other credentials/profiles,
+change Hermes/provider settings or silently change the selected endpoint/model.
+
+Transfer the value directly through the supported application-private setup/handover,
+not via chat, argv, public configuration, logs, database artifacts or secret-derived
+fingerprints. Keep private ownership/permissions and the previously approved Neo4j
+binding, configuration identities/digest checks, store and accounting intact. Do not
+pause merely because native-only setup lacks the assessment role: this revision
+authorizes installing that binding without another permission question. Pause only
+the dependent step if the named source is actually unavailable, permission is denied,
+or supported handover fails; report the reason without exposing a key. Provider-free
+implementation can continue. Binding installation alone grants no dispatch authority:
+the issued goal and Gate A still apply. No container/shared-service reconfiguration.
+
+Do not change simulator/submodule code, `docker/`, `.github/workflows/`,
+`.pre-commit-config.yaml`, tests/fixtures, shared caches/services or unrelated work.
+Do not commit, push, stash or reset.
+
+## 5. Ordered work and gates
+
+### Implementation — reach the next real application boundary
+
+Recheck git state and the selected boundary's definitions/callers. Reuse the existing
+coordinator, execution owner, grants, private role delivery, `BoundedSceneModels`,
+`RequestEnvelope`, artifact readers and durable reservations. Implement only what
+connects the retained a5 inputs to one installed assessment and its readback/replay.
+For each correction, name the observed missing/failing boundary, predicted change
+and exact existing check or installed command. Do not reopen accepted native work.
+
+The task-specific test freeze overrides generic TDD/debugging recipes: **no new or
+modified tests, parametrized cases, mocks, fixtures, harnesses or source-extraction
+proof runners**. Select only existing simulation-free checks directly affected by
+the change; run those and scoped host lint. Re-run a check only after a relevant
+correction or changed observation, not to increase a pass count. Once these pass,
+advance to the installed boundary. No full-suite campaign, synthetic scenario
+matrix, dependency inventory, replacement executor or new evidence platform.
+Existing synthetic checks are regression evidence, never live acceptance.
+
+Arena package checks use the verified existing checkout container, discovered via
+`.agents/skills/dev-container/SKILL.md`, as `ubuntu` UID 1000 with
+`/isaac-sim/python.sh`; lint stays on the host. A Kit-starting test is forbidden.
+Missing model credentials do not block the work that needs no private binding;
+never invent a credential or a synthetic response to simulate installed readiness.
+
+Keep the visual question small: for each retained camera at step 180, can each of
+`red_block` and `blue_bin` be identified as visible? Ground short subject descriptions
+only in already-retained candidate/asset metadata, with source fields and explicit
+camera/image order. Names and PNG subject tags are not visual proof. Preserve
+uncertainty when identity or visibility is indeterminate; no new asset-inspection
+campaign, geometry reconstruction, XY repair or calibration is required.
+
+### Gate A — four pre-send checks, not a separate project
+
+| Check | Sufficient evidence |
+| --- | --- |
+| Inputs and consumer | Actual installed artifact reads match section 2's candidate/evidence/PNG hashes. The new consumer links to the unchanged producer/cohort; rubric, subject descriptions and camera order cover both subjects in every frame. |
+| Request and containment | Exercise the production admission, retained-input resolution and serialization path with provider sends denied. Retain the exact serialized request identity and the denial/zero-send observation. Verify accounting-only policy, technical limits, zero native authority, cumulative three-attempt guard, retry classification, send-time authorization and deadlines using this path plus affected existing checks/source. A synthetic provider answer is not proof. |
+| Scoped regression | Relevant existing simulation-free checks and changed-file host lint pass; native-only, synthetic and other budgeted selections keep their guards. Do not build new cases or require a general regression certification. |
+| Live prerequisites | Issued authority, assessment binding installed from the authorized `OPENAI_API_KEY`, approved Neo4j binding, supported handover, remaining attempts and unambiguous ownership hold. Freeze source, operation, profile, rubric, request, completion allowance and retry policy before critique and through all attempts/readback/replay/cleanup. |
+
+Use the application's existing commands/entrypoints and retained evidence, not a
+parallel acceptance runner. Record an exact failed command/boundary if a check
+cannot pass. A missing required operational binding blocks its dependent installed
+check; it does not invalidate completed provider-free implementation. Once the four
+checks and pre-send critique pass, the next action is the authorized installed
+submission—not another checklist, inspection packet or review round.
+
+### Critic — two normal checkpoints
+
+The parent is sole writer/operator. Use one fresh read-only critic at pre-send
+Gate A and one after the live/readback/cleanup outcome, through
+`delegate_task(tasks=[{goal, context, output_schema}])`. A blocked-outcome review can
+replace an unreachable checkpoint. Do not request critique after routine patches;
+reopen pre-send review only if the reviewed source, request or authority materially
+changes. Give only scoped source/diff and sanitized evidence. The critic cannot edit,
+run tests/services/constructors, read private client/credential files, submit operations,
+write the database, call the workflow provider, grant authority or close the package.
+
+Require JSON with `decision` (`CONTINUE`, `NEED_EVIDENCE`, `BLOCKED`, `ACCEPT`),
+`evidence_refs`, `unmet_criteria` and `next_action`. Cite any blocking finding to an
+acceptance criterion or effect limit; do not request speculative hardening or more
+synthetic coverage. Allow one format-only correction including tool-managed schema
+repair, then stop if unusable. The parent checks the claims; `CONTINUE` is not new
+authority and `ACCEPT` requires real scoped runtime evidence.
+An eligible retry under the frozen policy does not require another critic or approval.
+
+### Retry policy — recover before repeating
+
+- Use the existing application orchestration/reservations to record each dispatch
+  durably and consume one of three attempts, including errors/timeouts. Disable SDK
+  retries; no parallel calls, probes, fallback model or separate repair request.
+- Retry only provider-response JSON/schema/required-coverage failures or transient
+  transport failures, including timeouts, transient rate limits and HTTP 5xx.
+  Do not retry authentication/permission failures, exhausted quota, invalid model/
+  configuration/context limits, unsafe ownership or a valid negative/uncertain verdict.
+- First perform bounded local readback/reconciliation. Recover an already retained
+  response instead of requesting it again. Preserve malformed raw responses and
+  validation errors; never coerce an unsupported verdict into a pass. If no valid
+  recoverable result exists after an eligible failure and owned cleanup is complete,
+  retry the same frozen assessment request within the remaining attempts/deadline.
+  A timeout can remain provider-side uncertain; count it and retain unknown usage/cost
+  rather than require impossible proof of non-execution before a retry.
+- Respect bounded backoff/Retry-After within the total deadline and cleanup reserve.
+  Keep all request/response identifiers, raw answers, error classifications and usage
+  records linked to the same consumer. Stop on the first valid complete assessment,
+  exhaustion of three attempts, the total deadline or a non-retryable failure.
+
+### Live assessment and closeout
+
+Submit the one assessment through authenticated installed CLI/GraphQL. The
+application owns release, provider transport, validation, retention and cleanup;
+direct model/helper calls or manually chained stages cannot satisfy acceptance.
+Retain every attempt's exact request/raw response, structured result or validation
+failure, lineage, reported usage, cost/unknowns, reservations and sanitized initiating
+errors. Model output is data, not authority. The application owns eligible retries
+under the policy above; after a valid result or exhausted allowance, only non-sending
+recovery is allowed. Never retry to improve a valid visual verdict.
+
+A fresh authenticated client must recover request/response/assessment and referenced
+input bytes with matching hashes. Replay the same completed operation: same retained
+result/receipt, no additional provider send or worker release, unchanged durable
+allocation/usage and prior records. Separate aggregate permission/owner revisions
+from immutable record changes. Verify exact owned-process cleanup, durable retirement
+and API drain; report cleanup errors separately and do not confuse dead zombies with
+live workers. Preserve shared services. Obtain final critique, then the parent alone
+verifies acceptance and closes or blocks the package. Keep one compact operation
+record; update this package, its index, Plan 04 and the handoff, not a new reporting system.
+
+## 6. Acceptance and stop conditions
+
+Success requires one real, source-bound installed assessment, not a serializer
+check, test count, exported file, review pass or successful process exit. Report
+separately: integration, visual verdict/limitations, fresh-client readback/replay,
+and cleanup/accounting. Preserve `native_settled`, `converged`, `verified` and prior
+eligibility exactly as before; this package grants no automatic promotion.
+
+Stop the dependent installed/live step for missing private authority; complete the
+feasible provider-free work first. Stop for unsupported source binding, an
+unrepresentable honest rubric, a complete request outside provider technical limits,
+required native work, an out-of-scope remedy, unresolved ownership, unusable critique
+or three unsuccessful provider-free correction cycles for the same blocker. Report
+the exact blocker/decision; do not respond by adding tests or audit prerequisites.
+Projected token/spend totals and missing exact pricing are not stop conditions.
+A local refusal proven never dispatched may be corrected without a new allocation;
+retain/reconcile its existing records. Each failed or uncertain send uses one attempt;
+an eligible retry may use the remaining allowance after reconciliation/cleanup.
+Stop sending on a valid complete result, three consumed attempts, deadline exhaustion
+or a non-retryable failure; thereafter recover retained bytes only, never reset counters.
+Finish bounded owned cleanup even on failure. Negative or explicitly uncertain
+visual results with complete coverage can satisfy integration; transport failures,
+malformed answers and incomplete coverage cannot. Never fabricate a replacement answer.
+
+## Revised goal prompt
+
+**Issued on 2026-09-25; retained verbatim below.** Its installed operation is now
+blocked and its execution deadline expired. Reopening this text does not renew that
+window or authorize bypassing pending cleanup. Sections 2 and 4–6 supply the exact
+identities and constraints. The revision narrows the task to visibility, freezes synthetic test growth and
+keeps Gate A finite. It supersedes old monetary/token caps, amends one provider send
+to three cumulative attempts, and authorizes the named environment-key handover.
+Consumed native accounting, other private boundaries and Gate A remain intact.
+The [original prompt](archive/02-original-issued-goal.md) and its
+[intake identity](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/intake.json)
+are retained separately. Do not reintroduce a larger arbitrary dollar cap.
+
+```text
+/goal Finish P04-I02 in .agents/references/plans/plan04_implementation/02-installed-visual-assessment.md: one installed, authenticated visibility assessment of a5's retained images, then fresh-client byte recovery and replay without another provider request. Do not build the full scene workflow. Read sections 2 and 4–6 for the exact source, effect limits and acceptance requirements; historical stopped goals are not instructions to resume their audits.
+
+FIXED INPUT AND AUTHORITY
+
+Use p04-i01-native-a5, its exact run/candidate/evidence/PNG identities in section 2, both red_block and blue_bin, and all three retained cameras at step 180. Link a new assessment consumer to the unchanged producer. Preserve all original records, measurements, flags, failures and source/cache caveats; no relabeling or fresh-capture claim.
+
+This issued revision permits necessary Arena assessment/admission/accounting/retention changes, affected existing simulation-free checks, the private handover below and scoped writes in milestone1_live_20260924t232748z_r2. Allow up to THREE cumulative assessment-role gpt-6-astra provider attempts after Gate A, including retries and prior sends—not three per restart/operation. ZERO native/Kit work, steps, resets, captures, generation/scene repair, separate model-repair calls, policy or new prior retrieval. Preserve the original 3/3 and additional 2/2 consumed native launches and earlier generation allowance. No accounting resets.
+
+No preset USD, aggregate-token or numeric output-token budget. Implement accounting-only policy in existing paths, not dummy caps, free/synthetic pricing or another ledger. Retain usage/cost estimates or explicit unknowns; preserve other modes' guards, RequestEnvelope checks and provider technical limits. Freeze a sufficient finite completion allowance. One worker at a time: per attempt at most 180 seconds provider time plus 10 seconds cleanup, 190 seconds total; at most 570 seconds for the assessment stage and 600 seconds overall. Disable SDK retries/pings/fallbacks; only application-owned, durably counted retries below are allowed.
+
+IMPLEMENT, DO NOT GROW A TEST CAMPAIGN
+
+Recheck git and read the selected boundary's definitions/callers. Reuse the existing owner/coordinator, model transport, artifact readers and durable accounting. Fix the earliest missing/failing installed boundary, using one causal hypothesis, smallest correction and predicted observation. No general refactor or dependency/simulator audit.
+
+No new or modified tests, parametrized cases, mocks, fixtures, harnesses, source-extraction proof runners or synthetic scenario matrices. This task-specific freeze overrides generic TDD recipes. Run only affected existing simulation-free checks and scoped host lint; repeat only after a relevant correction or changed observation. Once they pass, move to the installed path. Test counts, plans, inspection packets and review passes are not progress. Do not replace a blocked runtime step with more synthetic work.
+
+Discover the existing checkout container through .agents/skills/dev-container/SKILL.md; Arena checks run there as ubuntu UID 1000 via /isaac-sim/python.sh. Lint stays on the host. Never start Kit or recreate containers.
+
+Authorize binding the assessment role using the existing active OPENAI_API_KEY configuration from the environment. If not exported, resolve only that entry from the operator-named ~/.hermes/.env locally as data. Use supported application-private handover and the approved Neo4j binding; preserve identities/digests/store/accounting. Do not ask again merely because the role is unbound. Never expose the key in chat/argv/logs/public artifacts, read other secrets/profiles or change provider settings. Pause the dependent step only if the authorized source is unavailable or handover actually fails. Provider-free work continues; binding alone grants no dispatch authority.
+
+GATE A: FOUR PRE-SEND CHECKS
+
+1. Installed artifact reads match section 2's exact hashes and producer/consumer links. Freeze the small visibility rubric: each subject in each frame, grounded descriptions from retained candidate/asset metadata, explicit camera order and honest uncertainty. Subject names/tags alone prove nothing. Use the existing request/evaluator path; minimally adapt its boolean-only schema if needed, not a new evaluation framework.
+2. The production admission/input-resolution/serialization path, with sends denied, yields the exact intended request. Retain its identity and zero-send evidence. Accounting policy, technical limits, native prohibition, three-attempt/retry guards, send-time authorization and deadlines hold; synthetic responses cannot substitute.
+3. Affected existing checks and scoped lint pass; native-only, synthetic and other budgeted guards remain intact. No general test certification or new cases.
+4. Issued authority, the authorized private binding, supported handover, remaining attempts and ownership are established. Freeze source, operation, profile, rubric, completion allowance, request and retry policy through all attempts/readback/replay/cleanup.
+
+Keep the parent as sole writer/operator. Use one fresh read-only critic before send and one after the outcome, with delegate_task(tasks=[{goal, context, output_schema}]) and section 5's compact cited JSON schema/restrictions. No routine per-patch critiques or extra reviewers. Reopen pre-send review only for a material change to reviewed source/request/authority. Parent verifies claims; critique grants no authority. Development-agent inference remains separate from Arena accounting.
+
+After Gate A and critique pass, submit through authenticated installed CLI/GraphQL, not another audit. The application owns dispatch, eligible retries, validation, retention and cleanup; direct provider/helper calls or manually chained stages do not count. Policy-compliant retries require no extra critic or permission round.
+
+DONE OR BLOCKED
+
+Retain each attempt's request/raw response or transport error, validation result, identifiers, limitations, usage/cost unknowns and reservations. Recover the attempt history, final result and input bytes with a fresh authenticated client and compare hashes. Replay the completed operation: identical result/receipt, no provider send or worker release, unchanged durable allocation/usage and prior records. Verify owned cleanup, durable retirement and API drain; distinguish cleanup errors and dead zombies from live workers.
+
+A valid negative or uncertain visual verdict with complete coverage can pass integration, not scene acceptance. Malformed/incomplete output or transport failure cannot. Promote no native_settled/converged/verified/prior flags and claim no calibration, full Milestone 1 or Plan 04 completion.
+
+Retry only response JSON/schema/coverage errors or transient network/timeout/rate-limit/5xx failures. Each failed or uncertain send consumes ONE of the THREE attempts. First reconcile retained responses and clean up the owned attempt; recover existing bytes instead of resending when possible. Otherwise retry the same frozen request with bounded backoff within the deadline. Provider-side timeout uncertainty alone does not forbid the next counted attempt. Never retry a valid negative/uncertain verdict, auth/permission/quota/configuration failure or unsafe ownership. Stop at the first valid complete result, three attempts or the deadline; then non-sending recovery only. Preserve every failure; no counter reset, coerced pass or fabricated answer. A refusal proven never dispatched is not a send.
+
+Stop after three unsuccessful provider-free corrections for the same blocker, or an actual authority, provenance, ownership, technical-limit, unusable-critique or scope blocker. Finish bounded cleanup and state the exact decision needed; do not add tests/audits instead. Missing exact pricing and old budget estimates are not blockers.
+
+Respect section 4 and repository protected paths; no simulator/submodule/shared-service changes, commits, pushes, stashes or resets. Keep one compact operation record and update this package, its index, Plan 04 and the canonical handoff with separate integration, visual, readback/replay and cleanup outcomes. Parent alone closes or blocks P04-I02 on verified application evidence.
+```
+
+## Closeout
+
+### Issued revision — installed ownership blocker, 2026-09-25
+
+Evidence is under
+[`p04-i02/retained-assessment/`](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/).
+The [operation record](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/operation-record.json)
+and [outcome checkpoint](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/outcome-checkpoint.json)
+separate the following results; none is full application acceptance.
+
+- **Integration — blocked:** authenticated CLI submission admitted operation
+  `p04-i02-visibility`, run
+  `0664fc8038961d9ea079f89c6c35cc5d305f2c56a1255d2253c64ce089d33e19`.
+  Intent `31f4dcec3ce2196818cc64d21ab0e67f64f17e4fdc56532b0032b06cf9d8f833`
+  was prepared/released, then entered reconciliation without a linked model result
+  or failure envelope. The underlying exception is not established; do not invent a
+  private-handover, provider or parser diagnosis. `installed-submit-after-admission.json`,
+  `installed-inspection.json` and `failed-worker-retained-records.json` are the evidence.
+- **Visual — not assessed:** no provider response/verdict exists. No negative,
+  uncertain or positive scene conclusion can be inferred from zero dispatches.
+- **Readback/replay — partial, not accepted:** fresh authenticated input reads
+  matched the exact candidate/evidence/three-PNG hashes. Fresh clients recovered
+  the submission and failed-state/attempt projection. There are no final assessment
+  bytes to recover; completed-operation replay was not performed or fabricated.
+- **Cleanup — worker verified, retirement/API blocked:** exact model-worker
+  PID/PGID/SID `62210` is absent, and cleanup evidence
+  `physical-b57a0beacd8e42731c77b61c229a7a91` is recorded. Supported cancel key
+  `p04-i02-stop-owned` delivered local stop and a durable cancellation request
+  (run version 8), not completed cancellation. Owner
+  `foreground-62035-99d8e7410d0056e4bb1a012f4ae23dd9`, epoch 6, remains dirty
+  with no retirement tombstone. `api-stop` returned `cleanup_unknown`, exit 1.
+  Instance `9a8eebfcbe9845498ec26fb81bb049ca` remains `stopping`; exact API
+  PID/PGID/SID `62035`, start ticks `21078356`, is live, not a zombie.
+  See `owned-stop-cancellation.json`, `api-drain.json`, `owned-physical-final.json`
+  and `final-durable-state.json`. No metadata deletion or forced unlock was used.
+- **Accounting/authority:** actual `assessment_source` ledger reads report zero
+  provider sends and three unspent cumulative attempts. One model-call/190-second
+  reservation persists; token/cost ceilings are null by explicit accounting-only
+  policy, not free/synthetic prices. No provider usage/cost response exists. The
+  600-second deadline expired at 16:22:51.511984 UTC; only non-sending recovery
+  followed. No source changed after the admitted submission.
+- **Preservation:** the producer remains `accepted`, version 12, with its exact
+  contract and evidence payload unchanged. Native allocation and cache/failure
+  caveats remain historical. No convergence, verification, prior eligibility,
+  calibration, full Milestone 1 or Plan 04 completion is promoted.
+- **Gate/implementation scope:** retained-only admission, subject/frame uncertainty,
+  accounting-only transport, cumulative retries and result projection were added
+  through existing application paths. Only affected existing simulation-free checks
+  and scoped lint ran; no tests/fixtures/harnesses were changed. Pre-send review found
+  and corrected a constructor ping and response-recovery/Retry-After defects; an
+  actual installed pre-admission refusal exposed the capture dependency projection.
+  Failed previews/submissions and corrected collectors remain retained. Passing
+  checks/reviews did not certify the subsequent worker boundary.
+- **Final review/parent decision:** independent `deleg_7682ffd5` returned `BLOCKED`,
+  and the parent verified the result, including fresh non-sending observation at
+  **16:44:42.311753 UTC**. See `critic-final.json`, `parent-closeout.json` and
+  `parent-final-observation.json`. No application acceptance or further authority.
+- **Separate lifecycle finding:** the parent confirmed
+  `neo4j_store.py:4071–4089`: identical cleanup acknowledgement calls
+  `_finish_known_native_cancel`, whose schema-3 guard excludes this schema-4
+  consumer. That is consistent with the cancellation stall; it does not diagnose
+  the original released-worker failure. `ExecutionOwner.close` also keeps
+  `cleanup_unknown` sticky. No repair or unchanged cancellation/drain retry was
+  performed after this finding. The exact next boundary is
+  `cancel_keyed → finish_cancelled → acknowledge_scene_cleanup`, under new
+  lifecycle-only authority and without manufacturing cancellation/retirement.
+
+**Decision needed:** authorize bounded lifecycle/reconciliation repair for this
+exact admitted, unsent run and live stopping API, preserving its reservation,
+failed records, private root/configuration identities and cumulative accounting.
+Any later assessment execution needs an explicit new window; it must retain the
+three-attempt cumulative cap and zero-native boundary. Do not silently reset this
+run, clear the owner, create a fresh allowance or restart an old audit campaign.
+
+### Historical prerequisite stop — original capped goal, 2026-09-25
+
+No new consumer operation, contract, model profile or final request was admitted.
+The existing source/input hashes were checked, but Gate A and live acceptance were
+not reached. This is a preflight stop, not a recorded installed workflow rejection.
+
+- **Integration:** no application-code edits, constructor probes, package tests or
+  service starts. All 210 a5 source-manifest entries still match the checkout.
+- **Budget:** the three unchanged PNGs serialize to 18,604 base64 characters. The
+  current guard reserves at least one input token per serialized request byte;
+  published Standard input pricing is USD 10 per million tokens. The images alone
+  therefore need at least **USD 0.18604 of reservation**, before text, output or the
+  image allowance. This exceeds USD 0.10 even if the output cap is reduced. This is
+  **not** 18,604 actual billable image tokens or a prediction of the provider invoice.
+  See the [calculation, source references and tariff caveats](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/pricing-prerequisite.json).
+- **Private setup:** a UID 1000 metadata-only read of the selected configuration
+  found schema 4, `retained-native-validation-v1`, zero required profiles and no
+  assessment-role binding. No credential file or other private root was searched;
+  this does not prove credentials are unavailable elsewhere. See the
+  [configuration observation](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/configuration-observation.json).
+- **Visual result:** not assessed. No scientific flags changed.
+- **Readback/replay:** original retained input hashes were verified locally; no new
+  authenticated assessment result or replay exists. Historical a5 proof is unchanged.
+- **Cleanup/accounting:** zero new Arena provider sends, native launches, worker
+  releases, database writes or private-configuration writes. No I02 process was
+  created. A fresh read-only physical observation found no live members in the
+  exact old worker sessions and no listener at the old API port; dead zombies remain.
+  This is not a fresh authenticated durable-owner query. See the
+  [physical observation](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/owned-state.json).
+- **Critique:** the independent read-only critic returned `BLOCKED`
+  (`deleg_0c595784`). The parent independently checked the cited calculation,
+  source/input hashes, guard/charge code and observation limits, then recorded
+  this blocked checkpoint. This is not a Gate A pass or application acceptance.
+  See [critic](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/critic-final.json),
+  [parent verification](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/parent-closeout.json)
+  and [result report](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/LIVE_RESULT.txt).
+
+**Subsequent prompt revision:** the operator requested removal of hard monetary/token
+budgets instead of the earlier proposed higher dollar ceiling. The revised prompt
+above replaces that budget-approval loop with explicit accounting-only semantics;
+the historical calculation, critique and original runtime records remain unchanged.
+This is not proof that the application already supports the revised policy.
+
+**Application-first refinement:** the current draft makes the visibility question
+explicit, separates provider-free implementation from private live readiness,
+replaces open-ended preflight with four checks and limits normal critique to pre-send
+and final outcome. It bans synthetic test growth and distinguishes a proven local
+refusal from an uncertain send. No runtime work was performed for this refinement.
+
+**Retry/credential amendment:** at operator request, the draft now permits up to three
+cumulative provider attempts for format/transient transport failures, with a 600-second
+operation deadline, and explicitly authorizes the existing active `OPENAI_API_KEY`
+handover. Historical one-send approvals remain historical; no credential was read or
+installed, no attempt was made and no accounting was reset for this prompt edit.
+
+**Historical next step at prompt-edit closeout:** issue the revision and implement
+the installed slice. That issuance and implementation subsequently occurred; the
+current installed ownership blocker above supersedes this old wait. No additional
+credential search, monetary-cap approval or native authority is implied. The
+[canonical handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)
+owns current status; P04-I01 remains the last accepted runtime boundary.

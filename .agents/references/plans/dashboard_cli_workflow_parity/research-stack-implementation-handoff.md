@@ -6,6 +6,152 @@ Bounded next-work plans live in the [Plan 04 implementation index](../plan04_imp
 
 ## 1. Current authorization and implementation gate
 
+### P04-I02 — BLOCKED after installed worker release (2026-09-25)
+
+The operator issued the [revised goal](../plan04_implementation/02-installed-visual-assessment.md#revised-goal-prompt).
+The retained-only/accounting-only path and authorized `OPENAI_API_KEY` private binding
+were installed. The application admitted and released one model worker, but no
+provider dispatch or final assessment is recorded. This is not the historical
+credential/budget preflight stop and not completed visual integration.
+
+Evidence root: `outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/`.
+Use its [operation record](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/operation-record.json),
+[outcome checkpoint](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/outcome-checkpoint.json)
+and [durable state](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/final-durable-state.json).
+
+- **Integration:** authenticated installed `p04-i02-visibility`, run
+  `0664fc8038961d9ea079f89c6c35cc5d305f2c56a1255d2253c64ce089d33e19`, was admitted
+  at 16:12:51.511984 UTC. Intent
+  `31f4dcec3ce2196818cc64d21ab0e67f64f17e4fdc56532b0032b06cf9d8f833` was released,
+  then entered `reconciliation_required` without a linked result or failure envelope.
+  The underlying exception is not established by the recovered evidence. Supported
+  cancel key `p04-i02-stop-owned` delivered local stop and a durable request; the
+  run is now **`cancel_requested`, version 8**, not terminally cancelled.
+- **Visual:** not assessed; no provider answer, coverage verdict or scene acceptance.
+- **Readback/replay:** fresh authenticated original candidate/evidence/three-PNG
+  bytes matched their pins. Fresh clients read the submission and failed-state/attempt
+  projection. No final assessment bytes or completed-operation replay exist; metadata
+  recovery does not satisfy that acceptance criterion.
+- **Physical cleanup:** registration `worker-db6e9a742765deb3bd6280d9216e469e`,
+  PID/PGID/SID `62210`, start ticks `21114658`, is absent. Exact cleanup
+  `physical-b57a0beacd8e42731c77b61c229a7a91` is recorded. The process scan has no
+  errors and no worker-group members; this is separate from durable retirement.
+- **Unresolved ownership/API:** owner `foreground-62035-99d8e7410d0056e4bb1a012f4ae23dd9`,
+  **epoch 6, dirty**, has no retirement tombstone. Supported `api-stop` returned
+  **`cleanup_unknown`, exit 1**. Instance `9a8eebfcbe9845498ec26fb81bb049ca` remains
+  `stopping` at `http://127.0.0.1:36315/graphql`; exact API PID/PGID/SID `62035`,
+  start ticks `21078356`, is live in state `S`, **not a dead zombie**. Boot
+  `b6dbba9f-5cde-4acc-a496-cb5421410968`, namespace `pid:[4026533721]`.
+  See `api-drain.json` and `owned-physical-final.json`; do not claim drain/retirement.
+- **Accounting/deadline:** actual `assessment_source` reads show **0 sends, 3 unspent
+  cumulative attempts**. A **one-model-call/190-second reservation remains**, without
+  refund. Token/cost ceilings are null under explicit accounting-only policy; actual
+  provider usage/cost was not reported. The **600-second deadline expired at
+  16:22:51.511984 UTC**. Unspent attempts do not renew it. No post-deadline dispatch,
+  accounting reset, metadata deletion, forced unlock or new operation occurred.
+- **Source and inputs:** all 212 `source-freeze-admission.json` entries still match,
+  manifest SHA `7dfdc8691f361f5230b9a85332eff02418e938620f7ee3adfea97fecfc920946`.
+  Source was not edited after admitted submission. The actual denied HTTP request
+  remains 22,697 bytes, SHA `806b55b0515c5cc562a46835d15b22e5b988464758dd8651dce0bd6f1d2c733a`,
+  with both subjects in three exact ordered frames, canonical rubric, `gpt-6-astra`,
+  `store=false` and finite completion allowance 16,384. Other modes retain guards.
+- **Private/state identity:** selected configuration remains
+  `/home/ubuntu/.local/state/arena/installed-native-20260925T012042Z/config-p04-i02-retry.json`,
+  config SHA `40b92a6ed724c1b964d6cc45ced7e16d4d67291f0d8b74bcd514a2c63bf473f0`,
+  binding SHA `88b97b5cb6ec9bfd6b45bb42ca432204f9a8245150539f6221de44478e9811d0`.
+  The same private/artifact roots and approved Neo4j binding remain in use. Do not
+  repeat credential discovery or expose its key; binding is not execution authority.
+- **Preservation/scope:** a5 remains accepted/version 12 with its exact original
+  contract/evidence payload unchanged. Original 3/3 plus additional 2/2 native
+  launches and earlier generation allowance remain consumed. No native/Kit/capture,
+  generation/repair/policy/new-prior work or scientific-flag promotion occurred.
+  Tests/fixtures/harnesses were not edited; affected existing checks and scoped lint
+  passed, but do not establish installed acceptance. P04-I01 remains the last
+  accepted runtime slice; full Milestone 1/Plan 04/calibration remain unclaimed.
+- **Final critique/parent decision:** `deleg_7682ffd5` returned `BLOCKED`; the parent
+  verified the source finding and fresh non-sending observation at **16:44:42.311753 UTC**,
+  confirming the same dirty owner, absent worker, live stopping API and zero dispatches.
+  See `critic-final.json`, `parent-closeout.json` and `parent-final-observation.json`.
+  P04-I02 is parent-blocked, not accepted; review grants no recovery authority.
+- **Separate, source-supported cancellation finding:**
+  `workflow/neo4j_store.py:4071–4089` routes duplicate cleanup acknowledgement to
+  `_finish_known_native_cancel`, which refuses schema4. That matches the persisted
+  `cancel_requested` state; `workflow/api/execution_owner.py:221–238` also makes
+  `cleanup_unknown` sticky. Parent read both exact paths. This does not identify
+  the initiating worker failure. No source repair or unchanged cancel/drain repeat
+  followed. Under explicit recovery authority, examine
+  `cancel_keyed → finish_cancelled → acknowledge_scene_cleanup` using the existing
+  intent/cleanup identity, then prove durable cancellation, exact-owner retirement
+  and API drain without changing reservations, dispatch count or producer records.
+
+**Exact next decision:** authorize bounded reconciliation/lifecycle repair of this
+admitted unsent run and live stopping API. Preserve registration, cleanup evidence,
+reservation, failed records, current private root/configuration digests and cumulative
+allocation; do not force a cancellation/retirement from an empty query or reset state.
+Any later assessment execution needs an explicit new window with the same cumulative
+three-attempt cap and zero-native restriction. Do not substitute more synthetic tests,
+budget/credential audits or a new allocation for this installed failure.
+
+The [original capped prompt](../plan04_implementation/archive/02-original-issued-goal.md)
+and its earlier stop below remain historical, not current execution instructions.
+
+### Historical P04-I02 — original capped goal blocked before Gate A (2026-09-25)
+
+[P04-I02 — installed visual assessment of retained native evidence](../plan04_implementation/02-installed-visual-assessment.md)
+was issued after prompt preparation. The parent stopped at explicit prerequisites
+before code changes, Gate A or application submission. P04-I01 remains the latest
+verified runtime result below; its five native launches remain consumed.
+
+**Issued limits:** at most one `gpt-6-astra` assessment request after Gate A, 32,768
+total reserved tokens, 2,048 output tokens and USD 0.10. Zero native launches, Kit,
+generation, XY repair, policy or new prior retrieval. **0/1 sends consumed**, but the
+remaining opportunity is conditional, not dispatchable. No allocation is renewed.
+
+**Budget blocker:** the three required unchanged a5 PNGs encode to 18,604 base64
+characters. The preserved guard reserves at least one input token per serialized
+request byte. Published Standard input pricing (USD 10 per million tokens) therefore
+requires at least **USD 0.18604 reservation for those bytes alone**, before text,
+output and image overhead. This is not actual billable token usage or an invoice
+estimate. Lowering the output cap cannot fix that floor. Exact sources/calculation
+and tariff caveats are in [pricing-prerequisite.json](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/pricing-prerequisite.json).
+
+**Private-binding blocker:** selected-config metadata, read as UID 1000 in the
+verified same-clone container, shows schema 4 / `retained-native-validation-v1`,
+zero required profiles and no assessment binding. No credential file or other
+private root was read; this does not assert global credential absence. See
+[configuration-observation.json](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/configuration-observation.json).
+
+**Separate outcomes:** integration not implemented/executed; visual not assessed;
+no new authenticated result/readback/replay. Original inputs and all 210 a5 source
+hashes still match. No new service, worker, provider request, database write or
+private setup write. Fresh exact-session inspection found no live old workers and
+no old API listener; two dead zombies remain. No fresh durable-owner/database query
+is claimed. See [intake](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/intake.json)
+and [physical observation](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/owned-state.json).
+
+**Decision requested at that checkpoint (superseded for the revised draft):** an operator-approved cost/tariff amendment (USD 0.50 is proposed,
+not authorized) or explicit accounting/selection-scope revision, plus an approved
+application-private assessment binding. USD 0.50 covers the issued token ceilings
+at the cited Standard/cache-write rates, not fast/regional uplifts or an unverified
+new request. Do not read Hermes keys, weaken native/synthetic guards, rebind old
+receipts or treat installation as execution permission. The independent read-only
+critic (`deleg_0c595784`) returned `BLOCKED`; the parent independently verified the
+guard/charge source, byte arithmetic, hashes and observation scope and recorded
+the same blocked result. No Gate A pass or application acceptance is claimed.
+See [critic](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/critic-final.json),
+[parent verification](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/parent-closeout.json)
+and [result](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/LIVE_RESULT.txt).
+Continue this package only after its blockers are resolved; do not allocate another
+provider opportunity.
+
+This planning read found a clean checkout at `de8f03b13827517e605bb32d49ff87ae596b24bf`
+before documentation edits. The uncommitted-source description in the a5 closeout
+records its execution-time state, not today's git state. No new application checks,
+service launches, database writes, native runs or Arena provider calls occurred in
+the P04-I02 intake. The current sequence is assessment integration → separately
+bounded complete scene workflow/repair → later policy pilot and full-plan readback.
+P04-I02 does not certify calibration, convergence, prior eligibility or Plan 04.
+
 ### P04-I01 — VERIFIED native-only acceptance, 2/2 additional launches consumed (2026-09-25)
 
 **Software integration:** `p04-i01-native-a5`, run
@@ -352,7 +498,7 @@ The single decision packet is `outputs/workflow/plan04-implementation/s2-initial
 
 **Current authorization/intake:** user said “proceed with the next step” after the explicit §8 approval decision. Parent proceeds within that bounded packet, not IF-D/live simulation. Intake `2026-09-22T23:53:38Z`, HEAD `fb225335302b5d0c60c1d043dcb15950df76be3e`, clean worktree; intervening HEAD changes since IF-A are documentation only and preserved. The approved packet copy/hash, original source identities and timing are in `outputs/workflow/plan04-implementation/s2-initialization/intake.json`. Remaining45minutes are carried forward, with hard stop `2026-09-23T00:38:38Z`, one hypothesis/challenge round and three diagnostic attempts maximum. No refund/reset for overlap with IF-A's conservative reserve. Two bounded file-owned implementers `deleg_df008ee7` own the harness/real preparation versus runner/collector slices; no child may execute containers/packages/native code. Parent must freeze and obtain fresh final-source review before any new attempt. Read-only image-ID inspection confirms the exact approved runtime and DB images exist; no test resources or diagnostics launched. Older awaiting-approval statements below describe the previous checkpoint only.
 
-**IF-A complete:** [S2 initialization approval packet](../event-mapping-plan04-s2-initialization-approval.md) is ready for the explicit implementation/effect/resource decision in §8. Safety/lifecycle critic passed; budget critic's one closeout finding is resolved by the timestamped conservative ledger. IF-A is charged15minutes/one round/zero diagnostics;45active minutes/one round/three attempts remain, not renewed. Requested future changes include a4GiB/256PID client,32MiB evidence tmpfs,300s work+120s cleanup per attempt and fixed new diagnostic routing. None is implemented or already permitted. No IF-B/IF-C selector exists today; final-source/preflight/critic gates remain mandatory and IF-D needs separate admission. Exact baseline/final hashes and budget/evidence readback: `outputs/workflow/plan04-planning/s2-if-a/`. All discovery/critic tasks finished; no test resources were launched or fresh live resource-state claim made. Next action: user decision on this single packet. Do not execute IF-B, change strategy, or start a new budget implicitly.
+**IF-A complete:** [S2 initialization approval packet](../event_mapping/event-mapping-plan04-s2-initialization-approval.md) is ready for the explicit implementation/effect/resource decision in §8. Safety/lifecycle critic passed; budget critic's one closeout finding is resolved by the timestamped conservative ledger. IF-A is charged15minutes/one round/zero diagnostics;45active minutes/one round/three attempts remain, not renewed. Requested future changes include a4GiB/256PID client,32MiB evidence tmpfs,300s work+120s cleanup per attempt and fixed new diagnostic routing. None is implemented or already permitted. No IF-B/IF-C selector exists today; final-source/preflight/critic gates remain mandatory and IF-D needs separate admission. Exact baseline/final hashes and budget/evidence readback: `outputs/workflow/plan04-planning/s2-if-a/`. All discovery/critic tasks finished; no test resources were launched or fresh live resource-state claim made. Next action: user decision on this single packet. Do not execute IF-B, change strategy, or start a new budget implicitly.
 
 **IF-A intake:** the user explicitly authorized the selected S2 approval-packet preparation and independent review, stopping before IF-B. Intake HEAD `4dd679599dea3e9682d463380d31d8fe89bb3fb1`, branch `dev/0.3.0-prerelease`, clean worktree. Source/planning baseline is `outputs/workflow/plan04-planning/s2-if-a/baseline.json` (394 captured files; inventory is not reviewed coverage). Prior selected-S2 source hashes match. Six historical cohorts still match their repository and generated retained source hashes; 563 is a historical overlapping case count, not a rerun. Retained final-probe evidence leaf hashes also match. Corrected static readback is `s2-if-a/retained-evidence-check-corrected.json`; the initial generated-file path classification error is retained separately. No current container/image/resource liveness inspection or runtime acceptance is claimed. Two bounded read-only discovery tasks (`deleg_0f7bd2fb`) cover harness controls/roles and initialization/cache bindings before packet drafting and fresh critics. All application/harness edits, imports/tests, containers, native effects and IF-B remain unauthorized. Earlier discussion-hold entries below are historical; source-only IF-A work now proceeds.
 
@@ -361,7 +507,7 @@ The single decision packet is `outputs/workflow/plan04-implementation/s2-initial
 
 **Current direction:** S2 controlled initialization is selected; the user identified and corrected the obsolete undecided-strategy wording. No native initialization or implementation is authorized by that choice. Current authority remains documentation/review only: no package tests, containers, further dependency probes or native/provider/production effects. No commits/pushes. Preserve source/user edits, including `.agents/references/quick_notes/hermes_plan_04_review.md`.
 
-Current plan references: [Plan 04](../event-mapping-refactoring_plan_04.md) G04-13/P1 selected S2 and A04-17 acceptance; §8's shared budget; [review ledger](../event-mapping-refactoring_plan_04-review.md) NR04-10–14; [S1 contingency](../event-mapping-registration-only-design.md#first-implementation-contract-to-approve); [cross-agent memory](../../quick_notes/session_memory.md#plan-04-checkpoint--2026-09-22--discussion-hold). The blocked E1 is server startup/catalogue loading, not the later P5 two-seed simulation. The IF-A–IF-D path is selected but unrun; no four-way strategy decision remains pending by default.
+Current plan references: [Plan 04](../event_mapping/event-mapping-refactoring_plan_04.md) G04-13/P1 selected S2 and A04-17 acceptance; §8's shared budget; [review ledger](../event_mapping/event-mapping-refactoring_plan_04-review.md) NR04-10–14; [S1 contingency](../event_mapping/event-mapping-registration-only-design.md#first-implementation-contract-to-approve); [cross-agent memory](../../quick_notes/session_memory.md#historical-plan-04-checkpoint--2026-09-22--discussion-hold). The blocked E1 is server startup/catalogue loading, not the later P5 two-seed simulation. The IF-A–IF-D path is selected but unrun; no four-way strategy decision remains pending by default.
 
 | State | Evidence level and limit |
 | --- | --- |
@@ -380,7 +526,7 @@ Source checkpoint at consolidation intake: HEAD `acda01b159d8ce07e86330c12727ba9
 
 The entries below preserve prior evidence and approval chronology. Present-tense directions, pending delegates and “current/latest” labels inside this historical section describe their original checkpoints, **not active work or permission to resume**. The discussion hold above controls.
 
-**Registration-only design investigation completed; implementation not authorized by this decision.** The user selected “Keep strict no-CUDA limits; investigate a registration-only design.” Deliverable: [registration-only design](../event-mapping-registration-only-design.md), based on independent read-only analyses `deleg_42c38c89` and fresh design challenge `deleg_b369d6f0` (PASS limited design). Recommend an opt-in immutable first-party metadata view sharing canonical declarations with runtime binding, unchanged legacy class registries, pure catalogue projection and explicit context through the existing real schema. Preserve hidden schema members, inheritance/signatures/docstrings/order and separate full metadata identity from the vocabulary digest. No fake class registries or historical digest substitutions.
+**Registration-only design investigation completed; implementation not authorized by this decision.** The user selected “Keep strict no-CUDA limits; investigate a registration-only design.” Deliverable: [registration-only design](../event_mapping/event-mapping-registration-only-design.md), based on independent read-only analyses `deleg_42c38c89` and fresh design challenge `deleg_b369d6f0` (PASS limited design). Recommend an opt-in immutable first-party metadata view sharing canonical declarations with runtime binding, unchanged legacy class registries, pure catalogue projection and explicit context through the existing real schema. Preserve hidden schema members, inheritance/signatures/docstrings/order and separate full metadata identity from the vocabulary digest. No fake class registries or historical digest substitutions.
 
 The selected E1 proposal-only generate/refine path returns before USD/native grounding; parent traced its existing early returns and the critic confirmed them. Registration separation therefore has a plausible scoped route, not proven runtime acceptance. Ordering/version, extension/mutation policy, exact wire binding and eventual runtime parity remain implementation-contract decisions. Source fingerprint/document verification: `outputs/workflow/plan04-implementation/installed-execution/registration-only-design-verification.json`. Only design/handoff documents were authored in this phase; no package imports, tests, containers, native initialization or production-source edits. The execution STOP below remains in force until a bounded implementation contract is approved.
 
@@ -434,7 +580,7 @@ Final parent readback: `outputs/workflow/plan04-implementation/final-verificatio
 
 Remaining implementation/deployment work: private provider/prior-role storage/loading; actual model/price/capability choices; durable envelope/profile/grant and campaign-allocation binding; retained-prior recovery; visual grounding; candidate/seed/policy-worker joining; typed evidence/artifact API completion and configuration handover. Native calibration, production DB/paired recovery and live trials remain unrun and separately authorized. All operator selections in the delivered no-selection report are intentionally unresolved. No real credentials were inspected.
 
-- The user activated Plan 04 through a standing implementation goal: begin with the operator-facing setup/readiness report, then continue dependency-ready source and isolated-verification slices with bounded implementer → fresh critic → parent verifier cycles. Starting branch `dev/0.3.0-prerelease`, clean HEAD `acda01b159d8ce07e86330c12727ba9d343b7009`. Canonical design: [Plan 04](../event-mapping-refactoring_plan_04.md) and its [review ledger](../event-mapping-refactoring_plan_04-review.md); Plan 03 modeling/contracts remain mandatory inputs.
+- The user activated Plan 04 through a standing implementation goal: begin with the operator-facing setup/readiness report, then continue dependency-ready source and isolated-verification slices with bounded implementer → fresh critic → parent verifier cycles. Starting branch `dev/0.3.0-prerelease`, clean HEAD `acda01b159d8ce07e86330c12727ba9d343b7009`. Canonical design: [Plan 04](../event_mapping/event-mapping-refactoring_plan_04.md) and its [review ledger](../event_mapping/event-mapping-refactoring_plan_04-review.md); Plan 03 modeling/contracts remain mandatory inputs.
 - Authorized: source edits and existing repository-approved isolated tests, host formatting, sentinel-only setup tests, plus the explicitly approved additive installed-execution cohort described above. Not authorized: real credential inspection, production/research DB access, paid Arena model calls, GPU/native workloads, shared-service changes, installations/downloads, protected Docker/CI/submodule changes, unrelated harness admission changes, staging, commits or pushes. Missing model/endpoint/key choices remain explicit operator blockers, not reasons to stop independent software work.
 - Intake plan/source identity inventory: `outputs/workflow/plan04-implementation/baseline.json`. Fingerprinting is not reviewed coverage. No live readiness or test result is asserted by this intake.
 - First active slice: bounded pure offline setup/readiness report and actual installed CLI entry, with unresolved nonsecret selections, role/alias sharing, outcome-scoped owner-labelled blockers, and separate configured/access/capability/authorization states. It performs no credential discovery, service probes or execution grants. Subagent owns report/CLI and admitted CLI/readiness tests; parent owns this handoff and final verification.
@@ -468,7 +614,7 @@ Remaining implementation/deployment work: private provider/prior-role storage/lo
 
 - Starting HEAD: `8f40c55584c4998ac657128f433d4dd407a2905b`, branch `dev/0.3.0-prerelease`. Existing uncommitted plan-03 and review-ledger amendments are preserved. No commit/push is authorized.
 - Authorized: source implementation and existing admitted isolated tests. No real credential access, live inference, native/GPU workloads, shared-service changes, research-database operations or protected Docker/CI/submodule changes without additional explicit authorization. Missing dependencies/images are not permission to install, pull or weaken isolation.
-- Canonical requirements and design remain in plan 03 and its [review ledger](../event-mapping-refactoring_plan_03-review.md). Neo4j is the sole application database; GraphQL is the application boundary; A2 is a reference fixture; dashboard work is deferred. The coding agents implement the application's coordinator, not an external-agent runtime workaround.
+- Canonical requirements and design remain in plan 03 and its [review ledger](../event_mapping/event-mapping-refactoring_plan_03-review.md). Neo4j is the sole application database; GraphQL is the application boundary; A2 is a reference fixture; dashboard work is deferred. The coding agents implement the application's coordinator, not an external-agent runtime workaround.
 - Current activity: independent network rerun `arena-neo4j-e4f05d3c665347a79a28471ad19cdc03` passed 42 cases with zero forbidden counters, 23 fresh CLI processes and 3 server witnesses; source, case order and fresh disposable cleanup verified (`graphql-query-launch/implementation/parent-network-verification.json`). Configuration/client and lifecycle/admission review results `deleg_10da5ed4` are pending delivery; selected-contract acceptance remains PARTIAL. A separate unreproduced client/loopback-instance binding hypothesis is recorded, not treated as a confirmed defect. Alias/identity and adversarial lifetime/transport/readback gaps remain open. Accepted ASGI bytes are unchanged; no deployment, protected topology changes, real credentials/shared services/native/GPU/live-provider work or commits/pushes. Full V0 remains unfinished.
 - Parent baseline: `python3 scripts/run-workflow-neo4j-checks.py workflow` passed in `arena-neo4j-cde160305e794466938a61bac471d51c`: 139 JUnit cases, zero failures/errors/skips. Captured and current repository source hashes match; the generated `closure.json` is checked against captured bytes, not mistaken for a repository file. Container/network cleanup is verified and exact recorded names are independently absent. Local readback: `outputs/workflow/plan03-implementation/store-baseline-verification.json`. This is real disposable-Neo4j store regression evidence, not native/provider/GraphQL acceptance or a claim about nonexistent forbidden-counter fields in ordinary workflow mode.
 - Each source slice follows witnessed RED → minimal implementation → GREEN → fresh critique → independent verification. At most three correction rounds for the same unresolved finding; continue other authorized dependency-ready work before reporting a terminal blocker. Preserve source-bound evidence, failed runs and cleanup records. Do not interpret an agent summary or a passing synthetic test as live acceptance.
@@ -662,7 +808,7 @@ The actual bounded scene-model child now has separate process evidence: `arena-f
 
 The joined initial-generation → scene path now passes through `ForegroundWorkflow` and the default CLI factory **inside the admitted harness**. Parent reran `workflow-scene` in `arena-neo4j-8f6af11eba6343ceaca3c391c331c704`: 10 cases, including actual generation/adoption, generation retirement, a fresh scene owner, three scene stages, terminal acceptance/retirement, and all six required-dependency negatives with no generation factory/SDK child. The joined trace retains four child registrations and two owner epochs. Parent also reran 465 core cases in `arena-f0-backend-e48e960edc20` and 138 real store cases in `arena-neo4j-82a363cab08e445ba3bc3cad9c5e9290`; all have zero failures/errors/skips and verified cleanup. Do not sum overlapping cohorts.
 
-The milestone is **not closed**, but the first focused recheck now closes CLI-01, RESUME-01 and CANCEL-01 for the guarded isolated scope. `workflow-cli` launches actual fresh interpreters; `arena-neo4j-233f07663f79447089a2948192b03167` retains 28 commands/20 SDK workers including active generation/scene cancellation, delivery before cancel-client DB access and verified owner retirement. Shared observation-only bootstrap is wired. The injected outage is cancel-client `StoreUnavailable`, not a stopped DB server. Two residuals remain: **B1** real pre-prepare dispatch interruption can strand known-unreleased ownership (seeded pending tests were insufficient); **B2** frozen-model mismatch needed typed not-ready/exit-3 mapping instead of generic failure. B2 unit RED→GREEN and scoped lint now pass (`arena-f0-backend-faba8aabffc6`, `arena-f0-backend-bfce99c4be9f`); fresh assertions are being joined to the B1 correction cohort. Parent reruns also verify 471 core cases (`arena-f0-backend-b97e6c7603b8`) and 139 store cases (`arena-neo4j-a6eb8b67a3ae4c9999d8e3e2d3ef4698`) at their captured revisions. See the [implementation ledger](../event-mapping-refactoring_plan_02-implementation-review.md) for remaining counterexamples and the [updated runbook](foreground-workflow-runbook.md) for JSONL/exit contracts. Unknown released effects remain blocked. Production deployment, installed startup, native/live inference and research retrieval remain outside this isolated proof.
+The milestone is **not closed**, but the first focused recheck now closes CLI-01, RESUME-01 and CANCEL-01 for the guarded isolated scope. `workflow-cli` launches actual fresh interpreters; `arena-neo4j-233f07663f79447089a2948192b03167` retains 28 commands/20 SDK workers including active generation/scene cancellation, delivery before cancel-client DB access and verified owner retirement. Shared observation-only bootstrap is wired. The injected outage is cancel-client `StoreUnavailable`, not a stopped DB server. Two residuals remain: **B1** real pre-prepare dispatch interruption can strand known-unreleased ownership (seeded pending tests were insufficient); **B2** frozen-model mismatch needed typed not-ready/exit-3 mapping instead of generic failure. B2 unit RED→GREEN and scoped lint now pass (`arena-f0-backend-faba8aabffc6`, `arena-f0-backend-bfce99c4be9f`); fresh assertions are being joined to the B1 correction cohort. Parent reruns also verify 471 core cases (`arena-f0-backend-b97e6c7603b8`) and 139 store cases (`arena-neo4j-a6eb8b67a3ae4c9999d8e3e2d3ef4698`) at their captured revisions. See the [implementation ledger](../event_mapping/event-mapping-refactoring_plan_02-implementation-review.md) for remaining counterexamples and the [updated runbook](foreground-workflow-runbook.md) for JSONL/exit contracts. Unknown released effects remain blocked. Production deployment, installed startup, native/live inference and research retrieval remain outside this isolated proof.
 
 Fresh submission guards include `operation_id=` against all required current keys before persistence/grants (parent GREEN `arena-f0-backend-669e725a3485`). CLI/parser/bootstrap passed 14 isolated core cases in `arena-f0-backend-93f9a6e20526` and scoped lint; exact admission passed 110 sandbox checks in `arena-core-units-bcdbc860be82`. These units are not the default-factory positive proof.
 
@@ -857,6 +1003,6 @@ Review tracked **and untracked** source files when preparing the commit. Do not 
 1. This checkpoint: current implementation gate, authorization and limits.
 2. [Session memory](../../quick_notes/session_memory.md): short decision record and conversation recovery anchor.
 3. [Historical progress log](implementation-progress.md): provenance only; contradictory “current” paragraphs are superseded.
-4. [Dashboard design](../dashboard_cli_workflow_parity.md), [endpoint contracts](endpoint-contract-plan.md), [research-stack design](research-stack-readiness.md), [model-profile contract](model-profile-contract.md): retained design records, not a new execution mandate.
+4. [Dashboard design](dashboard_cli_workflow_parity.md), [endpoint contracts](endpoint-contract-plan.md), [research-stack design](research-stack-readiness.md), [model-profile contract](model-profile-contract.md): retained design records, not a new execution mandate.
 
 Continue the currently authorized plan-02 implementation through its dependency and verification gates. Older approvals do not authorize additional shared-service changes, paid/GPU experiments or queue release. Preserve historical evidence rather than upgrading it to current acceptance.

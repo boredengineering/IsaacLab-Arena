@@ -93,12 +93,14 @@ def required_dependencies(contract: WorkflowContract, *, resolved_instances=None
     if type(contract) is not WorkflowContract:
         raise ValueError("Invalid workflow contract")
     config = contract.execution
-    profiles = [("runtime", config.runtime), ("neo4j", config.database)]
+    profiles = [("neo4j", config.database)]
+    if contract.schema_version != "4":
+        profiles.insert(0, ("runtime", config.runtime))
     if contract.source.kind == "new" or contract.allowed_interventions:
         profiles.append(("generation_model", config.generation_model))
     if any(criterion.kind == "visual" for criterion in contract.criteria):
         profiles.append(("assessment_model", config.assessment_model))
-    if any(criterion.kind != "structural" for criterion in contract.criteria):
+    if contract.schema_version != "4" and any(criterion.kind != "structural" for criterion in contract.criteria):
         if config.capture is None:
             raise ValueError("Capture profile required for requested evidence")
         profiles.extend((("capture", config.capture), ("gpu", config.runtime)))

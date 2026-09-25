@@ -116,6 +116,7 @@ class ForegroundAuthority:
         source_guard=None,
         prior_source=None,
         native_admission=None,
+        assessment_admission=None,
     ):
         self.scope = dict(database=database, deployment_id=deployment_id, workspace_id=workspace_id)
         self.store, self.grants, self.clock = store, grants, clock
@@ -123,6 +124,7 @@ class ForegroundAuthority:
         self._source_guard = nullcontext if source_guard is None else source_guard
         self.prior_source = prior_source
         self.native_admission = native_admission
+        self.assessment_admission = assessment_admission
         self.profiles = copy.deepcopy(profiles)
         self._lock = RLock()
         self._closed = False
@@ -212,12 +214,17 @@ class ForegroundAuthority:
         self.require_read(principal)
         if not isinstance(operation_id, str) or not operation_id:
             raise ValueError("Invalid operation")
-        if contract.source.kind != "new" and contract.schema_version != "3":
+        if contract.source.kind != "new" and contract.schema_version not in ("3", "4"):
             raise ValueError("Foreground refinement and research reads are unsupported")
         if contract.schema_version == "3" and (
             not callable(self.native_admission) or self.native_admission(principal, operation_id, contract) is not True
         ):
             raise ValueError("Explicit scoped native admission required")
+        if contract.schema_version == "4" and (
+            not callable(self.assessment_admission)
+            or self.assessment_admission(principal, operation_id, contract) is not True
+        ):
+            raise ValueError("Explicit scoped retained assessment admission required")
         if contract.effects.allow_database_reads:
             if contract.retrieval is None or self.prior_source is None:
                 raise ValueError("Foreground prior reads are not configured")
@@ -271,6 +278,8 @@ class ForegroundAuthority:
             raise ValueError("Paid model permission required")
         if self.clock() >= expires or "workflow_accounting" not in config:
             raise ValueError("Current attested token/cost bound required")
+        if config["workflow_accounting"]["version"] != (2 if contract.schema_version == "4" else 1):
+            raise ValueError("Accounting policy differs from the selected execution mode")
         return dict(config["workflow_accounting"])
 
     @_locked
@@ -455,15 +464,18 @@ class ForegroundAuthority:
         p = self.require_read(principal)
         assert isinstance(p, dict), "Checked principal metadata required"
         native_only = contract.schema_version == "3"
+        retained_assessment = contract.schema_version == "4"
         if native_only:
             profile, config, credential_expiry = contract.execution.runtime.model_dump(mode="json"), {}, p["expires_at"]
         else:
-            profile, config, credential_expiry = self._source(contract)
+            profile, config, credential_expiry = self._source(
+                contract, role="assessment" if retained_assessment else "generation"
+            )
         public_intent = {"contract": contract.model_dump(mode="json"), "profile": profile}
         self.protect_public(public_intent)
         if not native_only:
             reject_secret(public_intent, config["api_key"])
-        lifetime = contract.budget.total_deadline_seconds if native_only else 180
+        lifetime = contract.budget.total_deadline_seconds if native_only or retained_assessment else 180
         expires = min(_deadline(p["expires_at"]), credential_expiry, _deadline(self.clock()) + lifetime)
         binding = _hash(
             dict(
@@ -477,7 +489,10 @@ class ForegroundAuthority:
         )
         capability = "native_validation" if native_only else "model"
         public = self.grants.issue(principal, binding, capability, profile, config, expires)
-        capabilities = ["native_validation" if native_only else "generation_model", "operational_writes"]
+        capabilities = [
+            "native_validation" if native_only else "assessment_model" if retained_assessment else "generation_model",
+            "operational_writes",
+        ]
         if contract.effects.allow_paid_models:
             capabilities.append("paid_models")
         try:
@@ -677,7 +692,11 @@ class ForegroundAuthority:
             )
             config = self.grants.resolve(principal, snapshot.grant_ref, binding, "native_validation")
         else:
-            current_profile, current, expires = self._source(contract)
+            if contract.schema_version == "4" and fence is not None:
+                raise ValueError("Retained assessment cannot authorize generation")
+            current_profile, current, expires = self._source(
+                contract, role="assessment" if contract.schema_version == "4" else "generation"
+            )
             config = self.grants.resolve(principal, snapshot.grant_ref, binding, "model")
         if current != config or profile != current_profile or self.clock() >= min(expires, snapshot.expires_at):
             raise ValueError("Execution source changed or expired")

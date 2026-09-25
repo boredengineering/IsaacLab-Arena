@@ -80,8 +80,9 @@ def load(path):
         value,
         "schema_version mode operator private_root credentials_file endpoint bolt_uri binding artifact_root"
         " required_profiles bootstrap_principal read_principal"
-        + (" role_bindings" if type(value) is dict and value.get("schema_version") == 3 else "")
-        + (" native_validation" if type(value) is dict and value.get("schema_version") == 4 else ""),
+        + (" role_bindings" if type(value) is dict and value.get("schema_version") in (3, 5) else "")
+        + (" native_validation" if type(value) is dict and value.get("schema_version") == 4 else "")
+        + (" retained_assessment" if type(value) is dict and value.get("schema_version") == 5 else ""),
     )
     # Setup selection is never readiness or execution authority. V3 adds explicit
     # private roles, not a production mode or an exemption from the harness guard.
@@ -95,6 +96,7 @@ def load(path):
             (3, "query-only"),
             (3, "isolated-synthetic-execution-v1"),
             (4, "retained-native-validation-v1"),
+            (5, "retained-visual-assessment-v1"),
         )
     ):
         raise PrivateFileError("Unsupported configuration")
@@ -137,6 +139,11 @@ def load(path):
         raise PrivateFileError("Duplicate profile identity")
     if value["schema_version"] == 3:
         validate_role_bindings(value["role_bindings"], profiles)
+    elif value["schema_version"] == 5:
+        from .installed_assessment import AssessmentSelection
+
+        AssessmentSelection.model_validate_json(encode(value["retained_assessment"]))
+        validate_role_bindings(value["role_bindings"], profiles, assessment_only=True)
     elif value["schema_version"] == 4:
         from .installed_native import NativeSelection
 
@@ -152,13 +159,13 @@ def alias(value):
     return value
 
 
-def validate_role_bindings(value, profiles):
+def validate_role_bindings(value, profiles, *, assessment_only=False):
     """Validate explicit public pins without credentials, providers or database IO."""
     from ..profiles import ProfileRegistration, profile_revision
     from ..provider_configuration import ENDPOINTS
 
-    fields(value, "generation assessment repair prior_read")
-    for role in ("generation", "assessment", "repair"):
+    fields(value, "assessment" if assessment_only else "generation assessment repair prior_read")
+    for role in ("assessment",) if assessment_only else ("generation", "assessment", "repair"):
         row = fields(value[role], "credential_alias profile")
         alias(row["credential_alias"])
         profile = ProfileRegistration.model_validate_json(encode(row["profile"]))
@@ -169,6 +176,10 @@ def validate_role_bindings(value, profiles):
             or ("generation_model" if role == "repair" else role + "_model") not in profile.roles
         ):
             raise PrivateFileError("Unsupported role profile")
+    if assessment_only:
+        if len(profiles) != 1 or profile.roles != ("assessment_model",):
+            raise PrivateFileError("Only the explicit assessment profile is supported")
+        return
     # The current workflow contract pins repair to its generation model. Require
     # explicit sharing rather than silently selecting a separate unbound model/key.
     if value["repair"] != value["generation"]:
@@ -231,10 +242,14 @@ def prepare_credentials(config, value):
     """Bind supplied private roles and issue a nonsecret revision, never a grant."""
     from ..provider_configuration import reject_secret
 
-    if config.value["schema_version"] == 3:
+    if config.value["schema_version"] in (3, 5):
         if value["schema_version"] != 2:
             raise PrivateFileError("Versioned private roles required")
         selected = config.value["role_bindings"]
+        if config.value["schema_version"] == 5 and (
+            set(value["models"]) != {"assessment"} or set(value["databases"]) != {"operational"}
+        ):
+            raise PrivateFileError("Retained assessment requires only assessment and operational database bindings")
         for role, item in value["models"].items():
             if item["alias"] != selected[role]["credential_alias"]:
                 raise PrivateFileError("Private role binding differs")

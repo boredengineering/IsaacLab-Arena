@@ -28,8 +28,8 @@ Snapshot: 2026-09-25. This is a navigation summary; the handoff remains authorit
   PNGs and candidate/evidence bytes were recovered with matching hashes. Replay
   returned the retained result without a worker release.
 - Scratch is outside the original sealed store; prior failed evidence/accounting
-  remain intact. Registered workers are absent, no live owned members remain, the
-  owner is retired and the API is drained.
+  remain intact. At I01 closeout its workers were absent, its owner retired and
+  its API drained; the later I02 cleanup state below is separate.
 - The parent closed the package after final independent `ACCEPT` and its own
   verification. **2/2 additional launches and the prior 3/3 are consumed; zero remain.**
 - Only a5 has `native_settled=true`; no convergence, verification, prior eligibility,
@@ -37,23 +37,68 @@ Snapshot: 2026-09-25. This is a navigation summary; the handoff remains authorit
 - See the [scoped result and causal caveat](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/LIVE_RESULT.txt).
   Shared-cache permissions also changed before a5; the successful private-cache
   path is not proof that one permission defect was the sole cause.
+- **P04-I02 was issued and is blocked after installed admission.** The narrow
+  accounting-only/retained-assessment path and authorized private binding were
+  installed. Authenticated `p04-i02-visibility` released one owned worker but
+  retained no provider dispatch/result; integration and visibility are not accepted.
+  Fresh input and failed-state reads passed, not final-result recovery or completed replay.
+  Worker PID/group 62210 is absent and cleanup is recorded, but owner epoch 6 is
+  dirty/unretired. Supported cancellation leaves `cancel_requested`; API shutdown
+  returns `cleanup_unknown`, with exact API PID 62035 still live in `stopping`.
+  The 600-second deadline expired at 16:22:51.511984 UTC. Three provider sends remain
+  unspent; one model-call/190-second reservation persists without refund. No native,
+  generation, repair, policy or new-prior execution occurred. Final critic and parent
+  both returned `BLOCKED`; fresh parent observation confirmed the same live API/dirty owner.
+  See the [current outcome and recovery decision](02-installed-visual-assessment.md#issued-revision--installed-ownership-blocker-2026-09-25).
+- Planning checkout was clean at `de8f03b13827517e605bb32d49ff87ae596b24bf` before
+  these documentation edits. P04-I01's earlier uncommitted-source description is
+  historical; its captured source/evidence remain the runtime proof.
 
 ## Work-package register
 
 | ID | Plan | Status | Next gate | Execution authority |
 | --- | --- | --- | --- | --- |
-| P04-I01 | [Native integration defects and bounded revalidation](01-native-integration-defects.md) | Verified; parent-closed native-only slice | Remaining Plan 04 work needs a separately scoped goal | Additional 2/2 consumed; prior 3/3 preserved; zero native launches remain |
-| P04-GUIDE-01 | [How Far to Finish Plan 04 (Orchestrator Parity)](how-far-to-finish-plan04.md) | Informational guide | Complete Phase A software punch list | Strategic implementation guide & parity audit |
+| P04-I01 | [Native integration defects and bounded revalidation](01-native-integration-defects.md) | Verified; parent-closed native-only slice | P04-I02 under separately issued authority | Additional 2/2 consumed; prior 3/3 preserved; zero native launches remain |
+| P04-I02 | [Installed visual assessment of retained native evidence](02-installed-visual-assessment.md) | Parent BLOCKED after final critique: admitted worker, no provider/result; retirement and API drain incomplete | Explicit bounded recovery of exact unsent run/live stopping API; schema-3-only duplicate-cleanup finalizer excludes schema4 | Zero native and zero sends; three unspent, one model-call/190s reservation preserved. Existing run's 600s window expired; no reset or automatic restart |
+| P04-GUIDE-01 | [What remains to finish Plan 04](how-far-to-finish-plan04.md) | Informational; reconciled after a5 | Assessment-only slice, then full scene workflow, then policy | No execution authority; no percentage or fixed ETA asserted |
 
-The [goal prompt](01-native-integration-defects.md#proposed-goal-prompt) is retained
-as a historical reference. The issued goal is complete; its allocation cannot be reset.
+## Revised goal and retained checkpoint
 
-The loop requires evidence-linked critic feedback and parent verification, not
-review-count milestones. Native retries remain bounded and must test an identified
-correction. Development-agent inference is separate from the zero Arena workflow
-provider-request requirement; neither agent may deliver model credentials to the
-native application. No execution or additional launch is authorized by editing
-this index or its linked prompt.
+The [revised P04-I02 prompt](02-installed-visual-assessment.md#revised-goal-prompt)
+was issued and reached the blocked installed outcome above. The [original capped goal](archive/02-original-issued-goal.md)
+and [original prerequisite stop](02-installed-visual-assessment.md#closeout) are
+history, not a reason to reinstate old budgets in the revised selection. This is
+a historical prompt-edit checkpoint, not current execution status. The issued
+three-attempt amendment preserves past consumption rather than resetting it. The parent remains
+sole actor/operator; one read-only critic challenges meaningful evidence checkpoints.
+
+Gate A must preserve a5's original producer contract/profile/cohort while linking a
+new assessment consumer. Its four checks cover inputs, the serialized request with
+sends denied, affected existing regressions, and private/authority readiness. Establish
+explicit accounting-only policy without weakening other modes. Complete feasible
+implementation before pausing a credential-dependent step. After checks and critique
+pass, submit through the installed path; do not expand tests, audits or review rounds.
+Retain usage/cost estimates or explicit uncertainty, not monetary/token admission vetoes.
+Distinguish a local refusal proven never sent from a failed/uncertain send; neither
+allows allocation resets. Each failed/uncertain send consumes one attempt, not all
+three. Reconcile/clean up before eligible retries; stop on the first valid result,
+including negative/uncertain verdicts. Private setup remains mandatory before dispatch.
+
+Development-agent inference is separate from Arena workflow accounting. P04-I01
+remains zero-provider history; I02's ledger records zero sends but its admitted
+run's execution window is now expired. The named `OPENAI_API_KEY` was delivered
+privately through the supported binding path; no key value was exposed and no
+other profile or provider setting was changed. Private setup is not the current
+blocker or renewed dispatch authority. Recovery must preserve the existing
+reservation, failed records, private root and cumulative three-attempt cap.
+The [P04-I01 prompt](01-native-integration-defects.md#proposed-goal-prompt) is retained
+only as history; its completed allocation cannot be reset.
+
+First scene-only delivery still follows remaining P1 → scene P2 → scene P3 → P4.
+P04-I02 advances the assessment boundary; it does not close all those gates.
+XY repair needs a later budget for changed-candidate capture and reassessment.
+GR00T, the two-seed pilot and final full-plan P5/P6 work do not gate this first slice;
+fresh readback and cleanup are still required at every executed boundary.
 
 ## Document ownership
 

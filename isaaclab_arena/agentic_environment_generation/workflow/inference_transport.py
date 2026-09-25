@@ -10,11 +10,14 @@ admit calls; they do not cancel in-flight HTTP. There is no durable accounting
 or guard for direct urllib fallbacks. Importing this module loads no SDK/backend.
 """
 
+import base64
+import hashlib
 import math
 import threading
 import time
 from contextlib import contextmanager
 from decimal import Decimal
+from email.utils import parsedate_to_datetime
 
 from .accounting import _usd_units, checked_workflow_accounting
 from .request_envelope import RequestEnvelope
@@ -45,7 +48,13 @@ class CallAllowance:
         self._lock = threading.Lock()
         self._bound = None
         self._charged_tokens = self._charged_cost = 0
-        if any(v is not None for v in (max_tokens, cost_ceiling_usd, per_call_bound)):
+        self.provider_records = []
+        self.retain_provider_phase = None
+        if type(per_call_bound) is dict and per_call_bound.get("version") == 2:
+            self._bound = checked_workflow_accounting(per_call_bound)
+            if max_tokens is not None or cost_ceiling_usd is not None:
+                raise ValueError("Accounting-only allowance cannot contain token/cost caps")
+        elif any(v is not None for v in (max_tokens, cost_ceiling_usd, per_call_bound)):
             if type(max_tokens) is not int or max_tokens < 0:
                 raise ValueError("Complete token/cost allowance required")
             self._cost_ceiling = _usd_units(cost_ceiling_usd)
@@ -56,7 +65,12 @@ class CallAllowance:
     @property
     def token_cost_bounded(self):
         """Whether total admission is bounded conditional on the trusted attestation."""
-        return self._bound is not None
+        return self._bound is not None and self._bound["version"] == 1
+
+    @property
+    def accounting_only(self):
+        """Whether usage is recorded without a synthetic price or monetary/token veto."""
+        return self._bound is not None and self._bound["version"] == 2
 
     @property
     def charged_tokens(self):
@@ -91,7 +105,7 @@ class CallAllowance:
                 raise ValueError("Generation call deadline exhausted")
             if self._attempted_calls >= self._max_calls:
                 raise ValueError("Generation call budget exhausted")
-            if self._bound is not None:
+            if self.token_cost_bounded:
                 if self._charged_tokens + self._bound["max_tokens"] > self._max_tokens:
                     raise ValueError("Generation token budget exhausted")
                 if self._charged_cost + self._call_cost > self._cost_ceiling:
@@ -103,6 +117,108 @@ class CallAllowance:
 
 _patch_lock = threading.Lock()
 _managed_active = False
+
+
+def retryable_http_failure(status, code):
+    """Distinguish transient transport statuses from permission and quota failures."""
+    return (status in (408, 429) or (type(status) is int and 500 <= status <= 599)) and code not in (
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+    )
+
+
+def _provider_error(exc):
+    from openai import APIConnectionError, APITimeoutError
+
+    status, body = getattr(exc, "status_code", None), getattr(exc, "body", None)
+    code = body.get("code") if type(body) is dict else None
+    return dict(
+        kind=type(exc).__name__,
+        status=status,
+        code=code if type(code) is str else None,
+        retryable=isinstance(exc, (APIConnectionError, APITimeoutError)) or retryable_http_failure(status, code),
+        request_id=getattr(exc, "request_id", None),
+    )
+
+
+def _retain_phase(allowance, phase):
+    if allowance.retain_provider_phase is not None:
+        try:
+            allowance.retain_provider_phase(phase, allowance.provider_records[-1])
+        except Exception as exc:
+            allowance.provider_records[-1]["retention_error"] = dict(phase=phase, kind=type(exc).__name__)
+            raise
+
+
+def _retain_request(allowance, raw):
+    if allowance.accounting_only:
+        allowance.provider_records[-1]["serialized_request"] = raw.decode("utf-8")
+        _retain_phase(allowance, "request")
+
+
+def _retry_after_deadline(value, received_at):
+    if value is None:
+        return None
+    try:
+        delay = float(value)
+    except ValueError:
+        try:
+            delay = parsedate_to_datetime(value).timestamp() - received_at
+        except (ValueError, TypeError, OverflowError):
+            return None
+    return received_at + max(0, delay) if math.isfinite(delay) else None
+
+
+def _retain_http_response(allowance, response):
+    response.read()
+    raw = response.content
+    received_at = time.time()
+    retry_after = response.headers.get("retry-after")
+    allowance.provider_records[-1]["http_response"] = dict(
+        status_code=response.status_code,
+        request_id=response.headers.get("x-request-id"),
+        received_at=received_at,
+        retry_after=retry_after,
+        retry_not_before_unix=_retry_after_deadline(retry_after, received_at),
+        body_base64=base64.b64encode(raw).decode("ascii"),
+        body_utf8=raw.decode("utf-8", errors="replace"),
+        body_sha256=hashlib.sha256(raw).hexdigest(),
+    )
+    _retain_phase(allowance, "response")
+
+
+def _complete_recorded(completion, kwargs, pending, allowance):
+    """Keep actual SDK responses and unknown costs in the existing call allowance."""
+    pending.admitted = True
+    record = None
+    if allowance.accounting_only:
+        record = dict(
+            request=kwargs,
+            dispatched=False,
+            response=None,
+            transport_error=None,
+            usage=None,
+            cost_usd=None,
+            cost_basis="unknown_no_price_attestation",
+        )
+        allowance.provider_records.append(record)
+    try:
+        response = completion(**kwargs)
+        if record is not None:
+            record["response"] = response.model_dump(mode="json")
+            record["usage"] = response.usage.model_dump(mode="json") if response.usage else None
+        return response
+    except Exception as exc:
+        if record is not None:
+            record["transport_error"] = _provider_error(exc)
+        raise
+    finally:
+        try:
+            if record is not None and getattr(pending, "raw", None) is not None:
+                record["serialized_request"] = pending.raw.decode("utf-8")
+                _retain_phase(allowance, "complete")
+        finally:
+            pending.admitted = False
 
 
 def managed_inference_active(backend=None):
@@ -149,7 +265,7 @@ def bounded_client(
     api_key, base_url, model = (config[name] for name in ("api_key", "base_url", "model"))
     if not all(isinstance(value, str) and value for value in (api_key, base_url, model)):
         raise ValueError("Explicit provider configuration required")
-    if allowance.token_cost_bounded:
+    if allowance._bound is not None:
         if not strict_model_binding:
             raise ValueError("Workflow accounting requires strict model binding")
         checked_workflow_accounting(allowance._bound, model=model, endpoint=base_url)
@@ -166,12 +282,13 @@ def bounded_client(
         from isaaclab_arena.agentic_environment_generation import inference_backend
 
         # Some runtimes vendor HTTPX under a different module name.
-        with DefaultHttpxClient(follow_redirects=False, trust_env=False, timeout=45) as transport:
+        timeout = min(180, max(0.001, allowance.deadline - time.monotonic())) if allowance.accounting_only else 45
+        with DefaultHttpxClient(follow_redirects=False, trust_env=False, timeout=timeout) as transport:
             with OpenAI(
                 api_key=api_key,
                 base_url=base_url,
                 http_client=transport,
-                timeout=45,
+                timeout=timeout,
                 max_retries=0,
             ) as client:
                 client._arena_workflow_managed = _managed_active
@@ -223,15 +340,22 @@ def bounded_client(
                             request_envelope.check_http(request, api_key=api_key)
                             if time.monotonic() >= allowance.deadline:
                                 raise ValueError("Generation send deadline exhausted")
+                            _retain_request(allowance, pending.raw)
                             if send_guard is not None:
                                 send_guard(request)
                             if time.monotonic() >= allowance.deadline:
                                 raise ValueError("Generation send authority expired")
+                            if allowance.accounting_only:
+                                allowance.provider_records[-1]["dispatched"] = True
                             pending.admitted = False
                         except ValueError:
                             raise OpenAIError("request envelope rejected before transport") from None
 
                     transport.event_hooks["request"].append(before_send)
+                    if allowance.accounting_only:
+                        transport.event_hooks["response"].append(
+                            lambda response: _retain_http_response(allowance, response)
+                        )
                 completion = client.chat.completions.create
 
                 def complete(*args, **kwargs):
@@ -246,11 +370,7 @@ def bounded_client(
                     allowance.charge()
                     if request_envelope is None:
                         return completion(*args, **kwargs)
-                    pending.admitted = True
-                    try:
-                        return completion(**kwargs)
-                    finally:
-                        pending.admitted = False
+                    return _complete_recorded(completion, kwargs, pending, allowance)
 
                 client.chat.completions.create = complete
                 original = inference_backend.OpenAI

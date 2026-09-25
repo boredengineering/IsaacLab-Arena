@@ -51,10 +51,11 @@ def inspection_budget(intent, reservations):
     # Inputs are the validated finite float Amount/Count ledger and budget,
     # not arbitrary Decimal coefficients. Include limits in the aligned width
     # so subtraction is exact too, plus row-count digits for addition carries.
-    from decimal import Context, ROUND_HALF_EVEN, localcontext
+    from decimal import ROUND_HALF_EVEN, Context, localcontext
 
-    amounts = {key: [Decimal(str(row.get(key, 0))) for row in reservations] for key in limits}
-    ceilings = {key: Decimal(str(value)) for key, value in limits.items()}
+    unbounded = {key for key, value in limits.items() if value is None}
+    amounts = {key: [Decimal(str(row.get(key, 0))) for row in reservations] for key in limits if key not in unbounded}
+    ceilings = {key: Decimal(str(value)) for key, value in limits.items() if key not in unbounded}
     operands = [Decimal(0), *ceilings.values(), *(value for values in amounts.values() for value in values)]
     least = min(int(value.as_tuple().exponent) for value in operands)
     most = max(value.adjusted() + 1 for value in operands)
@@ -75,9 +76,12 @@ def inspection_budget(intent, reservations):
     counts = set(limits) - {"cost_ceiling_usd", "runtime_allowance_seconds"}
     reserved = {key: int(value) if key in counts else value for key, value in totals.items()}
     remaining = {key: int(value) if key in counts else value for key, value in remaining.items()}
+    reserved.update({key: None for key in unbounded})
+    remaining.update({key: None for key in unbounded})
     return InspectionBudget(
         reserved=ReservationTotals(**reserved),
         remaining=ReservationTotals(**remaining),
+        accounting="accounting-only-v1" if unbounded else "conservative_cumulative_reservations_no_refunds",
         admitted_at=intent.submission.admitted_at,
         deadline=intent.submission.admitted_at + b.total_deadline_seconds,
         per_operation_ceiling_seconds=b.per_operation_timeout_seconds,
@@ -202,11 +206,17 @@ def workflow_result(store, run_id, *, protect):
         policy_steps=budget.max_policy_steps,
     )
     reservations = [json.loads(i["reservation"]) for i in records["intents"]]
-    reserved = {key: float(sum(Decimal(str(r.get(key, 0))) for r in reservations)) for key in limits}
+    reserved = {
+        key: None if limit is None else float(sum(Decimal(str(r.get(key, 0))) for r in reservations))
+        for key, limit in limits.items()
+    }
     # Initial candidate production is reserved by generation, whose older codec
     # does not contain the scene-only candidates counter.
     reserved["candidates"] += sum(1 for i in records["intents"] if i["scene"] is None)
-    remaining = {key: max(0, float(Decimal(str(limit)) - Decimal(str(reserved[key])))) for key, limit in limits.items()}
+    remaining = {
+        key: None if limit is None else max(0, float(Decimal(str(limit)) - Decimal(str(reserved[key]))))
+        for key, limit in limits.items()
+    }
     counts = {
         "model_calls",
         "model_tokens",
@@ -219,7 +229,8 @@ def workflow_result(store, run_id, *, protect):
         "policy_steps",
     }
     for key in counts:
-        reserved[key], remaining[key] = int(reserved[key]), int(remaining[key])
+        if reserved[key] is not None:
+            reserved[key], remaining[key] = int(reserved[key]), int(remaining[key])
     evidence, criteria = [], []
     selected = {}
     selected_observations = []
@@ -366,4 +377,31 @@ def workflow_result(store, run_id, *, protect):
             "remote_effects_unknown",
         ],
     )
+    if contract.schema_version == "4":
+        attempts = []
+        for intent in records["intents"]:
+            result = json.loads(intent["result"]) if intent["result"] is not None else None
+            outcome = (
+                json.loads(result["retained_assessment_json"])
+                if result and result.get("retained_assessment_json")
+                else None
+            )
+            attempts.append(
+                dict(
+                    intent_id=intent["intent_id"],
+                    reservation=json.loads(intent["reservation"]),
+                    send=json.loads(intent["assessment_send"]) if intent.get("assessment_send") else None,
+                    outcome=outcome,
+                )
+            )
+        attempts.sort(key=lambda item: item["send"]["cumulative_attempt"] if item["send"] else 0)
+        complete = [item["outcome"] for item in attempts if item["outcome"] and item["outcome"]["complete"]]
+        value["retained_assessment"] = dict(
+            producer=contract.retained_evidence.model_dump(mode="json"),
+            attempts=attempts,
+            integration="passed" if len(complete) == 1 else "not_established",
+            result=complete[0]["structured_result"] if len(complete) == 1 else None,
+        )
+        value["budget"].update(accounting="accounting-only-v1", actual_consumption="see_attempt_usage_or_unknown")
+        value["limitations"] = ["retained_images_not_fresh_capture", "visibility_only_not_scene_acceptance"]
     return json.loads(_protected(value, protect))

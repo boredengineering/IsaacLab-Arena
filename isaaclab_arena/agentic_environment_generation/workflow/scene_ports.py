@@ -53,8 +53,8 @@ class ModelCeiling:
     """Configured adapter ceilings, independent of the requested reservation."""
 
     max_calls: int
-    max_tokens: int
-    max_cost_usd: str
+    max_tokens: int | None
+    max_cost_usd: str | None
     timeout_seconds: float
     per_call_bound: dict
 
@@ -109,9 +109,11 @@ class ScenePorts:
         native_only = (
             self.profile.codec_version == 2 and self.profile.assurance == "native-unverified" and model_ceilings == {}
         )
+        retained_only = self.profile.assurance == "retained-evidence" and set(model_ceilings or {}) == {"assessment"}
         if (
             model_ceilings is not None
             and not native_only
+            and not retained_only
             and (type(model_ceilings) is not dict or set(model_ceilings) != {"generation", "assessment"})
         ):
             raise ValueError("complete generation/assessment ceilings required")

@@ -80,7 +80,7 @@ def _retain(area, family, binding, value, protect):
 def read_retained(area, reference, *, protect):
     if type(reference) is not dict or set(reference) != {"family", "version", "manifest_digest", "binding"}:
         raise ValueError("Exact scene artifact reference required")
-    if reference["family"] not in {"scene-model-input", "scene-model-output"}:
+    if reference["family"] not in {"scene-model-input", "scene-model-output", "scene-model-phase"}:
         raise ValueError("Scene artifact family required")
     if reference["version"] != hashlib.sha256(canonical(reference["binding"])).hexdigest():
         raise ValueError("Scene artifact identity mismatch")
@@ -127,6 +127,107 @@ def retain_request(area, *, root, registration, contract, action, data, protect)
     return result
 
 
+def retained_response_candidates(record, raw):
+    """Read response content before trusting a fallible worker's text projection."""
+    candidates = []
+    http = record.get("http_response")
+    if http is not None and 200 <= http["status_code"] < 300:
+        with contextlib.suppress(ValueError):
+            candidates.append(("http_response", json.loads(http["body_utf8"])))
+    candidates.append(("sdk_response", record.get("response")))
+    result = []
+    for origin, response in candidates:
+        if type(response) is dict:
+            with contextlib.suppress(KeyError, IndexError, TypeError):
+                result.append((origin, response["choices"][0]["message"]["content"]))
+    return result + [("worker_projection", raw)]
+
+
+def recover_assessment_output(area, payload, *, send_record, failure_kind, protect):
+    """Recover stopped-owned-worker bytes before considering a counted retry."""
+    from isaaclab_arena.agentic_environment_generation.workflow.inference_transport import retryable_http_failure
+
+    def reference(family, binding):
+        version = hashlib.sha256(canonical(binding)).hexdigest()
+        if not area.has_final(family, version):
+            return None
+        manifest = area.read_final_manifest(family, version, binding=binding)
+        return dict(family=family, version=version, binding=binding, manifest_digest=manifest["digest"])
+
+    binding = dict(payload["request"]["binding"], request_manifest_digest=payload["request"]["manifest_digest"])
+    result_binding = dict(binding, codec="scene-model-result-v1")
+    completed = reference("scene-model-output", result_binding)
+    if completed is not None:
+        read_retained(area, completed, protect=protect)
+        return completed
+    phases, record = {}, None
+    for phase in ("request", "response", "complete"):
+        ref = reference("scene-model-phase", dict(binding, codec="scene-model-phase-v1", phase=phase))
+        if ref is not None:
+            phases[phase] = ref
+            record = read_retained(area, ref, protect=protect)
+    dispatched = send_record is not None
+    if dispatched and (
+        record is None
+        or hashlib.sha256(record["serialized_request"].encode()).hexdigest() != send_record["request_sha256"]
+    ):
+        raise ValueError("Charged attempt has no matching retained request")
+    raw = None
+    if record is not None:
+        record["dispatched"] = dispatched
+        http = record.get("http_response")
+        if http is not None and not dispatched:
+            raise ValueError("Response without durable dispatch authority")
+        if http is not None and "complete" not in phases:
+            try:
+                response = json.loads(http["body_utf8"])
+            except ValueError:
+                response = None
+            if 200 <= http["status_code"] < 300:
+                record["response"] = response
+                record["usage"] = response.get("usage") if type(response) is dict else None
+            else:
+                error = response.get("error") if type(response) is dict else None
+                code = error.get("code") if type(error) is dict else None
+                record["transport_error"] = dict(
+                    kind="retained_http_failure",
+                    status=http["status_code"],
+                    code=code,
+                    retryable=retryable_http_failure(http["status_code"], code),
+                    request_id=http["request_id"],
+                )
+        if dispatched and http is None and record["transport_error"] is None:
+            record["transport_error"] = dict(
+                kind="owned_transport_incomplete",
+                observed_failure=failure_kind,
+                status=None,
+                code=None,
+                retryable=True,
+                request_id=None,
+            )
+        raw = next((text for _, text in retained_response_candidates(record, None) if type(text) is str), None)
+    output = dict(
+        kind="raw_visual_response",
+        raw_response=raw,
+        publication="not_published",
+        provider_records=[] if record is None else [record],
+        phase_receipts=phases,
+        local_error={"kind": failure_kind},
+        recovery="owned_stopped_retained_bytes_no_resend",
+    )
+    return _retain(
+        area,
+        "scene-model-output",
+        result_binding,
+        dict(
+            binding=result_binding,
+            output=output,
+            attempted_calls=int(dispatched),
+        ),
+        protect,
+    )
+
+
 def scene_allowance(packet, *, contract=None):
     inputs = packet["inputs"]
     if set(packet) != {"inputs", "config", "graph_config", "workflow_execution"} or set(inputs) != LEGACY_INPUTS | {
@@ -153,7 +254,7 @@ def scene_allowance(packet, *, contract=None):
         raise ValueError("Scene request binding mismatch")
     projected = dict(packet, inputs={k: inputs[k] for k in LEGACY_INPUTS})
     allowance = workflow_allowance(projected)
-    if not allowance.token_cost_bounded:
+    if not (allowance.token_cost_bounded or allowance.accounting_only):
         raise ValueError("Attested scene allowance required")
     return allowance
 
@@ -199,13 +300,30 @@ def execute(packet, allowance, protect, *, send_guard=None):
                 SceneEvidenceArtifacts,
             )
 
-            if set(data) != {"criterion", "candidate", "cohort", "observation_manifest_digest"}:
+            retained = data.get("consumer_contract_digest") is not None
+            expected_fields = {"criterion", "candidate", "cohort", "observation_manifest_digest"}
+            if retained:
+                expected_fields |= {"consumer_contract_digest", "producer_source"}
+            if set(data) != expected_fields:
                 raise ValueError("Invalid assessment request")
             candidate, cohort = CandidateBinding.model_validate(data["candidate"]), EvidenceCohort.model_validate(
                 data["cohort"]
             )
-            if candidate.contract_digest != payload["request"]["binding"]["contract_digest"]:
+            consumer_digest = data["consumer_contract_digest"] if retained else candidate.contract_digest
+            if consumer_digest != payload["request"]["binding"]["contract_digest"]:
                 raise ValueError("Candidate contract mismatch")
+            if retained:
+                from isaaclab_arena.agentic_environment_generation.workflow.contracts import RetainedEvidenceSource
+
+                source = RetainedEvidenceSource.model_validate(data["producer_source"])
+                if (
+                    not allowance.accounting_only
+                    or candidate.candidate_digest != source.candidate_digest
+                    or candidate.contract_digest != source.contract_digest
+                    or candidate.profile_digest != source.profile_digest
+                    or data["observation_manifest_digest"] != source.observation_manifest_digest
+                ):
+                    raise ValueError("Retained producer/consumer link mismatch")
             artifacts = SceneEvidenceArtifacts(area)
             observation = artifacts.load_receipt(
                 candidate,
@@ -214,17 +332,38 @@ def execute(packet, allowance, protect, *, send_guard=None):
                 manifest_digest=data["observation_manifest_digest"],
                 protect=protect,
             )
-            raw = tools.assess(
-                criterion=Criterion.model_validate(data["criterion"]),
-                candidate=candidate,
-                cohort=cohort,
-                artifacts=artifacts,
-                observation=observation,
-                protect=protect,
-            )
-            if type(raw) is not str or not 1 <= len(raw.encode()) <= 65536:
+            raw, error = None, None
+            phases = {}
+            if retained:
+
+                def retain_phase(phase, record):
+                    binding = dict(
+                        payload["request"]["binding"],
+                        codec="scene-model-phase-v1",
+                        request_manifest_digest=payload["request"]["manifest_digest"],
+                        phase=phase,
+                    )
+                    phases[phase] = _retain(area, "scene-model-phase", binding, record, protect)
+
+                allowance.retain_provider_phase = retain_phase
+            try:
+                raw = tools.assess(
+                    criterion=Criterion.model_validate(data["criterion"]),
+                    candidate=candidate,
+                    cohort=cohort,
+                    artifacts=artifacts,
+                    observation=observation,
+                    protect=protect,
+                )
+            except Exception as exc:
+                if not retained:
+                    raise
+                error = {"kind": type(exc).__name__}
+            if not retained and (type(raw) is not str or not 1 <= len(raw.encode()) <= 65536):
                 raise ValueError("Visual response bound")
             output = {"kind": "raw_visual_response", "raw_response": raw, "publication": "not_published"}
+            if retained:
+                output.update(provider_records=allowance.provider_records, local_error=error, phase_receipts=phases)
         else:
             assets, relations, tasks = prepare_catalogues(inputs["execution_catalogue_sha256"])
             kwargs = dict(asset_catalog=assets, relation_catalog=relations, task_catalog=tasks, protect=protect)
@@ -311,7 +450,8 @@ def main():
         signal.setitimer(signal.ITIMER_REAL, remaining)
         send_guard = (
             ModelSendAuthorization(channel, sys.stdin.buffer, allowance)
-            if "request_bounds" in packet["config"] else None
+            if "request_bounds" in packet["config"]
+            else None
         )
         with open(os.devnull, "w") as sink, contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
             receipt = execute(packet, allowance, protect, send_guard=send_guard)

@@ -1,3 +1,8 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Copyright (c) 2026, The Isaac Lab Arena Project Developers.
 # SPDX-License-Identifier: Apache-2.0
 """Explicit query transport types; no domain model auto-exposure."""
@@ -264,8 +269,8 @@ class PublicWorkflowAccounting:
     attested: bool
     model: str
     endpoint: str
-    max_tokens: PositiveDecimalInteger
-    max_cost_usd: DecimalString
+    max_tokens: PositiveDecimalInteger | None
+    max_cost_usd: DecimalString | None
 
 
 @strawberry.type
@@ -303,7 +308,7 @@ def model_settings_view(value):
             else PublicWorkflowAccounting(
                 **fields(accounting, "attested model endpoint max_cost_usd"),
                 version=str(accounting.version),
-                max_tokens=str(accounting.max_tokens),
+                max_tokens=None if accounting.max_tokens is None else str(accounting.max_tokens),
             )
         ),
     )
@@ -392,8 +397,8 @@ class FrozenBudget:
     max_revisions: Counter
     max_runtime_seconds: DecimalString
     max_model_calls: Counter
-    max_model_tokens: Counter
-    max_cost_usd: DecimalString
+    max_model_tokens: Counter | None
+    max_cost_usd: DecimalString | None
     max_realizations: Counter
     max_steps: Counter
     max_observations: Counter
@@ -428,8 +433,8 @@ class FrozenIntent:
 @strawberry.type
 class ReservationTotals:
     model_calls: Counter
-    model_tokens: Counter
-    cost_ceiling_usd: DecimalString
+    model_tokens: Counter | None
+    cost_ceiling_usd: DecimalString | None
     runtime_allowance_seconds: DecimalString
     candidates: Counter
     revisions: Counter
@@ -829,6 +834,7 @@ class Workflow:
     scene: SceneSummary | None
     generation_outputs: list[GenerationOutputReference]
     readiness: list[RetainedReadiness]
+    retained_assessment_json: str | None
 
     @strawberry.field
     @safe_resolver
@@ -865,7 +871,10 @@ SubmissionResult = Annotated[SubmissionReceipt | NotFound | QueryFailure, strawb
 
 def fields(value, names, *, text=False):
     """Project only the literal reviewed field list supplied by the mapper."""
-    return {name: str(getattr(value, name)) if text else getattr(value, name) for name in names.split()}
+    return {
+        name: str(getattr(value, name)) if text and getattr(value, name) is not None else getattr(value, name)
+        for name in names.split()
+    }
 
 
 def profile_reference(value):
@@ -1049,6 +1058,7 @@ def workflow_view(value):
             " experiment_outcome",
         ),
         frozen_intent=frozen_intent(value.intent.contract),
+        retained_assessment_json=value.retained_assessment_json,
         available_actions=[
             action
             for action, allowed in (

@@ -1,174 +1,202 @@
-# How Far Are We from Replicating External Success in the Application Orchestrator?
+# What remains to finish Plan 04?
 
-- **Document ID**: `P04-GUIDE-01`
-- **Created**: 2026-09-25
-- **Status**: Informational & Strategic Implementation Guide
-- **Parent**: [Plan 04](../event_mapping/event-mapping-refactoring_plan_04.md)
-- **Work Package**: [P04-I01 (Native Integration Defects)](01-native-integration-defects.md)
-- **Canonical Implementation Handoff**: [Research Stack Handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)
-
-> [!NOTE]
-> **Container Volume Mount Portability**:
-> In the devcontainer, this checkout is located at `/workspaces/IsaacLab-Arena`. Inside the simulation execution container (`isaaclab_arena-latest`), it is mounted at `/workspaces/isaaclab_arena`. To maintain complete compatibility across named volumes, local devcontainers, and execution containers, all code references in this guide use **repository-relative paths** (`../../../../...`) rather than container-specific absolute filesystem URIs.
+- Document ID: `P04-GUIDE-01`
+- Updated: 2026-09-25, after the issued P04-I02 installed ownership/cleanup blocker
+- Status: Informational & Tracking; no execution authority
+- Parent: [Plan 04](../event_mapping/event-mapping-refactoring_plan_04.md)
+- Current goal: [P04-I02 — blocked after installed worker release](02-installed-visual-assessment.md)
+- Runtime status: [canonical handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)
 
 ---
 
-## 1. Executive Summary & Readiness Assessment
+## Executive Scorecard: Plan 04 Five-Stage Completion Matrix
 
-We are at the **5-yard line** — approximately **90% of the application-owned orchestration pipeline is implemented, executed, and empirically proven**.
-
-The core architectural paradigm shift demanded by Plan 04 — transitioning away from an external agent or operator manually daisy-chaining standalone Python scripts and towards a self-contained, enterprise GraphQL/CLI execution service that autonomously owns process groups, GPU leases, and database transactions — is almost entirely complete.
-
-Only **two specific software defects** and **one verified simulation execution run** stand between our current blocked state and complete parity with the earlier successful trial.
-
----
-
-## 2. Comparison: External Orchestrator vs. Application-Owned Orchestrator
-
-The table below contrasts the earlier successful standalone realization (`realize-20260924T232748Z`) with the current installed application-owned pipeline (`installed-native-20260925T012042Z`):
-
-| Phase | External Orchestrator (`realize-20260924T232748Z`) | Application-Owned Orchestrator (`installed-native-20260925T012042Z`) | Current Status in Application |
-| :--- | :--- | :--- | :--- |
-| **1. Trigger & Authentication** | Operator manually ran ad-hoc bash one-liners | Authenticated GraphQL mutation / CLI (`api-launch --authorize-native`) | **100% Proven & Verified** |
-| **2. Leases & Fencing** | None (ran directly on host/container without locks) | Durable GPU lease (`/eval/.arena-workbench-gpu.lock`), process group owner fencing | **100% Proven & Verified** |
-| **3. Spec Admission** | Direct Python variable passing | Schema 3 admission, SHA-256 candidate validation, contract digest verification | **100% Proven & Verified** |
-| **4. Worker Lifecycle** | Manual Python process | Application spawns, registers, monitors, and terminates isolated [`NativeSceneWorker`](../../../../isaaclab_arena_examples/agentic_environment_generation/web_api/native_scene_worker.py) | **100% Proven & Verified** |
-| **5. Kit Initialization** | Standalone `SimulationApp` boot | Managed Kit boot inside container under 590s watchdog | **100% Proven & Verified** |
-| **6. Scene Construction** | Standalone builder succeeded | Attempt a3 reached `InteractiveScene` and crashed on `schemas.activate_contact_sensors` | **BLOCKED (Defect G04-14)** |
-| **7. 180-Step PhysX Settling** | Succeeded for 120 steps (rejected on strict 0.001 rad/s) | Not yet executed inside application worker | **Ready** (Reuses same [`initialize_and_settle`](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_realization.py)) |
-| **8. Camera Frame Capture** | Captured 3 PNGs to local disk | Worker captures and encodes 3 same-cohort PNGs | **Ready** (Pipeline wired, blocked by #6) |
-| **9. Artifact Retention** | Loose files in `outputs/...` | Sealed [`ArtifactArea`](../../../../isaaclab_arena/agentic_environment_generation/workbench/research_artifacts.py) with manifests and SHA-256 digests | **BLOCKED (Defect G04-15)** |
-| **10. Neo4j Persistence** | Operator manually called `sync_spec_to_neo4j` | Application coordinator automatically writes to Neo4j | **100% Proven & Verified** |
-| **11. Cleanup & Teardown** | Manual process kill | Zero zombie processes, clean GPU lease release, tombstone records | **100% Proven & Verified** |
+| Stage / Package | Goal & Target | Scope & Technical Boundaries | Current Status | Consumed vs. Authorized Resources | Exit Criteria & Key Artifacts |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Stage 1: P04-I01** | **Goal A: Native Simulation Slice** | Real Isaac Sim (PhysX) settling in `isaaclab_arena-latest` on Blackwell GPU; 180 control steps settling ($<0.001\text{ m/s}$ linear, $<0.01\text{ rad/s}$ angular); 3 camera PNG captures at step 180; scratch recovery outside sealed artifacts. | **100% VERIFIED & CLOSED**<br>Critic `ACCEPT` ([`deleg_1acfe8e1`](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/critic-final.json)) | **5/5 lifetime native launches consumed (0 remain)**.<br>$0.00 provider spend. | [`LIVE_RESULT.txt`](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/LIVE_RESULT.txt), [`parent-closeout.json`](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/parent-closeout.json), 3 PNGs, `native_settled=true`. |
+| **Stage 2: P04-I02** | **Goals B & C: Installed Visual Assessment** | Assess a5's 3 retained camera PNGs (`external_camera_rgb`, `external_camera_2_rgb`, `wrist_camera_rgb`) with `gpt-6-astra` via installed GraphQL/ASGI; persist structured visibility result in Neo4j; fresh-client byte recovery and replay without provider send. | **BLOCKED AFTER ADMISSION**<br>Released worker, no model result; owner unretired and API still live/stopping | **0 native launches; 0 provider sends**.<br>3 sends unspent, one model-call/190s reservation retained; 600s window expired. Private binding installed. | Requires exact lifecycle recovery, then a separately bounded execution window with unchanged cumulative cap. No visual/final-result/replay acceptance; this scoped slice alone does not close full Milestone 1. |
+| **Stage 3: P04-I03** | **Goal D: Full Scene Workflow (Plan 03 V1)** | Single unbroken submission: Prompt $\to$ LLM generation $\to$ schema validation $\to$ native settling/capture $\to$ visual assessment $\to$ bounded repair (if needed) $\to$ scene disposition. | **PENDING**<br>Gated on Stage 2 completion | Requires new explicit cumulative envelope for native + provider launches. | Single GraphQL operation drives full prompt-to-scene lifecycle autonomously; accepted or truthfully rejected scene. |
+| **Stage 4: P04-I04** | **Goal E: Policy Pilot (Plan 03 V2)** | Isaac-GR00T policy co-residency; reference task: *"Grasp yellow banana from right and set onto white plate on left"* across 2 predeclared seeds; goal predicate evaluations. | **PENDING**<br>Gated on Stage 3 completion | Requires dedicated GPU memory allocation and GR00T service deployment. | Episode trajectories, joint action logs, goal predicate success/failure retained; `verified=true/false`. |
+| **Stage 5: P04-P6** | **Audit: Independent Causal Readback** | Fresh-client cryptographic traversal of full causal graph: prompt $\to$ priors $\to$ candidate $\to$ settling $\to$ assessment $\to$ policy trials; leak-free process audit. | **PENDING**<br>Gated on Stage 4 completion | Read-only fresh client audit. | Complete reproducible graph dump; hash-verified evidence store; production handoff sign-off. |
 
 ---
 
-## 3. End-to-End Orchestration Architecture & Chokepoints
+## Milestone Architecture & Progression
 
 ```mermaid
 flowchart TD
-    subgraph Proven["PROVEN & WORKING IN APPLICATION ORCHESTRATOR"]
-        CLI["1. CLI / GraphQL api-launch"] --> Lease["2. Acquire GPU & Owner Lease"]
-        Lease --> Admit["3. Admit Immutable candidate.json"]
-        Admit --> Worker["4. Spawn & Register NativeSceneWorker"]
-        Worker --> Kit["5. Initialize Omniverse Kit in Docker"]
+    subgraph M1["Milestone 1: Foundational Simulation & Multimodal Evaluation (~75% Complete)"]
+        S1["Stage 1: P04-I01 Native Physical Simulation (PhysX Settling + 3 Cameras)"] -->|100% VERIFIED| S2["Stage 2: P04-I02 Installed Visual Assessment (gpt-6-astra on a5 PNGs)"]
     end
 
-    subgraph Chokepoint["THE CURRENT INTEGRATION CHOKEPOINT"]
-        Kit -->|Attempt a3| Build{"6. Scene Construction<br/>(build_native_environment)"}
-        Build -->|CRASH: schemas.activate_contact_sensors| Err["G04-14: No rigid bodies under prim<br/>(Diagnostic omitted str(cause))"]
+    subgraph M2["Milestone 2: Autonomous Scene Loop (Pending)"]
+        S2 -->|Unlocks M2| S3["Stage 3: P04-I03 Full Live Scene Workflow (Prompt -> Generation -> Simulation -> Assessment)"]
     end
 
-    subgraph ReadyToRun["READY TO EXECUTE IMMEDIATELY AFTER FIX"]
-        Build -->|Once Unblocked| Settle["7. 180-Step PhysX Settling<br/>(<0.001 m/s lin, <0.01 rad/s ang)"]
-        Settle --> Capture["8. Capture 3 Cohort Cameras"]
-        Capture --> Retain["9. Persist to Sealed ArtifactArea<br/>(Needs G04-15 scratch fix)"]
-        Retain --> Neo4j["10. Write Truthful Outcome to Neo4j"]
-        Neo4j --> Cleanup["11. Drain Worker & Release GPU Lease"]
+    subgraph M3["Milestone 3: Physical AI Policy Validation & Lineage Audit (Pending)"]
+        S3 -->|Unlocks M3| S4["Stage 4: P04-I04 Seed-Bound Isaac-GR00T Policy Pilot (Banana Pick-and-Place)"]
+        S4 --> S5["Stage 5: P6 Independent Causal Traversal & Full Plan 04 Closeout"]
     end
 
-    style Proven fill:#d4edda,stroke:#28a745,color:#155724
-    style Chokepoint fill:#f8d7da,stroke:#dc3545,color:#721c24
-    style ReadyToRun fill:#d1ecf1,stroke:#17a2b8,color:#0c5460
+    style S1 fill:#d4edda,stroke:#28a745,stroke-width:2px;
+    style S2 fill:#fff3cd,stroke:#ffc107,stroke-width:2px;
+    style S3 fill:#f8f9fa,stroke:#6c757d,stroke-width:1px;
+    style S4 fill:#f8f9fa,stroke:#6c757d,stroke-width:1px;
+    style S5 fill:#f8f9fa,stroke:#6c757d,stroke-width:1px;
 ```
 
----
-
-## 4. Root Cause Analysis of the Remaining Gaps
-
-### Defect 1: G04-15 Artifact Store Directory Contamination
-- **Coordinate**: [`native_scene_worker.py`](../../../../isaaclab_arena_examples/agentic_environment_generation/web_api/native_scene_worker.py) & [`installed_native.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_native.py)
-- **Mechanism**: The worker placed temporary scratch files into:
-  ```python
-  output_root = Path(packet["payload"]["root"]) / "native-capture-work"
-  ```
-  Because `packet["payload"]["root"]` is the sealed [`ArtifactArea`](../../../../isaaclab_arena/agentic_environment_generation/workbench/research_artifacts.py) root (e.g. `/home/ubuntu/.local/state/arena/installed-native-20260925T012042Z/artifacts/`), creating `native-capture-work` as a 4th root directory directly violates:
-  ```python
-  if set(os.listdir(fd)) != {cls.MARKER, "staging", "final"}:
-      raise ArtifactError("Invalid artifact root layout")
-  ```
-- **Consequence**: Fresh candidate and artifact-inventory GraphQL queries fail with `QueryFailure UNKNOWN` (`ArtifactError: Invalid artifact root layout`).
-- **Remediation**:
-  1. Redirect `output_root` to `native_scratch_root(artifact_root)` (located outside the sealed artifact directory).
-  2. In the container, move the stray `native-capture-work` into a sibling `scratch/` directory.
-
-### Defect 2: G04-14 Rigid Object Contact Sensor Activation Crash
-- **Coordinate**: [`schemas.py:720`](../../../../submodules/IsaacLab/source/isaaclab/isaaclab/sim/schemas/schemas.py) via [`object.py:152`](../../../../isaaclab_arena/assets/object.py)
-- **Mechanism**:
-  [`object.py:152`](../../../../isaaclab_arena/assets/object.py) unconditionally calls `_get_spawn_cfg(activate_contact_sensors=True)` on every rigid object. Isaac Lab's `activate_contact_sensors` searches the prim and its descendants for `UsdPhysics.RigidBodyAPI`. If none are found, it raises `ValueError: No contact sensors added to the prim: '{prim_path}'`.
-  Crucially, [`native_scene_worker.py`](../../../../isaaclab_arena_examples/agentic_environment_generation/web_api/native_scene_worker.py) only retained the exception class name (`ValueError`) and line numbers, failing to capture `str(cause)` or the offending prim path before Kit shut down.
-- **Remediation**:
-  1. Instrument [`native_scene_worker.py`](../../../../isaaclab_arena_examples/agentic_environment_generation/web_api/native_scene_worker.py) to retain `sanitized_message = str(cause)` and the active construction phase before Kit shutdown.
-  2. On Native Launch 1, the enriched diagnostic will immediately expose the exact failing prim path if it recurs.
-
-### Defect 3: A3 Visual Dispatch Unbound Receipt
-- **Coordinate**: [`split_scene_ports.py:158`](../../../../isaaclab_arena/agentic_environment_generation/workflow/split_scene_ports.py)
-- **Mechanism**: When `intent.action == "assess"` and visual criteria exist, line 158 calls `visual_request(visual, receipt.candidate, ...)` but `receipt` was only assigned inside `if intent.action == "capture":`. This causes an `UnboundLocalError`, causing the service to catch an unhandled exception and fall back to `reconciliation_required`.
-- **Remediation**: Assign `receipt = self._retained[retained_observation.cohort.realization_id][1]` in the assessment branch.
-
-### Defect 4: A3 Flake8 C901 Cyclomatic Complexity
-- **Coordinate**: [`workflow/cli.py:215`](../../../../isaaclab_arena/agentic_environment_generation/workflow/cli.py) (`_run_installed`)
-- **Mechanism**: Complexity is 31 (threshold 30) due to inline command branches.
-- **Remediation**: Extract command branches into helper dispatchers.
-
-### Execute Native Launch 1 (Under 10 minutes simulation run)
-
-- Once Steps 1–3 pass Gate A, submit the candidate through the application:
-    - The application spawns the worker in isaaclab_arena-latest.
-    - It constructs the scene using candidate.json.
-    - It executes 180 control steps (settling under < 0.001 m/s linear and < 0.01 rad/s angular).
-    - It captures 3 camera frames, writes them to final/, records native_settled=true in Neo4j, and cleans up.
+- **Milestone 1**: Proves individual components work end-to-end through the installed application.
+  - *Simulation*: Done (180 PhysX control steps, settled, 3 cameras rendered).
+  - *Visual Assessment*: Blocked after admitted worker release, before provider dispatch; durable retirement and API drain remain unresolved.
+- **Milestone 2**: Proves autonomous orchestration without manual stage chaining.
+- **Milestone 3**: Proves robot policy execution (Isaac-GR00T) and full scientific auditability.
 
 ---
 
-## 5. The Actionable Punch List to Finish Plan 04 Milestone 1
+## 1. What the application has actually demonstrated
+
+[P04-I01](01-native-integration-defects.md) is parent-closed after an independent
+`ACCEPT` and parent verification. Operation `p04-i01-native-a5`, run
+`fcc052f890be2d208783f04453d184f7d2455afe948aa8607e92a5a87d79ea48`, reached
+native-only `accepted` through authenticated CLI/GraphQL submission.
+
+| Boundary | Verified scope |
+| --- | --- |
+| Admission and ownership | Exact retained candidate; existing coordinator, execution owner and registered owned workers; no manual chaining of capture and numeric assessment |
+| Native result | 180 actual control steps; both subjects passed the strict final five-sample linear/angular window under the frozen operator-approved revised policy |
+| Capture | Three same-cohort PNGs at step 180, no extra capture steps |
+| Retention/readback | Fresh authenticated candidate/evidence/PNG bytes matched hashes; same completed-operation replay released no worker |
+| Cleanup | Registered workers absent, no live owned members, durable owner retirement and API drain; dead zombie entries were disclosed |
+| Accounting | Original 3/3 and additional 2/2 native launches consumed; zero remain. Arena provider requests and policy execution were zero for the installed native slice |
+| Scientific flags | Only a5 has `native_settled=true`; no automatic convergence, verification or prior eligibility |
+
+Evidence: [result](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/LIVE_RESULT.txt),
+[parent closure](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/parent-closeout.json),
+[critic verdict](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/critic-final.json).
+These records establish the exercised source and selected workflow, not universal
+runtime correctness or later-source acceptance.
+
+The earlier standalone realization did construct and capture the scene, but it
+failed its original settling window and was not installed-application acceptance.
+Keep that failure and its original criteria; do not describe it as a fully
+successful equivalent workflow.
+
+## 2. Which old blockers are closed?
+
+| Earlier issue | Current position |
+| --- | --- |
+| G04-15: scratch inside sealed artifacts | Recovered scratch outside the same sealed store, preserving prior bytes/inodes; authenticated byte reads and replay passed |
+| G04-14: contact activation failed during construction | a4 localized the failure to `blue_bin`; private cache delivery was corrected and a5 passed construction/settling/capture. Shared-cache permissions also changed before a5, actor unknown; sole-cause attribution is unsupported |
+| Visual-dispatch check and CLI complexity | Affected existing checks and scoped host lint passed at a5 closeout; this does not prove an actual VLM assessment |
+
+The old launch punch list is complete and its allocation exhausted. It must not
+be treated as a fresh two-launch allowance. The old unbound-receipt diagnosis and
+blanket claims that all process entries disappeared are not current evidence.
+
+## 3. Current blocked package: P04-I02
+
+Read the [revised goal](02-installed-visual-assessment.md#revised-goal-prompt).
+It retains the parent-actor/single-read-only-critic loop and requires installed
+application acceptance, not standalone model/helper execution.
+
+The revision was issued and the installed operation `p04-i02-visibility` admitted.
+The worker is absent with recorded cleanup, but run state is `cancel_requested`,
+owner epoch 6 remains dirty, and the exact API process is live/stopping after
+`cleanup_unknown`. No assessment response or completed replay exists. See the
+[current outcome and recovery decision](02-installed-visual-assessment.md#issued-revision--installed-ownership-blocker-2026-09-25).
+Unspent provider attempts do not extend the expired operation deadline or permit
+resetting its one-call/190-second reservation. No additional credential/budget audit
+is needed; bounded lifecycle recovery is the next decision.
+
+### Implementation guidance (installed acceptance remains blocked)
+
+- Preserve a5's original candidate, producer contract/profile, cohort and image
+  hashes. A new visual/paid request needs an explicit consumer link; changing its
+  contract does not authorize rebinding old receipts.
+- Reuse the existing per-frame visibility serializer/evaluator and verify exact
+  subject, camera and image mapping. Hash binding alone is not semantic grounding.
+- The necessary retained-assessment admission/composition and explicit accounting-only
+  policy were implemented through existing paths. Native mode remains model-free;
+  synthetic/budgeted modes retain their guards. Unknown live costs are not free or
+  `synthetic_fixture` pricing; none of this is successful installed assessment evidence.
+- Grounded subject descriptions and camera order were frozen with the narrow
+  per-subject uncertainty adaptation. The actual serialized request matched all
+  retained inputs; no provider answer has exercised its completed installed result path.
+- Implement technical request limits and accounting-only policy without waiting for a
+  model key. Install the assessment binding through supported private handover from
+  the authorized active `OPENAI_API_KEY` environment configuration (the operator-named
+  `.env` entry is allowed if not exported). No key exposure or other credential access.
+  Only actual source/permission/handover failure blocks the dependent step.
+- Gate A has four checks: exact installed input reads, production serialization with
+  sends denied, affected existing regressions, and private/authority readiness.
+  Run only affected existing simulation-free checks and scoped host lint. No new or
+  modified tests, cases, fixtures, harnesses or synthetic matrices; passing checks lead
+  to the installed submission, not a broader readiness campaign.
+
+### One conditional live assessment
+
+The issued revision allowed up to three cumulative `gpt-6-astra` assessment attempts
+after Gate A and zero native work, with no preset dollar, aggregate-token or numeric
+output budgets. Retry only format/coverage or transient network failures, not a valid
+negative/uncertain verdict or non-retryable authority/configuration failure. Choose a
+finite completion allowance for the full answer within provider technical limits;
+retain reported usage and sourced cost estimates, or explicit unknowns. The old
+byte-based reservation floor must not veto this revised selection. Represent the
+policy explicitly rather than substituting a huge cap or pretending execution is free.
+Three-attempt enforcement, request integrity and cleanup remain mandatory: at most
+180 seconds provider time plus 10 seconds cleanup per attempt, 570 seconds stage
+allowance and 600 seconds total. The application owns and records retries; no hidden
+SDK retries or new review round for a policy-compliant retry. The implementation
+was exercised through admission/worker release, but the current operation is blocked
+and expired; these limits do not authorize automatic restart.
+Correct a local pre-transport refusal only with retained proof that no send occurred;
+preserve its history. A failed/uncertain send consumes one attempt. Reconcile retained
+responses and finish owned cleanup before using a remaining attempt; provider-side
+timeout uncertainty alone does not exhaust the allowance.
+
+The application must retain the source-linked raw/structured result and usage,
+provide fresh authenticated byte readback, replay without another call, and clean
+up exact owned processes. A valid negative or inconclusive visual verdict can
+prove software integration but not scene acceptance. Malformed output, failed
+transport or missing frame coverage cannot complete the package.
+
+No generation, XY repair, recapture, policy rollout or prior promotion is included.
+One VLM visibility response is not calibrated 3D grounding or physical validation.
+
+## 4. What comes after retained assessment?
 
 ```mermaid
 flowchart TD
-    subgraph Step1["Step 1: Phase A Software Repairs (Zero Native Launches, $0 Spend)"]
-        A1["Fix G04-15: Relocate scratch output outside sealed artifact root"]
-        A2["Move stray native-capture-work in container to sibling scratch/"]
-        A3["Fix G04-14: Retain str(cause) & prim path in native_scene_worker.py"]
-        A4["Fix A3: Bind receipt in split_scene_ports.py & modularize cli.py (C901)"]
-        A5["Gate A Pass: Unit tests & authenticated GraphQL readback verified"]
-        A1 --> A2 --> A3 --> A4 --> A5
-    end
-
-    subgraph Step2["Step 2: Phase B Bounded Execution (At Most 2 Native Launches)"]
-        B1["Issue Bounded Goal Prompt (Max 2 Launches)"]
-        B2["Launch 1: Installed workflow runs candidate.json in isaaclab_arena-latest"]
-        B3{"Constructor<br/>Passes?"}
-        B4["Execute 180 control steps<br/>Settle: lin < 0.001 m/s, ang < 0.01 rad/s<br/>Capture 3 same-cohort PNGs"]
-        B5["Enriched diagnostics reveal exact prim<br/>Apply 1 targeted adapter fix<br/>Execute Launch 2"]
-        B6["Verify persistence in Neo4j<br/>Replay without simulation launch"]
-        
-        A5 --> B1 --> B2 --> B3
-        B3 -- Yes --> B4 --> B6
-        B3 -- No --> B5 --> B4
-    end
-
-    subgraph Step3["Step 3: Phased Roadmap to Full Plan 04 Completion"]
-        G_B["Goal B: Visual Assessment Wireup (XY Repair Logic)"]
-        G_C["Goal C: Live VLM Assessment (1 Call, gpt-6-astra)"]
-        G_D["Goal D: End-to-End Live Scene Generation"]
-        G_E["Goal E: Seed-Bound Policy Pilot (GR00T)"]
-        B6 --> G_B --> G_C --> G_D --> G_E
-    end
+    A["Verified: P04-I01 native-only a5"] --> B["P04-I02 blocked: admitted unsent run, lifecycle recovery required"]
+    B --> C["Only after explicit recovery/window authority: assessment, cumulative cap 3; readback/replay/cleanup"]
+    C --> D["Remaining scene validation gates under separate authority"]
+    D --> E["Full installed prompt-to-scene workflow (Stage 3)"]
+    E --> F["If authorized: repair, fresh capture and reassessment"]
+    E --> G["Later: GR00T readiness, two-seed policy pilot (Stage 4)"]
+    F --> G
+    G --> H["Full-plan independent lineage readback and handoff (Stage 5)"]
 ```
 
----
+1. **Finish Remaining Scene Obligations**: P04-I02 advances assessment
+   integration but does not waive independent validation/calibration requirements.
+2. **Prove Autonomous Scene Workflow (Stage 3 / P04-I03)**: Prove one installed submission
+   owns generation → native settling/capture → assessment → truthful scene disposition.
+   Issue new cumulative effect limits beforehand; no previous native allowance carries forward.
+3. **Budget Repair if Included**: If XY repair is authorized, budget both changed-candidate
+   capture and reassessment. A changed candidate cannot inherit a5's measurements or frames.
+4. **Policy Pilot (Stage 4 / P04-I04)**: Add policy readiness/reset prerequisites and the
+   separately bounded two-seed pilot afterward. GR00T and policy co-residency do not gate
+   retained assessment or the first scene-only workflow.
+5. **Full Lineage Readback (Stage 5 / P6)**: Complete fresh-client causal reconstruction
+   across the full accepted/failing lineage, with immutable byte checks and exact cleanup.
 
-## 6. Conclusion: Estimated Remaining Effort
+## 5. Where status belongs
 
-- **Phase A Software Fixes**: 1–2 hours (Code changes complete; zero native compute consumed).
-- **Gate A Verification**: 15 minutes (Readback verified over GraphQL).
-- **Phase B Native Launch**: 10 minutes (PhysX settling and camera rendering in container).
-- **Total Distance**: **~2 hours of focused execution**.
+- [Work-package register](README.md): proposed scope, next gate and approval boundary.
+- [P04-I02](02-installed-visual-assessment.md): copyable prompt and acceptance/stop conditions.
+- [Plan 04](../event_mapping/event-mapping-refactoring_plan_04.md): parent architecture, gaps and full definition of done.
+- [Canonical handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md): latest verified runtime outcome and issued authority.
 
-### In Plain Terms
-
-In the earlier run, we drove the car manually by opening the hood and turning the engine crank by hand. It proved the engine works.
-
-In this run, we built the entire dashboard, steering wheel, ignition, transmission, and seatbelts (the application orchestrator). We turned the key, the starter fired, the transmission engaged, but a loose wire on the contact sensor stalled the engine, and a stray file in the glovebox locked the door.
-
-We do not need to redesign the car or re-invent the engine. Once we fix those two specific wires, the application will drive the exact same road the manual trial drove — fully autonomously.
+Use repository-relative links. Discover the checkout's existing execution container
+through the repository skill rather than assuming a host/container path or container
+name. Updating this guide does not start services, enable credentials or issue a goal.

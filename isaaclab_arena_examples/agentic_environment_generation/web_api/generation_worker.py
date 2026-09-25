@@ -79,7 +79,9 @@ def workflow_allowance(envelope):
             # decimal spelling once; all subsequent admission uses integer units.
             accounting = dict(
                 max_tokens=reservation.model_tokens,
-                cost_ceiling_usd=format(Decimal(str(reservation.cost_ceiling_usd)), "f"),
+                cost_ceiling_usd=(
+                    None if bound["version"] == 2 else format(Decimal(str(reservation.cost_ceiling_usd)), "f")
+                ),
                 per_call_bound=bound,
             )
         return CallAllowance(max_calls=reservation.model_calls, deadline=monotonic + deadline - now, **accounting)

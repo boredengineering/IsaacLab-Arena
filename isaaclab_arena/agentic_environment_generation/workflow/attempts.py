@@ -8,7 +8,7 @@
 """Frozen metadata for the generation-only persistence boundary, never credentials."""
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, model_serializer, model_validator
 
 from .contracts import Amount, Count, FrozenModel, Hash, Identifier
 
@@ -28,7 +28,10 @@ class AuthorizationSnapshot(FrozenModel):
     contract_digest: Hash
     expires_at: Amount
     capabilities: Annotated[
-        tuple[Literal["generation_model", "operational_writes", "paid_models", "native_validation"], ...],
+        tuple[
+            Literal["generation_model", "assessment_model", "operational_writes", "paid_models", "native_validation"],
+            ...,
+        ],
         Field(min_length=1, max_length=3),
     ]
 
@@ -92,6 +95,24 @@ class GenerationReservation(FrozenModel):
     """Full outer allowance; no refund or consumption reconciliation exists yet."""
 
     model_calls: Count
-    model_tokens: Count
-    cost_ceiling_usd: Amount
+    model_tokens: Count | None
+    cost_ceiling_usd: Amount | None
     runtime_allowance_seconds: Amount
+    accounting_policy: Literal["bounded-v1", "accounting-only-v1"] = "bounded-v1"
+
+    @model_validator(mode="after")
+    def accounting(self):
+        missing = self.model_tokens is None or self.cost_ceiling_usd is None
+        if self.accounting_policy == "accounting-only-v1":
+            if self.model_tokens is not None or self.cost_ceiling_usd is not None:
+                raise ValueError("Accounting-only reservations cannot contain token/cost caps")
+        elif missing:
+            raise ValueError("Legacy reservations require token and cost bounds")
+        return self
+
+    @model_serializer(mode="wrap")
+    def versioned_accounting(self, handler):
+        value = handler(self)
+        if self.accounting_policy == "bounded-v1":
+            value.pop("accounting_policy", None)
+        return value

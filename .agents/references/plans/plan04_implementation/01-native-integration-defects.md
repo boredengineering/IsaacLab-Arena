@@ -1,12 +1,24 @@
 # P04-I01 — Native integration defects and bounded revalidation
 
+> **Current status: VERIFIED and parent-closed on a5 (2026-09-25).**
+> The original 3/3 and additional 2/2 native launches are consumed; zero remain.
+> The proposal/review-script snapshot below is preserved as history, not a new
+> allocation or a reversal of the [verified result](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/LIVE_RESULT.txt)
+> and [parent closeout](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/parent-closeout.json).
+> Successor [P04-I02](02-installed-visual-assessment.md) has a revised prompt without
+> preset monetary/token budgets; execution is paused and no new calls/runs occurred.
+> The [canonical handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)
+> owns current status. Unchecked proposal items and “not issued” text below are historical.
+
+## Historical proposal and review-script snapshot
+
 - Created: 2026-09-25
-- Status: **Verified — installed native-only acceptance completed on a5; parent closed after independent ACCEPT (2026-09-25)**
+- Status: **Proposed — implementation and additional native execution not authorized by this document**
 - Parent: [Plan 04](../event_mapping/event-mapping-refactoring_plan_04.md)
 - Status owner: [canonical implementation handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)
 - Previous allocation: **3/3 native launches consumed; none remain**
-- Issued new allocation: at most two additional native launches in total, only
-  after Gate A; **2/2 consumed, zero remain**. The prior 3/3 remain consumed.
+- Proposed new allocation: at most two additional native launches, only after the
+  no-native gate and explicit issuance of the goal below.
 - Development method: parent-led actor with one independent, read-only critic;
   evidence-driven correction loop, not a parallel application executor.
 
@@ -23,28 +35,7 @@ installed workflow with a standalone helper invocation.
 This work package does not close all of Milestone 1, visual validation, policy
 acceptance, prior eligibility or Plan 04.
 
-### Verified scoped result
-
-The installed authenticated operation `p04-i01-native-a5`, run
-`fcc052f890be2d208783f04453d184f7d2455afe948aa8607e92a5a87d79ea48`, reached
-`accepted` through application-owned native capture, numeric assessment, retention
-and cleanup. Both subjects passed the actual final steps 176–180; three same-cohort
-PNGs were recovered through authenticated byte reads with matching hashes. Actual
-seeds/timing/reset settings match the policy below, with no extra capture steps.
-Completed-operation replay released no worker. Exact physical cleanup, durable
-retirement and API drain passed. Only the new attempt has `native_settled=true`;
-convergence, verification and prior eligibility were not promoted.
-
-Evidence: [scoped result](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/LIVE_RESULT.txt),
-[final critic ACCEPT](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/critic-final.json),
-[parent closeout](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/parent-closeout.json).
-The default shared cache's permissions also changed before a5, actor unknown;
-do not claim unchanged shared cache or exclusive causal proof for the private-cache
-correction. The passing worker's private bin bytes match the earlier working copy.
-
-## 2. Entry baseline — historical failures preserved
-
-This table records the starting point, not the current verified result above.
+## 2. Established facts and remaining uncertainty
 
 | Issue | Established evidence | What is not established |
 | --- | --- | --- |
@@ -100,8 +91,8 @@ replace the original file with normalized output.
 | Per-launch bound | 600 seconds including cleanup |
 
 These are an operator-approved revised settling policy, not established calibration.
-a3/a4 failed before these checks; a5 verified the actual seeds, timestep and reset
-behavior in its retained before-reset and after-capture runtime snapshots.
+The failed constructor never reached verification of the realized timestep/reset
+behavior. A successful attempt must check those actual values.
 
 ## 4. Actor-critic development loop
 
@@ -190,7 +181,7 @@ than voting, spawning more reviewers or repeating the same argument.
 
 ### Loop bounds
 
-- The issued native allowance was **two additional launches in total**, now exhausted, not
+- The proposed native allowance remains **two additional launches in total**, not
   two per iteration, process, new goal restart or new operation ID. Count diagnostic
   launches and failed starts according to the existing durable accounting. Never
   refund consumed releases because construction failed.
@@ -209,33 +200,33 @@ than voting, spawning more reviewers or repeating the same argument.
 
 ### A1. Separate scratch and retained artifacts
 
-- [x] Add an explicit, bounded, operator-owned native scratch location outside the
+- [ ] Add an explicit, bounded, operator-owned native scratch location outside the
   sealed artifact root, delivered through the existing worker boundary.
-- [x] Keep per-attempt ownership/path validation and cleanup; do not expose arbitrary
+- [ ] Keep per-attempt ownership/path validation and cleanup; do not expose arbitrary
   filesystem paths or relax artifact reader checks.
-- [x] Verify exact worker absence and ownership before recovering the existing layout.
+- [ ] Verify exact worker absence and ownership before recovering the existing layout.
   Preserve the misplaced scratch directory intact at a recorded safe location;
   preserve the marker, staged/final manifests, receipts, hashes and all failed evidence.
-- [x] Reopen the same artifact area. Do not create a fresh artifact/private root to
+- [ ] Reopen the same artifact area. Do not create a fresh artifact/private root to
   evade failed state, ownership, configuration checks or consumed accounting.
-- [x] Use a fresh authenticated client to retrieve the retained candidate and available
+- [ ] Use a fresh authenticated client to retrieve the retained candidate and available
   artifact bytes, compare their declared hashes, and prove reads/replay release no worker.
   Correct any remaining external-candidate read-path defect rather than equating
   a filesystem export with HTTP acceptance.
 
 ### A2. Make construction failures actionable
 
-- [x] Compare the installed wrapper's consumed construction inputs with the earlier
+- [ ] Compare the installed wrapper's consumed construction inputs with the earlier
   working realization: prim mapping, asset references, contact-report requests,
   required asset/runtime environment delivery and relevant builder settings.
-- [x] Use retained logs and source first. Distinguish an incorrectly targeted subtree,
+- [ ] Use retained logs and source first. Distinguish an incorrectly targeted subtree,
   missing/unloaded asset, and an inappropriate contact request as hypotheses—not facts.
-- [x] Retain the failed phase, offending prim, relevant asset reference and sanitized
+- [ ] Retain the failed phase, offending prim, relevant asset reference and sanitized
   causal exception message before Kit shutdown, in addition to bounded static frames.
   Do not record locals, credentials or sensitive URL components.
-- [x] Keep inspection scoped to the failed construction boundary. No comprehensive
+- [ ] Keep inspection scoped to the failed construction boundary. No comprehensive
   simulator metadata inventory, physics redesign or submodule changes.
-- [x] Correct only an evidence-supported adapter/configuration mismatch. Do not
+- [ ] Correct only an evidence-supported adapter/configuration mismatch. Do not
   globally disable contact checks or add rigid-body properties to force acceptance.
   If the remedy requires changing assets, physics or simulator code, stop for a decision.
 
@@ -244,13 +235,13 @@ authorized native run must collect the required diagnosis; it is not an uncounte
 
 ### A3. Resolve existing quality failures
 
-- [x] Diagnose `test_foreground_split_service_keeps_owner_and_cleans_before_model[False-False]`
+- [ ] Diagnose `test_foreground_split_service_keeps_owner_and_cleans_before_model[False-False]`
   with the existing check; establish baseline status rather than assuming regression.
-- [x] Correct any in-scope dispatch defect without bypassing the authorization/send guard.
-- [x] Resolve C901 in `workflow/cli.py::_run_installed` with narrowly scoped command-handler
+- [ ] Correct any in-scope dispatch defect without bypassing the authorization/send guard.
+- [ ] Resolve C901 in `workflow/cli.py::_run_installed` with narrowly scoped command-handler
   cleanup, not a broad refactor.
-- [x] Run existing relevant checks. Do not add or modify tests, mocks or synthetic fixtures.
-- [x] Select simulation-free checks for Gate A. A check that initializes Kit/native
+- [ ] Run existing relevant checks. Do not add or modify tests, mocks or synthetic fixtures.
+- [ ] Select simulation-free checks for Gate A. A check that initializes Kit/native
   simulation is a counted native launch, not a free test, and cannot run in this phase.
   Follow repository rules: lint on the host; Arena package checks inside the verified
   existing checkout container as the host user.
@@ -259,52 +250,52 @@ authorized native run must collect the required diagnosis; it is not an uncounte
 
 Before any new native launch, retain evidence that:
 
-- [x] The same artifact area reopens and authenticated candidate/artifact-byte reads pass.
-- [x] Original/canonical bytes match their respective hashes; failed records remain attributable.
-- [x] No model credentials are loaded into the Arena application or worker; no Arena
+- [ ] The same artifact area reopens and authenticated candidate/artifact-byte reads pass.
+- [ ] Original/canonical bytes match their respective hashes; failed records remain attributable.
+- [ ] No model credentials are loaded into the Arena application or worker; no Arena
   workflow provider calls or native worker releases occurred during this phase.
-- [x] Useful bounded constructor diagnostics are wired, and the known/unknown cause is explicit.
-- [x] Relevant existing checks and scoped lint pass; unresolved failures are not hidden.
-- [x] The next candidate, settings, operation identity and source revision are frozen.
-- [x] The critic has reviewed this concrete evidence and the proposed next native
+- [ ] Useful bounded constructor diagnostics are wired, and the known/unknown cause is explicit.
+- [ ] Relevant existing checks and scoped lint pass; unresolved failures are not hidden.
+- [ ] The next candidate, settings, operation identity and source revision are frozen.
+- [ ] The critic has reviewed this concrete evidence and the proposed next native
   action; the actor has resolved cited blocking findings and rechecked authority.
 
 ## 6. Phase B — Conditional installed native revalidation
 
-The operator explicitly issued this phase on 2026-09-25. Its additional allocation
-is now exhausted, as is the old allocation; neither may be reset or reused.
+This phase requires explicit issuance of the proposed goal or equivalent fresh
+bounded authorization. The exhausted old allocation is never reset or reused.
 
-- [x] Record the new allocation and fresh operation identities using the existing
+- [ ] Record the new allocation and fresh operation identities using the existing
   authorization/accounting machinery; preserve old receipts, tombstones and reservations.
   Use checked configuration handover if the selected public configuration changes.
-- [x] Discover and verify this checkout's existing container, run as the host user,
+- [ ] Discover and verify this checkout's existing container, run as the host user,
   and keep one environment/owned native worker at a time.
-- [x] First additional launch: submit through the installed authenticated interface.
+- [ ] First additional launch: submit through the installed authenticated interface.
   Let the application own construction, settling, capture, persistence and cleanup.
-- [x] If it fails, retain the precise diagnosis and cleanup. A second additional launch
+- [ ] If it fails, retain the precise diagnosis and cleanup. A second additional launch
   is allowed only after a supported in-scope correction; never retry an unchanged failure.
-- [x] Feed the actual native outcome, retained artifacts and cleanup evidence into
+- [ ] Feed the actual native outcome, retained artifacts and cleanup evidence into
   the actor-critic loop before selecting any next action. Missing settling samples
   or cameras are missing evidence, not a reason to recycle the older trial's artifacts.
-- [x] Freeze corrected source before acceptance. No warm-up/diagnostic launch outside
+- [ ] Freeze corrected source before acceptance. No warm-up/diagnostic launch outside
   the new allocation, no provider call and no manually launched next stage.
 
 ## 7. Acceptance and stop conditions
 
 Mark this work package **Verified** only when all of these are evidenced:
 
-- [x] Real finite measurements pass the complete final five-sample settling window.
-- [x] Actual seeds, timestep and reset behavior agree with the frozen policy.
-- [x] Three fresh camera captures belong to that same candidate/cohort.
-- [x] The application retains the new attempt, candidate/policy identities, measurements,
+- [ ] Real finite measurements pass the complete final five-sample settling window.
+- [ ] Actual seeds, timestep and reset behavior agree with the frozen policy.
+- [ ] Three fresh camera captures belong to that same candidate/cohort.
+- [ ] The application retains the new attempt, candidate/policy identities, measurements,
   images and truthful outcome; fresh authenticated clients recover the bytes.
-- [x] Replaying the completed operation returns retained results without another launch.
-- [x] Physical owned-worker cleanup and durable owner retirement are verified.
-- [x] `native_settled=true` is supported by the actual passing attempt. `converged`,
+- [ ] Replaying the completed operation returns retained results without another launch.
+- [ ] Physical owned-worker cleanup and durable owner retirement are verified.
+- [ ] `native_settled=true` is supported by the actual passing attempt. `converged`,
   `verified` and prior eligibility are not promoted merely because native settling passes.
-- [x] Existing failed attempts remain unchanged; Plan 04 and the handoff state the
+- [ ] Existing failed attempts remain unchanged; Plan 04 and the handoff state the
   verified native-only result and remaining visual/policy/general-validation gates.
-- [x] The final critic review cites these actual results, and the parent independently
+- [ ] The final critic review cites these actual results, and the parent independently
   verifies the claims and marks completion; the critic cannot close tracked work.
 
 Stop on the additional allocation being exhausted, unresolved ownership, an
@@ -315,9 +306,8 @@ gate; passing checks does not close the whole Plan 04.
 
 ## Proposed goal prompt
 
-**Historical prompt.** The operator separately issued this bounded goal; P04-I01 is
-now verified and both additional launches are consumed. This preserved text grants
-no further authority and must not be reused to replenish the exhausted allocation.
+**Not issued.** Saving this prompt grants no execution authority. Copy and issue it
+only when both implementation and the conditional new allocation below are intended.
 
 ```text
 /goal Complete P04-I01 in .agents/references/plans/plan04_implementation/01-native-integration-defects.md using a bounded actor-critic development loop. Repair the native integration defects and make the installed application run, capture, retain and recover the real native-validation result. Progress means executable application acceptance, not more plans, tests or review passes.
@@ -366,30 +356,76 @@ Stop for exhausted allocation, unresolved ownership, an out-of-scope remedy, no 
 Update the work-package index, Plan 04 and canonical handoff with the final source/evidence references, allocation used, and separate integration, native-scientific, readback/replay and cleanup outcomes. Keep reporting concise. Do not claim full Milestone 1, VLM/visual validation, policy acceptance, prior eligibility or Plan 04 completion from this slice.
 ```
 
-## Closeout — verified by parent, 2026-09-25
+### New Review script
 
-- Authority: operator-issued `/goal`; prior 3/3 and additional 2/2 consumed, zero remain.
-- Actor/critic: Gate A `CONTINUE` (`deleg_87a04b06`), a4/correction `CONTINUE`
-  (`deleg_56e91b35`), final `ACCEPT` (`deleg_1acfe8e1`); parent independently checked
-  the raw measurements/bytes, replay, source integrity and cleanup and alone closed this package.
-- Integration: `p04-i01-native-a4` retained the blue-bin construction failure;
-  `p04-i01-native-a5` completed the installed application-owned path.
-- Native science: 180 steps; both objects passed strict final steps 176–180. Realized
-  seeds 42/42, dt 0.005 s, decimation 4, control dt 0.020 s; one reset placement draw,
-  three fresh same-cohort cameras at step 180 and zero extra capture steps.
-- Recovery: authenticated candidate and evidence bytes, embedded PNG hashes and exact
-  completed-operation replay passed without a new release. Prior outcomes/budgets/
-  per-intent cleanup and sealed leaves remain unchanged. Aggregate inspection hashes
-  incorporate the advancing global owner, so they are not immutable per-run hashes.
-- Cleanup: registered native/numeric PIDs absent, no live owned members, durable epoch 5
-  retired and API drained. Two dead native-session zombies remain, not live workers.
-- Source: baseline `8d557315cc056e83e531727274a12bd5705af42e`, uncommitted scoped diff,
-  `source-a5.json` (210 hashes), no drift through final parent verification.
-- Supporting checks: 293 existing targeted tests and 17 subtests, 8 provider-bounds
-  tests, scoped host lint; 96 warnings retained. No test/fixture or simulator edits.
-- Remaining scope: not calibrated/independently validated sensing, no VLM/visual or
-  policy acceptance, no convergence/verification/prior-eligibility promotion, and no
-  full Milestone 1/Plan 04 completion. Shared-cache mode changes prevent an exclusive
-  causal attribution; see the corrected observation in the result report.
-- Canonical handoff and Plan 04 updated. [Evidence and caveats](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/LIVE_RESULT.txt)
-  remain alongside all original failed evidence and accounting.
+```bash
+/goal Complete P04-I01 in .agents/references/plans/plan04_implementation/01-native-integration-defects.md using a bounded actor-critic development loop. Repair the native integration defects and make the installed application run, capture, retain and recover the real native-validation result. Progress means executable application acceptance, not more plans, tests or review passes.
+  
+  AUTHORITY AND ROLES
+  
+  This issued goal authorizes narrowly scoped Arena adapter/orchestration changes, exact retained-scratch recovery, existing checks, authenticated readback and—only after Gate A passes—at most two additional native launches in total. Preserve the three consumed launches and all durable accounting. Do not start a new allocation on restart or because a different agent/operation is used.
+  
+  You are the ACTOR and sole writer/operator. Use one independent CRITIC at a time through the available subagent delegation tool in a fresh context at meaningful checkpoints. Pass the goal, constraints, acceptance criteria, scoped diff and sanitized evidence explicitly. Do not build a new agent framework, parallel executor, budget ledger or reporting platform.
+  
+  The CRITIC is read-only: inspect the relevant source and evidence, challenge the root-cause hypothesis, find missing acceptance evidence, and propose the smallest next action. It must not edit files, run tests/services/simulation, submit operations, access credentials/private client files, write the database or grant authority. Development-agent inference may use the existing Hermes
+configuration and incur tokens; this is separate from Arena's zero-workflow-provider budget. Do not change provider configuration or read/export model credentials into the application, worker or review packet.
+  
+  EXECUTION LOOP
+  
+  1. Observe the earliest failed application boundary from real retained evidence. Separate initiating errors from cleanup errors and unknowns from facts. Identify one falsifiable causal hypothesis, the smallest in-scope correction, its predicted observation and the exact existing check or installed command that can verify it.
+  2. Apply that correction and run its affected existing checks. Prefer a no-native reproduction when it answers the question. If diagnosis is missing, improve bounded diagnostics rather than guessing. Do not add or modify tests, mocks, fixtures or a standalone acceptance harness. Honor repository tool boundaries: host lint, Arena package checks in the verified existing container
+isaaclab_arena-latest as the non-root host user ubuntu (UID 1000, required by ForegroundOwnerLease). Gate A checks must be simulation-free; a test that initializes Kit/native simulation is a counted launch, not an exception to the gate.
+  3. Capture a compact record: iteration/operation/attempt and source identities; candidate/policy identities; allocation consumed/remaining; command and actual result; furthest phase; sanitized causal exception including prim/asset when known; real measurements/images and cohort if available; retained artifact references; authenticated readback/replay observations; and exact owned
+cleanup. Reuse existing evidence paths and record missing evidence explicitly.
+  4. Obtain the CRITIC's valid JSON response at Gate A, after each native outcome and after a materially changed correction to an unresolved blocker—not after every file/tool action. Use the tool's per-task output_schema to require decision (CONTINUE, NEED_EVIDENCE, BLOCKED or ACCEPT), evidence_refs, earliest_failed_boundary, hypothesis, prediction, next_action, next_check, unmet_criteria
+and scope_or_budget_risks. Each finding must cite evidence. Invalid or absent feedback is not approval; allow one format-only correction request, then stop if unusable.
+  5. Verify the critic's claims yourself. Resolve a disagreement with the smallest discriminating observation, not extra reviewers. Apply a supported in-scope fix, rerun affected checks, and continue without asking permission after every routine correction. Before every native release, independently recheck Gate A, current authority, remaining allocation, unchanged input/policy and
+previous-worker cleanup. Critic approval cannot waive any gate.
+  6. Stop only when all acceptance criteria are actually verified or a stated stop condition applies. After three unsuccessful non-native fix cycles for the same blocker, stop for a specific scope/architecture decision; do not try a fourth speculative variant. Never repeat an unchanged native failure. Every diagnostic native launch counts.
+  
+  FIRST: GATE A, WITHOUT NATIVE EXECUTION
+  
+  Separate native scratch from the sealed artifact root without weakening its reader. Move stray native-capture-work out of /home/ubuntu/.local/state/arena/installed-native-20260925T012042Z/artifacts/ into a sibling scratch/ directory. Keep manifests, bytes, receipts, tombstones and failed evidence intact; reopen the same artifact area, not a replacement private root that evades history.
+Prove fresh authenticated candidate/artifact-byte reads and their declared hashes, and replay without a worker release.
+
+  Compare the installed constructor inputs with the earlier working realization. Retain bounded sanitized failure messages (str(cause)), failing phase and prim/asset references before Kit shutdown; do not capture locals, secrets or sensitive URL components. Treat prim mapping, asset loading and contact requests as hypotheses until evidenced. Do not globally disable contact checks or add
+physics properties to force construction. Resolve the outstanding existing visual-dispatch check in split_scene_ports.py (line 158 receipt binding during assess) and CLI complexity lint (C901 in workflow/cli.py::_run_installed) without changing tests or weakening guards. Gate A passes only with real readback evidence, usable diagnostics, relevant existing checks/lint, frozen selections
+and the critic's evidence review; distinguish any still-unknown native cause explicitly.
+
+  THEN: BOUNDED INSTALLED EXECUTION
+
+  Reuse outputs/workflow/plan04-implementation/milestone1/realize-20260924T232748Z/candidate.json unchanged; original-file SHA-256 is 8dcd08b813236ee0ccdcad1024594a70301d4a6fdcd0af41d013e05f5135a7e8. Keep the plan's distinct canonical digest and frozen policy: seeds 42/42; simulation dt 0.005 s; decimation 4; control dt 0.020 s; resolve_on_reset=true with initial reset only; 180 control
+steps; final five consecutive samples; linear norm <0.001 m/s and angular norm <0.01 rad/s for red_block and blue_bin. Check actual realized values, forbid hidden terminal/autoreset substitution, and allow no extra capture stepping. This is an operator-approved revised policy, not established calibration.
+
+  Make zero Arena workflow provider requests: no generation, constructor probes, model repair or VLM assessment; no policy execution. Only the approved operational Neo4j binding may be used for this workflow, with trial writes limited to milestone1_live_20260924t232748z_r2 and required application-owned records. Preserve separate read/execution authority, private delivery and checked
+configuration handover.
+
+  Discover and verify this checkout's existing Isaac Lab container (isaaclab_arena-latest) and run as non-root UID 1000 (ubuntu). Permit one environment and one owned native worker concurrently. Use the existing finite 600-second per-launch watchdog including cleanup. Submit fresh operation identities through the installed authenticated CLI/GraphQL interface. The coordinator, execution
+owner and owned worker must own the entire native run, capture, retention and cleanup; never manually launch each next stage.
+
+  Freeze exercised source during a run and its readback/replay verification. Capture the actual outcome before shutdown and verify physical cleanup and durable owner retirement before modifying that source or releasing another worker. If the first new launch fails, the second may run only after a cited, evidence-supported correction, including a targeted diagnostic correction if required.
+Failed starts and diagnostic runs consume the existing accounting allowance; no refunds or hidden probes. Changes affecting an earlier passing result require revalidation within the remaining allocation.
+
+  ACCEPTANCE, STOP AND CLOSEOUT
+
+  Accept only after finite measurements pass the actual final five-step window, three fresh camera captures belong to that same cohort, and the application retains the exact new attempt/candidate/policy identities, measurements, images and truthful outcome. A fresh authenticated client must recover retained bytes with matching hashes; replaying the completed operation must return its
+retained result without another native launch. Verify cleanup, unchanged prior failed records and zero Arena workflow provider calls. Set native_settled only from a genuinely passing attempt; do not automatically promote convergence, verification or prior eligibility.
+
+  The critic must cite the complete acceptance evidence; the parent independently verifies it and alone closes the work package. A review pass, successful process exit, unit-test count, filesystem export or accurately reported native failure is not positive native acceptance.
+
+  Stop for exhausted allocation, unresolved ownership, an out-of-scope remedy, no supported next correction, unusable independent critique or the repeated non-native failure limit. Preserve diagnostics and complete required bounded cleanup before reporting the exact blocker and operator decision needed. Do not change the candidate, seeds, thresholds, assets or physics; edit
+simulator/submodule code; recreate containers; reconfigure shared services; bypass synthetic/native guards; commit or push. Preserve unrelated working-tree changes; do not stash or reset them.
+
+  Update the work-package index, Plan 04 and canonical handoff with the final source/evidence references, allocation used, and separate integration, native-scientific, readback/replay and cleanup outcomes. Keep reporting concise. Do not claim full Milestone 1, VLM/visual validation, policy acceptance, prior eligibility or Plan 04 completion from this slice.
+```
+
+## Closeout — to be filled after authorized execution
+
+- Goal/authorization reference: not issued.
+- Actor-critic iterations and evidence/decision references: none; loop not started.
+- Gate A evidence: pending.
+- New operation/run identities and consumed allocation: none authorized under this plan.
+- Native result and artifact-byte/replay evidence: pending.
+- Cleanup evidence: pending for any future execution; previous cleanup remains in the handoff.
+- Remaining blockers / next decision: approve a bounded goal or revise its scope.
+- Canonical handoff update: pending execution, not implied by creation of this plan.

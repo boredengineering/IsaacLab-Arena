@@ -75,6 +75,7 @@ class ForegroundWorkflow:
         ownership_artifacts_factory,
         cancellation,
         native_support=None,
+        retained_support=None,
     ):
         if authority.store is not store:
             raise ValueError("Exact same-store authority required")
@@ -98,7 +99,17 @@ class ForegroundWorkflow:
         profile = self.scene_options["profile"]
         if not profile.owned_worker:
             raise ValueError("Owned scene composition required")
-        if native_support is not None:
+        if retained_support is not None:
+            from .retained_assessment import RetainedAssessmentPorts
+
+            if (
+                native_support is not None
+                or not isinstance(retained_support, RetainedAssessmentPorts)
+                or retained_support.profile != profile
+                or profile.assurance != "retained-evidence"
+            ):
+                raise ValueError("Explicit retained-assessment support required")
+        elif native_support is not None:
             from .split_scene_ports import SplitScenePorts
 
             if (
@@ -113,16 +124,20 @@ class ForegroundWorkflow:
             raise ValueError("Only explicitly synthetic owned scene composition is supported")
         # Construct only pure admission ports: no worker, backend, SDK or ping.
         self._support = (
-            native_support
-            if native_support is not None
-            else ScenePorts(
-                **self.scene_options,
-                protect=authority.protect_public,
-                authorize=None,
-                ready=None,
-                refine=None,
-                visual=None,
-                check_active=lambda: None,
+            retained_support
+            if retained_support is not None
+            else (
+                native_support
+                if native_support is not None
+                else ScenePorts(
+                    **self.scene_options,
+                    protect=authority.protect_public,
+                    authorize=None,
+                    ready=None,
+                    refine=None,
+                    visual=None,
+                    check_active=lambda: None,
+                )
             )
         )
         self.service = WorkflowService(store, authority, gate, validate_support=self._support.admit)
@@ -157,6 +172,11 @@ class ForegroundWorkflow:
         self._support.admit(contract)
         self.authority.protect_workflow_contract(principal, contract)
         bounds = self.authority.require_workflow_model_bounds(principal, contract)
+        if contract.schema_version == "4":
+            if self._support.profile.assurance != "retained-evidence" or set(bounds) != {"assessment"}:
+                raise ValueError("Retained assessment support required")
+            self._support.require_bounded_capability(principal, contract, self._support.profile.assess)
+            return
         if contract.schema_version == "3":
             if self._support.profile.assurance != "native-unverified" or bounds:
                 raise ValueError("Native-only application support required")
@@ -315,7 +335,7 @@ class ForegroundWorkflow:
                 _resume_authority_context.active = False
             if self.store.get_run(run.run_id) != run:
                 return self.status(principal, run.run_id)
-            if contract.schema_version == "3":
+            if contract.schema_version in ("3", "4"):
                 return self._scene(principal, run.run_id, contract)
             return self._generate(principal, run, contract)
 

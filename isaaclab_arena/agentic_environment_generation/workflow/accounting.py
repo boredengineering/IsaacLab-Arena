@@ -29,14 +29,17 @@ def checked_workflow_accounting(value, *, model=None, endpoint=None):
         type(value) is not dict
         or set(value) != {"version", "attested", "model", "endpoint", "max_tokens", "max_cost_usd"}
         or type(value["version"]) is not int
-        or value["version"] != 1
-        or value["attested"] is not True
+        or value["version"] not in (1, 2)
         or any(type(value[k]) is not str or not value[k] for k in ("model", "endpoint"))
-        or type(value["max_tokens"]) is not int
-        or value["max_tokens"] <= 0
         or (model is not None and value["model"] != model)
         or (endpoint is not None and value["endpoint"] != endpoint)
     ):
+        raise ValueError("Invalid workflow accounting attestation")
+    if value["version"] == 2:
+        if value["attested"] is not False or value["max_tokens"] is not None or value["max_cost_usd"] is not None:
+            raise ValueError("Accounting-only policy requires explicit unknown token/cost ceilings")
+        return dict(value)
+    if value["attested"] is not True or type(value["max_tokens"]) is not int or value["max_tokens"] <= 0:
         raise ValueError("Invalid workflow accounting attestation")
     _usd_units(value["max_cost_usd"])
     return dict(value)

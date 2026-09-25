@@ -13,12 +13,12 @@ These views expose retained metadata, not fresh artifact-byte verification.
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, model_serializer
 
-from .policy_contracts import PolicyTrialReceipt
 from .attempts import AttemptFence, ReadinessReceipt
 from .contracts import FrozenModel, Hash, Identifier, WorkflowContract
 from .evidence import SceneEvidenceAssessment
+from .policy_contracts import PolicyTrialReceipt
 from .results import OwnerView
 from .scene_loop import CandidateRecord, Observation, SceneDecision
 
@@ -170,8 +170,8 @@ class ReservationTotals(FrozenModel):
     """Exact cumulative counters and decimal allowances, not actual usage."""
 
     model_calls: Annotated[int, Field(strict=True, ge=0)]
-    model_tokens: Annotated[int, Field(strict=True, ge=0)]
-    cost_ceiling_usd: Annotated[Decimal, Field(ge=0, allow_inf_nan=False)]
+    model_tokens: Annotated[int, Field(strict=True, ge=0)] | None
+    cost_ceiling_usd: Annotated[Decimal, Field(ge=0, allow_inf_nan=False)] | None
     runtime_allowance_seconds: Annotated[Decimal, Field(ge=0, allow_inf_nan=False)]
     candidates: Annotated[int, Field(strict=True, ge=0)]
     revisions: Annotated[int, Field(strict=True, ge=0)]
@@ -186,7 +186,7 @@ class InspectionBudget(FrozenModel):
     reserved: ReservationTotals
     remaining: ReservationTotals
     actual_consumption: Literal["unknown"] = "unknown"
-    accounting: Literal["conservative_cumulative_reservations_no_refunds"] = (
+    accounting: Literal["conservative_cumulative_reservations_no_refunds", "accounting-only-v1"] = (
         "conservative_cumulative_reservations_no_refunds"
     )
     runtime_accounting: Literal["cumulative_allowance_not_walltime"] = "cumulative_allowance_not_walltime"
@@ -303,3 +303,11 @@ class RunInspection(FrozenModel):
     retained_dependencies_revision: Hash
     retained_revision: Hash
     response_revision: Hash
+    retained_assessment_json: str | None = None
+
+    @model_serializer(mode="wrap")
+    def retain_legacy_inspection_shape(self, handler):
+        data = handler(self)
+        if self.retained_assessment_json is None:
+            data.pop("retained_assessment_json", None)
+        return data

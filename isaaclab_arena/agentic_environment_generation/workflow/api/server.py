@@ -120,7 +120,7 @@ async def retain_unknown(app, config, selected, known):
             continue
 
 
-async def supervise(config, selected, known, *, native_authorized=False):
+async def supervise(config, selected, known, *, native_authorized=False, assessment_authorized=False):
     import httpx
     import uvicorn
 
@@ -148,6 +148,16 @@ async def supervise(config, selected, known, *, native_authorized=False):
             "isaaclab_arena.agentic_environment_generation.workflow.api.installed_native"
         )
         execution_factory = execution.compose(config, tokens=registry, auth=auth, native_authorized=native_authorized)
+    elif config.value["mode"] == "retained-visual-assessment-v1":
+        from . import installed_assessment as execution
+
+        execution_factory = execution.compose(
+            config,
+            tokens=registry,
+            auth=auth,
+            assessment_authorized=assessment_authorized,
+            private_roles=lambda: resources.private_roles(),
+        )
     resources = Resources(config)
 
     def protect(value):
@@ -293,11 +303,19 @@ async def supervise(config, selected, known, *, native_authorized=False):
     return 0
 
 
-def serve(config, selected, lifetime, gate, *, native_authorized=False):
+def serve(config, selected, lifetime, gate, *, native_authorized=False, assessment_authorized=False):
     """No operational effects until inherited lease, intent and startup gate agree."""
     known = validate_gate(config, selected, lifetime, gate)
     logging.disable(logging.CRITICAL)
     try:
-        return asyncio.run(supervise(config, selected, known, native_authorized=native_authorized))
+        return asyncio.run(
+            supervise(
+                config,
+                selected,
+                known,
+                native_authorized=native_authorized,
+                assessment_authorized=assessment_authorized,
+            )
+        )
     finally:
         os.close(lifetime)

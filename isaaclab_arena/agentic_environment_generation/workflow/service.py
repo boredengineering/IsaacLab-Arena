@@ -598,6 +598,25 @@ class WorkflowService:
             return self._store.begin_scene(
                 run_id, run.version, candidate, validation, profile, authorization=authorization
             )
+        if contract.schema_version == "4":
+            from .retained_assessment import load_retained_source
+            from .scene_evidence_artifacts import SceneEvidenceArtifacts
+
+            authorization = self._authority.require_scene_execute(principal, contract, run_id=run_id, retained_run=run)
+            evidence_id, _, _, _, _ = load_retained_source(
+                self._store, SceneEvidenceArtifacts(artifacts.area), contract, protect=protect
+            )
+            candidate = candidate_record(
+                run_id, json.loads(contract.source.content), source_id=contract.source.identity
+            )
+            validation = dict(
+                disposition="retained_assessment_consumer",
+                producer=contract.retained_evidence.model_dump(mode="json"),
+                producer_evidence_id=evidence_id,
+            )
+            return self._store.begin_scene(
+                run_id, run.version, candidate, validation, profile, authorization=authorization
+            )
         run, attempt, _ = self.read_generation_recovery(principal, run_id)
         if type(artifacts) is not GenerationArtifacts or attempt.receipt is None or attempt.cleanup is None:
             raise ValueError("retained generation bytes and cleanup required")
@@ -776,7 +795,11 @@ class WorkflowService:
             for name in ("prepare_worker", "cleanup_worker", "require_held_owner")
         ):
             raise ValueError("managed scene worker ports required")
-        if profile.codec_version == 2 and not callable(getattr(ports, "release_native_resource", None)):
+        if (
+            profile.codec_version == 2
+            and profile.assurance != "retained-evidence"
+            and not callable(getattr(ports, "release_native_resource", None))
+        ):
             raise ValueError("trusted capture slot release port required")
         if profile.policy is not None and not callable(getattr(ports, "verify_policy", None)):
             raise ValueError("trusted policy receipt verification port required")
@@ -819,6 +842,11 @@ class WorkflowService:
         from .scene_loop import Observation, SceneResult
 
         version = released.profile.codec_version
+        if contract.schema_version == "4":
+            return SceneResult(
+                codec_version=version,
+                retained_assessment_json=ports.verify_retained_assessment(output, contract, released.intent),
+            )
         if released.intent.action == "policy":
             checked = ports.verify_policy(output, contract, released.candidate, released.intent.policy_binding)
             if type(checked) is not PolicyTrialReceipt:

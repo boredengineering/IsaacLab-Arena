@@ -1,3 +1,8 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Copyright (c) 2026, The Isaac Lab Arena Project Developers.
 # SPDX-License-Identifier: Apache-2.0
 """Fixed query/admin composition; never provider or workflow execution authority."""
@@ -13,7 +18,7 @@ class PrivateRoles:
     """Explicit private role snapshot; rotation invalidates release, never read authority."""
 
     def __init__(self, config, *, document=None):
-        if config.value["schema_version"] not in (3, 4):
+        if config.value["schema_version"] not in (3, 4, 5):
             raise ValueError("Explicit private role configuration required")
         self.config = config
         self.document = self._read() if document is None else document
@@ -122,7 +127,7 @@ class Resources:
         self.authority = Authority(config)
         document = credential_document(read_private(config.value["credentials_file"], MAX_CREDENTIALS))
         self.credential = document["databases"]["operational"]
-        self.roles = PrivateRoles(config, document=document) if config.value["schema_version"] in (3, 4) else None
+        self.roles = PrivateRoles(config, document=document) if config.value["schema_version"] in (3, 4, 5) else None
 
     def protect(self, value):
         def walk(item):

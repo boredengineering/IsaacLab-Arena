@@ -367,6 +367,28 @@ candidate, not an instruction to begin that sequence.
 
 ### Recovery and successor-assessment prompt — not issued
 
+**Before Rebooting (Optional Clean Exit)**
+
+In the terminal tab where Hermes is running (pts/1):
+
+- Press Ctrl+C or type exit to let Hermes shut down its event loop cleanly.
+- (If you reboot immediately without doing this, the database is already checkpointed and will not corrupt).
+
+**After Rebooting**
+
+1. Open VS Code and connect to the Dev Container as usual.
+2. If for any reason the devcontainer was rebuilt from scratch and /root/.hermes was re-initialized empty, restore the backup first:
+
+```bash
+cp -a /workspaces/IsaacLab-Arena/.hermes_backup/* /root/.hermes/
+```
+
+3. Resume the exact Hermes session:
+
+```bash
+hermes --resume 20260923_174815_e247de --in /workspaces/IsaacLab-Arena
+```
+
 Recovery instruction, for after restarting the computer:
 
 ```text

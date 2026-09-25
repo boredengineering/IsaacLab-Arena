@@ -22,25 +22,31 @@ An execution goal must state those permissions explicitly.
 
 Snapshot: 2026-09-25. This is a navigation summary; the handoff remains authoritative.
 
-- The installed zero-provider native path was exercised, but positive native
-  validation is blocked. Its three-launch allocation is exhausted.
-- The last attempt failed during contact-sensor activation in environment
-  construction, before settling or camera capture.
-- Native scratch inside the sealed artifact root blocks fresh candidate/artifact-byte reads.
-- Failed-result readback, replay without another launch, and owned cleanup were verified.
-- The next proposed work uses a parent-led actor and one independent read-only
-  critic: observe, make a targeted fix, run/capture, critique the evidence, then
-  correct or advance. It starts with repairs that require no native launch.
-  Any additional native allocation remains unapproved until explicitly issued.
+- **P04-I01 is verified:** a5 completed application-owned native capture, numeric
+  assessment, retention and cleanup through the installed authenticated interface.
+- Both objects passed the actual final five of 180 steps; three fresh same-cohort
+  PNGs and candidate/evidence bytes were recovered with matching hashes. Replay
+  returned the retained result without a worker release.
+- Scratch is outside the original sealed store; prior failed evidence/accounting
+  remain intact. Registered workers are absent, no live owned members remain, the
+  owner is retired and the API is drained.
+- The parent closed the package after final independent `ACCEPT` and its own
+  verification. **2/2 additional launches and the prior 3/3 are consumed; zero remain.**
+- Only a5 has `native_settled=true`; no convergence, verification, prior eligibility,
+  VLM/visual or policy acceptance, full Milestone 1 or Plan 04 completion is claimed.
+- See the [scoped result and causal caveat](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/LIVE_RESULT.txt).
+  Shared-cache permissions also changed before a5; the successful private-cache
+  path is not proof that one permission defect was the sole cause.
 
 ## Work-package register
 
 | ID | Plan | Status | Next gate | Execution authority |
 | --- | --- | --- | --- | --- |
-| P04-I01 | [Native integration defects and bounded revalidation](01-native-integration-defects.md) | Proposed; actor-critic loop not started | Recover artifact-byte reads and improve constructor diagnostics without native execution | Not issued; goal proposes up to two additional launches in total, only after the no-native gate |
+| P04-I01 | [Native integration defects and bounded revalidation](01-native-integration-defects.md) | Verified; parent-closed native-only slice | Remaining Plan 04 work needs a separately scoped goal | Additional 2/2 consumed; prior 3/3 preserved; zero native launches remain |
+| P04-GUIDE-01 | [How Far to Finish Plan 04 (Orchestrator Parity)](how-far-to-finish-plan04.md) | Informational guide | Complete Phase A software punch list | Strategic implementation guide & parity audit |
 
-The current [goal prompt](01-native-integration-defects.md#proposed-goal-prompt)
-is a proposal, not an active instruction.
+The [goal prompt](01-native-integration-defects.md#proposed-goal-prompt) is retained
+as a historical reference. The issued goal is complete; its allocation cannot be reset.
 
 The loop requires evidence-linked critic feedback and parent verification, not
 review-count milestones. Native retries remain bounded and must test an identified

@@ -366,6 +366,11 @@ class OwnedSceneStageAdapter:
         self.require_gpu_released()
         return self._worker(prepared, role=self.model_worker).send(prepared, *args, **kwargs)
 
+    def bind_model_send(self, prepared, guard):
+        """Forward the bounded model-send guard to the exact prepared model worker."""
+        self.require_gpu_released()
+        return self._worker(prepared, role=self.model_worker).bind_model_send(prepared, guard)
+
     def receive(self, prepared, *args, **kwargs):
         self.require_gpu_released()
         return self._worker(prepared, role=self.model_worker).receive(prepared, *args, **kwargs)

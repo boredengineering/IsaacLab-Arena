@@ -2,9 +2,105 @@
 
 This is the single current implementation handoff. The orchestrator pivot below supersedes the former S2 initialization campaign, comprehensive metadata prerequisites and delegated review gates. Older entries are retained as history, not instructions to resume those campaigns.
 
-Bounded next-work plans live in the [Plan 04 implementation index](../plan04_implementation/README.md). [P04-I01 — Native integration defects and bounded revalidation](../plan04_implementation/01-native-integration-defects.md) records the proposed scratch/readback and constructor-diagnostics fixes with a goal prompt. It is not an issued execution goal and does not replenish the exhausted native allocation. Verified runtime status remains here.
+Bounded next-work plans live in the [Plan 04 implementation index](../plan04_implementation/README.md). The operator-issued [P04-I01 — Native integration defects and bounded revalidation](../plan04_implementation/01-native-integration-defects.md) is verified and parent-closed on 2026-09-25. Its two additional launches and the prior three are consumed; no native authority remains. Verified runtime status remains here.
 
 ## 1. Current authorization and implementation gate
+
+### P04-I01 — VERIFIED native-only acceptance, 2/2 additional launches consumed (2026-09-25)
+
+**Software integration:** `p04-i01-native-a5`, run
+`fcc052f890be2d208783f04453d184f7d2455afe948aa8607e92a5a87d79ea48`, completed through
+the installed authenticated CLI/GraphQL interface. The coordinator, execution owner
+and owned workers performed native capture, numeric assessment, retention and cleanup;
+the parent did not manually start the next stage. The retained result is `accepted`.
+
+**Native scientific result:** exactly 180 control steps, with both subjects passing
+the strict final samples 176–180. Maximum final-window norms (linear m/s, angular rad/s):
+red block `0.00039190197907890346`, `0.0005115689044323816`; blue bin
+`0.00005379842290012085`, `0.00010763729995919131`. Actual seeds 42/42, simulation dt
+0.005 s, decimation 4/control dt 0.020 s and `resolve_on_reset=true` were read before
+reset and after capture. One placement draw occurred, with no terminal/autoreset
+substitution accepted and no extra capture steps. Three fresh cameras share the
+same cohort at step 180. This revised policy is operator-approved, not calibration.
+
+**Readback/replay:** a fresh authenticated client recovered the canonical candidate
+and 130917-byte evidence artifact, including all three RGB PNGs, with matching hashes.
+Replaying a5 returned the exact retained result and receipt with unchanged reservations
+and worker registrations; no new release. Original candidate bytes, previous trial
+rows, per-run identities/versions/outcomes/budgets/cleanup intents and original sealed
+bytes/inodes were preserved. Aggregate prior inspection hashes include the global
+owner and changed with epoch 5; this is not a mutation of the immutable prior run.
+
+**Cleanup/accounting:** native PID 49516 and numeric PID 49985 are absent, with no live
+owned group/session members. Two dead native-session zombie entries remain. Owner
+epoch 5 is durably retired (`dirty=false`); API `e39e6ccc4ee14afda68d67ddf24eb2af` is
+stopped/drained, its identity is not live and the lifetime lock is released.
+Both additional launches are consumed (a4 failed, a5 passed), alongside the original
+3/3; zero remain. The separate numeric assessment is not another native launch.
+All five runs retain zero workflow model/token/policy reservations; provider calls
+and policy execution remain zero. No model/prior credentials were configured for
+this selected native workflow. Only a5 has `native_settled=true`; `converged=false`,
+`verified=false` and original failed-graph/prior-ineligibility state remain intact.
+
+**Source and acceptance decision:** baseline `8d557315cc056e83e531727274a12bd5705af42e`,
+uncommitted scoped changes; `source-a5.json` contains 210 unchanged hashes through
+final parent verification. Existing targeted checks pass (293 tests, 17 subtests,
+96 warnings retained), final provider-bounds checks pass (8), scoped host lint and
+whitespace checks pass. No tests/fixtures or simulator/submodule changes, commits or
+pushes. The independent critic returned `ACCEPT` (`deleg_1acfe8e1`); the parent
+independently verified the actual evidence and alone closed P04-I01.
+
+**Causal caveat and remaining gates:** the default bin cache changed from mode 0600
+to 0644 before a5, modifying actor unknown from filesystem evidence. Do not claim
+the shared cache stayed unchanged or that the private-cache correction was the sole
+cause. The passing worker retained its private temporary root and its bin bytes match
+the earlier readable copy. This corrects the stale unverified shared-cache note in
+`a5-asset-readback.json`; all observations remain retained. Public secret screening
+records four common database-label filename collisions, not erased evidence.
+This native-only acceptance does not establish calibrated/independently validated
+sensing, VLM/visual validation, policy success, prior eligibility, full Milestone 1
+or Plan 04 completion. Further work requires separately bounded authority.
+
+Evidence root: `outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/`.
+Start with [LIVE_RESULT.txt](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/LIVE_RESULT.txt),
+[parent closeout](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/parent-closeout.json)
+and [critic verdict](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/critic-final.json).
+Raw records: `a5-http-evidence_json.json`, `a5-http-readback.json`,
+`a5-native-verification.json`, `a5-readback-replay.json`, `a5-neo4j-readback.json`,
+`a5-physical-cleanup.json`, `a5-api-drained.json`, `parent-final-integrity.json`,
+`a5-prior-result-comparison.json` and `a5-shared-cache-observation.json`.
+
+### Historical P04-I01 checkpoint — a4 diagnosed, then superseded by a5
+
+Recovered the exact stray scratch directory to the sibling `scratch/` directory
+with unchanged sealed leaf hashes and directory identity. Fresh authenticated
+candidate-byte reads for all three prior attempts match declared canonical hashes;
+a3 replay preserves the retained result and the three original releases. The Gate A
+API was stopped/drained. Existing scene/trajectory/CLI checks pass (293 tests, 17
+subtests), provider-bounds checks pass (8), and scoped host lint passes. Constructor
+diagnostics now retain bounded sanitized cause text and phase; the contact-activation
+cause remains unknown pending an authorized native observation. Evidence is under
+`outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i01/`.
+Gate A subsequently passed independent critique and parent source/selection checks.
+a4 (`p04-i01-native-a4`, run `43e697b3a8c0dcdb3e0a8452b29fe571b1c78f59e1f2543d898060b1e1c73463`)
+failed contact activation at `/World/envs/env_0/blue_bin`, before settling or images.
+Its bounded causal text and exact registration are retained. Authenticated cancellation,
+failed-result/candidate-byte recovery, unchanged replay, physical cleanup, durable owner
+retirement and API drain passed. Source remained frozen through that verification.
+Original sealed leaves and failed graph/attempt flags remain unchanged; provider calls
+remain zero. The scoped read-only observation found the selected bin's default `/tmp`
+USD owned by root with mode 0600 and unreadable by UID 1000, while the earlier working
+private cache copy is readable. The native bootstrap now selects an owned 0700
+`scratch/native-tmp` directory before Kit, without changing assets/physics or shared
+cache permissions. Existing checks/lint pass after this correction. The a4 outcome
+and correction await independent critique before the sole remaining launch, a5.
+Evidence: `a4-native-diagnostic.json`, `a4-readback.json`, `a4-physical-cleanup.json`,
+`a4-neo4j-readback.json`, `a4-asset-paths.json`, `a4-correction-checkpoint.json`,
+`a5-bootstrap-check.json`, `source-a5.json` under the same evidence folder.
+Positive native acceptance is still unverified.
+
+The earlier blocked slice below is historical evidence, not a renewed hold on the
+newly issued bounded goal.
 
 ### Installed zero-provider native slice — BLOCKED, 3/3 launches consumed (2026-09-25)
 

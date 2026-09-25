@@ -212,36 +212,41 @@ def _reconcile_native_cancellation(config, run_id):
     )
 
 
+def _run_setup_readiness(options):
+    """Report explicit setup selections without importing execution dependencies."""
+    from .setup_readiness import MAX_SELECTION_BYTES, setup_readiness
+
+    try:
+        raw = None
+        if options.selection is not None:
+            # Same regular-file/no-follow discipline as contract inspection.
+            fd = os.open(options.selection, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            try:
+                metadata = os.fstat(fd)
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > MAX_SELECTION_BYTES:
+                    raise ValueError("invalid file")
+                with os.fdopen(fd, "rb", closefd=False) as stream:
+                    raw = stream.read(MAX_SELECTION_BYTES + 1)
+            finally:
+                os.close(fd)
+        if options.config is None:
+            report = setup_readiness(raw)
+        else:
+            from .api.installed_config import load
+            from .setup_readiness import setup_readiness_from_config
+
+            report = setup_readiness_from_config(load(options.config))
+    except (OSError, ValueError, RecursionError, AttributeError):
+        print("setup-readiness: invalid selection file", file=sys.stderr)
+        return 2
+    print(json.dumps(report, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
 def _run_installed(options):
     """Execute only the explicitly selected installed operation with static errors."""
     if options.command == "setup-readiness":
-        from .setup_readiness import MAX_SELECTION_BYTES, setup_readiness
-
-        try:
-            raw = None
-            if options.selection is not None:
-                # Same regular-file/no-follow discipline as contract inspection.
-                fd = os.open(options.selection, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-                try:
-                    metadata = os.fstat(fd)
-                    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > MAX_SELECTION_BYTES:
-                        raise ValueError("invalid file")
-                    with os.fdopen(fd, "rb", closefd=False) as stream:
-                        raw = stream.read(MAX_SELECTION_BYTES + 1)
-                finally:
-                    os.close(fd)
-            if options.config is None:
-                report = setup_readiness(raw)
-            else:
-                from .api.installed_config import load
-                from .setup_readiness import setup_readiness_from_config
-
-                report = setup_readiness_from_config(load(options.config))
-        except (OSError, ValueError, RecursionError, AttributeError):
-            print("setup-readiness: invalid selection file", file=sys.stderr)
-            return 2
-        print(json.dumps(report, sort_keys=True, separators=(",", ":")))
-        return 0
+        return _run_setup_readiness(options)
     if options.command in {"submit", "cancel", "resume", "result"}:
         try:
             from .api.client import query

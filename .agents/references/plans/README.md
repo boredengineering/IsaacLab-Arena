@@ -57,4 +57,5 @@ Autonomous evaluation flywheels and devcontainer tooling.
 Bounded implementation work packages, approval boundaries, acceptance gates and proposed goal prompts for Plan 04. The existing research-stack handoff remains the owner of verified runtime status.
 - [Work-package index and current position](plan04_implementation/README.md) — What is blocked, what is proposed next, and how to add another plan.
 - [P04-I01: Native integration defects and bounded revalidation](plan04_implementation/01-native-integration-defects.md) — Repair scratch/artifact separation and constructor diagnostics before any newly authorized native launch. Proposed, not approved for execution.
+- [P04-GUIDE-01: How far to finish Plan 04 (Orchestrator parity guide)](plan04_implementation/how-far-to-finish-plan04.md) — Executive guide and Mermaid architecture comparing external vs application orchestrator, root cause breakdown, and punch list.
 - [New work-package template](plan04_implementation/_template.md) — Scope, authority, evidence, gates, goal prompt and closeout.

@@ -12,6 +12,23 @@ import stat
 from pathlib import Path
 
 
+def native_scratch_root(artifact_root):
+    """Return owned capture scratch beside, never inside, the sealed artifact area."""
+    from .api.private_files import Directory
+
+    parent = Path(artifact_root).parent
+    with Directory(str(parent)):
+        scratch = parent / "scratch"
+        with Directory(str(scratch), create=True):
+            output = scratch / "native-capture-work"
+            output.mkdir(mode=0o700, exist_ok=True)
+            info = output.lstat()
+            assert (
+                stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o022
+            ), "Native scratch must be an operator-owned directory"
+    return output
+
+
 class NativeGpuLease:
     """Hold the shared renderer flock until exact trusted child cleanup is verified.
 

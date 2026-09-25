@@ -342,6 +342,7 @@ class NativeCaptureProducer:
                             raise ValueError("Finite native velocity required")
                         if not math.hypot(*vector) < limit:
                             raise ValueError("Final native settling window rejected")
+            self._check_realized_runtime(payload["diagnostics"].get("realized_runtime", {}))
             expected_frames = {
                 (step, camera) for step in range(s.window.start_step, s.window.end_step + 1) for camera in s.camera_keys
             }
@@ -364,6 +365,48 @@ class NativeCaptureProducer:
             evidence=evidence,
             verified_manifest_digests=(receipt.manifest_digest,),
         )
+
+    @staticmethod
+    def _realized_runtime(env):
+        """Read the selected environment and its existing reset-placement pool."""
+        import tempfile
+
+        from isaaclab_arena.relations.placement_events import PLACEMENT_RESET_EVENT_NAME, get_placement_pool
+
+        base = env.unwrapped
+        term = base.event_manager.get_term_cfg(PLACEMENT_RESET_EVENT_NAME)
+        pool = get_placement_pool(env)
+        assert pool is not None and pool.num_envs == 1, "Selected reset placement pool required"
+        return dict(
+            seed=base.cfg.seed,
+            placement_seed=pool._base_placement_seed,
+            resolve_on_reset=term.mode == "reset",
+            num_envs=base.num_envs,
+            timestep_seconds=base.cfg.sim.dt,
+            decimation=base.cfg.decimation,
+            control_dt=base.step_dt,
+            remaining_layouts=pool.remaining,
+            temporary_root=tempfile.gettempdir(),
+        )
+
+    def _check_realized_runtime(self, report):
+        """Require frozen realized settings and exactly one reset placement draw."""
+        s = self.settings
+        expected = dict(
+            seed=s.seed,
+            placement_seed=s.placement_seed,
+            resolve_on_reset=s.resolve_on_reset,
+            num_envs=1,
+            timestep_seconds=s.timestep_seconds,
+            decimation=s.decimation,
+            control_dt=s.timestep_seconds * s.decimation,
+        )
+        before, after = report.get("before_reset", {}), report.get("after_capture", {})
+        for observed in (before, after):
+            if {key: observed.get(key) for key in expected} != expected:
+                raise ValueError("Realized native seeds, timestep or reset policy differ")
+        if before["remaining_layouts"] - after["remaining_layouts"] != 1:
+            raise ValueError("Exactly one initial placement reset required")
 
     def _check_spec(self, spec, candidate, kit_cameras_enabled):
         """Check the exact validated candidate and graph camera intent without construction."""
@@ -549,7 +592,7 @@ class NativeCaptureProducer:
             return value
 
         recorder = ObservationRecorder(sample, provenance="native-unverified")
-        diagnostics = {"status": "incomplete", "charged_steps": 0}
+        diagnostics = {"status": "incomplete", "phase": "construct_environment", "charged_steps": 0}
         frames = []
         visual = next((c for c in s.criteria if c.kind == "visual"), None)
 
@@ -618,6 +661,10 @@ class NativeCaptureProducer:
             base = env.unwrapped
             if base.num_envs != 1 or base.cfg.sim.dt != s.timestep_seconds or base.cfg.decimation != s.decimation:
                 raise ValueError("realized runtime settings mismatch")
+            if s.evidence_only:
+                diagnostics["phase"] = "validate_runtime"
+                diagnostics["realized_runtime"] = {"before_reset": self._realized_runtime(env)}
+            diagnostics["phase"] = "initialize_and_settle"
             initialized = native_realization.initialize_and_settle(
                 env,
                 settings=s.settle_settings(),
@@ -631,6 +678,7 @@ class NativeCaptureProducer:
                     charge(diagnostics["charged_steps"] + 1)
                     return initialized.hold_action
 
+            diagnostics["phase"] = "capture_trajectory"
             captured = capture_trajectory(
                 env,
                 Hold(),
@@ -645,6 +693,9 @@ class NativeCaptureProducer:
                 reset_policy=False,
             )
             diagnostics["capture"] = {k: v for k, v in captured.items() if k != "frames"}
+            if s.evidence_only:
+                diagnostics["realized_runtime"]["after_capture"] = self._realized_runtime(env)
+                self._check_realized_runtime(diagnostics["realized_runtime"])
             active()
             diagnostics["status"] = "complete"
             receipt = retain()

@@ -80,7 +80,7 @@ def compose(config, *, tokens, auth, native_authorized=False):
     from ..artifacts import GenerationArtifacts
     from ..bootstrap import ObservationOnlyPort, ScopedHostBootstrap
     from ..native_capture import NativeCaptureProducer
-    from ..native_resources import NativeGpuLease
+    from ..native_resources import NativeGpuLease, native_scratch_root
     from ..readiness import DependencyRequirement, DependencyResult
     from ..scene_evidence_artifacts import SceneEvidenceArtifacts
     from ..scene_loop import ScenePortProfile, SceneReservation
@@ -221,11 +221,12 @@ def compose(config, *, tokens, auth, native_authorized=False):
                 repair=SceneReservation.model_validate(dict(numeric_budget, candidates=1, revisions=1)),
             )
             artifacts = SceneEvidenceArtifacts(area)
+            scratch = native_scratch_root(config.value["artifact_root"])
             producer = NativeCaptureProducer(
                 settings=settings,
                 artifacts=artifacts,
                 protect=protect_all,
-                output_root=Path(config.value["artifact_root"]) / "native-capture-work",
+                output_root=scratch,
             )
             scene_options = dict(
                 profile=profile,
@@ -235,7 +236,7 @@ def compose(config, *, tokens, auth, native_authorized=False):
                 capture_steps=settings.window.end_step - settings.window.start_step,
                 capture_timeout_seconds=settings.max_runtime_seconds,
                 native_producer=producer,
-                output_root=Path(config.value["artifact_root"]) / "native-capture-work",
+                output_root=scratch,
                 direct_root_subjects=tuple(s.subject_id for s in settings.subjects),
                 displacement_tolerance_m=0.001,
             )

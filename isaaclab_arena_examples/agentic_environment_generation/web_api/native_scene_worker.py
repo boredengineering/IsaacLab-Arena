@@ -15,15 +15,19 @@ import ctypes
 import json
 import logging
 import os
+import re
 import signal
 import socket
 import sys
+import tempfile
 import time
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from isaaclab_arena.agentic_environment_generation.workbench.research_artifacts import ArtifactArea
 from isaaclab_arena.agentic_environment_generation.workflow import native_worker_protocol as protocol
 from isaaclab_arena.agentic_environment_generation.workflow.native_capture import NativeCaptureProducer
+from isaaclab_arena.agentic_environment_generation.workflow.native_resources import native_scratch_root
 from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import SceneEvidenceArtifacts
 
 
@@ -63,11 +67,52 @@ def _initialize_kit(settings):
     return AppLauncher(headless=True, enable_cameras=bool(settings.camera_keys), device=settings.device).app
 
 
+def _configure_native_tmp(scratch_root):
+    """Keep native asset downloads in the operator-owned scratch namespace."""
+    from isaaclab_arena.agentic_environment_generation.workflow.api.private_files import Directory
+
+    with Directory(str(Path(scratch_root).parent / "native-tmp"), create=True) as directory:
+        # tempfile may have cached its default before this released worker's
+        # bootstrap. Set both interfaces; never reuse another user's /tmp USDs.
+        os.environ["TMPDIR"] = directory.path
+        tempfile.tempdir = directory.path
+        return directory.path
+
+
 def _validate_spec(candidate):
     # Schema/registry imports are deliberately after Kit initialization.
     from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
     return ArenaEnvGraphSpec.model_validate_json(candidate.scene_json)
+
+
+def _diagnostic_message(cause):
+    """Bound native error text without URL credentials, query tokens or input dumps."""
+    from pydantic import ValidationError
+
+    if isinstance(cause, ValidationError):
+        return "Validation failed; see bounded validation locations"
+
+    def public_url(match):
+        try:
+            value = urlsplit(match.group())
+            host = value.hostname or "redacted"
+            if value.port is not None:
+                host += f":{value.port}"
+            return urlunsplit((value.scheme, host, value.path, "", ""))
+        except ValueError:
+            return "[redacted-url]"
+
+    message = str(cause)
+    message = re.sub(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s\"'<>]+", public_url, message)
+    message = re.sub(r"(?i)\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]+", "[redacted-auth]", message)
+    message = re.sub(
+        r"(?i)\b(?:password|api[_-]?key|access[_-]?token|secret|authorization)\b[\"']?\s*[:=]\s*"
+        r"(?:\"[^\"]*\"|'[^']*'|[^\s,;}]+)",
+        "[redacted-field]",
+        message,
+    )
+    return "".join(c if c.isprintable() or c == "\n" else " " for c in message)[:2048]
 
 
 def execute(packet, *, protect, action, arm_deadline=None, on_retained=None):
@@ -98,14 +143,19 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None):
             settings=request.settings,
             artifacts=SceneEvidenceArtifacts(area),
             protect=protect,
-            output_root=Path(packet["payload"]["root"]) / "native-capture-work",
+            output_root=native_scratch_root(packet["payload"]["root"]),
         )
         producer.admit(request.contract)
         app = None
         failure = None
+        temporary_root = None
+        phase = "configure_native_tmp"
         try:
+            temporary_root = _configure_native_tmp(producer.output_root)
+            phase = "initialize_kit"
             app = _initialize_kit(request.settings)
             active()
+            phase = "validate_spec"
             spec = _validate_spec(request.candidate)
             charged = 0
 
@@ -116,6 +166,7 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None):
                     raise ValueError("native step reservation exhausted")
                 charged = step
 
+            phase = "native_capture"
             result = producer(
                 spec=spec,
                 intent=request.intent,
@@ -128,6 +179,7 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None):
                 check_active=active,
             )
             active()
+            phase = "retain_capture"
             reference = protocol.capture_reference(result.receipt)
             protocol.reopen_capture(area, request, reference, protect=protect)
             receipt = protocol.retain_result(area, packet, reference, protect=protect)
@@ -138,8 +190,8 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None):
                 on_retained(receipt)
         except BaseException as exc:
             failure = exc
-            # Retain static diagnostic coordinates BEFORE Kit close can terminate
-            # the interpreter. No locals, credentials or exception input values.
+            # Retain bounded causal diagnostics BEFORE Kit close can terminate
+            # the interpreter. Never include locals or validation input dumps.
             cause = exc.__cause__ if exc.__cause__ is not None else exc
             frames, cursor = [], cause.__traceback__
             while cursor is not None and len(frames) < 24:
@@ -152,7 +204,13 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None):
                 )
                 cursor = cursor.tb_next
             diagnostic = dict(
-                outcome="failed", exception_type=type(cause).__name__, wrapper_type=type(exc).__name__, frames=frames
+                outcome="failed",
+                phase=phase,
+                temporary_root=temporary_root,
+                exception_type=type(cause).__name__,
+                exception_message=_diagnostic_message(cause),
+                wrapper_type=type(exc).__name__,
+                frames=frames,
             )
             from pydantic import ValidationError
 

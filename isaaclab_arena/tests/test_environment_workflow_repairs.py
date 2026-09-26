@@ -394,6 +394,569 @@ def test_permitted_has_no_external_overrides(override):
         permitted(repair_contract(), scene(), scene(), **override)
 
 
+def test_resolved_selection_pins_original_scalar_paths():
+    from isaaclab_arena.agentic_environment_generation.workflow import repairs
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import candidate_record
+
+    contract = repair_contract(("x", "y"), bound=0.1)
+    original = candidate_record("run", scene(), source_id="raw")
+    selection = repairs.resolve_repair_selection(contract, original)
+    assert selection.codec == "scalar-xy-selection-v1"
+    assert selection.original_candidate_id == original.candidate_id
+    assert selection.schema_paths == ("/relations/2/params/x", "/relations/2/params/y")
+    assert selection.original_xy_m == (0.0, 0.0) and selection.max_displacement_m == 0.1
+    assert selection.placement_semantics == "weighted-at-position-root-xy-v1"
+    assert selection.applies_changes is False and selection.establishes_physical_effect is False
+    proposed = scene()
+    proposed["relations"][2]["params"]["x"] = 0.05
+    assert repairs.validate_selected_scene_repair(contract, selection, original, proposed).delta.displacement_m == 0.05
+    current = candidate_record(
+        "run", proposed, source_id="revision", original_id=original.original_id, parent_id=original.candidate_id
+    )
+    with pytest.raises(ValueError, match="original"):
+        repairs.resolve_repair_selection(contract, current)
+    proposed["relations"][2]["params"]["x"] = 0.11
+    with pytest.raises(ValueError, match="displacement"):
+        repairs.validate_selected_scene_repair(contract, selection, original, proposed)
+    proposed["relations"][2]["params"]["x"] = 0.05
+    proposed["objects"][1]["params"]["mass"] = 1.0
+    with pytest.raises(ValueError, match="forbidden"):
+        repairs.validate_selected_scene_repair(contract, selection, original, proposed)
+    duplicate = scene()
+    duplicate["relations"].append(copy.deepcopy(duplicate["relations"][2]))
+    with pytest.raises(ValueError, match="unique"):
+        repairs.resolve_repair_selection(contract, candidate_record("run", duplicate, source_id="raw"))
+    reordered = scene()
+    reordered["relations"] = list(reversed(reordered["relations"]))
+    with pytest.raises(ValueError, match="path"):
+        repairs.resolve_repair_selection(contract, candidate_record("run", reordered, source_id="raw"))
+    disabled = scene()
+    disabled["relations"][2]["params"]["relation_loss_weight"] = 0
+    with pytest.raises(ValueError, match="weight"):
+        repairs.resolve_repair_selection(contract, candidate_record("run", disabled, source_id="raw"))
+
+
+def test_target_goal_and_selected_unknown_policy_gate_actions(tmp_path):
+    import base64
+    import io
+
+    from PIL import Image
+
+    from isaaclab_arena.agentic_environment_generation.workflow import contracts, scene_eligibility, scene_observation
+    from isaaclab_arena.agentic_environment_generation.workflow.evidence import CandidateBinding, EvidenceCohort
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import (
+        Observation,
+        candidate_record,
+        profile_digest,
+        repaired_candidate,
+    )
+    from isaaclab_arena.tests._workflow_scene_fixture import artifacts, composed_fixture, criterion
+
+    area, store = artifacts(tmp_path)
+    image = io.BytesIO()
+    Image.new("RGB", (1, 1)).save(image, format="PNG")
+
+    def selected_inputs(tag, measured_x, visual_truth, unknown_action="stop"):
+        # Byte-backed pure inputs, not a worker/physics stand-in or live proof.
+        raw = repair_contract(("x", "y"), bound=0.1).model_dump(mode="json")
+        raw["schema_version"] = "5"
+        raw["effects"]["allow_runtime"] = True
+        raw["acquisition"] = dict(
+            codec="explicit-acquisition-v1",
+            adapter="droid-rigid-world-v1",
+            clock="control_step",
+            reference_frame="world",
+            control_dt_seconds=0.02,
+            horizon_steps=2,
+            subjects=["banana", "bowl"],
+            state_steps=[1, 2],
+            images=[dict(camera="wrist_camera_rgb", step=1, modality="rgb")],
+            renderer_update_steps=[1],
+            displacement_step=1,
+        )
+        raw["criteria"] = [
+            criterion(
+                "scene.xy-target-error",
+                criterion_id="goal",
+                kind="geometry",
+                evaluator_version="numeric-v2",
+                subjects=("banana",),
+                observation_window=dict(start_step=1, end_step=2),
+                rubric="selected world XY target error",
+                limit=dict(operator="lt", value=0.001, unit="m"),
+                parameters=dict(
+                    metric="xy_target_error",
+                    reference_frame="world",
+                    clock="control_step",
+                    sample_steps=[1, 2],
+                    temporal_aggregation="all",
+                    subject_aggregation="all",
+                    missing_data="reject",
+                    invalid_data="reject",
+                    target_xy_m=[0.05, 0.0],
+                ),
+            ).model_dump(mode="json"),
+            criterion(
+                "scene.visible",
+                criterion_id="visible",
+                kind="visual",
+                evaluator_version="full-scene-ternary-v1",
+                subjects=("bowl",),
+                required_modalities=("rgb",),
+                coordinate_frames=("wrist_camera_rgb",),
+                observation_window=dict(start_step=1, end_step=1),
+                rubric="selected per-frame visibility",
+                limit=dict(operator="eq", value=1.0, unit="boolean"),
+                parameters=dict(
+                    metric="visibility",
+                    reference_frame="camera",
+                    clock="control_step",
+                    images=raw["acquisition"]["images"],
+                    temporal_aggregation="all",
+                    camera_aggregation="all",
+                    subject_aggregation="all",
+                    missing_data="reject",
+                    invalid_data="reject",
+                ),
+            ).model_dump(mode="json"),
+        ]
+        raw["action_policy"] = dict(
+            codec="scene-action-policy-v1",
+            on_false="corrective_repair",
+            on_unknown=unknown_action,
+            target_subject="banana",
+            mechanism="direct-root-xy-goal-v1",
+            goal_criterion_id="goal",
+            prerequisite_criterion_ids=[],
+            observation=raw["acquisition"] if unknown_action == "informative_observation" else None,
+            diagnostic_delta_xy_m=[0.02, 0.0] if unknown_action == "diagnostic_intervention" else None,
+            displacement_tolerance_m=0.001,
+        )
+        raw["budget"].update(
+            max_runtime_seconds=None,
+            total_deadline_seconds=None,
+            max_model_tokens=None,
+            max_cost_usd=None,
+            max_realizations=3,
+            max_steps=6,
+            max_observations=3,
+            max_model_calls=3,
+            policy=dict(
+                codec="experiment-policy-v1",
+                runtime="accounting_only",
+                deadline="accounting_only",
+                model_tokens="accounting_only",
+                cost="accounting_only",
+            ),
+            control=dict(
+                codec="renewable-control-v1",
+                max_supervision_lease_seconds=60.0,
+                heartbeat_seconds=20.0,
+                max_credential_lifetime_seconds=300.0,
+                client_descriptor_schema="2",
+            ),
+        )
+        contract = contracts.WorkflowContract.model_validate(raw)
+        original = candidate_record("run", scene(), source_id="raw")
+        candidate = CandidateBinding(
+            candidate_digest=original.digest,
+            contract_digest=contracts.contract_digest(contract),
+            profile_digest=profile_digest(contract),
+        )
+        cohort = EvidenceCohort(
+            environment_id="synthetic-env0",
+            contract_digest=candidate.contract_digest,
+            profile_digest=candidate.profile_digest,
+            realization_id=tag,
+            reset_id=tag,
+            frame_id="world",
+            window_id=tag,
+        )
+        sample = dict(
+            step=1,
+            frame="world",
+            origin_w=[0.0, 0.0, 0.0],
+            subjects={
+                subject: dict(
+                    position_w=[measured_x if subject == "banana" else 1.0, 0.0, 0.5],
+                    linear_velocity_w=[0.0, 0.0, 0.0],
+                    angular_velocity_w=[0.0, 0.0, 0.0],
+                    scene_name=subject,
+                    prim_path=f"/World/envs/env_0/{subject}",
+                    root_kind="rigid_object",
+                )
+                for subject in ("banana", "bowl")
+            },
+        )
+        compiled = scene_observation.compile_acquisition(
+            contract.acquisition, contract.criteria, candidate=candidate, cohort=cohort
+        )
+        recorder = scene_observation.ObservationRecorder(
+            lambda _env, step: sample | {"step": step}, provenance="synthetic", acquisition=compiled
+        )
+        recorder(None, 1)
+        recorder.add_frame(
+            camera="wrist_camera_rgb",
+            step=1,
+            subject_ids=contract.acquisition.subjects,
+            image_bytes=image.getvalue(),
+            sensor_update_step=1,
+            sensor_sequence=1,
+        )
+        recorder(None, 2)
+        payload = recorder.complete(executed_steps=2, reset_count=1, terminated=False, truncated=False)
+        payload["diagnostics"] = dict(
+            root_xy_mapping=dict(
+                codec="root-xy-mapping-v1",
+                subject="banana",
+                scene_name="banana",
+                prim_path="/World/envs/env_0/banana",
+                root_kind="rigid_object",
+                position_mapping="root-world-with-env-origin-v1",
+                authored_coordinate_frame="env_local",
+                placement_semantics="weighted-at-position-root-xy-v1",
+                relation_index=2,
+                relation_loss_weight=1.0,
+                original_scene_digest=original.digest,
+                candidate_scene_digest=original.digest,
+            )
+        )
+        source = store.write(candidate, cohort, payload, protect=lambda _: None)
+        request = scene_observation.visual_request(
+            contract.criteria[1], candidate, cohort, store, source, protect=lambda _: None
+        )
+        frame = request["frames"][0]
+        response = dict(
+            codec="full-scene-ternary-v1",
+            request_sha256=request["request_sha256"],
+            answers=[
+                {key: frame[key] for key in ("observation_id", "camera", "step", "clock", "time_seconds", "modality")}
+                | dict(
+                    frame_digest=frame["sha256"],
+                    subjects=[
+                        dict(
+                            subject="bowl",
+                            truth=visual_truth,
+                            confidence=None,
+                            conflict=False,
+                            reason="pure codec input",
+                        )
+                    ],
+                )
+            ],
+        )
+        answer = scene_observation.retain_visual_answer(
+            contract.criteria[1],
+            candidate,
+            cohort,
+            store,
+            source,
+            json.dumps(response).encode(),
+            protect=lambda _: None,
+        )
+        diagnostic = scene_eligibility.retain_root_xy_diagnostic(
+            contract, original, original, store, source, protect=lambda _: None
+        )
+        decision = scene_eligibility.evaluate_action_eligibility(
+            contract,
+            original,
+            original,
+            store,
+            source,
+            visual_answer=answer,
+            diagnostic=diagnostic,
+            protect=lambda _: None,
+        )
+        from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import assess_and_route
+
+        routed_observation = Observation(
+            codec="scene-observation-v2",
+            cohort=cohort,
+            source_manifest_digest=source.manifest_digest,
+            answer_manifest_digest=answer.manifest_digest,
+            answer_assessment_id=store.verified_payload(answer, protect=lambda _: None)["assessment_id"],
+            evidence=decision.required_evidence,
+            verified_manifest_digests=(source.manifest_digest, answer.manifest_digest),
+            action_selection=decision.model_dump(mode="json"),
+        )
+        route = assess_and_route(contract, original, routed_observation)
+        expected_action = {
+            "corrective_repair": "repair",
+            "diagnostic_intervention": "repair",
+            "informative_observation": "capture",
+            "stop": "stop",
+        }[decision.action]
+        if decision.reason == "all_required_true":
+            expected_action = "accept"
+        assert route.action == expected_action
+        assert route.action_selection == decision.model_dump(mode="json")
+        if route.action in ("repair", "capture"):
+            assert (
+                scene_eligibility.validate_selected_effect(contract, original, route.action, route.action_selection)
+                == decision
+            )
+        else:
+            for forbidden in ("repair", "capture"):
+                with pytest.raises(ValueError, match="selection"):
+                    scene_eligibility.validate_selected_effect(contract, original, forbidden, route.action_selection)
+        stale = routed_observation.model_copy(
+            update={
+                "action_selection": decision.model_copy(update={"candidate_digest": "f" * 64}).model_dump(mode="json")
+            }
+        )
+        with pytest.raises(ValueError, match="selection"):
+            assess_and_route(contract, original, stale)
+        if tag == "corrective":
+            (tmp_path / "read-only").mkdir(mode=0o700)
+            reader = composed_fixture(tmp_path / "read-only")
+            try:
+                reader.ports.artifacts = store
+                observed = Observation(
+                    codec="scene-observation-v2",
+                    source_manifest_digest=source.manifest_digest,
+                    answer_manifest_digest=answer.manifest_digest,
+                    answer_assessment_id=store.verified_payload(answer, protect=lambda _: None)["assessment_id"],
+                    cohort=cohort,
+                    evidence=decision.required_evidence,
+                    verified_manifest_digests=(source.manifest_digest, answer.manifest_digest),
+                )
+                reader.ports.restore_observations(
+                    [
+                        dict(
+                            candidate_id=original.candidate_id,
+                            candidate=original.model_dump_json(),
+                            payload=observed.model_dump_json(),
+                        )
+                    ],
+                    contract,
+                )
+                assert reader.ports.verify_observation(observed, contract, original) == observed
+                assert reader.events == []
+                malformed = scene_observation.retain_visual_answer(
+                    contract.criteria[1], candidate, cohort, store, source, b"\xff", protect=lambda _: None
+                )
+                reader.ports._retained[cohort.realization_id] = (original, source, malformed)
+                failed = reader.ports._evaluate(cohort.realization_id, contract, original)
+                assert failed.static_failure == "invalid_visual_answer"
+                assert malformed.manifest_digest in failed.verified_manifest_digests
+                without_answer = failed.model_copy(
+                    update={"answer_manifest_digest": None, "answer_assessment_id": None}
+                )
+                with pytest.raises(ValueError, match="ancestry"):
+                    Observation.model_validate_json(without_answer.model_dump_json())
+                legacy_observation = Observation(cohort=cohort, evidence=(), verified_manifest_digests=())
+                assert set(legacy_observation.model_dump(mode="json")) == {
+                    "cohort",
+                    "evidence",
+                    "verified_manifest_digests",
+                    "static_failure",
+                }
+                with pytest.raises(ValueError, match="Legacy observations"):
+                    Observation.model_validate(
+                        legacy_observation.model_dump(mode="python") | {"source_manifest_digest": None}
+                    )
+                (tmp_path / "failed-readback").mkdir(mode=0o700)
+                failed_reader = composed_fixture(tmp_path / "failed-readback")
+                try:
+                    failed_reader.ports.artifacts = store
+                    failed_row = {
+                        "candidate_id": original.candidate_id,
+                        "candidate": original.model_dump_json(),
+                        "payload": failed.model_dump_json(),
+                    }
+                    failed_reader.ports.restore_observations([failed_row], contract)
+                    recovered_answer = failed_reader.ports._retained[cohort.realization_id][2]
+                    assert recovered_answer == malformed  # Failure is not verification of absent answer=None.
+                    raw_failed = store.verified_payload(recovered_answer, protect=lambda _: None)["raw_response"]
+                    assert raw_failed["encoding"] == "base64"
+                    assert base64.b64decode(raw_failed["bytes"], validate=True) == b"\xff"
+                    assert failed_reader.ports.verify_observation(failed, contract, original) == failed
+                    assert failed_reader.events == []
+                finally:
+                    failed_reader.area.close()
+            finally:
+                reader.area.close()
+            proposed = scene()
+            proposed["relations"][2]["params"]["x"] = decision.hypothesis.proposed_authored_xy_m[0]
+            validated = scene_eligibility.validate_action_proposal(
+                contract,
+                original,
+                original,
+                store,
+                source,
+                decision,
+                proposed,
+                visual_answer=answer,
+                diagnostic=diagnostic,
+                protect=lambda _: None,
+            )
+            assert validated.candidate_scene_digest == decision.proposed_scene_digest
+            other_proposal = copy.deepcopy(proposed)
+            other_proposal["relations"][2]["params"]["x"] = 0.04
+            with pytest.raises(ValueError, match="decision|hypothesis"):
+                scene_eligibility.validate_action_proposal(
+                    contract,
+                    original,
+                    original,
+                    store,
+                    source,
+                    decision,
+                    other_proposal,
+                    visual_answer=answer,
+                    diagnostic=diagnostic,
+                    protect=lambda _: None,
+                )
+            after_candidate = repaired_candidate(contract, original, original, proposed, source_id="repair")
+            after_binding = candidate.model_copy(update={"candidate_digest": after_candidate.digest})
+            after_cohort = cohort.model_copy(update={"realization_id": "after", "reset_id": "after"})
+            after_schedule = scene_observation.compile_acquisition(
+                contract.acquisition, contract.criteria, candidate=after_binding, cohort=after_cohort
+            )
+
+            def after_sample(_env, step):
+                measured = copy.deepcopy(sample)
+                measured["step"] = step
+                measured["subjects"]["banana"]["position_w"][0] = 0.05 if step == 1 else 0.08
+                return measured
+
+            after_recorder = scene_observation.ObservationRecorder(
+                after_sample, provenance="synthetic", acquisition=after_schedule
+            )
+            after_recorder(None, 1)
+            after_recorder.add_frame(
+                camera="wrist_camera_rgb",
+                step=1,
+                subject_ids=contract.acquisition.subjects,
+                image_bytes=image.getvalue(),
+                sensor_update_step=1,
+                sensor_sequence=1,
+            )
+            after_recorder(None, 2)
+            after = store.write(
+                after_binding,
+                after_cohort,
+                after_recorder.complete(executed_steps=2, reset_count=1, terminated=False, truncated=False),
+                protect=lambda _: None,
+            )
+            displacement = scene_observation.effective_displacement(
+                store,
+                source,
+                after,
+                subject="banana",
+                step=1,
+                target_local=[0.05, 0.0, 0.5],
+                mapping="direct-root-translation-v1",
+                tolerance_m=0.001,
+                protect=lambda _: None,
+                hypothesis=decision.hypothesis,
+            )
+            assert displacement["codec"] == "measured-displacement-v2" and displacement["effective"]
+            assert displacement["step"] == 1 and displacement["causal_status"] == "unproven"
+            with pytest.raises(ValueError, match="selected|hypothesis"):
+                scene_observation.effective_displacement(
+                    store,
+                    source,
+                    after,
+                    subject="banana",
+                    step=2,
+                    target_local=[0.05, 0.0, 0.5],
+                    mapping="direct-root-translation-v1",
+                    tolerance_m=0.001,
+                    protect=lambda _: None,
+                    hypothesis=decision.hypothesis,
+                )
+            after_request = scene_observation.visual_request(
+                contract.criteria[1], after_binding, after_cohort, store, after, protect=lambda _: None
+            )
+            after_response = copy.deepcopy(response)
+            after_response["request_sha256"] = after_request["request_sha256"]
+            after_frame = after_request["frames"][0]
+            after_response["answers"][0].update(
+                {
+                    key: after_frame[key]
+                    for key in ("observation_id", "camera", "step", "clock", "time_seconds", "modality")
+                }
+                | {"frame_digest": after_frame["sha256"]}
+            )
+            after_answer = scene_observation.retain_visual_answer(
+                contract.criteria[1],
+                after_binding,
+                after_cohort,
+                store,
+                after,
+                json.dumps(after_response).encode(),
+                protect=lambda _: None,
+            )
+            after_observed = Observation(
+                codec="scene-observation-v2",
+                source_manifest_digest=after.manifest_digest,
+                answer_manifest_digest=after_answer.manifest_digest,
+                answer_assessment_id=store.verified_payload(after_answer, protect=lambda _: None)["assessment_id"],
+                cohort=after_cohort,
+                evidence=(
+                    scene_observation.evaluate_measurement(
+                        contract.criteria[0], after_binding, after_cohort, store, after, protect=lambda _: None
+                    ),
+                    scene_observation.evaluate_visual_answer(
+                        contract.criteria[1],
+                        after_binding,
+                        after_cohort,
+                        store,
+                        after,
+                        after_answer,
+                        protect=lambda _: None,
+                    ),
+                ),
+                verified_manifest_digests=(after.manifest_digest, after_answer.manifest_digest),
+            )
+            assert (
+                after_observed.evidence[0].verdict == "violated"
+            )  # Movement at step 1 is not goal satisfaction over steps 1–2.
+            (tmp_path / "ancestry").mkdir(mode=0o700)
+            fresh = composed_fixture(tmp_path / "ancestry")
+            try:
+                fresh.ports.artifacts = store
+                fresh.ports.restore_observations(
+                    [
+                        dict(
+                            candidate_id=after_candidate.candidate_id,
+                            candidate=after_candidate.model_dump_json(),
+                            payload=after_observed.model_dump_json(),
+                        ),
+                        dict(
+                            candidate_id=original.candidate_id,
+                            candidate=original.model_dump_json(),
+                            payload=observed.model_dump_json(),
+                        ),
+                    ],
+                    contract,
+                    decisions={after_candidate.candidate_id: decision},
+                )
+                assert fresh.ports.verify_observation(after_observed, contract, after_candidate) == after_observed
+                assert fresh.events == []
+            finally:
+                fresh.area.close()
+        return decision
+
+    try:
+        wrong_subject = selected_inputs("wrong-subject", 0.05, "false")
+        assert wrong_subject.action == "stop" and wrong_subject.reason == "causal_link_not_supported"
+        unknown = selected_inputs("unknown", 0.05, "unknown")
+        assert unknown.action == "stop" and unknown.observation_selection is None
+        observe = selected_inputs("observe", 0.05, "unknown", "informative_observation")
+        assert observe.action == "informative_observation" and observe.observation_selection is not None
+        corrective = selected_inputs("corrective", 0.0, "true")
+        assert corrective.action == "corrective_repair" and corrective.hypothesis.target_subject == "banana"
+        assert corrective.hypothesis.baseline_error_m == 0.05 and corrective.hypothesis.predicted_error_m == 0.0
+        diagnostic = selected_inputs("diagnostic", 0.05, "unknown", "diagnostic_intervention")
+        assert diagnostic.action == "diagnostic_intervention" and diagnostic.hypothesis.predicted_error_m > 0
+        assert diagnostic.can_execute is False and corrective.can_execute is False
+        assert corrective.policy_digest != observe.policy_digest
+        assert corrective.diagnostic_manifest_digest and corrective.repair_selection_digest
+    finally:
+        area.close()
+
+
 def test_permitted_cumulative_drift_and_conservative_rule_minimum():
     contract = repair_contract(("x", "y"), bound=0.1)
     rule_x, rule_y = contract.allowed_interventions

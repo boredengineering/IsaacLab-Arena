@@ -54,7 +54,8 @@ def inspection_budget(intent, reservations):
     from decimal import ROUND_HALF_EVEN, Context, localcontext
 
     unbounded = {key for key, value in limits.items() if value is None}
-    amounts = {key: [Decimal(str(row.get(key, 0))) for row in reservations] for key in limits if key not in unbounded}
+    unknown = {key for key in limits if any(row.get(key, 0) is None for row in reservations)}
+    amounts = {key: [Decimal(str(row.get(key, 0))) for row in reservations] for key in limits if key not in unknown}
     ceilings = {key: Decimal(str(value)) for key, value in limits.items() if key not in unbounded}
     operands = [Decimal(0), *ceilings.values(), *(value for values in amounts.values() for value in values)]
     least = min(int(value.as_tuple().exponent) for value in operands)
@@ -72,19 +73,20 @@ def inspection_budget(intent, reservations):
     )
     with localcontext(context):
         totals = {key: sum(values, Decimal(0)) for key, values in amounts.items()}
-        remaining = {key: max(Decimal(0), limit - totals[key]) for key, limit in ceilings.items()}
+        remaining = {key: max(Decimal(0), limit - totals[key]) for key, limit in ceilings.items() if key not in unknown}
     counts = set(limits) - {"cost_ceiling_usd", "runtime_allowance_seconds"}
     reserved = {key: int(value) if key in counts else value for key, value in totals.items()}
     remaining = {key: int(value) if key in counts else value for key, value in remaining.items()}
-    reserved.update({key: None for key in unbounded})
-    remaining.update({key: None for key in unbounded})
+    reserved.update({key: None for key in unknown})
+    remaining.update({key: None for key in unbounded | unknown})
     return InspectionBudget(
         reserved=ReservationTotals(**reserved),
         remaining=ReservationTotals(**remaining),
         accounting="accounting-only-v1" if unbounded else "conservative_cumulative_reservations_no_refunds",
         admitted_at=intent.submission.admitted_at,
-        deadline=intent.submission.admitted_at + b.total_deadline_seconds,
+        deadline=b.deadline_at(intent.submission.admitted_at),
         per_operation_ceiling_seconds=b.per_operation_timeout_seconds,
+        policy=b.policy.model_dump(mode="json") if hasattr(b, "policy") else None,
     )
 
 
@@ -177,6 +179,7 @@ def inspection_scene(contract, candidate, decision, evidence, assessment_id, dec
         assessment=decision.assessment,
         selected_assessed=selected,
         policy_trial=decision.policy_trial,
+        action_selection=decision.action_selection,
         assessment_status=decision.assessment.status if decision.assessment else "not_assessed",
         acceptance=(
             "accepted" if decision.action == "accept" or decision.scene_disposition == "accepted" else "not_established"
@@ -207,14 +210,22 @@ def workflow_result(store, run_id, *, protect):
     )
     reservations = [json.loads(i["reservation"]) for i in records["intents"]]
     reserved = {
-        key: None if limit is None else float(sum(Decimal(str(r.get(key, 0))) for r in reservations))
-        for key, limit in limits.items()
+        key: (
+            None
+            if any(r.get(key, 0) is None for r in reservations)
+            else float(sum(Decimal(str(r.get(key, 0))) for r in reservations))
+        )
+        for key in limits
     }
     # Initial candidate production is reserved by generation, whose older codec
     # does not contain the scene-only candidates counter.
     reserved["candidates"] += sum(1 for i in records["intents"] if i["scene"] is None)
     remaining = {
-        key: None if limit is None else max(0, float(Decimal(str(limit)) - Decimal(str(reserved[key]))))
+        key: (
+            None
+            if limit is None or reserved[key] is None
+            else max(0, float(Decimal(str(limit)) - Decimal(str(reserved[key]))))
+        )
         for key, limit in limits.items()
     }
     counts = {
@@ -230,7 +241,9 @@ def workflow_result(store, run_id, *, protect):
     }
     for key in counts:
         if reserved[key] is not None:
-            reserved[key], remaining[key] = int(reserved[key]), int(remaining[key])
+            reserved[key] = int(reserved[key])
+        if remaining[key] is not None:
+            remaining[key] = int(remaining[key])
     evidence, criteria = [], []
     selected = {}
     selected_observations = []
@@ -349,7 +362,8 @@ def workflow_result(store, run_id, *, protect):
             runtime_accounting="cumulative_unallocated_allowance_not_walltime",
             per_operation_ceiling_seconds=budget.per_operation_timeout_seconds,
             admitted_at=records["admitted_at"],
-            deadline=records["admitted_at"] + budget.total_deadline_seconds,
+            deadline=budget.deadline_at(records["admitted_at"]),
+            **({"policy": budget.policy.model_dump(mode="json")} if contract.schema_version == "5" else {}),
         ),
         scene_acceptance=(
             "accepted"

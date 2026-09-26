@@ -56,8 +56,93 @@ class RetainedArtifacts:
         assert type(area) is ArtifactArea and callable(protect), "Bound artifact area and public protection required"
         self.service, self.area, self.protect = service, area, protect
 
+    def _numeric(self, principal, run_id, reference_id, intent):
+        """Reopen a keyed child and its verified source without extending the source observation."""
+        from .derived_assessment import NumericReassessmentSelection, reopen_retained_numeric
+        from .evidence import CandidateBinding
+        from .scene_evidence_artifacts import SceneEvidenceArtifacts, canonical
+        from .scene_loop import profile_digest
+
+        value = self.service.read_numeric_reassessment(principal, reference_id, protect=self.protect)
+        if value is None:
+            return None
+        if value.run_id != run_id or value.operation_id != reference_id:
+            raise ValueError("Derived assessment does not belong to selected run/key")
+        if value.disposition == "refused":
+            return None
+        source = self.service.read_scene_evidence(principal, value.evidence_id, protect=self.protect)
+        candidate_view = self.service.read_scene_candidate(principal, value.candidate_id, protect=self.protect)
+        if (
+            value.evidence is None
+            or value.assessment_id is None
+            or value.manifest_digest is None
+            or source is None
+            or candidate_view is None
+            or source.run_id != run_id
+            or source.evidence_id != value.evidence_id
+            or source.candidate_id != value.candidate_id
+            or candidate_view.run_id != run_id
+            or candidate_view.candidate.candidate_id != value.candidate_id
+            or source.observation.source_manifest_digest != value.source_manifest_digest
+            or value.source_manifest_digest not in source.observation.verified_manifest_digests
+            or value.evidence.cohort != source.observation.cohort
+        ):
+            raise ValueError("Derived artifact source lineage differs")
+        selected = NumericReassessmentSelection(
+            codec="retained-numeric-selection-v1",
+            **{
+                key: getattr(value, key)
+                for key in (
+                    "run_id",
+                    "evidence_id",
+                    "candidate_id",
+                    "source_manifest_digest",
+                    "criterion",
+                    "purpose",
+                    "validation_contract_digest",
+                )
+            },
+        )
+        if digest(canonical(selected.model_dump(mode="json"))) != value.selection_digest:
+            raise ValueError("Derived selection digest differs")
+        binding = CandidateBinding(
+            candidate_digest=candidate_view.candidate.digest,
+            contract_digest=contract_digest(intent.contract),
+            profile_digest=profile_digest(intent.contract),
+        )
+        artifacts = SceneEvidenceArtifacts(self.area)
+        receipt = artifacts.load_receipt(
+            binding,
+            source.observation.cohort,
+            kind="numeric-assessment",
+            assessment_id=value.assessment_id,
+            manifest_digest=value.manifest_digest,
+            protect=self.protect,
+        )
+        fresh = reopen_retained_numeric(
+            artifacts,
+            receipt,
+            protect=self.protect,
+            validation_contract=intent.contract if value.purpose == "validation" else None,
+        )
+        payload = artifacts.verified_payload(receipt, protect=self.protect)
+        if (
+            fresh.evidence != value.evidence
+            or fresh.purpose != value.purpose
+            or payload["source_manifest_digest"] != value.source_manifest_digest
+            or payload["selection"]["criterion"] != value.criterion.model_dump(mode="json")
+            or payload["selection"]["validation_contract_digest"] != value.validation_contract_digest
+        ):
+            raise ValueError("Derived artifact semantics differ from retained record")
+        files = self.area.verify(receipt.relative_directory, json.loads(receipt.manifest_json))
+        return RetainedBundle(
+            run_id, "numeric-assessment", reference_id, receipt.manifest_digest, files, receipt, binding.contract_digest
+        )
+
     def read(self, principal, run_id, kind, reference_id):
-        if kind not in {"prior", "candidate", "generation", "evidence"} or kind == "prior" and reference_id != run_id:
+        if kind not in {"prior", "candidate", "generation", "evidence", "numeric-assessment"} or (
+            kind == "prior" and reference_id != run_id
+        ):
             raise ValueError("Unsupported artifact reference")
         if kind == "evidence" and (
             type(reference_id) is not str or re.fullmatch(r"[0-9a-f]{128}", reference_id) is None
@@ -66,6 +151,8 @@ class RetainedArtifacts:
         intent = self.service.read_run_intent(principal, run_id, protect=self.protect)
         if intent is None:
             return None
+        if kind == "numeric-assessment":
+            return self._numeric(principal, run_id, reference_id, intent)
         if kind == "evidence":
             from .evidence import CandidateBinding
             from .scene_evidence_artifacts import SceneEvidenceArtifacts
@@ -77,6 +164,47 @@ class RetainedArtifacts:
                 return None
             if view.run_id != run_id or view.evidence_id != evidence_id:
                 raise ValueError("Evidence does not belong to selected run")
+            if intent.contract.schema_version == "5":
+                from .evidence import EvidenceCohort
+
+                observation = view.observation
+                if manifest_digest not in observation.verified_manifest_digests or view.candidate_id is None:
+                    raise ValueError("Unverified versioned artifact reference")
+                candidate_view = self.service.read_scene_candidate(principal, view.candidate_id, protect=self.protect)
+                if candidate_view is None or candidate_view.run_id != run_id:
+                    raise ValueError("Missing artifact candidate lineage")
+                candidate = candidate_view.candidate
+                cohort, assessment_id = observation.cohort, None
+                if manifest_digest == observation.source_manifest_digest:
+                    family = "observation"
+                elif manifest_digest == observation.answer_manifest_digest:
+                    family, assessment_id = "visual-answer", observation.answer_assessment_id
+                else:
+                    references = [
+                        r for r in observation.diagnostic_references if r["manifest_digest"] == manifest_digest
+                    ]
+                    if len(references) != 1:
+                        raise ValueError("Exact diagnostic reference required")
+                    reference = references[0]
+                    family, assessment_id = reference["kind"], reference["assessment_id"]
+                    cohort = EvidenceCohort.model_validate_json(json.dumps(reference["cohort"]))
+                binding = CandidateBinding(
+                    candidate_digest=candidate.digest,
+                    contract_digest=contract_digest(intent.contract),
+                    profile_digest=profile_digest(intent.contract),
+                )
+                receipt = SceneEvidenceArtifacts(self.area).load_receipt(
+                    binding,
+                    cohort,
+                    kind=family,
+                    manifest_digest=manifest_digest,
+                    assessment_id=assessment_id,
+                    protect=self.protect,
+                )
+                files = self.area.verify(receipt.relative_directory, json.loads(receipt.manifest_json))
+                return RetainedBundle(
+                    run_id, kind, reference_id, manifest_digest, files, receipt, binding.contract_digest
+                )
             entries = [entry for entry in view.observation.evidence if entry.manifest_digest == manifest_digest]
             if not entries or manifest_digest not in view.observation.verified_manifest_digests:
                 raise ValueError("Manifest is not a retained verified evidence reference")

@@ -62,6 +62,280 @@ def test_numeric_limits_use_retained_samples(tmp_path, speed, verdict):
         area.close()
 
 
+def test_explicit_acquisition_and_strict_multisubject_measurement(tmp_path):
+    import base64
+    import io
+    import json
+
+    from PIL import Image
+
+    from isaaclab_arena.agentic_environment_generation.workflow import contracts
+    from isaaclab_arena.agentic_environment_generation.workflow import scene_observation as producers
+
+    candidate, cohort = identities()
+    selected = criterion(
+        evaluator_version="numeric-v2",
+        subjects=("cup", "bin"),
+        rubric="selected velocity norm",
+        observation_window=dict(start_step=176, end_step=180),
+        limit=dict(operator="lt", value=0.001, unit="m_per_s"),
+        parameters=dict(
+            metric="linear_speed",
+            reference_frame="world",
+            clock="control_step",
+            sample_steps=[176, 177, 178, 179, 180],
+            temporal_aggregation="all",
+            subject_aggregation="all",
+            missing_data="reject",
+            invalid_data="reject",
+        ),
+    )
+    plan = contracts.AcquisitionSchedule(
+        codec="explicit-acquisition-v1",
+        adapter="droid-rigid-world-v1",
+        clock="control_step",
+        reference_frame="world",
+        control_dt_seconds=0.02,
+        horizon_steps=180,
+        subjects=("cup", "bin"),
+        state_steps=(176, 177, 178, 179, 180),
+        images=(
+            dict(camera="wrist_camera_rgb", step=175, modality="rgb"),
+            dict(camera="wrist_camera_rgb", step=180, modality="rgb"),
+        ),
+        renderer_update_steps=(175, 180),
+        displacement_step=180,
+    )
+    reversed_images = plan.model_dump(mode="json")
+    reversed_images["images"].reverse()
+    with pytest.raises(ValueError, match="image.*ordered"):
+        contracts.AcquisitionSchedule.model_validate(reversed_images)
+    compiled = producers.compile_acquisition(plan, (selected,), candidate=candidate, cohort=cohort)
+    assert compiled.state_steps == plan.state_steps
+    assert compiled.collection_steps == (175, 176, 177, 178, 179, 180)
+    assert compiled.renderer_update_steps == (175, 180)
+    sampled = []
+
+    def measured(_env, step):
+        sampled.append(step)
+        value = sample(step, 0.0005)
+        value["subjects"]["bin"] = sample(step, 0.001)["subjects"]["cup"]
+        return value
+
+    recorder = producers.ObservationRecorder(measured, provenance="synthetic", acquisition=compiled)
+    image = io.BytesIO()
+    Image.new("RGB", (1, 1)).save(image, format="PNG")
+    for step in compiled.collection_steps:
+        recorder(None, step)
+        if step in (175, 180):
+            recorder.add_frame(
+                camera="wrist_camera_rgb",
+                step=step,
+                subject_ids=plan.subjects,
+                image_bytes=image.getvalue(),
+                sensor_update_step=step,
+                sensor_sequence=step,
+            )
+    assert sampled == list(plan.state_steps)
+    with pytest.raises(ValueError, match="duplicate|step"):
+        recorder(None, 180)
+    payload = recorder.complete(executed_steps=180, reset_count=1, terminated=False, truncated=False)
+    assert payload["collection"]["status"] == "complete"
+    assert payload["frames"][0]["observation_id"] != payload["frames"][1]["observation_id"]
+    area, store = artifacts(tmp_path)
+    try:
+        retained = store.write(candidate, cohort, payload, protect=lambda _: None)
+        value = producers.evaluate_measurement(selected, candidate, cohort, store, retained, protect=lambda _: None)
+        assert value.verdict == "violated"
+        inclusive = type(selected).model_validate(
+            selected.model_dump(mode="python") | {"limit": dict(operator="le", value=0.001, unit="m_per_s")}
+        )
+        assert (
+            producers.evaluate_measurement(
+                inclusive, candidate, cohort, store, retained, protect=lambda _: None
+            ).verdict
+            == "established"
+        )
+        assert value.coverage.state_steps == plan.state_steps
+        stationary = type(selected).model_validate(
+            selected.model_dump(mode="python")
+            | dict(
+                evidence_producer="scene.settled",
+                rubric="selected stationary limits",
+                limit=dict(operator="eq", value=1.0, unit="boolean"),
+                parameters=selected.parameters.model_dump(mode="python")
+                | dict(
+                    metric="stationary",
+                    linear_limit=dict(operator="lt", value=0.001, unit="m_per_s"),
+                    angular_limit=dict(operator="lt", value=0.01, unit="rad_per_s"),
+                ),
+            )
+        )
+        assert (
+            producers.evaluate_measurement(
+                stationary, candidate, cohort, store, retained, protect=lambda _: None
+            ).verdict
+            == "violated"
+        )
+        visual = criterion(
+            "scene.visible",
+            criterion_id="visible",
+            kind="visual",
+            evaluator_version="full-scene-ternary-v1",
+            required_modalities=("rgb",),
+            coordinate_frames=("wrist_camera_rgb",),
+            subjects=plan.subjects,
+            observation_window=dict(start_step=180, end_step=180),
+            rubric="selected per-frame visibility",
+            limit=dict(operator="eq", value=1.0, unit="boolean"),
+            parameters=dict(
+                metric="visibility",
+                reference_frame="camera",
+                clock="control_step",
+                images=[plan.images[-1].model_dump(mode="json")],
+                temporal_aggregation="all",
+                camera_aggregation="all",
+                subject_aggregation="all",
+                missing_data="reject",
+                invalid_data="reject",
+            ),
+        )
+        request = producers.visual_request(visual, candidate, cohort, store, retained, protect=lambda _: None)
+        assert [f["step"] for f in request["frames"]] == [180]  # Not the numeric window or all saved images.
+        response = dict(
+            codec="full-scene-ternary-v1",
+            request_sha256=request["request_sha256"],
+            answers=[
+                {key: f[key] for key in ("observation_id", "camera", "step", "clock", "time_seconds", "modality")}
+                | dict(
+                    frame_digest=f["sha256"],
+                    subjects=[
+                        dict(
+                            subject="cup",
+                            truth="false",
+                            confidence=0.1,
+                            conflict=False,
+                            reason="not visible in this frame",
+                        ),
+                        dict(
+                            subject="bin",
+                            truth="unknown",
+                            confidence=None,
+                            conflict=False,
+                            reason="not enough visual evidence",
+                        ),
+                    ],
+                )
+                for f in request["frames"]
+            ],
+        )
+        raw = json.dumps(response).encode()
+        answer = producers.retain_visual_answer(visual, candidate, cohort, store, retained, raw, protect=lambda _: None)
+        result = producers.evaluate_visual_answer(
+            visual, candidate, cohort, store, retained, answer, protect=lambda _: None
+        )
+        assert result.verdict == "violated" and result.conflict is False  # FALSE AND UNKNOWN, not a repair grant.
+        fresh = store.load_receipt(
+            candidate,
+            cohort,
+            kind="visual-answer",
+            assessment_id=result.assessment_id,
+            manifest_digest=answer.manifest_digest,
+            protect=lambda _: None,
+        )
+        assert fresh == answer
+        rejected = producers.retain_visual_answer(
+            visual,
+            candidate,
+            cohort,
+            store,
+            retained,
+            b"\xff",
+            protect=lambda _: None,
+        )
+        rejected_payload = store.verified_payload(rejected, protect=lambda _: None)
+        assert base64.b64decode(rejected_payload["raw_response"]["bytes"]) == b"\xff"
+        assert rejected.relative_directory != answer.relative_directory
+        with pytest.raises(ValueError):
+            producers.evaluate_visual_answer(
+                visual, candidate, cohort, store, retained, rejected, protect=lambda _: None
+            )
+        repeated = type(visual).model_validate(
+            visual.model_dump(mode="python")
+            | dict(
+                observation_window=dict(start_step=175, end_step=180),
+                parameters=visual.parameters.model_dump(mode="python") | {"images": plan.images},
+            )
+        )
+        repeated_request = producers.visual_request(
+            repeated, candidate, cohort, store, retained, protect=lambda _: None
+        )
+        assert [f["step"] for f in repeated_request["frames"]] == [175, 180]
+        assert repeated_request["request_sha256"] != request["request_sha256"]
+        response["answers"][0]["step"] = 175
+        with pytest.raises(ValueError):
+            producers.validate_ternary_response(json.dumps(response).encode(), request)
+        from isaaclab_arena.agentic_environment_generation.workflow import derived_assessment
+
+        relaxed = derived_assessment.assess_retained_numeric(
+            inclusive,
+            candidate,
+            cohort,
+            store,
+            retained,
+            purpose="exploratory",
+            protect=lambda _: None,
+        )
+        strict = derived_assessment.assess_retained_numeric(
+            selected,
+            candidate,
+            cohort,
+            store,
+            retained,
+            purpose="exploratory",
+            protect=lambda _: None,
+        )
+        assert relaxed.evidence.verdict == "established" and strict.evidence.verdict == "violated"
+        assert relaxed.receipt.relative_directory != strict.receipt.relative_directory
+        assert derived_assessment.reopen_retained_numeric(store, relaxed.receipt, protect=lambda _: None) == relaxed
+        with pytest.raises(ValueError, match="preselected"):
+            derived_assessment.assess_retained_numeric(
+                inclusive,
+                candidate,
+                cohort,
+                store,
+                retained,
+                purpose="validation",
+                protect=lambda _: None,
+            )
+        insufficient = type(selected).model_validate(
+            selected.model_dump(mode="python")
+            | dict(
+                observation_window=dict(start_step=175, end_step=180),
+                parameters=selected.parameters.model_dump(mode="python") | {"sample_steps": [175, 180]},
+            )
+        )
+        with pytest.raises(ValueError, match="coverage"):
+            derived_assessment.assess_retained_numeric(
+                insufficient,
+                candidate,
+                cohort,
+                store,
+                retained,
+                purpose="exploratory",
+                protect=lambda _: None,
+            )
+        assert store.verified_payload(retained, protect=lambda _: None) == payload
+        with pytest.raises(ValueError, match="collection") as reset:
+            recorder.complete(executed_steps=180, reset_count=2, terminated=False, truncated=False)
+        assert reset.value.category == "unexpected_reset"
+        with pytest.raises(ValueError, match="collection") as terminal:
+            recorder.complete(executed_steps=179, reset_count=1, terminated=True, truncated=False)
+        assert terminal.value.category == "unexpected_termination"
+    finally:
+        area.close()
+
+
 def test_exact_scene_receipt_loader_reopens_and_rejects_wrong_bindings(tmp_path):
     from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import SceneEvidenceArtifacts
 
@@ -490,9 +764,9 @@ def test_effective_displacement_explicit_origin_mapping(tmp_path, moved, expecte
 @pytest.fixture
 def cpu_native_sampler():
     """Real CPU Warp/ProxyArray conversion; synthetic scene, no simulator startup."""
+    import torch
     from types import SimpleNamespace
 
-    import torch
     import warp as wp
 
     # Disable CUDA initialization, not the isolated runner's denial boundaries.
@@ -592,11 +866,7 @@ def test_native_sampler_cpu_proxy_contact_requires_exact_binding(cpu_native_samp
 def test_native_sampler_cpu_proxy_root_getters_use_scalar_view(cpu_native_sampler):
     import torch
 
-    from isaaclab_arena.tasks.predicates.predicate_utils import (
-        get_root_ang_vel_w,
-        get_root_lin_vel_w,
-        get_root_pos_w,
-    )
+    from isaaclab_arena.tasks.predicates.predicate_utils import get_root_ang_vel_w, get_root_lin_vel_w, get_root_pos_w
 
     f = cpu_native_sampler
     data = f.env.scene["cup"].data

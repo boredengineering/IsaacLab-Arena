@@ -23,6 +23,52 @@ from isaaclab_arena.agentic_environment_generation.workflow.scope_binding import
 
 
 class InstalledControls(unittest.TestCase):
+    def test_native_supervision_uses_real_authority_guard_and_refuses_stale_owner(self):
+        from isaaclab_arena.agentic_environment_generation.workflow.api.installed_full_scene import (
+            native_supervision_context,
+        )
+        from isaaclab_arena_examples.agentic_environment_generation.foreground_authorization import ForegroundAuthority
+
+        authority = ForegroundAuthority.__new__(ForegroundAuthority)
+        authority._lock = threading.RLock()
+        calls = []
+
+        def guarded(value):
+            self.assertTrue(authority._lock._is_owned())
+            calls.append(value)
+            return value
+
+        current_api = SimpleNamespace(principal="operator", instance="instance", generation=2, expires_at=300.0)
+        fence = SimpleNamespace(run_id="run")
+        intent = SimpleNamespace(intent_id="intent", worker_fence=fence, worker_registration=object())
+        current_intent = SimpleNamespace(**vars(intent), status="released", worker_cleanup=None)
+        run = SimpleNamespace(state="running", operation_id="operation")
+        authority.require_scene_execute = lambda *a, **kw: guarded("grant")
+        arguments = dict(
+            config=SimpleNamespace(binding="scope"),
+            tokens=SimpleNamespace(current=lambda auth: guarded(current_api)),
+            auth=object(),
+            store=SimpleNamespace(
+                get_scene_intent=lambda *a: guarded(current_intent),
+                get_run=lambda *a: guarded(run),
+                inspection_bundle=lambda *a: guarded(dict(admitted_at=100.0)),
+            ),
+            authority=authority,
+            admission=lambda *a: guarded("admission"),
+            intent=intent,
+            contract=object(),
+        )
+        result = native_supervision_context(**arguments)
+        self.assertEqual(result["credential_generation"], 2)
+        self.assertEqual(result["authority"], "grant")
+        self.assertFalse(authority._lock._is_owned())
+        calls.clear()
+        current_intent.worker_registration = object()
+        with self.assertRaises(PermissionError):
+            native_supervision_context(**arguments)
+        self.assertNotIn("admission", calls)
+        self.assertNotIn("grant", calls)
+
     def test_result_polling_keeps_minimum_interval_with_variable_call_overhead(self):
         from unittest.mock import patch
 
@@ -182,7 +228,9 @@ class InstalledControls(unittest.TestCase):
             validate_document(body, read_schema)
 
     def test_cancel_reaches_handler_while_owned_drive_is_active(self):
-        async def exercise():
+        async def exercise(delivery):
+            from isaaclab_arena.agentic_environment_generation.workflow.contracts import ControlPolicy
+
             binding = ScopeBinding(
                 database="db",
                 deployment_id="deployment",
@@ -194,12 +242,23 @@ class InstalledControls(unittest.TestCase):
                 store_id="store",
                 registry_id="registry",
             )
-            tokens = TokenRegistry(binding=binding, instance="instance", generation=1, clock=lambda: 100.0)
+            now = [100.0]
+            tokens = TokenRegistry(binding=binding, instance="b" * 32, generation=1, clock=lambda: now[0])
             bearer = tokens.issue(principal="operator", lifetime=100)
             auth = tokens.authenticate(("Bearer " + bearer).encode())
+            tokens.bind_current(
+                auth,
+                ControlPolicy(
+                    codec="renewable-control-v1",
+                    max_supervision_lease_seconds=60.0,
+                    heartbeat_seconds=20.0,
+                    max_credential_lifetime_seconds=300.0,
+                    client_descriptor_schema="2",
+                ),
+            )
             active, stop = threading.Event(), threading.Event()
             calls = []
-            observation = LocalStopObservation(delivery="delivered")
+            observation = LocalStopObservation(delivery=delivery)
             payload = command_json({"runId": "run"})
             receipt = make_cancel_receipt(
                 scope=dict(database="db", deployment_id="deployment", workspace_id="workspace"),
@@ -216,6 +275,7 @@ class InstalledControls(unittest.TestCase):
             )
 
             def authorize(kind, principal, run_id):
+                self.assertEqual(tokens.current(auth).principal, principal)
                 self.assertEqual((kind, principal, run_id), ("cancel", "operator", "run"))
                 calls.append("permission")
 
@@ -262,18 +322,57 @@ class InstalledControls(unittest.TestCase):
                 owner._drive = owner._driver.submit(drive)
                 while not active.is_set():
                     await asyncio.sleep(0.001)
-                result = await asyncio.wait_for(owner.cancel(auth, "cancel-1", "run"), 1)
-                self.assertEqual(result.receipt, receipt)
-                self.assertEqual(calls, ["permission", "handler"])
-                tokens.revoke(auth)
+                now[0] = 201.0
                 with self.assertRaises(PermissionError):
-                    await owner.cancel(auth, "cancel-2", "run")
+                    tokens.authenticate(("Bearer " + bearer).encode())
+                with self.assertRaises(PermissionError):
+                    await owner.cancel(auth, "cancel-1", "run")
+                delivered = []
+                metadata = tokens.refresh_current(auth, deliver=delivered.append)
+                self.assertNotIn("bearer", metadata)
+                import tempfile
+                from unittest.mock import patch
+
+                from isaaclab_arena.agentic_environment_generation.workflow.api.client import descriptor
+                from isaaclab_arena.agentic_environment_generation.workflow.api.private_files import Directory, encode
+
+                with tempfile.TemporaryDirectory() as temporary:
+                    with Directory(temporary + "/" + auth.instance, create=True) as directory:
+                        private = dict(delivered[0], endpoint="http://127.0.0.1:36315/graphql")
+                        directory.write("client.json", encode(private))
+                        with patch("time.time", return_value=now[0]):
+                            reloaded = descriptor(directory.path + "/client.json")
+                            self.assertEqual(reloaded["credential_revision"], 2)
+                            self.assertEqual(reloaded["binding"], binding.model_dump(mode="json"))
+                refreshed = tokens.authenticate(("Bearer " + delivered[0]["bearer"]).encode())
+                self.assertIs(tokens.current(auth), refreshed)
+                self.assertEqual(
+                    (refreshed.principal, refreshed.instance, refreshed.binding),
+                    (auth.principal, auth.instance, auth.binding),
+                )
+                self.assertEqual(metadata["credential_revision"], 2)
+                self.assertEqual(metadata["expires_at"], 501.0)
+                with self.assertRaises(PermissionError):
+                    tokens.recheck(auth)
+                result = await asyncio.wait_for(owner.cancel(refreshed, "cancel-1", "run"), 1)
+                self.assertEqual(result.receipt, receipt)
+                self.assertEqual(owner._run_ids, {"run"} if delivery == "delivered" else set())
+                self.assertEqual(calls, ["permission", "handler"])
+                tokens.revoke(refreshed)
+                with self.assertRaises(PermissionError):
+                    await owner.cancel(refreshed, "cancel-2", "run")
+                with self.assertRaises(PermissionError):
+                    tokens.current(auth)
+                with self.assertRaises(PermissionError):
+                    tokens.refresh_current(auth, deliver=delivered.append)
+                self.assertEqual(len(delivered), 1)
             finally:
                 stop.set()
                 await owner.close()
             self.assertEqual(calls, ["permission", "handler", "closed"])
 
-        asyncio.run(exercise())
+        asyncio.run(exercise("delivered"))
+        asyncio.run(exercise("no_owner"))
 
 
 if __name__ == "__main__":

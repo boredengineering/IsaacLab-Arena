@@ -100,6 +100,38 @@ def projection_api():
     return evidence_contracts
 
 
+def test_ternary_aggregation_keeps_truth_collection_and_conflict_distinct():
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import CriterionCoverage
+
+    w = api()
+    assert w.aggregate_truth(("true", "unknown"), "all") == "unknown"
+    assert w.aggregate_truth(("false", "unknown"), "all") == "false"
+    assert w.aggregate_truth(("true", "unknown"), "any") == "true"
+    assert w.negate_truth("unknown") == "unknown"
+    legacy = receipt()
+    assert "coverage" not in legacy.model_dump(mode="json")
+    with pytest.raises(ValueError):
+        w.CriterionEvidence.model_validate(legacy.model_dump() | {"conflict": None})
+    with pytest.raises(ValueError):
+        w.CriterionRequirement.model_validate(requirement().model_dump() | {"coverage": None})
+    coverage = CriterionCoverage(clock="control_step", state_steps=(0, 10), images=())
+    required = tuple(
+        requirement(name, evaluator_version="numeric-v2", coverage=coverage) for name in ("first", "second")
+    )
+    values = (
+        receipt("first", evaluator_version="numeric-v2", coverage=coverage, verdict="violated", conflict=False),
+        receipt("second", evaluator_version="numeric-v2", coverage=coverage, verdict="inconclusive", conflict=False),
+    )
+    result = assess(required, values)
+    assert result.truth == "false" and result.collection_status == "complete" and result.conflict is False
+    missing = assess(required, values[:1])
+    assert missing.collection_status == "incomplete"  # Not a valid UNKNOWN answer.
+    assert missing.truth is None
+    conflict = assess(required, (values[0].model_copy(update={"conflict": True}), values[1]))
+    assert conflict.conflict is True and conflict.truth == "unknown"
+    assert "truth" not in assess((requirement(),), (receipt(),)).model_dump(mode="json")
+
+
 def frozen_contract():
     from isaaclab_arena.agentic_environment_generation.workflow.contracts import WorkflowContract
 

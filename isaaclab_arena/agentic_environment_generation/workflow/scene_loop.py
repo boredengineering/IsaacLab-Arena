@@ -56,6 +56,57 @@ class Observation(FrozenModel):
     evidence: tuple[CriterionEvidence, ...]
     verified_manifest_digests: tuple[Hash, ...]
     static_failure: Literal["ineffective_edit", "invalid_visual_answer"] | None = None
+    codec: Literal["scene-observation-v1", "scene-observation-v2"] = "scene-observation-v1"
+    source_manifest_digest: Hash | None = None
+    answer_manifest_digest: Hash | None = None
+    answer_assessment_id: Hash | None = None
+    action_selection: dict | None = None
+    diagnostic_references: tuple[dict, ...] = ()
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def versioned_input_ancestry(cls, value, handler):
+        fields = value.model_fields_set if isinstance(value, cls) else set(value) if isinstance(value, dict) else set()
+        codec = (
+            value.codec
+            if isinstance(value, cls)
+            else value.get("codec", "scene-observation-v1") if isinstance(value, dict) else None
+        )
+        if codec == "scene-observation-v1" and fields & {
+            "codec",
+            "source_manifest_digest",
+            "answer_manifest_digest",
+            "answer_assessment_id",
+            "action_selection",
+            "diagnostic_references",
+        }:
+            raise ValueError("Legacy observations do not declare versioned input ancestry")
+        result = handler(value)
+        if result.codec == "scene-observation-v2":
+            if (
+                result.source_manifest_digest is None
+                or (result.answer_manifest_digest is None) != (result.answer_assessment_id is None)
+                or (result.static_failure == "invalid_visual_answer" and result.answer_manifest_digest is None)
+            ):
+                raise ValueError("Exact versioned source and failed/successful answer ancestry required")
+            required = {result.source_manifest_digest}
+            if result.answer_manifest_digest is not None:
+                required.add(result.answer_manifest_digest)
+            if not required <= set(result.verified_manifest_digests):
+                raise ValueError("Versioned input manifests must be byte-verified independently of truth evidence")
+        return result
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_observation(self, handler):
+        value = handler(self)
+        if self.action_selection is None:
+            value.pop("action_selection", None)
+        if not self.diagnostic_references:
+            value.pop("diagnostic_references", None)
+        if self.codec == "scene-observation-v1":
+            for key in ("codec", "source_manifest_digest", "answer_manifest_digest", "answer_assessment_id"):
+                value.pop(key, None)
+        return value
 
 
 class SceneDecision(FrozenModel):
@@ -64,10 +115,13 @@ class SceneDecision(FrozenModel):
     assessment: SceneEvidenceAssessment | None = None
     policy_trial: PolicyTrialReceipt | None = None
     scene_disposition: Literal["accepted"] | None = None
+    action_selection: dict | None = None
 
     @model_serializer(mode="wrap")
     def retain_scene_shape(self, handler):
         value = handler(self)
+        if self.action_selection is None:
+            value.pop("action_selection", None)
         if self.policy_trial is None:
             value.pop("policy_trial", None)
         if self.scene_disposition is None:
@@ -89,6 +143,8 @@ class SceneReservation(GenerationReservation):
     @model_serializer(mode="wrap")
     def retain_zero_policy_shape(self, handler):
         value = handler(self)
+        if self.time_policy == "enforced":
+            value.pop("time_policy", None)
         if self.accounting_policy == "bounded-v1":
             value.pop("accounting_policy", None)
         for key in ("policy_episodes", "policy_steps"):
@@ -103,6 +159,10 @@ class _VersionedSceneModel(FrozenModel):
     @model_serializer(mode="wrap")
     def retain_v1_shape(self, handler):
         value = handler(self)
+        if value.get("action_selection") is None:
+            value.pop("action_selection", None)
+        if value.get("workflow_schema") is None:
+            value.pop("workflow_schema", None)
         if self.codec_version == 1:
             for key in (
                 "codec_version",
@@ -134,9 +194,12 @@ class ScenePortProfile(_VersionedSceneModel):
     policy: SceneReservation | None = None
     policy_binding: PolicyTaskBinding | None = None
     policy_criteria: tuple[Hash, ...] = ()
+    workflow_schema: Literal["5"] | None = None
 
     @model_validator(mode="after")
     def versioned_stages(self):
+        if self.workflow_schema is not None and (self.codec_version != 2 or self.assurance != "native-unverified"):
+            raise ValueError("Configurable workflows require the owned native/model split")
         if self.assurance == "retained-evidence":
             if (
                 self.codec_version != 2
@@ -190,6 +253,7 @@ class ScenePortProfile(_VersionedSceneModel):
             if (
                 allocation is not None
                 and self.assurance != "retained-evidence"
+                and self.workflow_schema != "5"
                 and (allocation.model_tokens is None or allocation.cost_ceiling_usd is None)
             ):
                 raise ValueError("Legacy scene profiles require bounded accounting")
@@ -209,6 +273,7 @@ class SceneIntent(_VersionedSceneModel):
     observation_id: Hash | None = None
     observation_digest: Hash | None = None
     policy_binding: PolicyTaskBinding | None = None
+    action_selection: dict | None = None
 
     @model_validator(mode="after")
     def versioned_action(self):
@@ -357,6 +422,28 @@ def assess_and_route(contract, candidate, observation, profile=None):
     )
     if observation.static_failure:
         return SceneDecision(action="stop", reason=observation.static_failure, assessment=assessment)
+    if contract.schema_version == "5":
+        from .scene_eligibility import bound_action_selection
+
+        selected = bound_action_selection(contract, candidate, observation)
+        action = {
+            "stop": "stop",
+            "informative_observation": "capture",
+            "corrective_repair": "repair",
+            "diagnostic_intervention": "repair",
+        }[selected.action]
+        if selected.reason == "all_required_true":
+            if assessment.status != "established":
+                raise ValueError("Scientific selection and aggregate disagree")
+            action = "accept"
+        return SceneDecision.model_validate(
+            dict(
+                action=action,
+                reason=selected.reason,
+                assessment=assessment,
+                action_selection=selected.model_dump(mode="json"),
+            )
+        )
     if assessment.status == "established":
         required_policy = any(c.kind == "policy" and c.requirement == "required" for c in contract.criteria)
         return SceneDecision(

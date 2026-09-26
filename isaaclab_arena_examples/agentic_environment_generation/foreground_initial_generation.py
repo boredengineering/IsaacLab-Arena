@@ -30,13 +30,14 @@ from .web_api.scene_worker import LEGACY_INPUTS, open_area, read_retained, retai
 class InitialGenerationWorker(ForegroundSceneWorker):
     """Enrich only the coordinator's final post-release send; retain its original budget."""
 
-    def __init__(self, *, area, root, prior, protect, require_prior=True, **kwargs):
+    def __init__(self, *, area, root, prior, protect, require_prior=True, execution_catalogue=None, **kwargs):
         if type(prior) is not RetainedPriorReceipt or type(require_prior) is not bool or not callable(protect):
             raise ValueError("Exact retained prior and protection required")
         super().__init__(**kwargs)
         self._initial_area, self._initial_root = area, root
         self._initial_prior, self._initial_protect = prior, protect
         self._require_prior = require_prior
+        self._execution_catalogue = execution_catalogue
 
     def send(self, prepared, envelope, *, timeout_s):
         owned = self._get(prepared)
@@ -74,6 +75,19 @@ class InitialGenerationWorker(ForegroundSceneWorker):
                 },
                 protect=protect,
             )
+            if owned.contract.schema_version == "5":
+                from .web_api.scene_worker import full_scene_inputs
+
+                payload = packet["inputs"]["scene_payload"]
+                if (
+                    self._execution_catalogue is None
+                    or self._execution_catalogue.sha256 != packet["inputs"]["execution_catalogue_sha256"]
+                ):
+                    raise ValueError("Exact initial generation vocabulary required")
+                packet["inputs"] = full_scene_inputs(owned.contract, self._execution_catalogue) | {
+                    "scene_action": "generate",
+                    "scene_payload": payload,
+                }
             super().send(prepared, json.dumps(packet, allow_nan=False).encode() + b"\n", timeout_s=timeout_s)
 
 
@@ -103,7 +117,7 @@ class InitialGenerationReceiver(ForegroundGenerationReceiver):
             binding = payload["request"]["binding"]
             snapshot = RetainedPriorArtifacts(area).verified_snapshot(
                 RetainedPriorReceipt(**request["prior"]),
-                prompt=owned.inputs["prompt"],
+                prompt=owned.contract.source.prompt if owned.contract.schema_version == "5" else owned.inputs["prompt"],
                 contract_digest=binding["contract_digest"],
                 run_id=binding["run_id"],
                 protect=protect,

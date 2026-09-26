@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import re
+import select
 import signal
 import socket
 import sys
@@ -29,6 +30,101 @@ from isaaclab_arena.agentic_environment_generation.workflow import native_worker
 from isaaclab_arena.agentic_environment_generation.workflow.native_capture import NativeCaptureProducer
 from isaaclab_arena.agentic_environment_generation.workflow.native_resources import native_scratch_root
 from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import SceneEvidenceArtifacts
+
+
+class _RenewalChannel:
+    """Receive fenced renewals independently of the simulator's main thread."""
+
+    def __init__(self, request, *, emit):
+        import threading
+
+        if not callable(emit):
+            raise PermissionError("Owned renewal channel required")
+        self.request = request
+        self.state = protocol.owned_supervision(request)
+        self.emit = emit
+        self._timer = None
+        self._deadline_lock = threading.RLock()
+        self._hard_deadline = None
+        self.finished = threading.Event()
+        self.fd = os.dup(sys.stdin.fileno())
+        null = os.open(os.devnull, os.O_RDONLY)
+        try:
+            os.dup2(null, sys.stdin.fileno())
+        finally:
+            os.close(null)
+        self._arm_lease()
+        self.emit({"supervision_ack": self.state.retained_state()["last_acknowledgement"]})
+        self.thread = threading.Thread(target=self._read, name="native-renewals", daemon=True)
+        self.thread.start()
+
+    def arm(self, deadline):
+        """Use monotonic supervision; the separate parent can stop blocked Kit."""
+        import threading
+
+        with self._deadline_lock:
+            if self._timer is not None:
+                self._timer.cancel()
+            self._hard_deadline = deadline
+
+            def expired():
+                with self._deadline_lock:
+                    if self._hard_deadline == deadline and time.monotonic() >= deadline:
+                        os.kill(os.getpid(), signal.SIGKILL)
+
+            self._timer = threading.Timer(max(0.0, deadline - time.monotonic()), expired)
+            self._timer.daemon = True
+            self._timer.start()
+
+    def _arm_lease(self):
+        deadline = self.state.cursor.monotonic_deadline
+        assert deadline is not None, "Accepted supervision deadline required"
+        self.arm(deadline + 10.0)
+
+    def _read(self):
+        from isaaclab_arena.agentic_environment_generation.workflow.attempts import AuthorizationSnapshot
+        from isaaclab_arena.agentic_environment_generation.workflow.control_protocol import SupervisionLease
+
+        buffer = b""
+        try:
+            while not self.finished.is_set():
+                self.state.check_active()
+                if not select.select([self.fd], [], [], 0.5)[0]:
+                    continue
+                chunk = os.read(self.fd, 4096)
+                if not chunk:
+                    raise PermissionError("Owned parent renewal channel closed")
+                buffer += chunk
+                if len(buffer) > 8192:
+                    raise ValueError("Renewal frame exceeds bound")
+                while b"\n" in buffer:
+                    line, buffer = buffer.split(b"\n", 1)
+                    value = json.loads(line)
+                    if type(value) is not dict or set(value) != {"supervision_renewal"}:
+                        raise ValueError("Renewal frame required")
+                    body = value["supervision_renewal"]
+                    if type(body) is not dict or set(body) != {"lease", "authority"}:
+                        raise ValueError("Bound renewal metadata required")
+                    lease = SupervisionLease.model_validate_json(json.dumps(body["lease"]))
+                    authority = AuthorizationSnapshot.model_validate_json(json.dumps(body["authority"]))
+                    ack = self.state.accept(lease, authority)
+                    if self.finished.is_set():
+                        return
+                    self._arm_lease()
+                    self.emit({"supervision_ack": ack})
+        except BaseException as error:
+            if not self.finished.is_set():
+                self.state.revoke(error)
+                os.kill(os.getpid(), signal.SIGTERM)
+
+    def finish(self):
+        """End workload authority while permitting bounded independent cleanup."""
+        if self.finished.is_set():
+            return
+        self.finished.set()
+        self.thread.join(timeout=1)
+        os.close(self.fd)
+        self.arm(time.monotonic() + 60.0)
 
 
 def open_area(packet):
@@ -79,11 +175,20 @@ def _configure_native_tmp(scratch_root):
         return directory.path
 
 
-def _validate_spec(candidate):
+def _validate_spec(candidate, semantic_digest=None):
     # Schema/registry imports are deliberately after Kit initialization.
+    import hashlib
+
     from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
-    return ArenaEnvGraphSpec.model_validate_json(candidate.scene_json)
+    if hashlib.sha256(candidate.scene_json.encode("utf-8")).hexdigest() != candidate.digest:
+        raise ValueError("Canonical candidate identity changed")
+    spec = ArenaEnvGraphSpec.model_validate_json(candidate.scene_json)
+    if semantic_digest is not None:
+        actual = hashlib.sha256(protocol.canonical(spec.model_dump(mode="json"))).hexdigest()
+        if actual != semantic_digest:
+            raise ValueError("Validated semantic identity changed")
+    return spec
 
 
 def _diagnostic_message(cause):
@@ -115,30 +220,48 @@ def _diagnostic_message(cause):
     return "".join(c if c.isprintable() or c == "\n" else " " for c in message)[:2048]
 
 
-def execute(packet, *, protect, action, arm_deadline=None, on_retained=None):
+def execute(packet, *, protect, action, arm_deadline=None, on_retained=None, on_protocol=None):
     """Execute once in the child; optional timer seam is supplied by main, not JSON."""
+    from isaaclab_arena.agentic_environment_generation.workflow.control_protocol import legacy_monotonic_deadline
+
     if protocol.packet_action(packet) != action:
         raise ValueError("fixed child stage mismatch")
     with open_area(packet) as area:
         request = protocol.read_request(area, packet, protect=protect)
         _verify_identity(request)
         # Sample monotonic first to avoid extending the wall deadline by conversion work.
-        mono = time.monotonic()
-        deadline = mono + request.deadline - time.time()
-        if deadline <= mono:
-            raise TimeoutError("expired stage release")
-        if arm_deadline is not None:
-            arm_deadline(deadline)
+        renewable = request.contract.schema_version == "5" and action == "capture"
+        renewals = _RenewalChannel(request, emit=on_protocol) if renewable else None
+        deadline = None
+        if renewals is None:
+            mono = time.monotonic()
+            deadline = legacy_monotonic_deadline(request.deadline, wall_now=time.time(), monotonic_now=mono)
+            if arm_deadline is not None:
+                arm_deadline(deadline)
+
+        previous_term_handler = None
+        if renewals is not None:
+            previous_term_handler = signal.getsignal(signal.SIGTERM)
+
+            def stopped(signum, frame):
+                raise renewals.state.first_failure or PermissionError("Owned execution stopped")
+
+            signal.signal(signal.SIGTERM, stopped)
 
         def active():
+            if renewals is not None:
+                return renewals.state.check_active()
+            assert deadline is not None, "Transport deadline required"
             if time.monotonic() >= deadline:
                 raise TimeoutError("stage deadline exhausted")
+            return None
 
         active()
         if action == "assess":
             observation = protocol.numeric_evaluate(area, request, protect=protect)
             active()
             return protocol.retain_result(area, packet, observation.model_dump(mode="json"), protect=protect)
+        capture_options = {}
         producer = NativeCaptureProducer(
             settings=request.settings,
             artifacts=SceneEvidenceArtifacts(area),
@@ -156,7 +279,29 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None):
             app = _initialize_kit(request.settings)
             active()
             phase = "validate_spec"
-            spec = _validate_spec(request.candidate)
+            if request.contract.schema_version == "5":
+                spec = _validate_spec(request.candidate, request.validated_semantic_digest)
+            else:
+                spec = _validate_spec(request.candidate)
+            if renewals is not None:
+                from isaaclab_arena.agentic_environment_generation.workflow.native_capture import IsaacCaptureAdapter
+
+                adapter = IsaacCaptureAdapter(
+                    request.settings, request.contract, spec, request.candidate, request.original
+                )
+                scope, _, _, _ = protocol.control_values(request)
+                capture_options = dict(
+                    sample_state=adapter.sample_state,
+                    build_environment=adapter.build_environment,
+                    read_reset_count=adapter.read_reset_count,
+                    read_frame_clock=adapter.read_frame_clock,
+                    acquire_images=adapter.acquire_images,
+                    read_diagnostics=adapter.retained_diagnostics,
+                    supervision=renewals.state,
+                    control_scope=scope,
+                    control_instance=renewals.state.cursor.expected[1],
+                    control_principal=renewals.state.cursor.expected[2],
+                )
             charged = 0
 
             def charge(step):
@@ -175,6 +320,7 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None):
                 worker_initialized=True,
                 kit_cameras_enabled=bool(request.settings.camera_keys),
                 deadline=deadline,
+                **capture_options,
                 charge_step=charge,
                 check_active=active,
             )
@@ -183,6 +329,8 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None):
             reference = protocol.capture_reference(result.receipt)
             protocol.reopen_capture(area, request, reference, protect=protect)
             receipt = protocol.retain_result(area, packet, reference, protect=protect)
+            if renewals is not None:
+                renewals.finish()
             if on_retained is not None:
                 # Kit may terminate this interpreter during close. Publish the
                 # exact retained handle first; the parent still requires zero
@@ -219,22 +367,42 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None):
                     dict(location=list(item["loc"]), type=item["type"])
                     for item in cause.errors(include_input=False, include_context=False, include_url=False)[:24]
                 ]
-            protocol._retain(area, "native-scene-failure", request.binding(), diagnostic, protect)
+            try:
+                protocol._retain(area, "native-scene-failure", request.binding(), diagnostic, protect)
+            except BaseException as retention_error:
+                from isaaclab_arena_examples.agentic_environment_generation.foreground_generation import (
+                    DiagnosticRetentionFailed,
+                )
+
+                if on_protocol is not None:
+                    on_protocol({"diagnostic_retention_failed": diagnostic})
+                raise DiagnosticRetentionFailed(diagnostic) from retention_error
             raise
         finally:
             try:
+                if renewals is not None:
+                    renewals.finish()
+                    signal.signal(signal.SIGTERM, previous_term_handler)
                 if app is not None:
                     app.close()
             except BaseException:
                 if failure is None:
                     raise
-                failure.add_note("Kit shutdown also failed")
-        active()
+                note = getattr(failure, "add_note", None)
+                if callable(note):
+                    note("Kit shutdown also failed")
+        if renewals is None:
+            active()
         return receipt
 
 
 def _arm_deadline(deadline):
-    signal.signal(signal.SIGALRM, signal.SIG_DFL)
+    import threading
+
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGALRM, signal.SIG_DFL)
+    elif signal.getsignal(signal.SIGALRM) != signal.SIG_DFL:
+        raise RuntimeError("Unexpected kernel supervision handler")
     seconds = deadline - time.monotonic()
     if seconds <= 0:
         raise TimeoutError("stage deadline exhausted before arming")
@@ -268,19 +436,30 @@ def main(argv=None):
         # Isolate native C/C++ writes to fd 1 as well as Python stdout.
         with os.fdopen(os.dup(sys.stdout.fileno()), "w") as channel, open(os.devnull, "w") as sink:
             os.dup2(sink.fileno(), sys.stdout.fileno())
+            import threading
+
+            output_lock = threading.RLock()
+
+            def emit(message):
+                protocol._protected(message, protect)
+                with output_lock:
+                    channel.write(json.dumps(message, allow_nan=False) + "\n")
+                    channel.flush()
 
             def publish(receipt):
                 nonlocal published
                 if published:
                     raise ValueError("duplicate native result frame")
-                message = {"result": receipt}
-                protocol._protected(message, protect)
-                channel.write(json.dumps(message, allow_nan=False) + "\n")
-                channel.flush()
+                emit({"result": receipt})
                 published = True
 
             receipt = execute(
-                packet, protect=protect, action=args.stage, arm_deadline=_arm_deadline, on_retained=publish
+                packet,
+                protect=protect,
+                action=args.stage,
+                arm_deadline=_arm_deadline,
+                on_retained=publish,
+                on_protocol=emit,
             )
             if not published:
                 publish(receipt)

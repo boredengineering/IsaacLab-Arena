@@ -79,26 +79,51 @@ class SceneEvidenceArtifacts:
         self.area = area
 
     @staticmethod
-    def _binding(candidate, cohort):
+    def _binding(candidate, cohort, assessment_id=None):
         candidate = CandidateBinding.model_validate(candidate)
         cohort = EvidenceCohort.model_validate(cohort)
         if (candidate.contract_digest, candidate.profile_digest) != (cohort.contract_digest, cohort.profile_digest):
             raise ValueError("candidate/cohort mismatch")
-        return {
+        binding = {
             "codec": "scene-evidence-v1",
             "candidate": candidate.model_dump(mode="json"),
             "cohort": cohort.model_dump(mode="json"),
         }
+        if assessment_id is not None:
+            _digest(assessment_id)
+            binding.update(codec="scene-derived-evidence-v1", assessment_id=assessment_id)
+        return binding
+
+    @staticmethod
+    def _version(binding):
+        selected = binding["cohort"]
+        if "assessment_id" in binding:
+            selected = dict(cohort=selected, assessment_id=binding["assessment_id"])
+        return hashlib.sha256(canonical(selected)).hexdigest()
 
     def write(self, candidate, cohort, payload, *, protect):
         """Write observation or visual-answer data and verify actual retained bytes."""
-        binding = self._binding(candidate, cohort)
-        if type(payload) is not dict or payload.get("kind") not in ("observation", "visual-answer"):
+        if type(payload) is not dict or payload.get("kind") not in (
+            "observation",
+            "visual-answer",
+            "numeric-assessment",
+            "diagnostic",
+        ):
             raise ValueError("unsupported evidence kind")
+        assessment_id = (
+            payload["assessment_id"]
+            if payload.get("codec") in ("full-scene-answer-v1", "retained-numeric-v1", "root-xy-diagnostic-v1")
+            else None
+        )
+        if payload["kind"] in ("numeric-assessment", "diagnostic") and assessment_id is None:
+            raise ValueError("versioned derived assessment required")
+        binding = self._binding(candidate, cohort, assessment_id)
+        if assessment_id is not None:
+            self._source_receipt(candidate, cohort, payload, protect)
         envelope = dict(binding, payload=payload)
         raw = _protected(envelope, protect)
         # Cohort identity excludes candidate so changed candidates cannot reuse it.
-        version = hashlib.sha256(canonical(binding["cohort"])).hexdigest()
+        version = self._version(binding)
         family = "scene-" + payload["kind"]
         files = {"evidence.json": raw}
         manifest = self.area.expected_manifest(version, files, binding)
@@ -110,9 +135,9 @@ class SceneEvidenceArtifacts:
         self.verified_payload(receipt, protect=protect)
         return receipt
 
-    def load_receipt(self, candidate, cohort, *, kind, manifest_digest, protect):
+    def load_receipt(self, candidate, cohort, *, kind, manifest_digest, protect, assessment_id=None):
         """Reopen one exact final receipt, without scans or caller verification flags."""
-        if kind not in ("observation", "visual-answer"):
+        if kind not in ("observation", "visual-answer", "numeric-assessment", "diagnostic"):
             raise ValueError("unsupported evidence kind")
         if (
             type(manifest_digest) is not str
@@ -120,8 +145,8 @@ class SceneEvidenceArtifacts:
             or any(c not in "0123456789abcdef" for c in manifest_digest)
         ):
             raise ValueError("exact evidence manifest digest required")
-        binding = self._binding(candidate, cohort)
-        version = hashlib.sha256(canonical(binding["cohort"])).hexdigest()
+        binding = self._binding(candidate, cohort, assessment_id)
+        version = self._version(binding)
         family = "scene-" + kind
         manifest = self.area.read_final_manifest(family, version, binding=binding)
         if manifest["digest"] != manifest_digest:
@@ -139,8 +164,8 @@ class SceneEvidenceArtifacts:
 
     def verified_payload(self, receipt, *, protect):
         """Re-read exact manifest and bytes, screen current policy, and re-sync."""
-        binding = self._binding(receipt.candidate, receipt.cohort)
         manifest = json.loads(receipt.manifest_json)
+        binding = self._binding(receipt.candidate, receipt.cohort, manifest["binding"].get("assessment_id"))
         if canonical(manifest["binding"]) != canonical(binding):
             raise ValueError("receipt binding mismatch")
         with self.area.writer_lock():
@@ -154,4 +179,45 @@ class SceneEvidenceArtifacts:
                 raise ValueError("noncanonical evidence bytes")
             _, family, version = receipt.relative_directory.split("/")
             self.area.promote(version, family, version, manifest)
+        if "assessment_id" in binding:
+            if envelope["payload"].get("assessment_id") != binding["assessment_id"]:
+                raise ValueError("derived evidence identity mismatch")
+            self._source_receipt(receipt.candidate, receipt.cohort, envelope["payload"], protect)
         return envelope["payload"]
+
+    def _source_receipt(self, candidate, cohort, payload, protect):
+        if (payload.get("kind"), payload.get("codec")) not in (
+            ("visual-answer", "full-scene-answer-v1"),
+            ("numeric-assessment", "retained-numeric-v1"),
+            ("diagnostic", "root-xy-diagnostic-v1"),
+        ):
+            raise ValueError("unsupported derived evidence codec")
+        _digest(payload.get("source_manifest_digest"))
+        return self.load_receipt(
+            candidate,
+            cohort,
+            kind="observation",
+            manifest_digest=payload["source_manifest_digest"],
+            protect=protect,
+        )
+
+
+def _digest(value):
+    if type(value) is not str or len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
+        raise ValueError("exact immutable evidence digest required")
+    return value
+
+
+def assessment_identity(family, source_manifest_digest, selection):
+    """Identify a derived evaluation without rewriting the source contract/coverage."""
+    _digest(source_manifest_digest)
+    return hashlib.sha256(
+        canonical(
+            dict(
+                codec="derived-assessment-identity-v1",
+                family=family,
+                source_manifest_digest=source_manifest_digest,
+                selection=selection,
+            )
+        )
+    ).hexdigest()

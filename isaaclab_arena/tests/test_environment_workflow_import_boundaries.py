@@ -552,6 +552,12 @@ def test_foreground_authority_cold_construction_has_no_web_or_effect_dependencie
     import sys
     from types import SimpleNamespace
 
+    from pydantic import BaseModel
+
+    # Initialize the allowed schema dependency before denying Arena ambient IO.
+    assert BaseModel.__module__ == "pydantic.main"
+    preexisting_modules = set(sys.modules)
+
     example = "isaaclab_arena_examples.agentic_environment_generation"
     forbidden = (
         example + ".web_api",
@@ -666,7 +672,7 @@ def test_foreground_authority_cold_construction_has_no_web_or_effect_dependencie
         assert blocked == [] and transport_imports == []
         assert not any(
             name == item or name.startswith(item + ".")
-            for name in sys.modules
+            for name in sys.modules.keys() - preexisting_modules
             for item in (example + ".web_api", "sqlite3")
         )
 

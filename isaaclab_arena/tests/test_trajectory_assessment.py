@@ -802,6 +802,38 @@ def test_native_settle_is_blocking_raw_strict_bounded_and_single_reset(
         assert list(result["frames"]) == ["step_000003_wrist", "step_000004_wrist"]
     assert holds == [env]
     assert calls == ([] if already_reset else ["reset"]) + ["hold"] * env.steps
+    if velocity == 0.001 and terminal is None and not already_reset:
+        from dataclasses import replace
+
+        selected = replace(settings, codec="native-settle-v2", linear_velocity_limit=0.001, unsettled_policy="record")
+        calls.clear()
+        charges.clear()
+        samples.clear()
+        observed = []
+        measured = initialize_and_settle(
+            Env(),
+            settings=selected,
+            charge_step=charges.append,
+            sample_velocities=measure,
+            hold_action_factory=lambda _: "hold",
+            observe_step=lambda _env, step, _obs: observed.append(step),
+        )
+        assert measured.report["all_objects_settled"] is False
+        assert measured.report["reason"] == "unsettled"
+        assert measured.report["collection_status"] == "complete"
+        assert observed == [0, 1, 2, 3]
+        calls.clear()
+        charges.clear()
+        samples.clear()
+        relaxed = initialize_and_settle(
+            Env(),
+            settings=replace(selected, linear_velocity_limit=0.002),
+            charge_step=charges.append,
+            sample_velocities=measure,
+            hold_action_factory=lambda _: "hold",
+        )
+        assert relaxed.report["all_objects_settled"] is True
+        assert relaxed.report["linear_speed_limit"] == 0.002
 
 
 @pytest.mark.parametrize("shape", [(1, 3), (2, 3)])
@@ -1081,6 +1113,433 @@ def test_native_capture_settings_are_executable_frozen_sha_bound():
         settings.seed = 18
     with pytest.raises(ValueError):
         settings.subjects[0].scene_name = "other"
+
+
+def test_native_diagnostic_uses_validated_background_identity():
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.native_capture import IsaacCaptureAdapter
+
+    adapter = IsaacCaptureAdapter.__new__(IsaacCaptureAdapter)
+    adapter.spec = SimpleNamespace(background=SimpleNamespace(id="workbench"))
+    adapter.candidate = SimpleNamespace(scene_json='{"background":{"id":"workbench"}}')
+    assert adapter.background_scene_name() == "workbench"
+
+
+def test_native_camera_geometry_binds_source_and_encoded_frames():
+    import io
+    import numpy as np
+
+    from PIL import Image
+
+    from isaaclab_arena.agentic_environment_generation.workflow import native_capture
+
+    transform = native_capture.NativeImageTransform()
+    pixels = np.zeros((1, 240, 320, 3), dtype=np.uint8)
+    matrix = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [2.0, 3.0, 4.0, 1.0]]
+    arguments = dict(
+        camera_to_world=matrix,
+        source_shape_hw=pixels.shape[1:3],
+        clipping_range=(0.01, 10.0),
+        meters_per_unit=1.0,
+        image_transform=transform,
+    )
+    value = native_capture.camera_geometry(**arguments)
+    encoded = native_capture.encode_native_rgb(pixels, transform)
+    with Image.open(io.BytesIO(encoded)) as image:
+        assert value["encoded_image_shape_hw"] == [image.height, image.width]
+    assert value["camera_to_world_row_matrix"] == matrix
+    assert value["camera_axes"] == "usd_camera_negative_z_forward_positive_y_up"
+    assert value["source_image_shape_hw"] == [240, 320]
+    assert value["clipping_range_m"] == [0.01, 10.0]
+    assert value["image_transform"] == transform.model_dump(mode="json")
+    for changed in (
+        {"camera_to_world": [[float("nan")] * 4] * 4},
+        {"clipping_range": (10.0, 0.01)},
+        {"source_shape_hw": (0, 320)},
+        {"meters_per_unit": 0.01},
+    ):
+        with pytest.raises(ValueError):
+            native_capture.camera_geometry(**(arguments | changed))
+
+
+@pytest.mark.parametrize("image_steps", [(0, 2, 3), (3,)])
+def test_parameterized_capture_settings_consume_stationary_selection(tmp_path, monkeypatch, image_steps):
+    import time
+
+    from isaaclab_arena.agentic_environment_generation.workflow import native_capture
+    from isaaclab_arena.agentic_environment_generation.workflow.attempts import AuthorizationSnapshot
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import WorkflowContract, contract_digest
+    from isaaclab_arena.agentic_environment_generation.workflow.control_protocol import SupervisionLease
+    from isaaclab_arena.agentic_environment_generation.workflow.native_capture import (
+        NativeCaptureProducer,
+        NativeCaptureSettings,
+    )
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import identity
+    from isaaclab_arena.agentic_environment_generation.workflow.scope_binding import ScopeBinding
+
+    raw = _native_capture_settings().model_dump(mode="json")
+    legacy_bytes = _native_capture_settings().canonical_bytes()
+    mixed = NativeCaptureSettings.model_validate_json(legacy_bytes).model_dump(mode="json")
+    mixed["criteria"][0].update(
+        evaluator_version="numeric-v2",
+        rubric="selected velocity norm",
+        parameters=dict(
+            metric="linear_speed",
+            reference_frame="world",
+            clock="control_step",
+            sample_steps=list(range(mixed["window"]["start_step"], mixed["window"]["end_step"] + 1)),
+            temporal_aggregation="all",
+            subject_aggregation="all",
+            missing_data="reject",
+            invalid_data="reject",
+        ),
+    )
+    with pytest.raises(ValueError, match="Legacy capture"):
+        NativeCaptureSettings.model_validate(mixed)
+    raw.update(
+        codec="native-capture-v2",
+        evaluator_version="numeric-v2",
+        max_runtime_seconds=None,
+        settle_linear_m_per_s=0.002,
+        settle_angular_rad_per_s=0.02,
+        camera_keys=[],
+        window=dict(start_step=1, end_step=3),
+    )
+    for name in ("evaluator_linear_m_per_s", "evaluator_angular_rad_per_s", "evaluator_xy_m"):
+        raw.pop(name)
+    selected = raw["criteria"][0]
+    selected.update(
+        evidence_producer="scene.settled",
+        evaluator_version="numeric-v2",
+        rubric="selected stationary limits",
+        limit=dict(operator="eq", value=1.0, unit="boolean"),
+        observation_window=raw["window"],
+        parameters=dict(
+            metric="stationary",
+            reference_frame="world",
+            clock="control_step",
+            sample_steps=[1, 2, 3],
+            temporal_aggregation="all",
+            subject_aggregation="all",
+            missing_data="reject",
+            invalid_data="reject",
+            linear_limit=dict(operator="lt", value=0.002, unit="m_per_s"),
+            angular_limit=dict(operator="lt", value=0.02, unit="rad_per_s"),
+        ),
+    )
+    raw["criteria"] = [selected]
+    raw["acquisition"] = dict(
+        codec="explicit-acquisition-v1",
+        adapter="droid-rigid-world-v1",
+        clock="control_step",
+        reference_frame="world",
+        control_dt_seconds=0.02,
+        horizon_steps=3,
+        subjects=["object"],
+        state_steps=[1, 2, 3],
+        images=[],
+        renderer_update_steps=[],
+        displacement_step=3,
+    )
+    settings = NativeCaptureSettings.model_validate(raw)
+    settle = settings.settle_settings()
+    assert (settle.linear_velocity_limit, settle.angular_velocity_limit) == (0.002, 0.02)
+    assert (settle.linear_operator, settle.angular_operator, settle.unsettled_policy) == ("lt", "lt", "record")
+    assert NativeCaptureSettings.model_validate_json(settings.canonical_bytes()) == settings
+    assert NativeCaptureSettings.model_validate_json(legacy_bytes).canonical_bytes() == legacy_bytes
+    assert "acquisition" not in NativeCaptureSettings.model_validate_json(legacy_bytes).model_dump(mode="json")
+    # Existing pure callback fixture, not Kit or a native launch. Exercise actual
+    # settle/capture handoff and image-only step ownership in the new producer.
+    raw["camera_keys"] = ["wrist_camera_rgb", "external_camera_rgb"] if len(image_steps) > 1 else ["wrist_camera_rgb"]
+    raw["window"] = dict(start_step=min(1, *image_steps), end_step=3)
+    raw["acquisition"] = {
+        **raw["acquisition"],
+        "images": [
+            dict(camera="external_camera_rgb" if s == 2 else "wrist_camera_rgb", step=s, modality="rgb")
+            for s in image_steps
+        ],
+        "renderer_update_steps": list(image_steps),
+    }
+    settings = NativeCaptureSettings.model_validate(raw)
+    fixture = _native_capture_fixture(tmp_path, monkeypatch)
+    try:
+        value = fixture.kwargs["contract"].model_dump(mode="json")
+        value.update(
+            schema_version="5",
+            acquisition=settings.acquisition.model_dump(mode="json"),
+            criteria=[c.model_dump(mode="json") for c in settings.criteria],
+            action_policy=dict(
+                codec="scene-action-policy-v1",
+                on_unknown="stop",
+                on_false="stop",
+                target_subject=None,
+                mechanism=None,
+                goal_criterion_id=None,
+                prerequisite_criterion_ids=[],
+                observation=None,
+            ),
+        )
+        value["execution"].update(
+            runtime=settings.runtime_reference().model_dump(), capture=settings.capture_reference().model_dump()
+        )
+        value["budget"].update(
+            max_runtime_seconds=None,
+            total_deadline_seconds=None,
+            max_model_tokens=None,
+            max_cost_usd=None,
+            policy=dict(
+                codec="experiment-policy-v1",
+                runtime="accounting_only",
+                deadline="accounting_only",
+                model_tokens="accounting_only",
+                cost="accounting_only",
+            ),
+            control=dict(
+                codec="renewable-control-v1",
+                max_supervision_lease_seconds=60.0,
+                heartbeat_seconds=20.0,
+                max_credential_lifetime_seconds=300.0,
+                client_descriptor_schema="2",
+            ),
+        )
+        contract = WorkflowContract.model_validate(value)
+        adapter = native_capture.IsaacCaptureAdapter(
+            settings,
+            contract,
+            fixture.kwargs["spec"],
+            fixture.kwargs["candidate"],
+            fixture.kwargs["candidate"],
+        )
+        with pytest.raises(ValueError, match="Explicit rigid-root"):
+            native_capture.IsaacCaptureAdapter(fixture.settings, contract, None, None, None)
+        with pytest.raises(ValueError):
+            NativeCaptureSettings.model_validate(raw | {"ik_subjects": ["object"]})
+        monkeypatch.setattr(adapter, "clocks", lambda env: {"control_step": 1})
+        with pytest.raises(ValueError, match="Unscheduled native render"):
+            adapter.acquire_images(fixture.env, 1, settings.camera_keys, {})
+        from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import ScenePortProfile
+        from isaaclab_arena.agentic_environment_generation.workflow.split_scene_ports import SplitScenePorts
+
+        profile = ScenePortProfile(
+            codec_version=2,
+            workflow_schema="5",
+            port_id="configurable",
+            assurance="native-unverified",
+            owned_worker=True,
+            producer_ids=("scene.settled",),
+            capture=dict(
+                model_calls=0,
+                model_tokens=0,
+                cost_ceiling_usd=0.0,
+                runtime_allowance_seconds=None,
+                time_policy="accounting_only",
+                realizations=1,
+                observations=1,
+                steps=3,
+            ),
+            assess=dict(model_calls=0, model_tokens=0, cost_ceiling_usd=0.0, runtime_allowance_seconds=10.0),
+            repair=dict(model_calls=0, model_tokens=0, cost_ceiling_usd=0.0, runtime_allowance_seconds=0.0),
+        )
+        admission_producer = NativeCaptureProducer(
+            settings=settings, artifacts=fixture.artifacts, protect=lambda _: None, output_root=tmp_path
+        )
+        support = SplitScenePorts(
+            profile=profile,
+            artifacts=fixture.artifacts,
+            protect=lambda _: None,
+            authorize=None,
+            ready=None,
+            refine=None,
+            visual=None,
+            model_ceilings={},
+            capture_start_step=settings.window.start_step,
+            capture_steps=settings.window.end_step - settings.window.start_step,
+            capture_timeout_seconds=None,
+            capture_stage=lambda *a: pytest.fail("admission must not capture"),
+            native_producer=admission_producer,
+            output_root=tmp_path,
+            direct_root_subjects=("object",),
+            displacement_tolerance_m=0.001,
+            check_active=lambda: None,
+        )
+        assert support.admit(contract) == settings.criteria
+        assert support.require_bounded_capability(None, contract, profile.capture) is True
+        from types import SimpleNamespace
+
+        from isaaclab_arena.agentic_environment_generation.workflow.application import ForegroundWorkflow
+
+        existing = WorkflowContract.model_validate(
+            value
+            | {
+                "source": {
+                    "kind": "existing",
+                    "identity": "retained-source",
+                    "content": fixture.kwargs["candidate"].scene_json,
+                },
+                "execution": value["execution"] | {"generation_model": None, "assessment_model": None},
+            }
+        )
+        app = ForegroundWorkflow.__new__(ForegroundWorkflow)
+        app._support = support
+        app.generation_reservation = None
+        app.authority = SimpleNamespace(
+            protect_workflow_contract=lambda *a: None,
+            require_workflow_model_bounds=lambda *a: {},
+        )
+        app._preflight("operator", existing)
+        from isaaclab_arena.environment_spec.execution_catalogue import ExecutionCatalogue
+        from isaaclab_arena_examples.agentic_environment_generation.web_api.scene_worker import (
+            checked_full_scene_inputs,
+            full_scene_inputs,
+        )
+
+        catalogue = ExecutionCatalogue({
+            "assets": {"embodiments": [], "backgrounds": [], "objects": [{"name": "test-object", "tags": ["object"]}]},
+            "relations": {"relations": []},
+            "tasks": {"tasks": []},
+        })
+        inputs = full_scene_inputs(existing, catalogue)
+        assert "prompt" not in inputs and "retrieval_policy" not in inputs
+        checked_contract, checked_catalogue = checked_full_scene_inputs(inputs)
+        assert checked_contract.source.content == existing.source.content
+        assert checked_catalogue.sha256 == catalogue.sha256
+        scope = ScopeBinding(
+            schema_version=1,
+            authority_id="authority",
+            operational_schema_version=1,
+            artifact_marker_schema=1,
+            store_id="store",
+            registry_id="registry",
+            database="db",
+            deployment_id="deployment",
+            workspace_id="workspace",
+        )
+        now = time.time()
+        authority = AuthorizationSnapshot(
+            database="db",
+            deployment_id="deployment",
+            workspace_id="workspace",
+            principal="operator",
+            grant_ref="grant",
+            contract_digest=contract_digest(contract),
+            expires_at=now + 30,
+            capabilities=("native_validation",),
+        )
+        lease = SupervisionLease(
+            codec="supervision-lease-v1",
+            fence=fixture.kwargs["intent"].worker_fence,
+            scope_sha256=scope.body_sha256,
+            instance="instance",
+            principal="operator",
+            contract_digest=contract_digest(contract),
+            generation=1,
+            credential_generation=1,
+            allocation_digest=identity(fixture.kwargs["intent"].reservation.model_dump(mode="json")),
+            credential_expires_at=now + 30,
+            issued_at=now,
+            expires_at=now + 10,
+        )
+        fixture.env.unwrapped.scene["object"].data.root_lin_vel_w[0, 0] = 0.003
+        producer = NativeCaptureProducer(
+            settings=settings, artifacts=fixture.artifacts, protect=lambda _: None, output_root=tmp_path / "explicit"
+        )
+        renderer_updates = []
+        fixture.env.missing_camera = True
+
+        def acquire_images(env, step, keys, observation):
+            assert step in image_steps and observation["camera_obs"] == {}
+            assert tuple(keys) == tuple(image.camera for image in settings.acquisition.images if image.step == step)
+            renderer_updates.append(step)
+            env.missing_camera = False
+            try:
+                image = env.observation()["camera_obs"]["wrist_camera_rgb"]
+                return {**observation, "camera_obs": dict.fromkeys(keys, image)}
+            finally:
+                env.missing_camera = True
+
+        from isaaclab_arena.agentic_environment_generation.workflow.control_protocol import OwnedSupervision
+
+        channel = OwnedSupervision(
+            policy=getattr(contract.budget, "control"),
+            scope=scope,
+            instance="instance",
+            principal="operator",
+            contract_digest=contract_digest(contract),
+            fence=fixture.kwargs["intent"].worker_fence,
+            allocation_digest=lease.allocation_digest,
+        )
+        channel.accept(lease, authority)
+        original_step = fixture.env.step
+
+        def step_with_renewals(action):
+            value = original_step(action)
+            if fixture.env.steps == 1:
+                for generation in (2, 3):
+                    channel.accept(
+                        lease.model_copy(
+                            update=dict(
+                                generation=generation, issued_at=time.time(), expires_at=lease.expires_at + generation
+                            )
+                        ),
+                        authority,
+                    )
+            return value
+
+        fixture.env.step = step_with_renewals
+        body = fixture.env.unwrapped.scene["object"]
+        fixture.env.unwrapped.scene.rigid_objects = {"object": body}
+        body.data.root_quat_w = body.data.root_lin_vel_w.new_tensor([[1.0, 0.0, 0.0, 0.0]])
+        sampled_steps = []
+
+        def measured_clocks(env):
+            sampled_steps.append(env.steps)
+            return dict(
+                control_step=env.steps,
+                reset_count=fixture.events.count("reset"),
+                physics_step=env.steps * settings.decimation,
+                simulation_time_seconds=env.steps * settings.acquisition.control_dt_seconds,
+            )
+
+        monkeypatch.setattr(adapter, "clocks", measured_clocks)
+        monkeypatch.setattr(adapter, "diagnostics", lambda env, step: {"test_generated_step": step})
+        result = producer(**(
+            fixture.kwargs
+            | dict(
+                contract=contract,
+                deadline=None,
+                check_active=lambda: authority,
+                supervision=channel,
+                control_scope=scope,
+                control_instance="instance",
+                control_principal="operator",
+                sample_state=adapter.sample_state,
+                read_reset_count=lambda _: fixture.events.count("reset"),
+                read_frame_clock=lambda env, _camera: dict(sensor_update_step=env.steps, sensor_sequence=env.steps),
+                acquire_images=acquire_images,
+            )
+        ))
+        payload = fixture.artifacts.verified_payload(result.receipt, protect=lambda _: None)
+        assert sampled_steps == [1, 2, 3]
+        assert all(
+            sample["subjects"]["object"]["orientation_w"] == [1.0, 0.0, 0.0, 0.0] for sample in payload["samples"]
+        )
+        assert [sample["measured_clocks"]["control_step"] for sample in payload["samples"]] == [1, 2, 3]
+        assert [s["step"] for s in payload["samples"]] == [1, 2, 3]
+        assert [f["step"] for f in payload["frames"]] == list(image_steps)
+        assert payload["collection"]["status"] == "complete"
+        assert payload["diagnostics"]["settle"]["all_objects_settled"] is False
+        assert result.observation.evidence[0].verdict == "violated"
+        assert native_capture.capture_failure_category(PermissionError()) == "unsafe_execution"
+        assert native_capture.capture_failure_category(TimeoutError()) == "unsafe_execution"
+        assert native_capture.capture_failure_category(OSError()) == "infrastructure_failure"
+        assert fixture.events.count("reset") == 1 and fixture.charges == [1, 2, 3]
+        assert renderer_updates == list(image_steps)
+    finally:
+        fixture.area.close()
+    raw["settle_linear_m_per_s"] = 0.001
+    with pytest.raises(ValueError, match="stationary"):
+        NativeCaptureSettings.model_validate(raw)
 
 
 def _native_capture_fixture(tmp_path, monkeypatch):
@@ -1630,6 +2089,9 @@ def test_native_capture_parent_import_is_runtime_free(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", guard)
     importlib.reload(native_capture)
+    from isaaclab_arena.agentic_environment_generation.workflow.api import installed_full_scene
+
+    assert installed_full_scene.MODE == "full-scene-workflow-v1"
     _native_capture_settings()
 
 

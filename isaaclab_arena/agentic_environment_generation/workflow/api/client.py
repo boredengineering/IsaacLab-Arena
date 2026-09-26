@@ -104,14 +104,20 @@ DOCUMENTS["generation"] = (
     "manifestDigest disposition artifacts {runId kind referenceId name sha256 totalBytes}} "
     "... on NotFound {code} ... on QueryFailure {code}}}"
 )
+SCIENTIFIC_FIELDS = (
+    "scientificSelection {selectionDigest action reason policyDigest sourceManifestDigest sourceAcquisitionId "
+    "diagnosticManifestDigest diagnosticAssessmentId proposedSceneDigest targetSubject mechanism hypothesisDigest "
+    "beforeWorldXyM proposedAuthoredXyM predictedDeltaWorldXyM requiredEffects canExecute} "
+)
 DOCUMENTS["evidence"] = (
     "query Evidence($id:ID!,$reference:ID!){workflowEvidence(runId:$id,evidenceId:$reference){__typename ... on"
     " EvidenceDetail {runId evidenceId candidateId staticFailure verifiedManifestDigests freshArtifactVerification"
     " cohort{realizationId resetId environmentId windowId frameId contractDigest profileDigest} entries{criterionId"
     " criterionDigest producerId observedCoordinateFrames observedStepWindow subjectIds modality evaluatorVersion"
-    " rubricId candidateDigest manifestDigest verdict limitations cohort{realizationId resetId environmentId windowId"
-    " frameId contractDigest profileDigest}} artifactSelectors{kind referenceId manifestDigest}} ... on NotFound {code}"
-    " ... on QueryFailure {code}}}"
+    " rubricId candidateDigest manifestDigest verdict limitations assessmentId conflict cohort{realizationId resetId"
+    " environmentId windowId frameId contractDigest profileDigest}} "
+    + SCIENTIFIC_FIELDS
+    + "artifactSelectors{kind referenceId manifestDigest}} ... on NotFound {code} ... on QueryFailure {code}}}"
 )
 DOCUMENTS["artifact-inventory"] = (
     "query"
@@ -130,7 +136,9 @@ DOCUMENTS["result"] = (
     " policyOutcome publicationOutcome experimentOutcome retainedAssessmentJson cleanup { projectionRevision"
     " currentScopeOwner { id epoch dirty }   intents { intentId kind registrationId releaseState cleanupState"
     " cleanupEvidenceRef cleanupObservation remoteEffects retiredOwner { id epoch dirty } } }  scene { acceptance"
-    " assessmentStatus selectedAssessed action reason evidenceId assessmentId decisionId   selectedCandidateReference"
+    " assessmentStatus selectedAssessed action reason evidenceId assessmentId decisionId "
+    + SCIENTIFIC_FIELDS
+    + " selectedCandidateReference"
     " { candidateId digest sourceId originalId parentId }   criteria { criterionId requirement verdict"
     " reportedVerdicts manifests } }  budget { reserved { modelCalls modelTokens costCeilingUsd"
     " runtimeAllowanceSeconds candidates revisions realizations steps observations policyEpisodes policySteps }  "
@@ -147,24 +155,84 @@ DOCUMENTS["result"] = (
 
 
 MAX_RESPONSE = 8 * 1024 * 1024
+NUMERIC_FIELDS = (
+    "__typename ... on QueryFailure {code} ... on NumericDerivedResult {"
+    "operationId selectionDigest runId evidenceId candidateId sourceManifestDigest purpose validationContractDigest "
+    "disposition reason assessmentId manifestDigest criterionId evaluatorVersion thresholdOperator thresholdValue "
+    "thresholdUnit verdict conflict limitations originalRunVersion providerSends nativeReleases originalRunAmended "
+    "parameters {metric referenceFrame clock sampleSteps temporalAggregation subjectAggregation targetXyM "
+    "linearLimit {operator value unit} angularLimit {operator value unit} missingData invalidData}}"
+)
+DOCUMENTS["numeric-reassess"] = (
+    "mutation($id:ID!,$selection:NumericSelectionJSON!){reassessWorkflowNumeric(operationId:$id,selection:$selection){"
+    + NUMERIC_FIELDS
+    + "}}"
+)
+DOCUMENTS["numeric-result"] = "query($id:ID!){workflowNumericAssessment(operationId:$id){" + NUMERIC_FIELDS + "}}"
+DOCUMENTS["supervision"] = (
+    "query($id:ID!,$reference:ID!){workflowSupervision(runId:$id,intentId:$reference){__typename ... on QueryFailure"
+    " {code} ... on NativeSupervisionProgress {runId intentId leaseGeneration credentialGeneration expiresAt"
+    " credentialExpiresAt allocationDigest acknowledgedLeaseDigest expired cleanupVerified"
+    " currentWorkloadAuthorityProven}}}"
+)
+DOCUMENTS["scene-inspect"] = (
+    "query Inspection($contract:WorkflowContractJSON!){workflowInspection(contract:$contract){__typename "
+    "... on WorkflowInspection {operationId mode contractDigest selectionDigest settingsDigest catalogueDigest "
+    "sourceKind sourceBytesSha256 canonicalCandidateSha256 validatedSemanticSha256 initialGenerationRequired "
+    "priorStatus admitted providerSends nativeReleases liveAdmissionOrChildExecutionProven "
+    "frozen {schemaVersion budget {maxRuntimeSeconds totalDeadlineSeconds maxModelTokens maxCostUsd "
+    "maxModelCalls maxCandidates maxRevisions maxRealizations maxSteps maxObservations perOperationTimeoutSeconds "
+    "policy {runtime deadline modelTokens cost} control {codec maxSupervisionLeaseSeconds heartbeatSeconds "
+    "maxCredentialLifetimeSeconds clientDescriptorSchema}} criteria {id kind subjects evaluatorVersion "
+    "limit {operator value unit} parameters {metric referenceFrame clock sampleSteps temporalAggregation "
+    "subjectAggregation cameraAggregation targetXyM images {camera step} linearLimit {operator value unit} "
+    "angularLimit {operator value unit}}} acquisition {codec adapter clock referenceFrame controlDtSeconds "
+    "horizonSteps subjects stateSteps rendererUpdateSteps images {camera step} displacementStep} "
+    "actionPolicy {codec onUnknown onFalse targetSubject mechanism goalCriterionId prerequisiteCriterionIds "
+    "displacementToleranceM diagnosticDeltaXyM}}} ... on QueryFailure {code}}}"
+)
 
 
-def descriptor(path):
+def descriptor(path, *, previous=None):
     from ..scope_binding import ScopeBinding
     from .instance import instance_id
     from .private_files import encode
 
-    value = fields(
-        decode(read_private(path, 16384), 16384),
-        "schema_version endpoint instance generation binding principal expires_at bearer",
+    value = decode(read_private(path, 16384), 16384)
+    version = value.get("schema_version") if type(value) is dict else None
+    fields(
+        value,
+        "schema_version endpoint instance generation binding principal expires_at bearer"
+        + (" credential_revision context_handle issued_at" if version == 2 else ""),
     )
     if (
         type(value["schema_version"]) is not int
-        or value["schema_version"] != 1
+        or value["schema_version"] not in (1, 2)
         or type(value["generation"]) is not int
-        or value["generation"] != 1
+        or value["generation"] < 1
+        or (version == 1 and value["generation"] != 1)
     ):
         raise ValueError("Unsupported client descriptor")
+    if version == 2:
+        from ..control_protocol import PrincipalDescriptor
+
+        checked = PrincipalDescriptor.model_validate_json(
+            encode({key: item for key, item in value.items() if key not in {"endpoint", "bearer"}})
+        )
+        if checked.issued_at > time.time() or checked.expires_at - checked.issued_at > 300:
+            raise ValueError("Unsupported credential lifetime")
+    if previous is not None:
+        if any(
+            value[key] != previous[key] for key in ("schema_version", "endpoint", "instance", "binding", "principal")
+        ):
+            raise ValueError("Refreshed client principal or scope differs")
+        old_revision, revision = previous.get("credential_revision", 1), value.get("credential_revision", 1)
+        if (
+            value["generation"] < previous["generation"]
+            or revision < old_revision
+            or (revision == old_revision and value != previous)
+        ):
+            raise ValueError("Stale or conflicting client descriptor")
     selected = instance_id(value["instance"])
     if Path(path).name != "client.json" or Path(path).parent.name != selected:
         raise ValueError("Client instance differs")
@@ -190,6 +258,7 @@ def query(
     after=None,
     operation_id=None,
     raw_contract=None,
+    raw_selection=None,
     expected_version=None,
     renew_authorization=None,
     reference_id=None,
@@ -221,6 +290,9 @@ def query(
         "evidence",
         "artifact-inventory",
         "assessment",
+        "numeric-reassess",
+        "numeric-result",
+        "supervision",
     }:
         if type(identifier) is not str or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", identifier) is None:
             raise ValueError("Invalid query identity")
@@ -252,6 +324,7 @@ def query(
                 ("GENERATION", "CANDIDATE_YAML"),
                 ("GENERATION", "PROVENANCE_JSON"),
                 ("EVIDENCE", "EVIDENCE_JSON"),
+                ("NUMERIC_ASSESSMENT", "EVIDENCE_JSON"),
             }
             or type(reference_id) is not str
             or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", reference_id) is None
@@ -265,22 +338,28 @@ def query(
         ):
             raise ValueError("Invalid bounded artifact reference")
         variables.update(kind=kind, reference=reference_id, name=artifact_name, sha=sha256, offset=offset, limit=limit)
-    if operation in {"candidate", "generation", "evidence", "artifact-inventory", "assessment"}:
+    if operation in {"candidate", "generation", "evidence", "artifact-inventory", "assessment", "supervision"}:
         if type(reference_id) is not str or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", reference_id) is None:
             raise ValueError("Invalid retained reference")
         variables["reference"] = reference_id
     if operation == "artifact-inventory":
-        if kind not in {"PRIOR", "CANDIDATE", "GENERATION", "EVIDENCE"}:
+        if kind not in {"PRIOR", "CANDIDATE", "GENERATION", "EVIDENCE", "NUMERIC_ASSESSMENT"}:
             raise ValueError("Invalid artifact kind")
         variables["kind"] = kind
     if operation in {"runs", "events"}:
         if type(first) is not int or not 1 <= first <= 1000:
             raise ValueError("Invalid page size")
         variables.update(first=first, after=None if after is None else text(after, 4096))
-    if operation == "submit":
+    if operation in {"submit", "scene-inspect"}:
         from ..contracts import canonical_json, parse_contract
 
         variables["contract"] = canonical_json(parse_contract(raw_contract))
+    if operation == "numeric-reassess":
+        from ..derived_assessment import NumericReassessmentSelection
+
+        if type(raw_selection) is not str or len(raw_selection.encode("utf-8")) > 65536:
+            raise ValueError("Bounded numeric selection required")
+        variables["selection"] = NumericReassessmentSelection.model_validate_json(raw_selection).model_dump_json()
     if operation in {"cancel", "resume", "result"}:
         if type(operation_id) is not str or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", operation_id) is None:
             raise ValueError("Invalid operation identity")
@@ -293,7 +372,10 @@ def query(
     deadline = now + 10 if deadline is None else min(deadline, now + 10)
     if deadline <= now:
         raise TimeoutError("Query deadline expired")
-    bounded = operation in {"submit", "cancel", "resume", "result"} or supplied_deadline
+    bounded = (
+        operation in {"submit", "cancel", "resume", "result", "scene-inspect", "numeric-reassess", "numeric-result"}
+        or supplied_deadline
+    )
     with _transport_deadline(deadline, enabled=bounded) as trace:
         with httpx.Client(
             trust_env=False, follow_redirects=False, timeout=min(5, deadline - now), cookies=None

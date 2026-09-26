@@ -357,6 +357,75 @@ class CriterionLimit:
 
 
 @strawberry.type
+class ImageSelection:
+    camera: str
+    step: Counter
+
+
+@strawberry.type
+class PredicateParameters:
+    metric: str
+    reference_frame: str
+    clock: str
+    temporal_aggregation: str
+    subject_aggregation: str
+    missing_data: str
+    invalid_data: str
+    sample_steps: list[Counter] | None = None
+    images: list[ImageSelection] | None = None
+    camera_aggregation: str | None = None
+    linear_limit: CriterionLimit | None = None
+    angular_limit: CriterionLimit | None = None
+    target_xy_m: list[DecimalString] | None = None
+
+
+@strawberry.type
+class AcquisitionSchedule:
+    codec: str
+    adapter: str
+    clock: str
+    reference_frame: str
+    control_dt_seconds: DecimalString
+    horizon_steps: Counter
+    subjects: list[str]
+    state_steps: list[Counter]
+    images: list[ImageSelection]
+    renderer_update_steps: list[Counter]
+    displacement_step: Counter | None
+
+
+@strawberry.type
+class ActionPolicy:
+    codec: str
+    on_unknown: str
+    on_false: str
+    target_subject: str | None
+    mechanism: str | None
+    goal_criterion_id: str | None
+    prerequisite_criterion_ids: list[str]
+    observation: AcquisitionSchedule | None
+    displacement_tolerance_m: DecimalString | None
+    diagnostic_delta_xy_m: list[DecimalString] | None
+
+
+@strawberry.type
+class ExperimentPolicy:
+    runtime: str
+    deadline: str
+    model_tokens: str
+    cost: str
+
+
+@strawberry.type
+class ControlPolicy:
+    codec: str
+    max_supervision_lease_seconds: DecimalString
+    heartbeat_seconds: DecimalString
+    max_credential_lifetime_seconds: DecimalString
+    client_descriptor_schema: str
+
+
+@strawberry.type
 class Criterion:
     id: strawberry.ID
     kind: str
@@ -370,6 +439,7 @@ class Criterion:
     start_step: Counter
     end_step: Counter
     limit: CriterionLimit
+    parameters: PredicateParameters | None = None
 
 
 @strawberry.type
@@ -395,7 +465,7 @@ class Intervention:
 class FrozenBudget:
     max_candidates: Counter
     max_revisions: Counter
-    max_runtime_seconds: DecimalString
+    max_runtime_seconds: DecimalString | None
     max_model_calls: Counter
     max_model_tokens: Counter | None
     max_cost_usd: DecimalString | None
@@ -405,7 +475,9 @@ class FrozenBudget:
     max_policy_episodes: Counter
     max_policy_steps: Counter
     per_operation_timeout_seconds: DecimalString
-    total_deadline_seconds: DecimalString
+    total_deadline_seconds: DecimalString | None
+    policy: ExperimentPolicy | None = None
+    control: ControlPolicy | None = None
 
 
 @strawberry.type
@@ -428,6 +500,8 @@ class FrozenIntent:
     execution: ExecutionConfiguration
     budget: FrozenBudget
     effects: Effects
+    acquisition: AcquisitionSchedule | None = None
+    action_policy: ActionPolicy | None = None
 
 
 @strawberry.type
@@ -435,7 +509,7 @@ class ReservationTotals:
     model_calls: Counter
     model_tokens: Counter | None
     cost_ceiling_usd: DecimalString | None
-    runtime_allowance_seconds: DecimalString
+    runtime_allowance_seconds: DecimalString | None
     candidates: Counter
     revisions: Counter
     realizations: Counter
@@ -453,8 +527,9 @@ class InspectionBudget:
     accounting: str
     runtime_accounting: str
     admitted_at: DecimalString
-    deadline: DecimalString
+    deadline: DecimalString | None
     per_operation_ceiling_seconds: DecimalString
+    policy: ExperimentPolicy | None = None
 
 
 @strawberry.type
@@ -600,6 +675,56 @@ class PolicyTrial:
 
 
 @strawberry.type
+class ScientificSelection:
+    selection_digest: Digest
+    action: str
+    reason: str
+    policy_digest: Digest
+    source_manifest_digest: Digest
+    source_acquisition_id: Digest
+    diagnostic_manifest_digest: Digest | None
+    diagnostic_assessment_id: Digest | None
+    proposed_scene_digest: Digest | None
+    target_subject: str | None
+    mechanism: str | None
+    hypothesis_digest: Digest | None
+    before_world_xy_m: list[DecimalString] | None
+    proposed_authored_xy_m: list[DecimalString] | None
+    predicted_delta_world_xy_m: list[DecimalString] | None
+    required_effects: list[str]
+    can_execute: bool
+
+
+def scientific_selection(value):
+    from ..scene_eligibility import SceneActionDecision
+
+    if value is None:
+        return None
+    decision = SceneActionDecision.model_validate(value)
+    hypothesis = decision.hypothesis
+    return ScientificSelection(
+        selection_digest=Digest(decision.digest()),
+        **fields(
+            decision,
+            "action reason policy_digest source_manifest_digest source_acquisition_id "
+            "diagnostic_manifest_digest proposed_scene_digest can_execute",
+        ),
+        diagnostic_assessment_id=None if hypothesis is None else hypothesis.diagnostic_assessment_id,
+        target_subject=None if hypothesis is None else hypothesis.target_subject,
+        mechanism=None if hypothesis is None else hypothesis.mechanism,
+        hypothesis_digest=None if hypothesis is None else Digest(hypothesis.digest()),
+        before_world_xy_m=None if hypothesis is None else [DecimalString(str(v)) for v in hypothesis.before_world_xy_m],
+        proposed_authored_xy_m=(
+            None if hypothesis is None else [DecimalString(str(v)) for v in hypothesis.proposed_authored_xy_m]
+        ),
+        predicted_delta_world_xy_m=(
+            None if hypothesis is None else [DecimalString(str(v)) for v in hypothesis.predicted_delta_world_xy_m]
+        ),
+        required_effects=list(decision.required_effects),
+    )
+
+
+@strawberry.type
 class SceneSummary:
     selected_candidate_reference: CandidateReference
     criteria: list[CriterionInspection]
@@ -615,6 +740,7 @@ class SceneSummary:
     assessment_id: strawberry.ID | None
     selected_assessed: bool
     policy_trial: PolicyTrial | None
+    scientific_selection: ScientificSelection | None
     detail_coverage: str = "compact_summary_only"
 
 
@@ -887,6 +1013,43 @@ def profile_reference(value):
     )
 
 
+def criterion_parameters(value):
+    if value is None:
+        return None
+    output = fields(
+        value, "metric reference_frame clock temporal_aggregation subject_aggregation missing_data invalid_data"
+    )
+    if hasattr(value, "sample_steps"):
+        output["sample_steps"] = [str(step) for step in value.sample_steps]
+    if hasattr(value, "images"):
+        output["images"] = [ImageSelection(camera=image.camera, step=str(image.step)) for image in value.images]
+        output["camera_aggregation"] = value.camera_aggregation
+    for key in ("linear_limit", "angular_limit"):
+        if hasattr(value, key):
+            limit = getattr(value, key)
+            output[key] = CriterionLimit(operator=limit.operator, value=str(limit.value), unit=limit.unit)
+    if hasattr(value, "target_xy_m"):
+        output["target_xy_m"] = [str(item) for item in value.target_xy_m]
+    return PredicateParameters(**output)
+
+
+def acquisition_view(value):
+    if value is None:
+        return None
+    return AcquisitionSchedule(
+        **fields(value, "codec adapter clock reference_frame"),
+        **fields(value, "control_dt_seconds horizon_steps displacement_step", text=True),
+        subjects=list(value.subjects),
+        state_steps=[str(step) for step in value.state_steps],
+        renderer_update_steps=[str(step) for step in value.renderer_update_steps],
+        images=[ImageSelection(camera=image.camera, step=str(image.step)) for image in value.images],
+    )
+
+
+def experiment_policy_view(value):
+    return None if value is None else ExperimentPolicy(**fields(value, "runtime deadline model_tokens cost"))
+
+
 def frozen_intent(value):
     e = value.execution
     return FrozenIntent(
@@ -926,6 +1089,7 @@ def frozen_intent(value):
                     value=str(c.limit.value),
                     unit=c.limit.unit,
                 ),
+                parameters=criterion_parameters(c.parameters),
             )
             for c in value.criteria
         ],
@@ -947,13 +1111,42 @@ def frozen_intent(value):
                 " max_realizations max_steps max_observations max_policy_episodes max_policy_steps"
                 " per_operation_timeout_seconds total_deadline_seconds",
                 text=True,
-            )
+            ),
+            policy=experiment_policy_view(getattr(value.budget, "policy", None)),
+            control=(
+                None
+                if value.schema_version != "5"
+                else ControlPolicy(
+                    **fields(value.budget.control, "codec client_descriptor_schema"),
+                    **fields(
+                        value.budget.control,
+                        "max_supervision_lease_seconds heartbeat_seconds max_credential_lifetime_seconds",
+                        text=True,
+                    ),
+                )
+            ),
         ),
         effects=Effects(
             **fields(
                 value.effects,
                 "allow_paid_models allow_runtime allow_database_reads allow_publication allow_dcrg"
                 " allow_operational_writes",
+            )
+        ),
+        acquisition=acquisition_view(value.acquisition),
+        action_policy=(
+            None
+            if value.action_policy is None
+            else ActionPolicy(
+                **fields(value.action_policy, "codec on_unknown on_false target_subject mechanism goal_criterion_id"),
+                **fields(value.action_policy, "displacement_tolerance_m", text=True),
+                prerequisite_criterion_ids=list(value.action_policy.prerequisite_criterion_ids),
+                observation=acquisition_view(value.action_policy.observation),
+                diagnostic_delta_xy_m=(
+                    None
+                    if value.action_policy.diagnostic_delta_xy_m is None
+                    else [str(item) for item in value.action_policy.diagnostic_delta_xy_m]
+                ),
             )
         ),
     )
@@ -1089,6 +1282,7 @@ def workflow_view(value):
             remaining=ReservationTotals(**fields(b.remaining, totals, text=True)),
             **fields(b, "actual_consumption accounting runtime_accounting"),
             **fields(b, "admitted_at deadline per_operation_ceiling_seconds", text=True),
+            policy=experiment_policy_view(b.policy),
         ),
         actions=Actions(
             **fields(a, "cancel_applicable resume_branch resume_intent_id"),
@@ -1122,6 +1316,7 @@ def workflow_view(value):
                 ],
                 limitations=list(value.scene.limitations),
                 policy_trial=policy_trial_view(value.scene.policy_trial),
+                scientific_selection=scientific_selection(value.scene.action_selection),
                 **fields(
                     value.scene,
                     "acceptance assessment_status decision_id decision_identity_provenance action reason next_intent_id"
@@ -1166,6 +1361,7 @@ class ArtifactKind(Enum):
     CANDIDATE = "candidate"
     GENERATION = "generation"
     EVIDENCE = "evidence"
+    NUMERIC_ASSESSMENT = "numeric-assessment"
 
 
 @strawberry.enum
@@ -1272,6 +1468,8 @@ class CriterionEvidenceDetail:
     manifest_digest: str
     verdict: str
     limitations: list[str]
+    assessment_id: str | None
+    conflict: bool | None
 
 
 @strawberry.type
@@ -1291,6 +1489,7 @@ class EvidenceDetail:
     verified_manifest_digests: list[str]
     static_failure: str | None
     artifact_selectors: list[EvidenceArtifactSelector]
+    scientific_selection: ScientificSelection | None
     fresh_artifact_verification: str = "not_performed"
 
 
@@ -1384,6 +1583,8 @@ class Query:
         manifests = sorted(
             {entry.manifest_digest for entry in observation.evidence} & set(observation.verified_manifest_digests)
         )
+        if observation.codec == "scene-observation-v2":
+            manifests = sorted(set(observation.verified_manifest_digests))
         if len(manifests) > 16:
             raise ValueError("Retained artifact selection bound exceeded")
         return EvidenceDetail(
@@ -1403,11 +1604,14 @@ class Query:
                     subject_ids=list(entry.subject_ids),
                     cohort=RetainedEvidenceCohort(**entry.cohort.model_dump()),
                     limitations=list(entry.limitations),
+                    assessment_id=entry.assessment_id,
+                    conflict=entry.conflict,
                 )
                 for entry in observation.evidence
             ],
             verified_manifest_digests=list(observation.verified_manifest_digests),
             static_failure=observation.static_failure,
+            scientific_selection=scientific_selection(observation.action_selection),
             artifact_selectors=[
                 EvidenceArtifactSelector(
                     kind=ArtifactKind.EVIDENCE, reference_id=view.evidence_id + manifest, manifest_digest=manifest

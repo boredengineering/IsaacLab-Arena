@@ -32,7 +32,46 @@ from .generation_worker import workflow_allowance
 from .provider_security import reject_secret
 
 LEGACY_INPUTS = {"operation", "prompt", "retrieval_policy", "execution_catalogue_sha256"}
+FULL_SCENE_INPUTS = {"codec", "operation", "contract_json", "execution_catalogue", "execution_catalogue_sha256"}
 ACTIONS = {"generate", "refine", "assess"}
+
+
+def full_scene_inputs(contract, catalogue):
+    """Keep source selection explicit; ExistingSource never acquires a prompt or generation receipt."""
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import canonical_json
+
+    value = dict(
+        codec="scene-inputs-v2",
+        operation="scene",
+        contract_json=canonical_json(contract),
+        execution_catalogue=catalogue.payload(),
+        execution_catalogue_sha256=catalogue.sha256,
+    )
+    checked_full_scene_inputs(value)
+    return value
+
+
+def checked_full_scene_inputs(value):
+    """Validate the exact non-secret source/vocabulary selection without simulator discovery."""
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import canonical_json, parse_contract
+    from isaaclab_arena.environment_spec.execution_catalogue import ExecutionCatalogue
+
+    if (
+        type(value) is not dict
+        or set(value) != FULL_SCENE_INPUTS
+        or value["codec"] != "scene-inputs-v2"
+        or value["operation"] != "scene"
+    ):
+        raise ValueError("Exact configurable scene inputs required")
+    contract = parse_contract(value["contract_json"])
+    catalogue = ExecutionCatalogue(value["execution_catalogue"])
+    if (
+        contract.schema_version != "5"
+        or canonical_json(contract) != value["contract_json"]
+        or catalogue.sha256 != value["execution_catalogue_sha256"]
+    ):
+        raise ValueError("Configurable source or vocabulary identity changed")
+    return contract, catalogue
 
 
 class ModelSendAuthorization:
@@ -306,13 +345,22 @@ def recover_assessment_output(area, payload, *, send_record, failure_kind, prote
 
 def scene_allowance(packet, *, contract=None):
     inputs = packet["inputs"]
-    if set(packet) != {"inputs", "config", "graph_config", "workflow_execution"} or set(inputs) != LEGACY_INPUTS | {
+    full = inputs.get("codec") == "scene-inputs-v2"
+    input_fields = FULL_SCENE_INPUTS if full else LEGACY_INPUTS
+    if set(packet) != {"inputs", "config", "graph_config", "workflow_execution"} or set(inputs) != input_fields | {
         "scene_action",
         "scene_payload",
     }:
         raise ValueError("Invalid scene envelope")
     if inputs["scene_action"] not in ACTIONS:
         raise ValueError("Unsupported scene action")
+    if full:
+        selected_contract, _ = checked_full_scene_inputs({key: inputs[key] for key in input_fields})
+        if contract is not None and contract_digest(contract) != contract_digest(selected_contract):
+            raise ValueError("Selected scene contract changed")
+        contract = selected_contract
+        if inputs["scene_action"] == "generate" and contract.source.kind != "new":
+            raise ValueError("Existing source has no initial generation stage")
     payload = inputs["scene_payload"]
     if type(payload) is not dict or set(payload) != {"root", "store_id", "registry_id", "request"}:
         raise ValueError("Invalid scene payload")
@@ -328,8 +376,8 @@ def scene_allowance(packet, *, contract=None):
     }
     if canonical(binding) != canonical(expected):
         raise ValueError("Scene request binding mismatch")
-    projected = dict(packet, inputs={k: inputs[k] for k in LEGACY_INPUTS})
-    allowance = workflow_allowance(projected)
+    projected = dict(packet, inputs={k: inputs[k] for k in input_fields})
+    allowance = workflow_allowance(projected, scene_inputs=full)
     if not (allowance.token_cost_bounded or allowance.accounting_only):
         raise ValueError("Attested scene allowance required")
     return allowance
@@ -356,6 +404,17 @@ def prepare_catalogues(expected_sha256):
 
 
 def execute(packet, allowance, protect, *, send_guard=None):
+    inputs = packet["inputs"]
+    if inputs.get("codec") == "scene-inputs-v2":
+        contract, catalogue = checked_full_scene_inputs({key: inputs[key] for key in FULL_SCENE_INPUTS})
+        with catalogue.activate():
+            return _execute(
+                packet, allowance, protect, send_guard=send_guard, configurable=contract, catalogue=catalogue
+            )
+    return _execute(packet, allowance, protect, send_guard=send_guard)
+
+
+def _execute(packet, allowance, protect, *, send_guard, configurable=None, catalogue=None):
     from isaaclab_arena.agentic_environment_generation.workflow.scene_engines import BoundedSceneModels
 
     inputs, config = packet["inputs"], packet["config"]
@@ -377,6 +436,7 @@ def execute(packet, allowance, protect, *, send_guard=None):
             )
 
             retained = data.get("consumer_contract_digest") is not None
+            audited = retained or configurable is not None
             expected_fields = {"criterion", "candidate", "cohort", "observation_manifest_digest"}
             if retained:
                 expected_fields |= {"consumer_contract_digest", "producer_source"}
@@ -410,7 +470,7 @@ def execute(packet, allowance, protect, *, send_guard=None):
             )
             raw, error = None, None
             phases = {}
-            if retained:
+            if audited:
 
                 def retain_phase(phase, record):
                     binding = dict(
@@ -432,7 +492,7 @@ def execute(packet, allowance, protect, *, send_guard=None):
                     protect=protect,
                 )
             except Exception as exc:
-                if not retained:
+                if not audited:
                     raise
                 error = safe_failure("child_execute", exc)
                 error["kind"] = error["exception_type"]
@@ -452,13 +512,17 @@ def execute(packet, allowance, protect, *, send_guard=None):
                 except Exception:
                     setattr(exc, "diagnostic_retention_failed", True)
                     raise exc from None
-            if not retained and (type(raw) is not str or not 1 <= len(raw.encode()) <= 65536):
+            if not audited and (type(raw) is not str or not 1 <= len(raw.encode()) <= 65536):
                 raise ValueError("Visual response bound")
             output = {"kind": "raw_visual_response", "raw_response": raw, "publication": "not_published"}
-            if retained:
+            if audited:
                 output.update(provider_records=allowance.provider_records, local_error=error, phase_receipts=phases)
         else:
-            assets, relations, tasks = prepare_catalogues(inputs["execution_catalogue_sha256"])
+            assets, relations, tasks = (
+                catalogue.catalogues()
+                if catalogue is not None
+                else prepare_catalogues(inputs["execution_catalogue_sha256"])
+            )
             kwargs = dict(asset_catalog=assets, relation_catalog=relations, task_catalog=tasks, protect=protect)
             if action == "refine":
                 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
@@ -466,7 +530,10 @@ def execute(packet, allowance, protect, *, send_guard=None):
                 if set(data) != {"base_spec", "feedback"}:
                     raise ValueError("Invalid refinement request")
                 proposal = tools.refine(
-                    base_spec=ArenaEnvGraphSpec.model_validate(data["base_spec"]), feedback=data["feedback"], **kwargs
+                    base_spec=ArenaEnvGraphSpec.model_validate(data["base_spec"]),
+                    feedback=data["feedback"],
+                    **({"raw_scene": data["base_spec"]} if configurable is not None else {}),
+                    **kwargs,
                 )
             else:
                 from isaaclab_arena.agentic_environment_generation.workflow.prior_artifacts import (
@@ -478,7 +545,7 @@ def execute(packet, allowance, protect, *, send_guard=None):
                     raise ValueError("Invalid generation request")
                 binding = payload["request"]["binding"]
                 proposal = tools.generate(
-                    prompt=inputs["prompt"],
+                    prompt=configurable.source.prompt if configurable is not None else inputs["prompt"],
                     contract_digest=binding["contract_digest"],
                     run_id=binding["run_id"],
                     priors=RetainedPriorArtifacts(area),

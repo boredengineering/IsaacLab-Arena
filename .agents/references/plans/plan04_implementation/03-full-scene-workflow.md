@@ -4,7 +4,7 @@
 - Created: 2026-09-25
 - Last reviewed: 2026-09-26
 - Source baseline: `aec2b6b4781e9bd636bad08dccee6e668f7f6d39`
-- Status: **PROPOSED — implementation-and-empirical-proof package; execution authority NOT ISSUED**
+- Status: **G1 COMPLETE — parent-verified source/evidence foundation with scoped checks and accepted independent critique. G2–G4 and all live effects remain UNISSUED.**
 - Parent: [Plan 04](../event_mapping/event-mapping-refactoring_plan_04.md)
 - Status owner: [canonical handoff](../dashboard_cli_workflow_parity/research-stack-implementation-handoff.md)
 - Prerequisites: [I01](01-native-integration-defects.md) accepted **native-only**; [I02](02-installed-visual-assessment.md) parent-closed for **installed assessment integration with an uncertain visual result**. Neither establishes scene acceptance, calibration or the full workflow.
@@ -12,6 +12,23 @@
 - Proposed fixed-candidate repair-witness operation: `p04-i03-fixed-scene-proof-v1`
 
 The [strategy and four complete actor–critic prompts](03-full-scene-workflow-strategy.md#5-proposed-goal-prompts) are the issuance source. Reading either document, selecting a profile, or approving this planning revision does not issue a goal. Repository links are relative; deployment/private paths must be resolved for the selected operator, never copied from an editor's filesystem.
+
+> [!NOTE]
+> **Contract Schema Versioning (Schema 5 vs. Schema 6):**
+> In earlier exploratory notes and discussions, the configurable full-scene workflow contract was colloquially referred to as "Schema 6". The implemented workflow selection is **`schema_version == "5"`** in [contracts.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/contracts.py). It supplies G1's typed `NewSource`/`ExistingSource`, experiment policies, explicit acquisition and action-policy semantics, not the complete installed workflow. Service submission, the legacy scene-effect adapter and the existing native-worker wire decoder explicitly refuse this selection until G2 wiring exists. Evaluator/capture codecs are independently selected; installed configuration and database revisions were not changed. Legacy public I01/I02 decoding and identities were checked without replaying their effects.
+
+### G1 implementation boundary
+
+Implementation began from `7eec064165ba8d6798873f6563a1651cb939473a`. The [concrete G1-to-G2 handoff](03-full-scene-workflow-strategy.md#g1-to-g2-protocol-foundation) names implemented versions, callable consumers, actual checks and remaining adapters. The findings below retain their planning-baseline meaning; an implemented data codec is not proof of installed execution.
+
+- Strict/inclusive per-predicate parameters reach native settings, raw settle reports and retained numeric evaluation. New capture records valid unsettled status; legacy capture keeps its rejection behavior.
+- State samples, renderer updates, retained images and criterion coverage are distinct. Exact observation IDs, reset/clock checks and the settle/capture handoff are consumed by pure selectors and callback paths.
+- Ternary visual responses retain exact bounded bytes, including malformed UTF-8; new assessments have independent immutable identities. Old `visibility-v2` still decodes the accepted six-answer I02 result as **uncertain**.
+- Legacy native settings refuse parameterized criteria, and explicit image schedules refuse temporal reordering before callbacks. `scene-observation-v2` retains source/answer identities independently of valid verdicts, so fresh readback reopens malformed answers rather than verifying an absent response as failure. Legacy observation bytes remain unchanged.
+- The selected root-XY mechanism binds a measured required positional goal, verified diagnostic ancestry, original-centered scalar permissions, a frozen policy and an exact proposal. Wrong-subject visual FALSE cannot release repair; UNKNOWN permits observation only when selected. Every returned decision has `can_execute=False`.
+- Renewable supervision and current-principal/descriptor compatibility have pure checked semantics. An accounting-only development selection uses explicit null aggregate runtime/deadline limits, not large sentinels. Transport limits, issued counts, current workload authority, cancellation and cleanup remain separate.
+
+No provider call, Kit/native launch, API-service start, database I/O, policy execution, prior retrieval or credential installation occurred in G1. Physical validity, real sensor freshness, placement response, calibration and all G2–G4 application claims remain unproven.
 
 ## 1. Outcome and scope
 
@@ -166,7 +183,7 @@ The [detailed source findings and mental walkthrough](03-full-scene-workflow-str
 | Diagnostic decision / effect release | [scene_loop.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_loop.py#L368), [scene_ports.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_ports.py#L260), [foreground_scene_ports.py](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_scene_ports.py#L252) | Implement and consume the evidence-bound eligibility decision before reservation/release and in recovery/refiner feedback; no unconditional observe-to-capture conversion. |
 | Physical repair / causal evidence | [repairs.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/repairs.py#L275), [scene_ports.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_ports.py#L393) | Resolve exact authorized target, select correct before/after samples, retain effective displacement and causal limitations. |
 
-The installed config integer revision, workflow string revision, evaluator/worker codecs and database schema are separate version domains. `full-scene-execution-v1` and a new installed/contract revision remain proposed until implemented. Do not change the database schema number merely to match a workflow version.
+The installed config integer revision, workflow string revision, evaluator/worker codecs and database schema are separate version domains. Workflow schema `5` and the G1 codecs below are implemented selections. `full-scene-execution-v1`, installed activation and any new worker wire revision still require G2; no database revision was changed merely to match the workflow version.
 
 ## 4. Dependency-ordered implementation and proof
 

@@ -80,9 +80,10 @@ def load(path):
         value,
         "schema_version mode operator private_root credentials_file endpoint bolt_uri binding artifact_root"
         " required_profiles bootstrap_principal read_principal"
-        + (" role_bindings" if type(value) is dict and value.get("schema_version") in (3, 5) else "")
+        + (" role_bindings" if type(value) is dict and value.get("schema_version") in (3, 5, 6) else "")
         + (" native_validation" if type(value) is dict and value.get("schema_version") == 4 else "")
-        + (" retained_assessment" if type(value) is dict and value.get("schema_version") == 5 else ""),
+        + (" retained_assessment" if type(value) is dict and value.get("schema_version") == 5 else "")
+        + (" full_scene" if type(value) is dict and value.get("schema_version") == 6 else ""),
     )
     # Setup selection is never readiness or execution authority. V3 adds explicit
     # private roles, not a production mode or an exemption from the harness guard.
@@ -97,6 +98,7 @@ def load(path):
             (3, "isolated-synthetic-execution-v1"),
             (4, "retained-native-validation-v1"),
             (5, "retained-visual-assessment-v1"),
+            (6, "full-scene-workflow-v1"),
         )
     ):
         raise PrivateFileError("Unsupported configuration")
@@ -144,6 +146,11 @@ def load(path):
 
         AssessmentSelection.model_validate_json(encode(value["retained_assessment"]))
         validate_role_bindings(value["role_bindings"], profiles, assessment_only=True)
+    elif value["schema_version"] == 6:
+        from .installed_full_scene import FullSceneSelection
+
+        FullSceneSelection.model_validate_json(encode(value["full_scene"]))
+        validate_role_bindings(value["role_bindings"], profiles, configurable=True)
     elif value["schema_version"] == 4:
         from .installed_native import NativeSelection
 
@@ -159,14 +166,19 @@ def alias(value):
     return value
 
 
-def validate_role_bindings(value, profiles, *, assessment_only=False):
+def validate_role_bindings(value, profiles, *, assessment_only=False, configurable=False):
     """Validate explicit public pins without credentials, providers or database IO."""
     from ..profiles import ProfileRegistration, profile_revision
     from ..provider_configuration import ENDPOINTS
 
     fields(value, "assessment" if assessment_only else "generation assessment repair prior_read")
     for role in ("assessment",) if assessment_only else ("generation", "assessment", "repair"):
-        row = fields(value[role], "credential_alias profile")
+        row = fields(value[role], "credential_alias profile" + (" credential_source" if configurable else ""))
+        if configurable and (
+            row["credential_source"] not in {"generation", "assessment", "repair"}
+            or value[row["credential_source"]]["credential_alias"] != row["credential_alias"]
+        ):
+            raise PrivateFileError("Exact selected private credential source required")
         alias(row["credential_alias"])
         profile = ProfileRegistration.model_validate_json(encode(row["profile"]))
         if (
@@ -184,6 +196,10 @@ def validate_role_bindings(value, profiles, *, assessment_only=False):
     # explicit sharing rather than silently selecting a separate unbound model/key.
     if value["repair"] != value["generation"]:
         raise PrivateFileError("Repair requires explicit generation binding")
+    if configurable:
+        if value["prior_read"] != "not_requested":
+            raise PrivateFileError("Configurable scene installation has no prior retrieval selection")
+        return
     prior = fields(value["prior_read"], "credential_alias endpoint database authentication")
     alias(prior["credential_alias"])
     endpoint(prior["endpoint"], bolt=True)
@@ -260,6 +276,16 @@ def prepare_credentials(config, value):
                 raise PrivateFileError("Private prior binding differs")
             reject_secret(config.value, prior["password"])
             reject_secret(config.value, prior["username"])
+    elif config.value["schema_version"] == 6:
+        if value["schema_version"] != 2 or set(value["databases"]) != {"operational"}:
+            raise PrivateFileError("Configurable setup selects no prior database credentials")
+        for row in config.value["role_bindings"].values():
+            if row == "not_requested":
+                continue
+            private = value["models"].get(row["credential_source"])
+            if private is None or private["alias"] != row["credential_alias"]:
+                raise PrivateFileError("Selected private credential source unavailable")
+            reject_secret(config.value, private["api_key"])
     elif config.value["schema_version"] == 4:
         if value["schema_version"] != 2 or value["models"] or set(value["databases"]) != {"operational"}:
             raise PrivateFileError("Native-only setup requires only the operational database binding")

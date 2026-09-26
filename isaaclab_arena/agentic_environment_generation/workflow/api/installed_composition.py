@@ -18,7 +18,7 @@ class PrivateRoles:
     """Explicit private role snapshot; rotation invalidates release, never read authority."""
 
     def __init__(self, config, *, document=None):
-        if config.value["schema_version"] not in (3, 4, 5):
+        if config.value["schema_version"] not in (3, 4, 5, 6):
             raise ValueError("Explicit private role configuration required")
         self.config = config
         self.document = self._read() if document is None else document
@@ -58,7 +58,8 @@ class PrivateRoles:
         if role not in ("generation", "assessment", "repair"):
             raise ValueError("Unsupported private role")
         selected = self.config.value["role_bindings"][role]
-        private = self.document["models"].get(role)
+        source = selected["credential_source"] if self.config.value["schema_version"] == 6 else role
+        private = self.document["models"].get(source)
         if private is None or private["alias"] != selected["credential_alias"]:
             raise ValueError("Private model binding unavailable")
         settings = selected["profile"]["settings"]
@@ -80,6 +81,8 @@ class PrivateRoles:
         """Return only the explicitly configured prior login; never open a driver."""
         self.check_current()
         selected = self.config.value["role_bindings"]["prior_read"]
+        if selected == "not_requested":
+            raise ValueError("Prior retrieval was not requested")
         private = self.document["databases"].get("prior_read")
         if private is None or private["alias"] != selected["credential_alias"]:
             raise ValueError("Private prior binding unavailable")
@@ -127,7 +130,7 @@ class Resources:
         self.authority = Authority(config)
         document = credential_document(read_private(config.value["credentials_file"], MAX_CREDENTIALS))
         self.credential = document["databases"]["operational"]
-        self.roles = PrivateRoles(config, document=document) if config.value["schema_version"] in (3, 4, 5) else None
+        self.roles = PrivateRoles(config, document=document) if config.value["schema_version"] in (3, 4, 5, 6) else None
 
     def protect(self, value):
         def walk(item):

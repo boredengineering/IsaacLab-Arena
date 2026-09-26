@@ -61,7 +61,15 @@ class WorkflowService:
     """
 
     def __init__(
-        self, store, authority, gate, *, validate_support, max_pending=1, read_scope: ScopeBinding | None = None
+        self,
+        store,
+        authority,
+        gate,
+        *,
+        validate_support,
+        max_pending=1,
+        read_scope: ScopeBinding | None = None,
+        configurable_installed=False,
     ):
         if type(max_pending) is not int or not 1 <= max_pending <= 1000:
             raise ValueError("Invalid pending workflow capacity")
@@ -69,6 +77,9 @@ class WorkflowService:
         self._authority = authority
         self._gate = gate
         self._validate_support = validate_support
+        if type(configurable_installed) is not bool:
+            raise ValueError("Explicit configurable composition selection required")
+        self._configurable_installed = configurable_installed
         self._max_pending = max_pending
         self._read_scope = (
             None if read_scope is None else ScopeBinding.model_validate_json(read_scope.model_dump_json())
@@ -443,6 +454,23 @@ class WorkflowService:
         """Read an exact retained observation; metadata does not reverify artifact bytes."""
         return self._read_scene(principal, evidence_id, "evidence", SceneEvidenceView, protect)
 
+    def read_numeric_reassessment(self, principal, operation_id, *, protect):
+        """Read a scoped derived key under current read authority, without changing its source."""
+        from .derived_assessment import NumericReassessmentView
+        from .scene_evidence_artifacts import _protected
+
+        self._authority.require_read(principal)
+        validate_operation_id(operation_id)
+        if not callable(protect):
+            raise ValueError("public protection callback required")
+        value = self._store.get_numeric_reassessment(operation_id)
+        if value is not None:
+            value = NumericReassessmentView.model_validate_json(value.model_dump_json())
+            if value.operation_id != operation_id:
+                raise ValueError("Derived operation binding differs")
+        _protected(None if value is None else value.model_dump(mode="json"), protect)
+        return value
+
     def read_retained_bundle(self, principal, run_id, kind, reference_id, *, artifact_root, artifact_binding, protect):
         """Authenticate retained references and verify bytes in the configured private artifact area."""
         from ..workbench.research_artifacts import ArtifactArea
@@ -574,7 +602,7 @@ class WorkflowService:
         self._authority.require_read(principal)
         run = self._store.get_run(run_id)
         contract = parse_contract(run.contract_json)
-        if contract.schema_version == "3":
+        if contract.schema_version == "3" or (contract.schema_version == "5" and contract.source.kind == "existing"):
             import hashlib
 
             from .contracts import contract_digest
@@ -594,6 +622,12 @@ class WorkflowService:
                 contract_digest=contract_digest(contract),
                 native_schema_validation_required=True,
             )
+            if contract.schema_version == "5":
+                from .scene_ports import ScenePorts
+
+                validated = ScenePorts.validate_candidate(candidate.scene_json)
+                normalized = json.dumps(validated.to_dict(), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                validation["validated_semantic_sha256"] = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
             protect(validation)
             return self._store.begin_scene(
                 run_id, run.version, candidate, validation, profile, authorization=authorization
@@ -625,7 +659,12 @@ class WorkflowService:
         if hasattr(validation, "model_dump"):
             validation = validation.model_dump(mode="json")
         candidate = candidate_record(run_id, json.loads(files["candidate.json"]), source_id=attempt.fence.attempt_id)
-        return self._store.begin_scene(run_id, run.version, candidate, validation, profile)
+        authority = {}
+        if contract.schema_version == "5":
+            authority["authorization"] = self._authority.require_scene_execute(
+                principal, contract, run_id=run_id, retained_run=run
+            )
+        return self._store.begin_scene(run_id, run.version, candidate, validation, profile, **authority)
 
     def run_scene(self, principal, run_id, *, ports, resume_receipt=None):
         """Drive the retained scene loop through explicitly trusted bounded ports.
@@ -921,13 +960,17 @@ class WorkflowService:
             return SubmissionResult("dependencies_not_ready", None, report)
         if retained is not None:
             return SubmissionResult("retained", retained)
+        if request.schema_version == "5" and not self._configurable_installed:
+            raise ValueError("configurable_workflow_not_installed")
         if not request.effects.allow_operational_writes:
             raise ValueError("operational_writes_not_permitted")
         self._validate_support(request)
         self._authority.require_submit(principal, operation_id, request)
+        from .control_protocol import finite_backend_timeout
+
         report = self._gate.check(
             required_dependencies(request),
-            timeout_s=min(120, request.budget.per_operation_timeout_seconds),
+            timeout_s=finite_backend_timeout(request.budget.per_operation_timeout_seconds),
         )
         if not report.ready:
             return SubmissionResult("dependencies_not_ready", None, report)

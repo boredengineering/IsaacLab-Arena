@@ -41,11 +41,24 @@ class ForegroundScenePorts(ScenePorts):
     """
 
     def __init__(
-        self, *, store, authority, lease, worker, principal, run_id, catalogue_sha256, artifact_root, ready, **options
+        self,
+        *,
+        store,
+        authority,
+        lease,
+        worker,
+        principal,
+        run_id,
+        catalogue_sha256,
+        artifact_root,
+        ready,
+        execution_catalogue=None,
+        **options,
     ):
         self.store, self.authority, self.lease, self.worker = (store, authority, lease, worker)
         self.principal, self.run_id = principal, run_id
         self.catalogue_sha256, self.artifact_root = catalogue_sha256, artifact_root
+        self.execution_catalogue = execution_catalogue
         self._interlock = RLock()
         self._prepared_workers, self._cleanups, self._results = {}, {}, {}
         self._failure_contracts = {}
@@ -247,7 +260,12 @@ class ForegroundScenePorts(ScenePorts):
                 observation_manifest_digest=receipt.manifest_digest,
             ),
         )
-        return result.output["raw_response"].encode("utf-8")
+        raw = result.output["raw_response"]
+        if type(raw) is not str:
+            error = RuntimeError("Model execution produced no answer; retained failure is not UNKNOWN")
+            setattr(error, "safe_causal_failure", result.output.get("local_error"))
+            raise error
+        return raw.encode("utf-8")
 
     def _refine_child(self, *, parent, original, feedback, contract, allowance):
         intent, candidate, baseline, active_contract = self._active
@@ -258,7 +276,17 @@ class ForegroundScenePorts(ScenePorts):
         snapshot = self.store.scene_snapshot(self.run_id)
         if snapshot.candidate != parent or snapshot.original != original or snapshot.decision.action != "repair":
             raise ValueError("Retained repair decision required")
-        if canonical(feedback["assessment"]) != canonical(snapshot.decision.assessment.model_dump(mode="json")):
+        if contract.schema_version == "5":
+            from isaaclab_arena.agentic_environment_generation.workflow.scene_eligibility import SceneActionDecision
+
+            selected = SceneActionDecision.model_validate_json(canonical(snapshot.decision.action_selection))
+            if (
+                intent.action_selection != selected.model_dump(mode="json")
+                or feedback.get("selection_digest") != selected.digest()
+                or feedback.get("hypothesis") != selected.hypothesis.model_dump(mode="json")
+            ):
+                raise ValueError("Retained repair selection changed")
+        elif canonical(feedback["assessment"]) != canonical(snapshot.decision.assessment.model_dump(mode="json")):
             raise ValueError("Retained repair assessment changed")
         result = self._call_child("refine", dict(base_spec=json.loads(parent.scene_json), feedback=feedback))
         # The whole proposal (warnings/traces included) is screened BEFORE spec
@@ -308,13 +336,15 @@ class ForegroundScenePorts(ScenePorts):
             ]
             admitted = (
                 self.store.result_records(self.run_id)["admitted_at"]
-                if contract.schema_version == "4"
+                if contract.schema_version in ("4", "5")
                 else self.store.get_generation_attempt(self.run_id).admitted_at
             )
             ceiling = self.ceiling_for(intent.action)
+            aggregate_deadline = contract.budget.deadline_at(admitted)
+            if aggregate_deadline is not None:
+                deadlines.append(aggregate_deadline)
             deadline = min(
                 *deadlines,
-                admitted + contract.budget.total_deadline_seconds,
                 intent.released_at + intent.reservation.runtime_allowance_seconds,
                 time.time() + ceiling.timeout_seconds,
             )
@@ -330,17 +360,28 @@ class ForegroundScenePorts(ScenePorts):
                 cost_ceiling_usd=None if ceiling.max_cost_usd is None else float(ceiling.max_cost_usd),
                 runtime_allowance_seconds=intent.reservation.runtime_allowance_seconds,
             )
-            if contract.schema_version == "4":
+            if ceiling.per_call_bound["version"] == 2:
                 reservation["accounting_policy"] = "accounting-only-v1"
-            packet = dict(
-                inputs=dict(
+            if contract.schema_version == "5":
+                from .web_api.scene_worker import full_scene_inputs
+
+                if self.execution_catalogue is None or self.execution_catalogue.sha256 != self.catalogue_sha256:
+                    raise ValueError("Exact supplied scene vocabulary required")
+                inputs = full_scene_inputs(contract, self.execution_catalogue) | {
+                    "scene_action": action,
+                    "scene_payload": payload,
+                }
+            else:
+                inputs = dict(
                     operation="new",
                     prompt=contract.source.prompt if contract.source.kind == "new" else contract.criteria[0].rubric,
                     retrieval_policy="allow_fallback",
                     execution_catalogue_sha256=self.catalogue_sha256,
                     scene_action=action,
                     scene_payload=payload,
-                ),
+                )
+            packet = dict(
+                inputs=inputs,
                 config=config,
                 graph_config=None,
                 workflow_execution=dict(

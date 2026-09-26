@@ -26,6 +26,14 @@ class SceneProposal:
     publication: str = "not_published"
 
 
+@dataclass(frozen=True)
+class _RawSceneSpec:
+    value: dict
+
+    def model_dump(self, *, mode="json"):
+        return copy.deepcopy(self.value)
+
+
 class BoundedSceneModels:
     """Share one allowance across constructor pings, generation, refinement and vision.
 
@@ -213,6 +221,7 @@ class BoundedSceneModels:
         asset_catalog,
         relation_catalog,
         task_catalog,
+        raw_scene=None,
     ):
         """Propose against the exact base and caller-verified retained structured feedback.
 
@@ -228,6 +237,62 @@ class BoundedSceneModels:
         catalogues = self._catalogues(asset_catalog, relation_catalog, task_catalog)
         if type(feedback) is not dict or not feedback:
             raise ValueError("structured retained feedback required")
+        if feedback.get("codec") == "root-xy-feedback-v1":
+            import hashlib
+
+            from ..inference_backend import InferenceBackend, StructuredOutputRequest
+            from ..spec_wire_adapter import _parse_value
+            from .scene_eligibility import RootXYHypothesis
+            from .scene_evidence_artifacts import canonical
+            from .scene_ports import ScenePorts
+
+            keys = {
+                "codec",
+                "selection_digest",
+                "contract_digest",
+                "policy_digest",
+                "parent_candidate_id",
+                "parent_scene_digest",
+                "original_scene_digest",
+                "proposed_scene_digest",
+                "hypothesis",
+            }
+            if set(feedback) != keys or type(raw_scene) is not dict:
+                raise ValueError("Exact declared feedback projection required")
+            RootXYHypothesis.model_validate_json(canonical(feedback["hypothesis"]))
+            if hashlib.sha256(canonical(raw_scene)).hexdigest() != feedback["parent_scene_digest"]:
+                raise ValueError("Refiner parent bytes changed")
+            ScenePorts.validate_candidate(raw_scene)
+            request = StructuredOutputRequest(
+                schema_name="BoundRootXYRepair",
+                schema={
+                    "type": "object",
+                    "properties": {"scene_json": {"type": "string", "maxLength": 262144}},
+                    "required": ["scene_json"],
+                    "additionalProperties": False,
+                },
+                system=(
+                    "Return the exact parent JSON with only the declared root-XY correction. Preserve all other values"
+                    " and numeric representations. A prediction is not physical proof. No extra repairs or claims."
+                ),
+                user="Parent JSON:\n"
+                + canonical(raw_scene).decode("utf-8")
+                + "\nBound feedback:\n"
+                + _protected(feedback, protect).decode("utf-8"),
+                retry_label="bound-root-xy-repair",
+                parse_json=_parse_value,
+            )
+            with self._client("generation"):
+                response = InferenceBackend(**config).run_json(request)
+            proposed = _parse_value(response["scene_json"])
+            if (
+                type(proposed) is not dict
+                or hashlib.sha256(canonical(proposed)).hexdigest() != feedback["proposed_scene_digest"]
+            ):
+                raise ValueError("Returned proposal differs from selected hypothesis")
+            _protected(proposed, protect)
+            ScenePorts.validate_candidate(proposed)
+            return SceneProposal(_RawSceneSpec(proposed), (), ())
         checked = ArenaEnvGraphSpec.model_validate(base_spec.model_dump(mode="json"))
         encoded = _protected(feedback, protect).decode("utf-8")
         with self._client("generation"):
@@ -275,6 +340,17 @@ class BoundedSceneModels:
                 " subject, verdict (visible, not_visible, or uncertain), and a short visual reason. Use uncertain if"
                 " identity or visibility cannot be determined; never infer visibility from metadata. Do not assess"
                 " physics, task success or calibration. Request:\n"
+                + canonical(request).decode("utf-8")
+            )
+        elif criterion.evaluator_version == "full-scene-ternary-v1":
+            prompt = (
+                "Assess only RGB visibility; metadata and names are not visual proof. Return one JSON object "
+                "with codec full-scene-ternary-v1, the exact request_sha256, and answers in frame order. "
+                "Each answer copies observation_id, camera, step, clock, time_seconds and modality, adds "
+                "frame_digest (sha256), and subjects in requested order. Each subject has subject, truth "
+                "(true/false/unknown as strings), confidence (null), conflict (boolean), and visual reason. "
+                "Use unknown when identity or visibility is indeterminate. Do not infer physics, contact, "
+                "goal satisfaction or calibration. Request:\n"
                 + canonical(request).decode("utf-8")
             )
         with self._client("assessment"):

@@ -24,7 +24,7 @@ from .graph_access import checked_graph_config
 from .provider_security import reject_secret
 
 
-def workflow_allowance(envelope):
+def workflow_allowance(envelope, *, scene_inputs=False):
     """Validate trusted private release metadata; no store/OS authenticity is implied.
 
     Wall time is sampled once into a monotonic deadline, so pipe/startup delay
@@ -42,6 +42,10 @@ def workflow_allowance(envelope):
     )
 
     try:
+        if scene_inputs:
+            from .scene_worker import checked_full_scene_inputs
+
+            checked_full_scene_inputs(envelope["inputs"])
         packet = envelope["workflow_execution"]
         if (
             type(packet) is not dict
@@ -63,9 +67,15 @@ def workflow_allowance(envelope):
             or reservation.model_calls <= 0
             or envelope.get("graph_config") is not None
             or "managed_context" in envelope
-            or envelope["inputs"].get("operation") != "new"
-            or set(envelope["inputs"]) != {"operation", "prompt", "retrieval_policy", "execution_catalogue_sha256"}
-            or envelope["inputs"]["retrieval_policy"] != "allow_fallback"
+            or (
+                not scene_inputs
+                and (
+                    envelope["inputs"].get("operation") != "new"
+                    or set(envelope["inputs"])
+                    != {"operation", "prompt", "retrieval_policy", "execution_catalogue_sha256"}
+                    or envelope["inputs"]["retrieval_policy"] != "allow_fallback"
+                )
+            )
             or not isinstance(envelope.get("config"), dict)
         ):
             raise ValueError

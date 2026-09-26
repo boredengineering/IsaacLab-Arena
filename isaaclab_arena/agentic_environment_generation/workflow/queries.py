@@ -16,7 +16,7 @@ from typing import Annotated, Literal
 from pydantic import Field, model_serializer
 
 from .attempts import AttemptFence, ReadinessReceipt
-from .contracts import FrozenModel, Hash, Identifier, WorkflowContract
+from .contracts import ExperimentPolicy, FrozenModel, Hash, Identifier, WorkflowContract
 from .evidence import SceneEvidenceAssessment
 from .policy_contracts import PolicyTrialReceipt
 from .results import OwnerView
@@ -172,7 +172,7 @@ class ReservationTotals(FrozenModel):
     model_calls: Annotated[int, Field(strict=True, ge=0)]
     model_tokens: Annotated[int, Field(strict=True, ge=0)] | None
     cost_ceiling_usd: Annotated[Decimal, Field(ge=0, allow_inf_nan=False)] | None
-    runtime_allowance_seconds: Annotated[Decimal, Field(ge=0, allow_inf_nan=False)]
+    runtime_allowance_seconds: Annotated[Decimal, Field(ge=0, allow_inf_nan=False)] | None
     candidates: Annotated[int, Field(strict=True, ge=0)]
     revisions: Annotated[int, Field(strict=True, ge=0)]
     realizations: Annotated[int, Field(strict=True, ge=0)]
@@ -191,8 +191,9 @@ class InspectionBudget(FrozenModel):
     )
     runtime_accounting: Literal["cumulative_allowance_not_walltime"] = "cumulative_allowance_not_walltime"
     admitted_at: float
-    deadline: float
+    deadline: float | None
     per_operation_ceiling_seconds: float
+    policy: ExperimentPolicy | None = None
 
 
 class RetainedReadiness(FrozenModel):
@@ -265,6 +266,7 @@ class SceneInspection(FrozenModel):
     assessment_id: Hash | None
     assessment: SceneEvidenceAssessment | None
     policy_trial: PolicyTrialReceipt | None = None
+    action_selection: dict | None = None
     selected_assessed: bool
     assessment_status: Literal["established", "not_established", "inconclusive", "not_assessed"]
     acceptance: Literal["accepted", "not_established"]

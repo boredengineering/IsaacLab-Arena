@@ -32,7 +32,7 @@ class AuthorizationSnapshot(FrozenModel):
             Literal["generation_model", "assessment_model", "operational_writes", "paid_models", "native_validation"],
             ...,
         ],
-        Field(min_length=1, max_length=3),
+        Field(min_length=1, max_length=5),
     ]
 
 
@@ -97,11 +97,16 @@ class GenerationReservation(FrozenModel):
     model_calls: Count
     model_tokens: Count | None
     cost_ceiling_usd: Amount | None
-    runtime_allowance_seconds: Amount
+    runtime_allowance_seconds: Amount | None
     accounting_policy: Literal["bounded-v1", "accounting-only-v1"] = "bounded-v1"
+    time_policy: Literal["enforced", "advisory", "accounting_only"] = "enforced"
 
     @model_validator(mode="after")
     def accounting(self):
+        if self.time_policy == "enforced" and self.runtime_allowance_seconds is None:
+            raise ValueError("Enforced reservations require a finite runtime allowance")
+        if self.time_policy == "accounting_only" and self.runtime_allowance_seconds is not None:
+            raise ValueError("Accounting-only runtime cannot contain a cap")
         missing = self.model_tokens is None or self.cost_ceiling_usd is None
         if self.accounting_policy == "accounting-only-v1":
             if self.model_tokens is not None or self.cost_ceiling_usd is not None:
@@ -113,6 +118,8 @@ class GenerationReservation(FrozenModel):
     @model_serializer(mode="wrap")
     def versioned_accounting(self, handler):
         value = handler(self)
+        if self.time_policy == "enforced":
+            value.pop("time_policy", None)
         if self.accounting_policy == "bounded-v1":
             value.pop("accounting_policy", None)
         return value

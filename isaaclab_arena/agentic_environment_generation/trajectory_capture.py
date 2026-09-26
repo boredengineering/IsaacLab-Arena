@@ -22,6 +22,7 @@ def capture_trajectory(
     initial_observation=None,
     step_offset=0,
     reset_policy=True,
+    observe_step=None,
 ):
     """Capture reset and sampled observations, excluding post-autoreset end-step observations.
 
@@ -41,6 +42,8 @@ def capture_trajectory(
             frame labels use this absolute offset, while executed_steps counts new steps.
         reset_policy: Reset policy state at entry (legacy default); disable only for an
             already initialized policy in the same cohort.
+        observe_step: Optional trusted callback(env, absolute_step, observation).
+            Its compiled selector owns samples/images independently of legacy capture.
 
     Returns:
         Frame paths, actual executed steps, stop reason and terminal-image unavailability.
@@ -84,6 +87,8 @@ def capture_trajectory(
     capture(obs, step_offset)
     if sample_state is not None:
         sample_state(env, step_offset)
+    if observe_step is not None:
+        observe_step(env, step_offset, obs)
     stop_reason = "step_budget"
     executed_steps = 0
     ended = limited = False
@@ -96,6 +101,8 @@ def capture_trajectory(
             break
         if sample_state is not None:
             sample_state(env, step_offset + executed_steps)
+        if observe_step is not None:
+            observe_step(env, step_offset + executed_steps, obs)
         if executed_steps % frame_interval == 0 or executed_steps == num_steps:
             capture(obs, step_offset + executed_steps)
     result = {

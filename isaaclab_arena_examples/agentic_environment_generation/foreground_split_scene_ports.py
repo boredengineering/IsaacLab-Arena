@@ -47,7 +47,11 @@ class ForegroundSplitScenePorts(ForegroundScenePorts, SplitScenePorts):
         return self.worker.prepare_stage(
             intent,
             contract,
-            timeout_s=min(intent.reservation.runtime_allowance_seconds, contract.budget.per_operation_timeout_seconds),
+            timeout_s=(
+                contract.budget.control.heartbeat_seconds
+                if contract.schema_version == "5" and intent.reservation.runtime_allowance_seconds is None
+                else min(intent.reservation.runtime_allowance_seconds, contract.budget.per_operation_timeout_seconds)
+            ),
         )
 
     def _checked_stage_release(self, intent, contract):
@@ -97,20 +101,29 @@ class ForegroundSplitScenePorts(ForegroundScenePorts, SplitScenePorts):
         return self.worker.receive_evaluate(prepared, protect=self.protect)
 
     def _stage_deadline(self, intent, contract):
-        """Pass an absolute wall-clock deadline; the worker enforces it without renewal."""
+        """Separate a renewable native supervision horizon from legacy fixed transport limits."""
         admitted = (
             self.store.get_admitted_at(self.run_id)
-            if contract.schema_version == "3"
+            if contract.schema_version in ("3", "5")
             else self.store.get_generation_attempt(self.run_id).admitted_at
         )
+        aggregate_deadline = contract.budget.deadline_at(admitted)
+        if contract.schema_version == "5" and intent.action == "capture":
+            authority = self.authority.require_scene_execute(self.principal, contract, run_id=self.run_id)
+            limits = [time.time() + contract.budget.control.max_supervision_lease_seconds, authority.expires_at]
+            if aggregate_deadline is not None:
+                limits.append(aggregate_deadline)
+            deadline = min(limits)
+            if deadline <= time.time():
+                raise ValueError("Native supervision authority expired")
+            return deadline
         limit = (
             self.capture_timeout_seconds if intent.action == "capture" else intent.reservation.runtime_allowance_seconds
         )
-        deadline = min(
-            admitted + contract.budget.total_deadline_seconds,
-            intent.released_at + intent.reservation.runtime_allowance_seconds,
-            time.time() + limit,
-        )
+        limits = [intent.released_at + intent.reservation.runtime_allowance_seconds, time.time() + limit]
+        if aggregate_deadline is not None:
+            limits.append(aggregate_deadline)
+        deadline = min(limits)
         if deadline <= time.time():
             raise ValueError("scene stage deadline expired")
         return deadline

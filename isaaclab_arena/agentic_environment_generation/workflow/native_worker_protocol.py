@@ -30,10 +30,12 @@ class SceneWorkerRequest:
     settings: NativeCaptureSettings
     deadline: float
     retained_observation: Observation | None
+    control: dict | None = None
+    validated_semantic_sha256: str | None = None
 
     def binding(self):
-        return dict(
-            codec=CODECS[self.action] + "-request-v1",
+        result = dict(
+            codec=CODECS[self.action] + ("-request-v2" if self.contract.schema_version == "5" else "-request-v1"),
             intent_digest=identity(self.intent.model_dump(mode="json")),
             candidate_digest=self.candidate.digest,
             candidate_id=self.candidate.candidate_id,
@@ -44,16 +46,60 @@ class SceneWorkerRequest:
             deadline=self.deadline,
             observation_digest=self.intent.observation_digest,
         )
+        if self.contract.schema_version == "5":
+            result.update(
+                control_digest=identity(self.control), validated_semantic_sha256=self.validated_semantic_sha256
+            )
+        return result
 
 
-def validate_request(data, *, now=None):
-    """Revalidate released metadata and every frozen binding before native imports."""
+def control_values(request):
+    """Decode private-channel metadata, not a self-authorizing execution grant."""
+    from .attempts import AuthorizationSnapshot
+    from .control_protocol import SupervisionLease
+    from .scope_binding import ScopeBinding
+
+    value = request.control
+    if type(value) is not dict or set(value) != {"scope", "lease", "authority", "admitted_at"}:
+        raise ValueError("Exact owned supervision metadata required")
+    scope = ScopeBinding.model_validate_json(canonical(value["scope"]))
+    lease = SupervisionLease.model_validate_json(canonical(value["lease"]))
+    authority = AuthorizationSnapshot.model_validate_json(canonical(value["authority"]))
+    admitted = value["admitted_at"]
     if (
-        type(data) is not dict
-        or set(data)
-        != {"action", "intent", "candidate", "original", "contract", "settings", "deadline", "retained_observation"}
-        or data["action"] not in CODECS
+        type(admitted) not in (int, float)
+        or not math.isfinite(admitted)
+        or not 0 <= admitted <= request.intent.released_at
     ):
+        raise ValueError("Recorded admission clock required")
+    return scope, lease, authority, admitted
+
+
+def owned_supervision(request):
+    """Consume initial control using current clocks; never replay historical authority."""
+    from .control_protocol import OwnedSupervision
+
+    scope, lease, authority, _ = control_values(request)
+    state = OwnedSupervision(
+        policy=getattr(request.contract.budget, "control"),
+        scope=scope,
+        instance=lease.instance,
+        principal=lease.principal,
+        fence=request.intent.worker_fence,
+        contract_digest=contract_digest(request.contract),
+        allocation_digest=identity(request.intent.reservation.model_dump(mode="json")),
+    )
+    state.accept(lease, authority)
+    return state
+
+
+def validate_request(data, *, now=None, historical=False):
+    """Revalidate released metadata and every frozen binding before native imports."""
+    full = type(data) is dict and data.get("codec") in {name + "-request-v2" for name in CODECS.values()}
+    fields = {"action", "intent", "candidate", "original", "contract", "settings", "deadline", "retained_observation"}
+    if full:
+        fields |= {"codec", "control", "validated_semantic_sha256"}
+    if type(data) is not dict or set(data) != fields or data["action"] not in CODECS:
         raise ValueError("exact native/numeric request required")
     r = SceneWorkerRequest(
         data["action"],
@@ -68,9 +114,28 @@ def validate_request(data, *, now=None):
             if data["retained_observation"] is None
             else Observation.model_validate_json(canonical(data["retained_observation"]))
         ),
+        control=data.get("control"),
+        validated_semantic_sha256=data.get("validated_semantic_sha256"),
     )
     i, c, s = r.intent, r.candidate, r.settings
+    if not full and (r.contract.schema_version == "5" or s.codec != "native-capture-v1"):
+        raise ValueError("legacy worker codec cannot execute configurable workflow selections")
+    if full and (
+        r.contract.schema_version != "5"
+        or s.codec != "native-capture-v2"
+        or data["codec"] != CODECS[r.action] + "-request-v2"
+        or type(r.validated_semantic_sha256) is not str
+        or len(r.validated_semantic_sha256) != 64
+        or any(x not in "0123456789abcdef" for x in r.validated_semantic_sha256)
+    ):
+        raise ValueError("Configurable worker needs bound validated semantic identity")
     now = time.time() if now is None else now
+    if historical:
+        if i.released_at is None:
+            raise ValueError("Recorded release clock required for readback")
+        now = i.released_at
+        if full and r.action == "capture":
+            now = max(now, control_values(r)[1].issued_at)
     if (
         i.codec_version != 2
         or i.action != r.action
@@ -99,17 +164,39 @@ def validate_request(data, *, now=None):
         ):
             raise ValueError("exact candidate bytes required")
     reservation = i.reservation
+    fixed_bounds = (
+        reservation.runtime_allowance_seconds,
+        r.contract.budget.per_operation_timeout_seconds,
+        r.contract.budget.total_deadline_seconds,
+    )
+    if full and r.action == "capture":
+        from .control_protocol import SupervisionCursor
+
+        scope, lease, authority, admitted = control_values(r)
+        cursor = SupervisionCursor(
+            policy=getattr(r.contract.budget, "control"),
+            scope=scope,
+            instance=lease.instance,
+            principal=lease.principal,
+            fence=i.worker_fence,
+            contract_digest=contract_digest(r.contract),
+            allocation_digest=identity(reservation.model_dump(mode="json")),
+        )
+        cursor.check(lease, authority=authority, wall_now=now, monotonic_now=time.monotonic())
+        end = r.contract.budget.deadline_at(admitted)
+        if lease.generation != 1 or r.deadline != lease.expires_at or (end is not None and r.deadline > end):
+            raise ValueError("Initial acknowledged lease and workload clock required")
+        fixed_bounds = ()
+    elif full:
+        fixed_bounds = fixed_bounds[:2]
+    if any(type(value) not in (float, int) or not math.isfinite(value) or value < 0 for value in fixed_bounds):
+        raise ValueError("legacy worker requires finite fixed bounds")
+    fixed_limit = min(float(value) for value in fixed_bounds if value is not None) if fixed_bounds else None
     if (
         type(r.deadline) not in (float, int)
         or not math.isfinite(r.deadline)
         or r.deadline <= now
-        or r.deadline
-        > i.released_at
-        + min(
-            reservation.runtime_allowance_seconds,
-            r.contract.budget.per_operation_timeout_seconds,
-            r.contract.budget.total_deadline_seconds,
-        )
+        or (fixed_limit is not None and r.deadline > i.released_at + fixed_limit)
         or any((
             reservation.model_calls,
             reservation.model_tokens,
@@ -129,7 +216,13 @@ def validate_request(data, *, now=None):
             or reservation.realizations != 1
             or reservation.observations != 1
             or reservation.steps < s.window.end_step
-            or reservation.runtime_allowance_seconds < s.max_runtime_seconds
+            or (
+                s.max_runtime_seconds is not None
+                and (
+                    reservation.runtime_allowance_seconds is None
+                    or reservation.runtime_allowance_seconds < s.max_runtime_seconds
+                )
+            )
         ):
             raise ValueError("exact capture reservation required")
     elif (
@@ -181,7 +274,20 @@ def read_retained(area, reference, *, family, binding, protect):
 
 
 def retain_request(
-    area, *, root, action, intent, candidate, original, contract, settings, deadline, protect, retained_observation=None
+    area,
+    *,
+    root,
+    action,
+    intent,
+    candidate,
+    original,
+    contract,
+    settings,
+    deadline,
+    protect,
+    retained_observation=None,
+    control=None,
+    validated_semantic_sha256=None,
 ):
     """Retain one release; no authority, callback names or credentials on the wire."""
     data = dict(action=action, deadline=deadline)
@@ -194,6 +300,10 @@ def retain_request(
         retained_observation=retained_observation,
     ).items():
         data[key] = None if value is None else value.model_dump(mode="json")
+    if contract.schema_version == "5":
+        data.update(
+            codec=CODECS[action] + "-request-v2", control=control, validated_semantic_sha256=validated_semantic_sha256
+        )
     request = validate_request(data)
     prefix = CODECS[action]
     ref = _retain(area, prefix + "-input", request.binding(), data, protect)
@@ -241,14 +351,14 @@ def packet_action(packet):
     return actions[0]
 
 
-def read_request(area, packet, *, protect):
+def read_request(area, packet, *, protect, for_execution=True):
     action = packet_action(packet)
     p = packet["payload"]
     if (p["store_id"], p["registry_id"]) != (area.store_id, area.registry_id):
         raise ValueError("exact artifact area required")
     ref = p["request"]
     data = read_retained(area, ref, family=CODECS[action] + "-input", binding=ref["binding"], protect=protect)
-    request = validate_request(data)
+    request = validate_request(data, historical=not for_execution)
     if action != request.action or canonical(request.binding()) != canonical(ref["binding"]):
         raise ValueError("released request binding mismatch")
     return request

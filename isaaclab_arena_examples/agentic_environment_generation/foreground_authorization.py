@@ -117,6 +117,7 @@ class ForegroundAuthority:
         prior_source=None,
         native_admission=None,
         assessment_admission=None,
+        full_scene_admission=None,
     ):
         self.scope = dict(database=database, deployment_id=deployment_id, workspace_id=workspace_id)
         self.store, self.grants, self.clock = store, grants, clock
@@ -125,6 +126,7 @@ class ForegroundAuthority:
         self.prior_source = prior_source
         self.native_admission = native_admission
         self.assessment_admission = assessment_admission
+        self.full_scene_admission = full_scene_admission
         self.profiles = copy.deepcopy(profiles)
         self._lock = RLock()
         self._closed = False
@@ -214,7 +216,7 @@ class ForegroundAuthority:
         self.require_read(principal)
         if not isinstance(operation_id, str) or not operation_id:
             raise ValueError("Invalid operation")
-        if contract.source.kind != "new" and contract.schema_version not in ("3", "4"):
+        if contract.source.kind != "new" and contract.schema_version not in ("3", "4", "5"):
             raise ValueError("Foreground refinement and research reads are unsupported")
         if contract.schema_version == "3" and (
             not callable(self.native_admission) or self.native_admission(principal, operation_id, contract) is not True
@@ -229,6 +231,12 @@ class ForegroundAuthority:
             if contract.retrieval is None or self.prior_source is None:
                 raise ValueError("Foreground prior reads are not configured")
             self.prior_source(contract.retrieval)
+        if contract.schema_version == "5":
+            if not callable(self.full_scene_admission):
+                raise ValueError("Explicit full-scene workload admission required")
+            expiry = _deadline(self.full_scene_admission(principal, operation_id, contract))
+            if self.clock() >= expiry:
+                raise ValueError("Full-scene workload authority expired")
         if not contract.effects.allow_operational_writes:
             raise ValueError("Operational writes require permission")
         self.protect_public(contract.model_dump(mode="json"))
@@ -278,7 +286,10 @@ class ForegroundAuthority:
             raise ValueError("Paid model permission required")
         if self.clock() >= expires or "workflow_accounting" not in config:
             raise ValueError("Current attested token/cost bound required")
-        if config["workflow_accounting"]["version"] != (2 if contract.schema_version == "4" else 1):
+        accounting_only = contract.schema_version == "4" or (
+            contract.schema_version == "5" and contract.budget.policy.cost != "enforced"
+        )
+        if config["workflow_accounting"]["version"] != (2 if accounting_only else 1):
             raise ValueError("Accounting policy differs from the selected execution mode")
         return dict(config["workflow_accounting"])
 
@@ -376,11 +387,11 @@ class ForegroundAuthority:
         """
         self._workflow_sources(principal, contract, operation_id=operation_id)
 
-    def _issue_workflow_roles(self, principal, snapshot, binding, sources):
+    def _issue_workflow_roles(self, principal, snapshot, binding, sources, *, include_generation=False):
         roles = {}
         try:
             for role, (profile, config, expiry) in sources.items():
-                if role == "generation":
+                if role == "generation" and not include_generation:
                     continue
                 operation = _hash(dict(version=1, run_binding=binding, role=role))
                 expires = min(expiry, snapshot.expires_at)
@@ -403,7 +414,11 @@ class ForegroundAuthority:
             raise ValueError("Explicit new workflow binding required")
         sources = self._workflow_sources(principal, contract)
         self._workflow_bindings[run_id] = self._issue_workflow_roles(
-            principal, snapshot, self._bindings[run_id][1], sources
+            principal,
+            snapshot,
+            self._bindings[run_id][1],
+            sources,
+            include_generation=contract.schema_version == "5",
         )
         return snapshot
 
@@ -415,7 +430,7 @@ class ForegroundAuthority:
         if roles is None:
             raise ValueError("Explicit workflow model binding required")
         sources = self._workflow_sources(principal, contract)
-        if set(roles) != set(sources) - {"generation"}:
+        if set(roles) != set(sources) - (set() if contract.schema_version == "5" else {"generation"}):
             raise ValueError("Exact workflow roles required")
         for role, (reference, binding, profile, expiry) in roles.items():
             current_profile, current, current_expiry = sources[role]
@@ -431,7 +446,7 @@ class ForegroundAuthority:
         if scope not in self._release_scopes:
             raise ValueError("Held scene release guard required")
         snapshot = self.require_scene_execute(principal, contract, run_id=run_id)
-        if role == "generation":
+        if role == "generation" and contract.schema_version != "5":
             reference, binding = snapshot.grant_ref, self._bindings[run_id][1]
         else:
             if role not in self._workflow_bindings[run_id]:
@@ -465,7 +480,8 @@ class ForegroundAuthority:
         assert isinstance(p, dict), "Checked principal metadata required"
         native_only = contract.schema_version == "3"
         retained_assessment = contract.schema_version == "4"
-        if native_only:
+        full_scene = contract.schema_version == "5"
+        if native_only or full_scene:
             profile, config, credential_expiry = contract.execution.runtime.model_dump(mode="json"), {}, p["expires_at"]
         else:
             profile, config, credential_expiry = self._source(
@@ -473,10 +489,19 @@ class ForegroundAuthority:
             )
         public_intent = {"contract": contract.model_dump(mode="json"), "profile": profile}
         self.protect_public(public_intent)
-        if not native_only:
+        if not (native_only or full_scene):
             reject_secret(public_intent, config["api_key"])
-        lifetime = contract.budget.total_deadline_seconds if native_only or retained_assessment else 180
-        expires = min(_deadline(p["expires_at"]), credential_expiry, _deadline(self.clock()) + lifetime)
+        if full_scene:
+            from .web_api.execution_grants import MAX_TTL_SECONDS
+
+            approved_until = _deadline(self.full_scene_admission(principal, operation_id, contract))
+            expires = min(approved_until, _deadline(self.clock()) + MAX_TTL_SECONDS)
+            duration = contract.budget.enforced_limit("deadline")
+            if duration is not None:
+                expires = min(expires, self.clock() + duration)
+        else:
+            lifetime = contract.budget.total_deadline_seconds if native_only or retained_assessment else 180
+            expires = min(_deadline(p["expires_at"]), credential_expiry, _deadline(self.clock()) + lifetime)
         binding = _hash(
             dict(
                 version=1,
@@ -487,7 +512,7 @@ class ForegroundAuthority:
                 catalogue=catalogue,
             )
         )
-        capability = "native_validation" if native_only else "model"
+        capability = "native_validation" if native_only or full_scene else "model"
         public = self.grants.issue(principal, binding, capability, profile, config, expires)
         capabilities = [
             "native_validation" if native_only else "assessment_model" if retained_assessment else "generation_model",
@@ -495,6 +520,15 @@ class ForegroundAuthority:
         ]
         if contract.effects.allow_paid_models:
             capabilities.append("paid_models")
+        if full_scene:
+            from isaaclab_arena.agentic_environment_generation.workflow.readiness import required_dependencies
+
+            required = {item.dependency_id for item in required_dependencies(contract)}
+            capabilities = ["native_validation", "operational_writes"] + [
+                role for role in ("generation_model", "assessment_model") if role in required
+            ]
+            if contract.effects.allow_paid_models:
+                capabilities.append("paid_models")
         try:
             snapshot = AuthorizationSnapshot(
                 **self.scope,
@@ -506,7 +540,9 @@ class ForegroundAuthority:
             )
             self.protect_public(contract.model_dump(mode="json"))
             if workflow_sources is not None:
-                roles = self._issue_workflow_roles(principal, snapshot, binding, workflow_sources)
+                roles = self._issue_workflow_roles(
+                    principal, snapshot, binding, workflow_sources, include_generation=full_scene
+                )
         except BaseException:
             self.grants.revoke(public["grant_id"])
             raise
@@ -529,7 +565,13 @@ class ForegroundAuthority:
         if registration.fence != fence or attempt.fence != fence or attempt.registration != registration:
             raise ValueError("Exact retained registration required")
         _, binding, catalogue, _ = self._bindings[fence.run_id]
-        config = self.grants.resolve(principal, snapshot.grant_ref, binding, "model")
+        if contract.source.kind != "new":
+            raise ValueError("Existing source has no initial generation envelope")
+        if contract.schema_version == "5":
+            reference, role_binding, _, _ = self._workflow_bindings[fence.run_id]["generation"]
+            config = self.grants.resolve(principal, reference, role_binding, "model")
+        else:
+            config = self.grants.resolve(principal, snapshot.grant_ref, binding, "model")
         packet = {
             "inputs": {
                 "operation": "new",
@@ -547,7 +589,11 @@ class ForegroundAuthority:
                 "admitted_at": attempt.admitted_at,
                 "released_at": attempt.released_at,
                 "deadline": min(
-                    attempt.admitted_at + contract.budget.total_deadline_seconds,
+                    *(
+                        [contract.budget.deadline_at(attempt.admitted_at)]
+                        if contract.budget.deadline_at(attempt.admitted_at) is not None
+                        else []
+                    ),
                     snapshot.expires_at,
                     *(
                         [attempt.released_at + attempt.reservation.runtime_allowance_seconds]
@@ -578,7 +624,11 @@ class ForegroundAuthority:
             roles = self._workflow_bindings.get(run.run_id)
             if old is None and roles is None:
                 return "bind" if renew_authorization else "not_ready"
-            if old is None or roles is None or set(roles) != set(sources) - {"generation"}:
+            if (
+                old is None
+                or roles is None
+                or set(roles) != set(sources) - (set() if contract.schema_version == "5" else {"generation"})
+            ):
                 return "not_ready"
             snapshot, binding, catalogue, profile = old
             expected = _hash(
@@ -595,7 +645,12 @@ class ForegroundAuthority:
                 snapshot.principal != principal
                 or snapshot.contract_digest != contract_digest(contract)
                 or binding != expected
-                or profile != sources["generation"][0]
+                or profile
+                != (
+                    contract.execution.runtime.model_dump(mode="json")
+                    if contract.schema_version == "5"
+                    else sources["generation"][0]
+                )
             ):
                 return "not_ready"
             for role, (_, role_binding, role_profile, _) in roles.items():
@@ -682,8 +737,10 @@ class ForegroundAuthority:
                 != snapshot.model_dump(exclude={"grant_ref", "expires_at"})
             ):
                 raise ValueError("Exact retained attempt required")
-        if contract.schema_version == "3":
-            if fence is not None or "native_validation" not in snapshot.capabilities:
+        if contract.schema_version in ("3", "5"):
+            if (
+                fence is not None and contract.schema_version == "3"
+            ) or "native_validation" not in snapshot.capabilities:
                 raise ValueError("Native-only authority cannot authorize generation")
             current_profile, current, expires = (
                 contract.execution.runtime.model_dump(mode="json"),

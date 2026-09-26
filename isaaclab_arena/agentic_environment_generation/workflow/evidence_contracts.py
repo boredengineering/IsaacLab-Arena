@@ -14,13 +14,14 @@ import json
 
 from .contracts import WorkflowContract
 from .evidence import CriterionRequirement
+from .observation_schedule import criterion_coverage
 
 
 def project_required_criteria(contract: WorkflowContract, *, include_policy=False) -> tuple[CriterionRequirement, ...]:
     """Project required scene criteria; reject profiles this assessor cannot represent.
 
-    All required criteria share one exact inclusive step window. Frame identities
-    are per-criterion exact sets, so cameras need not share the cohort's scene frame.
+    Legacy required criteria share one exact inclusive window. Schema 5 carries
+    explicit per-criterion coverage; different windows never imply different resets.
     Advisory criteria do not participate. Structural reuse is deliberately disabled:
     the frozen contract does not assert state independence.
     """
@@ -59,10 +60,11 @@ def project_required_criteria(contract: WorkflowContract, *, include_policy=Fals
                 modality=profile[1],
                 evaluator_version=criterion.evaluator_version,
                 rubric_id=digest,
+                **({} if criterion.parameters is None else dict(coverage=criterion_coverage(criterion))),
             )
         )
     if not requirements:
         raise ValueError("at least one required criterion is necessary")
-    if len({requirement.step_window for requirement in requirements}) != 1:
+    if contract.schema_version != "5" and len({requirement.step_window for requirement in requirements}) != 1:
         raise ValueError("unsupported differing required observation windows")
     return tuple(requirements)

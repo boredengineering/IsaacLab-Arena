@@ -8,14 +8,31 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from math import hypot, isfinite
+from typing import Annotated, Literal
 
-from .contracts import WorkflowContract, canonical_json, contract_digest, parse_contract
+from pydantic import Field
+
+from .contracts import (
+    Amount,
+    Count,
+    FrozenModel,
+    Hash,
+    Identifier,
+    SchemaPath,
+    WorkflowContract,
+    canonical_json,
+    contract_digest,
+    parse_contract,
+)
 
 __all__ = [
     "SceneRepairReceipt",
     "PermittedSceneRepairReceipt",
     "validate_scene_repair",
     "validate_permitted_scene_repair",
+    "ResolvedRepairSelection",
+    "resolve_repair_selection",
+    "validate_selected_scene_repair",
 ]
 
 
@@ -185,6 +202,103 @@ def validate_permitted_scene_repair(
         hashlib.sha256(_scene_json(candidate).encode("utf-8")).hexdigest(),
         delta,
     )
+
+
+class ResolvedRepairSelection(FrozenModel):
+    """Exact original-centered scalar grammar; weighted placement is not a pose assignment."""
+
+    codec: Literal["scalar-xy-selection-v1"]
+    run_id: Identifier
+    contract_digest: Hash
+    original_candidate_id: Hash
+    original_scene_digest: Hash
+    target_subject: Identifier
+    relation_index: Count
+    schema_paths: Annotated[tuple[SchemaPath, ...], Field(min_length=1, max_length=2)]
+    coordinate_frame: Literal["env_local"]
+    units: Literal["m"]
+    original_xy_m: tuple[
+        Annotated[float, Field(strict=True, allow_inf_nan=False)],
+        Annotated[float, Field(strict=True, allow_inf_nan=False)],
+    ]
+    max_displacement_m: Amount
+    placement_semantics: Literal["weighted-at-position-root-xy-v1"]
+    relation_loss_weight: Annotated[float, Field(strict=True, gt=0, allow_inf_nan=False)]
+    applies_changes: Literal[False] = False
+    establishes_physical_effect: Literal[False] = False
+    requires_measured_displacement: Literal[True] = True
+
+    def digest(self):
+        return hashlib.sha256(_scene_json(self.model_dump(mode="json")).encode()).hexdigest()
+
+
+def resolve_repair_selection(contract, original):
+    """Bind frozen permissions to a unique active scalar relation before any effect.
+
+    The caller supplies its retained original CandidateRecord, not a revision.
+    Provenance and release authority remain the owner's responsibility. A generated
+    scene must match the selected exact-pointer grammar or is refused, not rewritten.
+    """
+    from .scene_loop import CandidateRecord
+
+    contract = parse_contract(canonical_json(contract))
+    original = CandidateRecord.model_validate_json(original.model_dump_json())
+    scene = json.loads(original.scene_json)
+    raw = _scene_json(scene)
+    if (
+        original.parent_id is not None
+        or original.original_id != original.candidate_id
+        or raw != original.scene_json
+        or hashlib.sha256(raw.encode()).hexdigest() != original.digest
+    ):
+        raise ValueError("repair_original_binding_required")
+    rules = contract.allowed_interventions
+    if not rules or len({r.subject_id for r in rules}) != 1:
+        raise ValueError("repair_missing_or_unsupported_permissions")
+    subject = rules[0].subject_id
+    if contract.action_policy is not None and contract.action_policy.target_subject not in (None, subject):
+        raise ValueError("repair_policy_target_mismatch")
+    index, xy = _target_relation(scene, subject)
+    params = scene["relations"][index]["params"]
+    if set(params) - {"x", "y", "z", "relation_loss_weight"}:
+        raise ValueError("repair_unsupported_parameters")
+    weight = _number(params.get("relation_loss_weight", 1.0), "repair_unsupported_weight")
+    if weight <= 0:
+        raise ValueError("repair_unsupported_weight")
+    paths = tuple(r.schema_path for r in rules)
+    if len(set(paths)) != len(paths) or any(
+        r.coordinate_frame != "env_local"
+        or r.schema_path not in {f"/relations/{index}/params/x", f"/relations/{index}/params/y"}
+        for r in rules
+    ):
+        raise ValueError("repair_unsupported_path_or_frame")
+    for rule in contract.preserved:
+        _preserved_subtree(scene, rule.schema_path, rule.subject_id)
+    return ResolvedRepairSelection(
+        codec="scalar-xy-selection-v1",
+        run_id=original.run_id,
+        contract_digest=contract_digest(contract),
+        original_candidate_id=original.candidate_id,
+        original_scene_digest=original.digest,
+        target_subject=subject,
+        relation_index=index,
+        schema_paths=paths,
+        coordinate_frame="env_local",
+        units="m",
+        original_xy_m=xy,
+        max_displacement_m=min(r.max_total_displacement_m for r in rules),
+        placement_semantics="weighted-at-position-root-xy-v1",
+        relation_loss_weight=weight,
+    )
+
+
+def validate_selected_scene_repair(contract, selection, original, candidate):
+    """Consume the exact resolved selection and preserve every unauthorized field."""
+    selection = ResolvedRepairSelection.model_validate(selection.model_dump(mode="python"))
+    expected = resolve_repair_selection(contract, original)
+    if selection != expected:
+        raise ValueError("repair_original_selection_mismatch")
+    return validate_permitted_scene_repair(contract, json.loads(original.scene_json), candidate)
 
 
 @dataclass(frozen=True, slots=True)

@@ -38,8 +38,9 @@ async def observe_execution_shutdown(task, app):
 
 
 class Control:
-    def __init__(self, config, selected, known, revoke):
+    def __init__(self, config, selected, known, revoke, refresh=None):
         self.config, self.selected, self.known, self.revoke = config, selected, known, revoke
+        self.refresh = refresh
         self.stop = threading.Event()
         self.closed = threading.Event()
         self.directory = Directory(instance_path(config, selected))
@@ -70,12 +71,16 @@ class Control:
                         or packet["v"] != 1
                         or packet["instance"] != self.selected
                         or packet["config_sha256"] != self.config.digest
-                        or packet["op"] not in {"status", "stop"}
+                        or packet["op"] not in {"status", "stop", "refresh-auth"}
                     ):
                         raise ValueError("Control request rejected")
                     if packet["op"] == "stop":
                         self.stop.set()
                         self.revoke()
+                    if packet["op"] == "refresh-auth":
+                        if self.refresh is None or self.stop.is_set() or self.known["state"] != "ready":
+                            raise PermissionError("Private refresh unavailable")
+                        self.refresh()
                     response = {
                         "v": 1,
                         "instance": self.selected,
@@ -136,7 +141,63 @@ async def retain_unknown(app, config, selected, known, *, pending=None):
             continue
 
 
-async def supervise(config, selected, known, *, native_authorized=False, assessment_authorized=False):
+def _issue_principal(config, registry):
+    policy = None
+    if config.value["mode"] == "full-scene-workflow-v1":
+        from .installed_full_scene import selection
+
+        policy = getattr(selection(config).cases[0].contract.budget, "control")
+    token = registry.issue(
+        principal=config.value["read_principal"],
+        lifetime=policy.max_credential_lifetime_seconds if policy is not None else 3600,
+    )
+    auth = registry.authenticate(("Bearer " + token).encode())
+    descriptor = registry.bind_current(auth, policy) if policy is not None else None
+    return policy, token, auth, descriptor
+
+
+def _compose_execution(
+    config, registry, auth, resources, native_authorized, assessment_authorized, workload_authorized
+):
+    import importlib
+
+    mode = config.value["mode"]
+    arguments = {"tokens": registry, "auth": auth}
+    if mode == "isolated-synthetic-execution-v1":
+        execution = importlib.import_module("isaaclab_arena.agentic_environment_generation.workflow.api.installed_execution")
+    elif mode == "retained-native-validation-v1":
+        from . import installed_native as execution
+
+        arguments["native_authorized"] = native_authorized
+    elif mode == "retained-visual-assessment-v1":
+        from . import installed_assessment as execution
+
+        arguments.update(assessment_authorized=assessment_authorized, private_roles=lambda: resources.private_roles())
+    elif mode == "full-scene-workflow-v1":
+        from . import installed_full_scene as execution
+
+        arguments.update(workload_authorized=workload_authorized, private_roles=lambda: resources.private_roles())
+    else:
+        return None, None
+    return execution, execution.compose(config, **arguments)
+
+
+def _refresh_principal(app, policy, registry, auth, config, selected):
+    owner = app.state.execution_owner
+    if policy is None or owner is None:
+        raise PermissionError("Private credential refresh not installed")
+
+    def deliver(value):
+        with Directory(instance_path(config, selected)) as directory:
+            directory.write("client.json", encode({**value, "endpoint": config.value["endpoint"]}), replace=True)
+
+    with owner.root.authority.mutation_guard():
+        registry.refresh_current(auth, deliver=deliver)
+
+
+async def supervise(
+    config, selected, known, *, native_authorized=False, assessment_authorized=False, workload_authorized=False
+):
     import httpx
     import uvicorn
 
@@ -146,35 +207,11 @@ async def supervise(config, selected, known, *, native_authorized=False, assessm
     from .security import TokenRegistry
 
     registry = TokenRegistry(binding=config.binding, instance=selected, generation=1, clock=time.time)
-    token = registry.issue(principal=config.value["read_principal"], lifetime=3600)
-    auth = registry.authenticate(("Bearer " + token).encode())
-    execution_factory = None
-    if config.value["mode"] == "isolated-synthetic-execution-v1":
-        import importlib
-
-        # This literal is an explicit execution root, not a discoverable plugin.
-        execution = importlib.import_module(
-            "isaaclab_arena.agentic_environment_generation.workflow.api.installed_execution"
-        )
-        execution_factory = execution.compose(config, tokens=registry, auth=auth)
-    elif config.value["mode"] == "retained-native-validation-v1":
-        import importlib
-
-        execution = importlib.import_module(
-            "isaaclab_arena.agentic_environment_generation.workflow.api.installed_native"
-        )
-        execution_factory = execution.compose(config, tokens=registry, auth=auth, native_authorized=native_authorized)
-    elif config.value["mode"] == "retained-visual-assessment-v1":
-        from . import installed_assessment as execution
-
-        execution_factory = execution.compose(
-            config,
-            tokens=registry,
-            auth=auth,
-            assessment_authorized=assessment_authorized,
-            private_roles=lambda: resources.private_roles(),
-        )
+    policy, token, auth, principal_descriptor = _issue_principal(config, registry)
     resources = Resources(config)
+    execution, execution_factory = _compose_execution(
+        config, registry, auth, resources, native_authorized, assessment_authorized, workload_authorized
+    )
 
     def protect(value):
         resources.protect(value)
@@ -215,11 +252,16 @@ async def supervise(config, selected, known, *, native_authorized=False, assessm
         timeout_graceful_shutdown=2 if execution_factory is not None else None,
     )
     server = uvicorn.Server(settings)
+
+    def refresh():
+        _refresh_principal(app, policy, registry, auth, config, selected)
+
     control = Control(
         config,
         selected,
         known,
         app.state.request_execution_stop if execution_factory is not None else registry.rotate,
+        refresh=refresh if policy is not None else None,
     )
     failed = False
 
@@ -279,6 +321,8 @@ async def supervise(config, selected, known, *, native_authorized=False, assessm
             "expires_at": auth.expires_at,
             "bearer": token,
         }
+        if principal_descriptor is not None:
+            descriptor.update(principal_descriptor)
         with Directory(config.value["private_root"]) as root, root.lease("metadata.lock"):
             with Directory(instance_path(config, selected)) as directory:
                 directory.write("client.json", encode(descriptor))
@@ -286,6 +330,8 @@ async def supervise(config, selected, known, *, native_authorized=False, assessm
             if app.state.execution_owner is None:
                 raise ValueError("Execution composition unavailable")
             known["capabilities"] = dict(execution.CAPABILITIES)
+            if policy is not None:
+                known["capabilities"]["submit"] = workload_authorized
         known.update(state="ready", code="ready")
         save_state(config, selected, known)
         while not task.done() and not control.stop.is_set():
@@ -319,7 +365,9 @@ async def supervise(config, selected, known, *, native_authorized=False, assessm
     return 0
 
 
-def serve(config, selected, lifetime, gate, *, native_authorized=False, assessment_authorized=False):
+def serve(
+    config, selected, lifetime, gate, *, native_authorized=False, assessment_authorized=False, workload_authorized=False
+):
     """No operational effects until inherited lease, intent and startup gate agree."""
     known = validate_gate(config, selected, lifetime, gate)
     logging.disable(logging.CRITICAL)
@@ -331,6 +379,7 @@ def serve(config, selected, lifetime, gate, *, native_authorized=False, assessme
                 known,
                 native_authorized=native_authorized,
                 assessment_authorized=assessment_authorized,
+                workload_authorized=workload_authorized,
             )
         )
     finally:

@@ -101,15 +101,127 @@ class WorkflowBudget(FrozenModel):
     per_operation_timeout_seconds: Duration
     total_deadline_seconds: Duration
 
+    def enforced_limit(self, resource):
+        """Return an effective aggregate ceiling, not a transport or supervision limit."""
+        field = {
+            "runtime": "max_runtime_seconds",
+            "deadline": "total_deadline_seconds",
+            "model_tokens": "max_model_tokens",
+            "cost": "max_cost_usd",
+        }[resource]
+        policy = getattr(self, "policy", None)
+        return getattr(self, field) if policy is None or getattr(policy, resource) == "enforced" else None
+
+    def deadline_at(self, admitted_at):
+        """Resolve the immutable admission deadline only when enforcement is selected."""
+        limit = self.enforced_limit("deadline")
+        return None if limit is None else admitted_at + limit
+
+    def allows_resource(self, resource, amount):
+        """Check a cumulative reservation only when its resource policy is enforced."""
+        limit = self.enforced_limit(resource)
+        return limit is None or (amount is not None and amount <= limit)
+
+    def allows_time(self, admitted_at, now, duration):
+        """Keep a finite transport allowance distinct from the aggregate deadline."""
+        if type(admitted_at) not in (int, float) or not math.isfinite(admitted_at) or now < admitted_at:
+            return False
+        deadline = self.deadline_at(admitted_at)
+        if duration is None:
+            return deadline is None and self.enforced_limit("runtime") is None
+        if type(duration) not in (int, float) or not math.isfinite(duration) or duration <= 0:
+            return False
+        return duration <= self.per_operation_timeout_seconds and (
+            deadline is None or (now < deadline and now + duration <= deadline)
+        )
+
     @model_validator(mode="after")
     def bounded_time(self):
-        if self.per_operation_timeout_seconds > self.total_deadline_seconds:
+        policy = getattr(self, "policy", None)
+        if (
+            self.total_deadline_seconds is not None
+            and (policy is None or policy.deadline == "enforced")
+            and self.per_operation_timeout_seconds > self.total_deadline_seconds
+        ):
             raise ValueError("operation timeout exceeds total deadline duration")
         return self
 
 
+ExperimentMode = Literal["enforced", "advisory", "accounting_only"]
+
+
+class ExperimentPolicy(FrozenModel):
+    """Aggregate experiment ceilings only; issued effect counts remain ceilings."""
+
+    codec: Literal["experiment-policy-v1"]
+    runtime: ExperimentMode
+    deadline: ExperimentMode
+    model_tokens: ExperimentMode
+    cost: ExperimentMode
+
+
+class ControlPolicy(FrozenModel):
+    """Finite renewable control selections, not workload or credential authority."""
+
+    codec: Literal["renewable-control-v1"]
+    max_supervision_lease_seconds: Duration
+    heartbeat_seconds: Duration
+    max_credential_lifetime_seconds: Annotated[float, Field(strict=True, gt=0, le=3600, allow_inf_nan=False)]
+    client_descriptor_schema: Literal["2"]
+
+    @model_validator(mode="after")
+    def finite_heartbeat(self):
+        if self.heartbeat_seconds >= self.max_supervision_lease_seconds:
+            raise ValueError("heartbeat must precede finite supervision expiry")
+        return self
+
+
+class ExperimentBudget(WorkflowBudget):
+    """Schema-5 accounting; per-operation timeout remains a finite backend bound."""
+
+    max_runtime_seconds: Amount | None
+    total_deadline_seconds: Duration | None
+    policy: ExperimentPolicy
+    control: ControlPolicy
+
+    @model_validator(mode="after")
+    def explicit_ceiling_policy(self):
+        for resource, value in (
+            ("runtime", self.max_runtime_seconds),
+            ("deadline", self.total_deadline_seconds),
+            ("model_tokens", self.max_model_tokens),
+            ("cost", self.max_cost_usd),
+        ):
+            mode = getattr(self.policy, resource)
+            if (mode == "enforced" and value is None) or (mode == "accounting_only" and value is not None):
+                raise ValueError("enforced ceilings must be finite; accounting-only ceilings must be null")
+        return self
+
+    def experiment_limit_status(self, resource, used):
+        """Interpret measured usage without refunding reservations or granting effects."""
+        limits = {
+            "runtime": self.max_runtime_seconds,
+            "deadline": self.total_deadline_seconds,
+            "model_tokens": self.max_model_tokens,
+            "cost": self.max_cost_usd,
+        }
+        if resource not in limits:
+            raise ValueError("unsupported aggregate experiment resource")
+        if used is None:
+            return "unknown"
+        if type(used) not in (int, float) or not math.isfinite(used) or used < 0:
+            raise ValueError("finite nonnegative usage required")
+        mode, limit = getattr(self.policy, resource), limits[resource]
+        if mode == "accounting_only":
+            return "accounted"
+        if limit is None:
+            return "unbounded_advisory"
+        exceeded = used >= limit if resource == "deadline" else used > limit
+        return f"{mode}_exceeded" if exceeded else "within"
+
+
 class CriterionLimit(FrozenModel):
-    operator: Literal["ge", "le", "eq"]
+    operator: Literal["lt", "gt", "ge", "le", "eq"]
     value: Annotated[float, Field(strict=True, allow_inf_nan=False, ge=-1e12, le=1e12)]
     unit: Identifier
 
@@ -124,6 +236,173 @@ class ObservationWindow(FrozenModel):
     def ordered(self):
         if self.end_step < self.start_step:
             raise ValueError("observation window end precedes start")
+        return self
+
+
+class ImageSelection(FrozenModel):
+    """A saved observation selection, not an assertion that a sensor updated."""
+
+    camera: Identifier
+    step: Count
+    modality: Literal["rgb"]
+
+
+class CriterionCoverage(FrozenModel):
+    """Exact criterion coverage, independent of the acquisition's other streams."""
+
+    clock: Literal["control_step"]
+    state_steps: Annotated[tuple[Count, ...], Field(max_length=256)]
+    images: Annotated[tuple[ImageSelection, ...], Field(max_length=16)]
+
+    @model_validator(mode="after")
+    def unique_coverage(self):
+        if tuple(sorted(set(self.state_steps))) != self.state_steps or len(set(self.images)) != len(self.images):
+            raise ValueError("duplicate or unordered criterion coverage")
+        if not self.state_steps and not self.images:
+            raise ValueError("empty criterion coverage")
+        return self
+
+
+class AcquisitionSchedule(FrozenModel):
+    """Initial explicit adapter capability; event/adaptive policies are unsupported."""
+
+    codec: Literal["explicit-acquisition-v1"]
+    adapter: Literal["droid-rigid-world-v1"]
+    clock: Literal["control_step"]
+    reference_frame: Literal["world"]
+    control_dt_seconds: Duration
+    horizon_steps: Annotated[int, Field(strict=True, ge=1, le=10000)]
+    subjects: Annotated[tuple[Identifier, ...], Field(min_length=1, max_length=16)]
+    state_steps: Annotated[tuple[Count, ...], Field(max_length=256)]
+    images: Annotated[tuple[ImageSelection, ...], Field(max_length=16)]
+    renderer_update_steps: Annotated[tuple[Count, ...], Field(max_length=256)]
+    """Requested update events; collection must separately attest actual sensor time."""
+    displacement_step: Count | None
+
+    @model_validator(mode="after")
+    def supported_schedule(self):
+        if len(set(self.subjects)) != len(self.subjects) or not (self.state_steps or self.images):
+            raise ValueError("unique subjects and nonempty acquisition required")
+        for steps in (self.state_steps, self.renderer_update_steps):
+            if tuple(sorted(set(steps))) != steps or any(step > self.horizon_steps for step in steps):
+                raise ValueError("schedule steps must be unique, ordered and within the horizon")
+        image_steps = tuple(image.step for image in self.images)
+        if image_steps != tuple(sorted(image_steps)):
+            raise ValueError("image steps must be temporally ordered; same-step order is preserved")
+        if len(set(self.images)) != len(self.images) or any(
+            image.step not in self.renderer_update_steps for image in self.images
+        ):
+            raise ValueError("unique image identities with declared renderer updates required")
+        if self.displacement_step is not None and self.displacement_step not in self.state_steps:
+            raise ValueError("displacement requires an explicitly sampled state step")
+        return self
+
+
+class ObservationInterventionPolicy(FrozenModel):
+    """Frozen scientific continuation choices; never a release or repair grant."""
+
+    codec: Literal["scene-action-policy-v1"]
+    on_unknown: Literal["stop", "informative_observation", "diagnostic_intervention"]
+    on_false: Literal["stop", "informative_observation", "diagnostic_intervention", "corrective_repair"]
+    target_subject: Identifier | None
+    mechanism: Literal["direct-root-xy-goal-v1"] | None
+    goal_criterion_id: Identifier | None
+    prerequisite_criterion_ids: Annotated[tuple[Identifier, ...], Field(max_length=32)]
+    observation: AcquisitionSchedule | None
+    displacement_tolerance_m: Annotated[float, Field(strict=True, gt=0, le=1e12, allow_inf_nan=False)] | None = None
+    diagnostic_delta_xy_m: (
+        tuple[
+            Annotated[float, Field(strict=True, allow_inf_nan=False)],
+            Annotated[float, Field(strict=True, allow_inf_nan=False)],
+        ]
+        | None
+    ) = None
+
+    @model_validator(mode="after")
+    def explicit_action_permissions(self):
+        actions = (self.on_unknown, self.on_false)
+        if ("informative_observation" in actions) != (self.observation is not None):
+            raise ValueError("informative observation requires its selected acquisition")
+        intervention = any(action in ("diagnostic_intervention", "corrective_repair") for action in actions)
+        if intervention != all((self.target_subject, self.mechanism, self.goal_criterion_id)):
+            raise ValueError("intervention requires an explicit target, mechanism and goal")
+        if not intervention and any((self.target_subject, self.mechanism, self.goal_criterion_id)):
+            raise ValueError("unselected intervention fields")
+        if intervention != (self.displacement_tolerance_m is not None):
+            raise ValueError("intervention requires a selected displacement tolerance in meters")
+        if ("diagnostic_intervention" in actions) != (self.diagnostic_delta_xy_m is not None):
+            raise ValueError("diagnostic intervention requires its selected nonzero perturbation")
+        if self.diagnostic_delta_xy_m is not None and not any(self.diagnostic_delta_xy_m):
+            raise ValueError("diagnostic intervention cannot be a no-op")
+        if len(set(self.prerequisite_criterion_ids)) != len(self.prerequisite_criterion_ids):
+            raise ValueError("duplicate prerequisite criteria")
+        return self
+
+
+class NumericCoverageParameters(FrozenModel):
+    """Explicit sampled semantics; accepting this DTO starts no adapter."""
+
+    reference_frame: Literal["world"]
+    clock: Literal["control_step"]
+    sample_steps: Annotated[tuple[Count, ...], Field(min_length=1, max_length=256)]
+    temporal_aggregation: Literal["all", "any"]
+    subject_aggregation: Literal["all", "any"]
+    missing_data: Literal["reject"]
+    invalid_data: Literal["reject"]
+
+    @model_validator(mode="after")
+    def exact_steps(self):
+        if tuple(sorted(set(self.sample_steps))) != self.sample_steps:
+            raise ValueError("explicit sample steps must be unique and ordered")
+        return self
+
+
+class NumericPredicateParameters(NumericCoverageParameters):
+    metric: Literal["linear_speed"]
+
+
+class PoseErrorParameters(NumericCoverageParameters):
+    """Immutable world XY goal, separate from any editable authored placement."""
+
+    metric: Literal["xy_target_error"]
+    target_xy_m: tuple[
+        Annotated[float, Field(strict=True, allow_inf_nan=False)],
+        Annotated[float, Field(strict=True, allow_inf_nan=False)],
+    ]
+
+
+class StationaryPredicateParameters(NumericCoverageParameters):
+    """Both velocity norms under selected strict or inclusive stationary limits."""
+
+    metric: Literal["stationary"]
+    linear_limit: CriterionLimit
+    angular_limit: CriterionLimit
+
+    @model_validator(mode="after")
+    def stationary_units(self):
+        for limit, unit in ((self.linear_limit, "m_per_s"), (self.angular_limit, "rad_per_s")):
+            if limit.unit != unit or limit.operator not in ("lt", "le") or limit.value < 0:
+                raise ValueError("unsupported stationary units/operator/limit")
+        return self
+
+
+class VisibilityPredicateParameters(FrozenModel):
+    """Explicit camera/time propositions, independently of numeric sampling."""
+
+    metric: Literal["visibility"]
+    reference_frame: Literal["camera"]
+    clock: Literal["control_step"]
+    images: Annotated[tuple[ImageSelection, ...], Field(min_length=1, max_length=16)]
+    temporal_aggregation: Literal["all", "any"]
+    camera_aggregation: Literal["all", "any"]
+    subject_aggregation: Literal["all", "any"]
+    missing_data: Literal["reject"]
+    invalid_data: Literal["reject"]
+
+    @model_validator(mode="after")
+    def unique_images(self):
+        if len(set(self.images)) != len(self.images):
+            raise ValueError("duplicate visual observation identity")
         return self
 
 
@@ -143,6 +422,52 @@ class Criterion(FrozenModel):
     rubric: Text
     subjects: Annotated[tuple[Identifier, ...], Field(min_length=1, max_length=256)]
     limit: CriterionLimit
+    parameters: (
+        Annotated[
+            NumericPredicateParameters
+            | StationaryPredicateParameters
+            | PoseErrorParameters
+            | VisibilityPredicateParameters,
+            Field(discriminator="metric"),
+        ]
+        | None
+    ) = None
+
+    @model_serializer(mode="wrap")
+    def versioned_wire(self, serialize):
+        value = serialize(self)
+        if self.parameters is None:
+            value.pop("parameters", None)
+        return value
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def versioned_input(cls, value, validate):
+        if isinstance(value, cls):
+            fields, version, limit = value.model_fields_set, value.evaluator_version, value.limit
+        elif isinstance(value, dict):
+            fields, version, limit = set(value), value.get("evaluator_version"), value.get("limit", {})
+        else:
+            return validate(value)
+        operator = limit.get("operator") if isinstance(limit, dict) else getattr(limit, "operator", None)
+        if version not in ("numeric-v2", "full-scene-ternary-v1") and (
+            "parameters" in fields or operator in ("lt", "gt")
+        ):
+            raise ValueError("legacy criterion fields and operators are unchanged")
+        return validate(value)
+
+    @model_validator(mode="after")
+    def parameter_binding(self):
+        if self.parameters is not None:
+            visual = self.parameters.metric == "visibility"
+            if self.evaluator_version != ("full-scene-ternary-v1" if visual else "numeric-v2"):
+                raise ValueError("predicate parameters require an explicit supported evaluator")
+            steps = tuple(image.step for image in self.parameters.images) if visual else self.parameters.sample_steps
+            if (self.observation_window.start_step, self.observation_window.end_step) != (min(steps), max(steps)):
+                raise ValueError("criterion window must bound its explicit sample coverage")
+        elif self.evaluator_version in ("numeric-v2", "full-scene-ternary-v1"):
+            raise ValueError("explicit versioned predicate parameters required")
+        return self
 
 
 class NewSource(FrozenModel):
@@ -238,25 +563,33 @@ class RetainedEvidenceSource(FrozenModel):
 
 
 class WorkflowContract(FrozenModel):
-    schema_version: Literal["1", "2", "3", "4"]
+    schema_version: Literal["1", "2", "3", "4", "5"]
     source: Annotated[NewSource | ExistingSource, Field(discriminator="kind")]
     criteria: Annotated[tuple[Criterion, ...], Field(min_length=1, max_length=256)]
     preserved: Annotated[tuple[PreservationRule, ...], Field(max_length=256)]
     allowed_interventions: Annotated[tuple[InterventionRule, ...], Field(max_length=256)]
     execution: ExecutionConfiguration
-    budget: WorkflowBudget
+    budget: ExperimentBudget | WorkflowBudget
     effects: EffectsPolicy
     retrieval: PriorRetrievalSelection | None = None
     """Required in schema 2; omitted from schema 1's unchanged wire representation."""
     retained_evidence: RetainedEvidenceSource | None = None
     predecessor_run_id: Hash | None = None
     """Cancelled assessment consumer superseded by this separately admitted schema-4 operation."""
+    acquisition: AcquisitionSchedule | None = None
+    action_policy: ObservationInterventionPolicy | None = None
 
     @model_validator(mode="before")
     @classmethod
     def versioned_fields(cls, value):
         if type(value) is dict and value.get("schema_version") == "1" and "retrieval" in value:
             raise ValueError("Retrieval selection requires workflow schema 2")
+        if type(value) is dict and value.get("schema_version") != "5":
+            if "acquisition" in value or "action_policy" in value:
+                raise ValueError("Configurable selections require workflow schema 5")
+            criteria = value.get("criteria", ())
+            if type(criteria) in (list, tuple) and any(type(c) is dict and "parameters" in c for c in criteria):
+                raise ValueError("Predicate parameters require workflow schema 5")
         return value
 
     @model_serializer(mode="wrap")
@@ -268,7 +601,86 @@ class WorkflowContract(FrozenModel):
             value.pop("retained_evidence", None)
         if self.predecessor_run_id is None:
             value.pop("predecessor_run_id", None)
+        if self.schema_version != "5":
+            value.pop("acquisition", None)
+            value.pop("action_policy", None)
         return value
+
+    @model_validator(mode="after")
+    def versioned_intent(self):
+        if self.schema_version == "5":
+            from .observation_schedule import criterion_coverage
+            from .scene_observation import admit_criterion
+
+            if (
+                not isinstance(self.budget, ExperimentBudget)
+                or self.acquisition is None
+                or self.action_policy is None
+                or self.retained_evidence is not None
+                or self.predecessor_run_id is not None
+                or self.retrieval is not None
+                or self.effects.allow_database_reads
+                or self.execution.policy is not None
+                or self.execution.capture is None
+                or not self.effects.allow_runtime
+                or self.acquisition.horizon_steps > self.budget.max_steps
+                or self.acquisition.control_dt_seconds != self.execution.timestep_seconds * self.execution.decimation
+            ):
+                raise ValueError("Schema 5 requires explicit configurable capture, policy and clock selections")
+            if self.source.kind == "new" and self.execution.generation_model is None:
+                raise ValueError("New-source selection requires its generation model")
+            if any(c.kind == "visual" for c in self.criteria) and self.execution.assessment_model is None:
+                raise ValueError("Visual selection requires its assessment model")
+            if sum(c.kind == "visual" for c in self.criteria) > 1:
+                raise ValueError("Initial installed capability selects one full-scene visual request per acquisition")
+            for criterion in self.criteria:
+                criterion = admit_criterion(criterion)
+                coverage = criterion_coverage(criterion)
+                if (
+                    coverage is None
+                    or not set(criterion.subjects) <= set(self.acquisition.subjects)
+                    or not set(coverage.state_steps) <= set(self.acquisition.state_steps)
+                    or not set(coverage.images) <= set(self.acquisition.images)
+                ):
+                    raise ValueError("Schema 5 requires supported exact acquisition coverage")
+            required = {c.criterion_id for c in self.criteria if c.requirement == "required"}
+            if not required or not set(self.action_policy.prerequisite_criterion_ids) <= required:
+                raise ValueError("Required action prerequisites must name frozen required criteria")
+            if (
+                self.action_policy.goal_criterion_id is not None
+                and self.action_policy.goal_criterion_id not in required
+            ):
+                raise ValueError("Action goal must name a frozen required criterion")
+            if len(self.criteria) > 32:
+                raise ValueError("Initial configurable capability supports at most 32 predicates")
+            if self.action_policy.goal_criterion_id is not None:
+                goal = next(c for c in self.criteria if c.criterion_id == self.action_policy.goal_criterion_id)
+                if (
+                    not isinstance(goal.parameters, PoseErrorParameters)
+                    or goal.subjects != (self.action_policy.target_subject,)
+                    or self.acquisition.displacement_step not in goal.parameters.sample_steps
+                    or not self.allowed_interventions
+                    or any(r.subject_id != self.action_policy.target_subject for r in self.allowed_interventions)
+                ):
+                    raise ValueError("Supported action requires one target's immutable sampled XY goal and permissions")
+            if self.action_policy.observation is not None:
+                observation = self.action_policy.observation
+                if (
+                    observation.adapter != self.acquisition.adapter
+                    or observation.clock != self.acquisition.clock
+                    or observation.control_dt_seconds != self.acquisition.control_dt_seconds
+                    or observation.subjects != self.acquisition.subjects
+                    or observation.horizon_steps > self.budget.max_steps
+                ):
+                    raise ValueError("Unsupported informative acquisition selection")
+        elif (
+            isinstance(self.budget, ExperimentBudget)
+            or self.acquisition is not None
+            or self.action_policy is not None
+            or any(c.parameters is not None or c.limit.operator in ("lt", "gt") for c in self.criteria)
+        ):
+            raise ValueError("New predicate and policy semantics require workflow schema 5")
+        return self
 
     @model_validator(mode="after")
     def consistent_intent(self):
@@ -308,7 +720,7 @@ class WorkflowContract(FrozenModel):
                 raise ValueError("Schema 4 requires explicit accounting-only retained visibility assessment")
             if hashlib.sha256(self.source.content.encode()).hexdigest() != self.retained_evidence.candidate_sha256:
                 raise ValueError("Retained candidate source bytes differ")
-        if self.schema_version != "4" and (
+        if self.schema_version not in ("4", "5") and (
             self.retained_evidence is not None
             or self.predecessor_run_id is not None
             or self.budget.max_model_tokens is None
@@ -336,7 +748,7 @@ class WorkflowContract(FrozenModel):
                 or self.budget.max_cost_usd
             ):
                 raise ValueError("Schema 3 requires explicit model-free retained-candidate native validation")
-        elif self.schema_version != "4" and (
+        elif self.schema_version not in ("4", "5") and (
             self.execution.generation_model is None or self.execution.assessment_model is None
         ):
             raise ValueError("Legacy workflow schemas require both explicit model selections")

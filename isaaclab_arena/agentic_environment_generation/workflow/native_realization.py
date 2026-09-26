@@ -10,12 +10,13 @@ The worker owns Kit startup, resource leases, immutable retention and cleanup.
 """
 
 import math
+import operator
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
 
-LINEAR_SPEED_LIMIT = 1e-3
 _RESET_AT_ENTRY = object()
 
 
@@ -28,14 +29,23 @@ class NativeSettleSettings:
     angular_velocity_limit: float
     consecutive_steps: int = 1
     camera_names: tuple[str, ...] = ()
+    linear_velocity_limit: float = 0.001
+    codec: str = "native-settle-v1"
+    linear_operator: str = "lt"
+    angular_operator: str = "lt"
+    unsettled_policy: str = "reject"
 
     def __post_init__(self):
         assert type(self.settle_steps) is int and 0 < self.settle_steps <= 10000, "Invalid settle allocation"
         assert type(self.consecutive_steps) is int and 0 < self.consecutive_steps <= self.settle_steps
-        assert isinstance(self.angular_velocity_limit, (int, float)) and not isinstance(
-            self.angular_velocity_limit, bool
-        )
-        assert math.isfinite(self.angular_velocity_limit) and self.angular_velocity_limit > 0
+        assert self.codec in ("native-settle-v1", "native-settle-v2"), "Unsupported settle codec"
+        assert self.linear_operator in ("lt", "le") and self.angular_operator in ("lt", "le")
+        assert self.unsettled_policy in ("reject", "record"), "Unsupported unsettled disposition"
+        for limit in (self.linear_velocity_limit, self.angular_velocity_limit):
+            assert type(limit) in (int, float) and math.isfinite(limit) and limit >= 0, "Invalid velocity limit"
+        if self.codec == "native-settle-v1":
+            assert self.linear_velocity_limit == 0.001 and self.angular_velocity_limit > 0
+            assert self.linear_operator == self.angular_operator == "lt" and self.unsettled_policy == "reject"
         for values in (self.subjects, self.camera_names):
             assert type(values) is tuple and len(values) <= 64 and len(set(values)) == len(values)
             assert all(type(value) is str and 0 < len(value) <= 100 for value in values)
@@ -66,6 +76,7 @@ def build_native_environment(
     builder_cfg: ArenaEnvBuilderCfg,
     enable_cameras: bool,
     kit_cameras_enabled: bool,
+    configure_arena: Callable[[Any], Any] | None = None,
 ):
     """Convert a validated graph using Arena's existing builder, returning its wrapper.
 
@@ -84,6 +95,9 @@ def build_native_environment(
     from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
 
     arena_env = spec.to_arena_env(enable_cameras=enable_cameras)
+    if configure_arena is not None:
+        assert callable(configure_arena), "Trusted per-environment configuration required"
+        arena_env = configure_arena(arena_env)
     return ArenaEnvBuilder(arena_env, cfg=builder_cfg).make_registered()
 
 
@@ -170,6 +184,7 @@ def initialize_and_settle(
     sample_velocities=sample_native_velocities,
     hold_action_factory=build_droid_posture_hold,
     initialized_observation: Any = _RESET_AT_ENTRY,
+    observe_step=None,
 ) -> InitializedScene:
     """Hold for the entire frozen allocation, resetting once unless already initialized.
 
@@ -183,6 +198,8 @@ def initialize_and_settle(
         initialized_observation: Observation of the caller's freshly reset cohort.
             If supplied, never call reset; if omitted, retain the legacy single reset.
             The caller owns reset identity and must supply the current reset observation.
+        observe_step: Optional trusted callback(env, absolute_step, observation),
+            after the initial reset and each nonterminal step, including the handoff.
 
     Returns:
         The final observation and absolute offset for initialized capture or rollout.
@@ -195,14 +212,24 @@ def initialize_and_settle(
         "all_objects_settled": False,
         "reason": "unsettled",
         "executed_steps": 0,
-        "linear_speed_limit": LINEAR_SPEED_LIMIT,
+        "linear_speed_limit": settings.linear_velocity_limit,
         "angular_speed_limit": settings.angular_velocity_limit,
         "comparison": "strict_less_than_raw_norm",
         "samples": [],
     }
+    if settings.codec == "native-settle-v2":
+        report.update(
+            codec=settings.codec,
+            collection_status="incomplete",
+            comparison="selected_raw_norm",
+            linear_operator=settings.linear_operator,
+            angular_operator=settings.angular_operator,
+        )
 
     def reject(reason):
         report["reason"] = reason
+        if settings.codec == "native-settle-v2":
+            report["collection_status"] = "invalid"
         raise SceneSettleRejected(report)
 
     def cameras_available(obs):
@@ -225,6 +252,8 @@ def initialize_and_settle(
         obs = initialized_observation
     cameras_available(obs)
     action = hold_action_factory(env)
+    if observe_step is not None:
+        observe_step(env, 0, obs)
     consecutive = 0
     for step in range(1, settings.settle_steps + 1):
         charge_step(step)
@@ -248,13 +277,23 @@ def initialize_and_settle(
                     "angular_velocity_w": list(angular),
                     "linear_speed": speed,
                     "angular_speed": angular_speed,
-                    "settled": speed < LINEAR_SPEED_LIMIT and angular_speed < settings.angular_velocity_limit,
+                    "settled": (operator.lt if settings.linear_operator == "lt" else operator.le)(
+                        speed, settings.linear_velocity_limit
+                    ) and (operator.lt if settings.angular_operator == "lt" else operator.le)(
+                        angular_speed, settings.angular_velocity_limit
+                    ),
                 }
         except (ValueError, TypeError, KeyError, OverflowError):
             reject("invalid_measurement")
         report["samples"].append({"step": step, "subjects": subjects})
         consecutive = consecutive + 1 if all(item["settled"] for item in subjects.values()) else 0
+        if observe_step is not None:
+            observe_step(env, step, obs)
     if consecutive < settings.consecutive_steps:
-        reject("unsettled")
-    report.update(all_objects_settled=True, reason="settled")
+        if settings.unsettled_policy == "reject":
+            reject("unsettled")
+    else:
+        report.update(all_objects_settled=True, reason="settled")
+    if settings.codec == "native-settle-v2":
+        report["collection_status"] = "complete"
     return InitializedScene(obs, action, settings.settle_steps, report)

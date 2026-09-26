@@ -89,15 +89,27 @@ class ForegroundGenerationReceiver:
                     if buffer or result is None:
                         raise ValueError("Generation result missing")
                     return result
-                total += len(chunk)
-                if total > 2 * 1024 * 1024:
-                    raise ValueError("Generation stream limit")
                 buffer += chunk
+                if len(buffer) > 2 * 1024 * 1024:
+                    raise ValueError("Generation stream limit")
                 while b"\n" in buffer:
                     line, buffer = buffer.split(b"\n", 1)
                     frame = json.loads(line)
+                    if type(frame) is dict and set(frame) == {"supervision_ack"}:
+                        handler = getattr(owned, "supervision_ack_handler", None)
+                        if not callable(handler) or len(line) > 4096:
+                            raise ValueError("Unbound or oversized supervision acknowledgement")
+                        handler(frame["supervision_ack"])
+                        continue
+                    total += len(line) + 1
                     frames += 1
-                    if frames > 128 or type(frame) is not dict or len(frame) != 1 or result is not None:
+                    if (
+                        total > 2 * 1024 * 1024
+                        or frames > 128
+                        or type(frame) is not dict
+                        or len(frame) != 1
+                        or result is not None
+                    ):
                         raise ValueError("Invalid generation stream")
                     if set(frame) == {"stage"} and frame["stage"] in GENERATION_STAGES:
                         continue
@@ -112,6 +124,9 @@ class ForegroundGenerationReceiver:
                     if set(frame) != {"result"}:
                         raise ValueError("Generation worker failed")
                     result = frame["result"]
+                    handler = getattr(owned, "result_retained_handler", None)
+                    if callable(handler):
+                        handler(result)
 
     def receive(self, principal, prepared, *, release_lease=True):
         owned = self._worker._get(prepared)
@@ -186,8 +201,14 @@ class ForegroundGenerationWorker:
 
         def expire():
             # Retain the owned capability; uncertainty cannot release a lease.
-            with suppress(Exception):
-                self.stop_owned(PreparedWorker(owned.registration, owned), timeout_s=3)
+            with owned.lock:
+                if owned.deadline != deadline or owned.cleanup is not None or time.monotonic() < owned.deadline:
+                    return
+                control = getattr(owned, "supervision", None)
+                if control is not None:
+                    control.revoke(TimeoutError("Owned supervision acknowledgement deadline expired"))
+                with suppress(Exception):
+                    self.stop_owned(PreparedWorker(owned.registration, owned), timeout_s=3)
 
         owned.timer = threading.Timer(max(0, deadline - time.monotonic()), expire)
         owned.timer.daemon = True
@@ -252,17 +273,25 @@ class ForegroundGenerationWorker:
                 packet = json.loads(envelope)
                 allowance = self._allowance(packet, owned)
                 execution = packet["workflow_execution"]
-                expected_prompt = (
-                    owned.contract.source.prompt
-                    if owned.contract.source.kind == "new"
-                    else owned.contract.criteria[0].rubric
-                )
+                if owned.contract.schema_version == "5":
+                    from .web_api.scene_worker import FULL_SCENE_INPUTS, checked_full_scene_inputs
+
+                    selected, _ = checked_full_scene_inputs({k: packet["inputs"][k] for k in FULL_SCENE_INPUTS})
+                    source_matches = selected == owned.contract
+                else:
+                    expected_prompt = (
+                        owned.contract.source.prompt
+                        if owned.contract.source.kind == "new"
+                        else owned.contract.criteria[0].rubric
+                    )
+                    source_matches = packet["inputs"]["prompt"] == expected_prompt
+                workflow_deadline = owned.contract.budget.deadline_at(execution["admitted_at"])
                 if (
                     set(packet) != {"inputs", "config", "graph_config", "workflow_execution"}
                     or execution["registration"] != prepared.registration.model_dump(mode="json")
                     or execution["fence"] != prepared.registration.fence.model_dump(mode="json")
-                    or packet["inputs"]["prompt"] != expected_prompt
-                    or execution["deadline"] > execution["admitted_at"] + owned.contract.budget.total_deadline_seconds
+                    or not source_matches
+                    or (workflow_deadline is not None and execution["deadline"] > workflow_deadline)
                     or time.monotonic() >= owned.deadline
                     or owned.cleanup is not None
                 ):
@@ -312,7 +341,9 @@ class ForegroundGenerationWorker:
                 OwnedProcessGroup.__init__(owned.group, owned.process.pid)
             owned.group.stop(term_timeout=min(0.2, timeout_s / 3), kill_timeout=max(0.01, timeout_s * 2 / 3))
             owned.process.wait(timeout=max(0.01, timeout_s / 3))
-            if callable(getattr(owned, "model_send_handler", None)):
+            if callable(getattr(owned, "model_send_handler", None)) or callable(
+                getattr(owned, "supervision_ack_handler", None)
+            ):
                 owned.process.stdin.close()
             if owned.timer is not None:
                 owned.timer.cancel()

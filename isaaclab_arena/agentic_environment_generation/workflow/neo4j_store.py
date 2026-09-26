@@ -1261,7 +1261,11 @@ class Neo4jWorkflowStore:
             if (
                 type(admitted_at) not in (int, float)
                 or not math.isfinite(admitted_at)
-                or not admitted_at <= now < admitted_at + contract.budget.total_deadline_seconds
+                or now < admitted_at
+                or (
+                    contract.budget.deadline_at(admitted_at) is not None
+                    and now >= contract.budget.deadline_at(admitted_at)
+                )
             ):
                 raise ValueError("Prior retrieval deadline expired")
             tx.run(
@@ -1272,7 +1276,7 @@ class Neo4jWorkflowStore:
                 run_id=run_id,
             ).consume()
             self._event(tx, run_id, "PriorRetrievalStarted", contract.retrieval.settings_sha256)
-        return admitted_at + contract.budget.total_deadline_seconds
+        return contract.budget.deadline_at(admitted_at)
 
     def retain_prior_reference(self, run_id, reference):
         """Commit the immutable artifact link before generation reservation or release."""
@@ -1404,6 +1408,32 @@ class Neo4jWorkflowStore:
 
     def _scene_authority(self, contract, authorization, now):
         """Keep native-only grants separate from the unchanged generation boundary."""
+        if contract.schema_version == "5":
+            authorization = AuthorizationSnapshot.model_validate_json(authorization.model_dump_json())
+            expected = {"native_validation", "operational_writes"}
+            models = []
+            if contract.source.kind == "new" or (contract.budget.max_revisions and contract.allowed_interventions):
+                expected.add("generation_model")
+                models.append(contract.execution.generation_model)
+            if any(c.kind == "visual" and c.requirement == "required" for c in contract.criteria):
+                expected.add("assessment_model")
+                models.append(contract.execution.assessment_model)
+            if any(model is None for model in models):
+                raise ValueError("Selected model role is unbound")
+            if any(model.billing == "paid" for model in models):
+                expected.add("paid_models")
+            if (
+                authorization.database != self.database
+                or any(getattr(authorization, key) != value for key, value in self.scope.items())
+                or authorization.contract_digest != contract_digest(contract)
+                or authorization.expires_at <= now
+                or set(authorization.capabilities) != expected
+                or not contract.effects.allow_runtime
+                or not contract.effects.allow_operational_writes
+                or ("paid_models" in expected and not contract.effects.allow_paid_models)
+            ):
+                raise ValueError("Configurable scene authority denied")
+            return
         if contract.schema_version == "4":
             authorization = AuthorizationSnapshot.model_validate_json(authorization.model_dump_json())
             expected = {"assessment_model", "operational_writes"}
@@ -1550,15 +1580,12 @@ class Neo4jWorkflowStore:
             if (
                 row["intents"]
                 or row["admitted_at"] is None
-                or now < row["admitted_at"]
-                or now + reservation.runtime_allowance_seconds > row["admitted_at"] + b.total_deadline_seconds
-                or now >= row["admitted_at"] + b.total_deadline_seconds
+                or not b.allows_time(row["admitted_at"], now, reservation.runtime_allowance_seconds)
                 or not 0 < reservation.model_calls <= b.max_model_calls
-                or not 0 < reservation.model_tokens <= b.max_model_tokens
-                or reservation.cost_ceiling_usd > b.max_cost_usd
-                or not 0
-                < reservation.runtime_allowance_seconds
-                <= min(b.max_runtime_seconds, b.per_operation_timeout_seconds)
+                or not b.allows_resource("model_tokens", reservation.model_tokens)
+                or not b.allows_resource("cost", reservation.cost_ceiling_usd)
+                or not b.allows_resource("runtime", reservation.runtime_allowance_seconds)
+                or reservation.runtime_allowance_seconds is None
             ):
                 raise ValueError("generation budget, deadline or active intent denied")
             tx.run(
@@ -1745,12 +1772,7 @@ class Neo4jWorkflowStore:
                 id=fence.run_id,
             ).single()["at"]
             reservation = GenerationReservation.model_validate_json(intent["reservation_json"])
-            if (
-                admitted_at is None
-                or now < admitted_at
-                or now + reservation.runtime_allowance_seconds > admitted_at + contract.budget.total_deadline_seconds
-                or now >= admitted_at + contract.budget.total_deadline_seconds
-            ):
+            if not contract.budget.allows_time(admitted_at, now, reservation.runtime_allowance_seconds):
                 raise ValueError("workflow deadline exhausted")
             rows = list(
                 tx.run(
@@ -3016,6 +3038,147 @@ class Neo4jWorkflowStore:
         """Read exact scoped assessment with its retained evidence and candidate."""
         return self._get_historical_scene("ArenaCriterionAssessment", assessment_id, self._historical_assessment)
 
+    def _numeric_reassessment(self, tx, operation_id):
+        from .derived_assessment import NumericReassessmentView
+
+        rows = list(
+            tx.run(
+                "MATCH (a:ArenaCriterionAssessment "
+                + _SCOPE
+                + ") WHERE a.record_kind='retained_numeric' "
+                "AND a.operation_id=$operation RETURN a.selection_json AS selection, a.payload AS payload",
+                **self.scope,
+                operation=operation_id,
+            )
+        )
+        if len(rows) > 1:
+            raise ValueError("Ambiguous retained numeric operation")
+        if not rows:
+            return None
+        return rows[0]["selection"], NumericReassessmentView.model_validate_json(rows[0]["payload"])
+
+    def get_numeric_reassessment(self, operation_id):
+        validate_operation_id(operation_id)
+        with self._transaction() as tx:
+            self._lock(tx)
+            value = self._numeric_reassessment(tx, operation_id)
+            return None if value is None else value[1]
+
+    def reassess_numeric(self, operation_id, selection, *, artifacts, protect):
+        """Key a derived assessment in this store without changing its source run."""
+        from .commands import CommandConflict
+        from .derived_assessment import (
+            NumericReassessmentSelection,
+            NumericReassessmentView,
+            assess_retained_numeric,
+            reopen_retained_numeric,
+        )
+        from .evidence import CandidateBinding
+        from .scene_evidence_artifacts import _protected, canonical
+        from .scene_observation import admit_criterion
+
+        validate_operation_id(operation_id)
+        selected = NumericReassessmentSelection.model_validate_json(canonical(selection))
+        request = canonical(selected.model_dump(mode="json")).decode("utf-8")
+        digest = hashlib.sha256(request.encode("utf-8")).hexdigest()
+        with self._transaction() as tx:
+            self._lock(tx)
+            retained = self._numeric_reassessment(tx, operation_id)
+            if retained is not None:
+                if retained[0] != request:
+                    raise CommandConflict("Retained numeric operation changed intent")
+                return retained[1]
+            criterion = admit_criterion(selected.criterion)
+            if criterion.evaluator_version != "numeric-v2":
+                raise ValueError("Explicit numeric-v2 selection required")
+            evidence = self._historical_evidence(
+                tx, self._historical_node(tx, "ArenaWorkflowEvidence", selected.evidence_id)
+            )
+            candidate = self._historical_candidate(
+                tx, self._historical_node(tx, "ArenaWorkflowCandidate", selected.candidate_id)
+            ).candidate
+            run = self._run(tx, "run_id", selected.run_id)
+            if (
+                evidence.run_id != run.run_id
+                or candidate.run_id != run.run_id
+                or evidence.candidate_id != candidate.candidate_id
+            ):
+                raise ValueError("Derived source lineage mismatch")
+            observation = evidence.observation
+            source_digest = observation.source_manifest_digest
+            if source_digest is None:
+                numeric = {e.manifest_digest for e in observation.evidence if e.modality != "visual"}
+                if len(numeric) != 1:
+                    raise ValueError("Exact source observation required")
+                source_digest = next(iter(numeric))
+            if source_digest != selected.source_manifest_digest:
+                raise ValueError("Derived source manifest mismatch")
+            contract = parse_contract(run.contract_json)
+            binding = CandidateBinding(
+                candidate_digest=candidate.digest,
+                contract_digest=observation.cohort.contract_digest,
+                profile_digest=observation.cohort.profile_digest,
+            )
+            source = artifacts.load_receipt(
+                binding, observation.cohort, kind="observation", manifest_digest=source_digest, protect=protect
+            )
+            payload = artifacts.verified_payload(source, protect=protect)
+            validation = contract if selected.purpose == "validation" else None
+            if selected.validation_contract_digest != (contract_digest(contract) if validation is not None else None):
+                raise ValueError("Derived validation selection mismatch")
+            result = None
+            reason = None
+            if payload.get("codec") != "observation-v2":
+                reason = "legacy_source_has_no_explicit_acquisition"
+            else:
+                result = assess_retained_numeric(
+                    criterion,
+                    binding,
+                    observation.cohort,
+                    artifacts,
+                    source,
+                    purpose=selected.purpose,
+                    protect=protect,
+                    validation_contract=validation,
+                )
+                if (
+                    reopen_retained_numeric(artifacts, result.receipt, protect=protect, validation_contract=validation)
+                    != result
+                ):
+                    raise ValueError("Derived readback changed")
+            view = NumericReassessmentView(
+                operation_id=operation_id,
+                selection_digest=digest,
+                run_id=run.run_id,
+                evidence_id=selected.evidence_id,
+                candidate_id=candidate.candidate_id,
+                source_manifest_digest=source_digest,
+                purpose=selected.purpose,
+                criterion=criterion,
+                validation_contract_digest=selected.validation_contract_digest,
+                disposition="refused" if result is None else "produced",
+                reason=reason,
+                assessment_id=None if result is None else result.evidence.assessment_id,
+                manifest_digest=None if result is None else result.receipt.manifest_digest,
+                evidence=None if result is None else result.evidence,
+                original_run_version=run.version,
+            )
+            _protected(view.model_dump(mode="json"), protect)
+            tx.run(
+                "MATCH (r:ArenaWorkflowRun "
+                + _SCOPE
+                + ") WHERE r.run_id=$run CREATE (r)-[:HAS_DERIVED_NUMERIC]->(a:ArenaCriterionAssessment "
+                + _SCOPE
+                + ") SET a.record_kind='retained_numeric', a.operation_id=$operation, a.selection_json=$selection,"
+                " a.payload=$payload",
+                **self.scope,
+                run=run.run_id,
+                operation=operation_id,
+                selection=request,
+                payload=view.model_dump_json(),
+            ).consume()
+            return view
+
     def get_scene_evidence(self, evidence_id) -> SceneEvidenceView | None:
         """Read exact scoped observation, retaining unavailable legacy candidate linkage as None."""
         return self._get_historical_scene("ArenaWorkflowEvidence", evidence_id, self._historical_evidence)
@@ -3576,12 +3739,13 @@ class Neo4jWorkflowStore:
         )
         charged = [json.loads(r["reservation"]) for r in rows]
         b = contract.budget
-        deadline = admitted + (
-            min(b.max_runtime_seconds, b.total_deadline_seconds) if retained_assessment else b.total_deadline_seconds
-        )
-        if now < admitted or now >= deadline:
+        deadline = b.deadline_at(admitted)
+        if retained_assessment:
+            assert b.max_runtime_seconds is not None and b.total_deadline_seconds is not None
+            deadline = admitted + min(b.max_runtime_seconds, b.total_deadline_seconds)
+        if now < admitted or (deadline is not None and now >= deadline):
             decision = decision.model_copy(update={"action": "stop", "reason": "budget_exhausted"})
-        if decision.action == "observe" and profile.codec_version == 2:
+        if decision.action == "observe" and profile.codec_version == 2 and contract.schema_version != "5":
             decision = decision.model_copy(update={"action": "capture"})
         allowance = (
             getattr(profile, decision.action, None)
@@ -3589,11 +3753,20 @@ class Neo4jWorkflowStore:
             else None
         )
         if allowance is not None:
+            if contract.schema_version == "5":
+                from .scene_eligibility import validate_selected_effect
+
+                initial = decision.reason in ("schema_validated", "external_candidate_admitted") and not any(
+                    c.get("realizations", 0) for c in charged
+                )
+                validate_selected_effect(
+                    contract, candidate, decision.action, decision.action_selection, initial_capture=initial
+                )
             limits = {
                 "model_calls": b.max_model_calls,
-                "model_tokens": b.max_model_tokens,
-                "cost_ceiling_usd": b.max_cost_usd,
-                "runtime_allowance_seconds": b.max_runtime_seconds,
+                "model_tokens": b.enforced_limit("model_tokens"),
+                "cost_ceiling_usd": b.enforced_limit("cost"),
+                "runtime_allowance_seconds": b.enforced_limit("runtime"),
                 "candidates": b.max_candidates - 1,
                 "revisions": b.max_revisions,
                 "realizations": b.max_realizations,
@@ -3603,7 +3776,9 @@ class Neo4jWorkflowStore:
                 "policy_steps": b.max_policy_steps,
             }
             invalid = any(
-                sum(c.get(key, 0) for c in charged) + getattr(allowance, key) > limit
+                any(c.get(key, 0) is None for c in charged)
+                or getattr(allowance, key) is None
+                or sum(c.get(key, 0) for c in charged) + getattr(allowance, key) > limit
                 for key, limit in limits.items()
                 if limit is not None and not (retained_assessment and key == "model_calls")
             )
@@ -3617,10 +3792,8 @@ class Neo4jWorkflowStore:
                     source=contract.retained_evidence.run_id,
                 ).single()["count"]
                 invalid |= sends >= b.max_model_calls
-            invalid |= (
-                not 0 < allowance.runtime_allowance_seconds <= b.per_operation_timeout_seconds
-                or now + allowance.runtime_allowance_seconds > deadline
-            )
+            invalid |= not b.allows_time(admitted, now, allowance.runtime_allowance_seconds)
+            invalid |= allowance.model_calls > 0 and allowance.runtime_allowance_seconds is None
             if decision.action in ("observe", "capture"):
                 invalid |= allowance.realizations < 1 or allowance.observations < 1
                 required_steps = max(
@@ -3639,7 +3812,7 @@ class Neo4jWorkflowStore:
                     or allowance.steps < binding.max_prerequisite_steps
                     or allowance.realizations < 1
                     or now >= binding.deadline_unix
-                    or binding.deadline_unix > admitted + b.total_deadline_seconds
+                    or (deadline is not None and binding.deadline_unix > deadline)
                 )
             if invalid:
                 decision = decision.model_copy(update={"action": "stop", "reason": "budget_exhausted"})
@@ -3663,6 +3836,7 @@ class Neo4jWorkflowStore:
                 action=decision.action,
                 status="reserved",
                 reservation=allowance,
+                action_selection=decision.action_selection,
                 observation_id=selected_evidence_id if decision.action in ("assess", "policy") else None,
                 observation_digest=observation_digest,
                 policy_binding=(
@@ -3797,7 +3971,9 @@ class Neo4jWorkflowStore:
                 ):
                     raise ValueError("Retained assessment consumer binding mismatch")
                 decision = SceneDecision(action="assess", reason="retained_producer_linked")
-            elif contract.schema_version == "3":
+            elif contract.schema_version == "3" or (
+                contract.schema_version == "5" and contract.source.kind == "existing"
+            ):
                 from .scene_loop import candidate_record
 
                 assert contract.source.kind == "existing", "Retained native source required"
@@ -3805,24 +3981,37 @@ class Neo4jWorkflowStore:
                 expected = candidate_record(
                     run_id, json.loads(contract.source.content), source_id=contract.source.identity
                 )
+                expected_validation = dict(
+                    disposition="external_candidate_admitted",
+                    source_identity=contract.source.identity,
+                    source_bytes_sha256=hashlib.sha256(contract.source.content.encode("utf-8")).hexdigest(),
+                    candidate_json_sha256=candidate.digest,
+                    contract_digest=contract_digest(contract),
+                    native_schema_validation_required=True,
+                )
+                if contract.schema_version == "5":
+                    from .scene_ports import ScenePorts
+
+                    validated = ScenePorts.validate_candidate(candidate.scene_json)
+                    normalized = json.dumps(
+                        validated.to_dict(), sort_keys=True, separators=(",", ":"), ensure_ascii=False
+                    )
+                    expected_validation["validated_semantic_sha256"] = hashlib.sha256(
+                        normalized.encode("utf-8")
+                    ).hexdigest()
                 if (
                     run.state != "pending"
                     or candidate != expected
                     or profile.codec_version != 2
                     or profile.assurance != "native-unverified"
                     or not profile.owned_worker
-                    or validation
-                    != dict(
-                        disposition="external_candidate_admitted",
-                        source_identity=contract.source.identity,
-                        source_bytes_sha256=hashlib.sha256(contract.source.content.encode("utf-8")).hexdigest(),
-                        candidate_json_sha256=candidate.digest,
-                        contract_digest=contract_digest(contract),
-                        native_schema_validation_required=True,
-                    )
+                    or validation != expected_validation
                 ):
                     raise ValueError("external candidate binding mismatch")
-                decision = SceneDecision(action="observe", reason="external_candidate_admitted")
+                decision = SceneDecision(
+                    action="capture" if contract.schema_version == "5" else "observe",
+                    reason="external_candidate_admitted",
+                )
             else:
                 if (run.state, run.phase) != ("running", "validation"):
                     raise ValueError("inactive scene start")
@@ -3851,10 +4040,13 @@ class Neo4jWorkflowStore:
                     )
                 ):
                     raise ValueError("scene generation binding mismatch")
-                decision = SceneDecision(action="observe", reason="schema_validated")
+                decision = SceneDecision(
+                    action="capture" if contract.schema_version == "5" else "observe", reason="schema_validated"
+                )
                 if validation.get("disposition") != "schema_validated":
                     decision = SceneDecision(action="stop", reason="invalid_candidate")
-            if contract.schema_version in ("3", "4"):
+            if contract.schema_version in ("3", "4", "5"):
+                self._scene_authority(contract, authorization, self._now())
                 tx.run(
                     "MATCH (r:ArenaWorkflowRun "
                     + _SCOPE
@@ -4082,6 +4274,128 @@ class Neo4jWorkflowStore:
             self._event(tx, fence.run_id, "SceneWorkerRegistered", registration.registration_id)
         return True
 
+    def record_scene_supervision(self, fence, state, *, protect):
+        """Retain one fenced acknowledgement without changing intent or allocations."""
+        from .control_protocol import SupervisionLease
+        from .scene_evidence_artifacts import _protected, canonical
+        from .scene_loop import identity
+
+        fence = AttemptFence.model_validate_json(fence.model_dump_json())
+        raw = _protected(state, protect, max_bytes=8192)
+        if type(state) is not dict or set(state) != {
+            "last_acknowledgement",
+            "lease",
+            "failure_type",
+            "workload_authority_expires_at",
+            "cleanup_verified",
+        }:
+            raise ValueError("Bounded supervision state required")
+        lease = SupervisionLease.model_validate_json(canonical(state["lease"]))
+        ack = state["last_acknowledgement"]
+        expected = dict(
+            codec="supervision-ack-v1",
+            generation=lease.generation,
+            fence=fence.model_dump(mode="json"),
+            lease_sha256=hashlib.sha256(canonical(lease.model_dump(mode="json"))).hexdigest(),
+        )
+        if (
+            ack != expected
+            or lease.fence != fence
+            or state["cleanup_verified"] is not False
+            or state["failure_type"] is not None
+        ):
+            raise ValueError("An acknowledgement is not cleanup evidence")
+        with self._transaction() as tx:
+            self._lock(tx)
+            intent = self._fenced_scene(tx, fence)
+            run = self._run(tx, "run_id", fence.run_id)
+            contract = parse_contract(run.contract_json)
+            if (
+                contract.schema_version != "5"
+                or intent.status != "released"
+                or intent.worker_cleanup is not None
+                or lease.contract_digest != contract_digest(contract)
+                or lease.allocation_digest != identity(intent.reservation.model_dump(mode="json"))
+                or lease.scope_sha256 != self._scope_binding(tx).body_sha256
+            ):
+                raise ValueError("Current released fenced intent required")
+            previous = self._intent(tx, fence.intent_id).get("supervision_json")
+            if previous is not None:
+                previous = json.loads(previous)
+                if previous == state:
+                    return False
+                if lease.generation != previous["lease"]["generation"] + 1:
+                    raise ValueError("Stale or skipped retained supervision generation")
+            elif lease.generation != 1:
+                raise ValueError("Initial supervision acknowledgement missing")
+            tx.run(
+                "MATCH (i:ArenaExecutionIntent " + _SCOPE + ") WHERE i.intent_id=$id SET i.supervision_json=$body",
+                **self.scope,
+                id=fence.intent_id,
+                body=raw.decode(),
+            ).consume()
+            self._event(tx, fence.run_id, "SceneSupervisionAcknowledged", identity(fence.intent_id, lease.generation))
+        return True
+
+    def get_scene_supervision(self, run_id, intent_id):
+        """Read historical control metadata without treating it as current authority."""
+        with self._transaction() as tx:
+            self._retained_scene_intent(tx, run_id, intent_id)
+            value = self._intent(tx, intent_id).get("supervision_json")
+            return None if value is None else json.loads(value)
+
+    @staticmethod
+    def _selected_scene_effect(snapshot):
+        from .scene_eligibility import validate_selected_effect
+
+        contract = parse_contract(snapshot.run.contract_json)
+        intent = snapshot.intent
+        if contract.schema_version != "5":
+            return
+        if intent is None or intent.action_selection != snapshot.decision.action_selection:
+            raise ValueError("Retained scientific selection changed")
+        initial = snapshot.decision.reason in ("schema_validated", "external_candidate_admitted")
+        validate_selected_effect(
+            contract, snapshot.candidate, intent.action, intent.action_selection, initial_capture=initial
+        )
+
+    def scene_action_selections(self, run_id):
+        """Recover exact produced-repair decisions from the existing intent ledger."""
+        from .scene_eligibility import SceneActionDecision
+        from .scene_loop import SceneIntent, SceneResult, candidate_record
+
+        with self._transaction() as tx:
+            self._lock(tx)
+            snapshot = self._scene_snapshot(tx, run_id)
+            if snapshot is None or parse_contract(getattr(snapshot.run, "contract_json")).schema_version != "5":
+                return {}
+            rows = tx.run(
+                "MATCH (i:ArenaExecutionIntent "
+                + _SCOPE
+                + ") WHERE i.run_id=$run AND i.kind='scene' AND i.result_json IS NOT NULL RETURN i.scene_json AS"
+                " intent, i.result_json AS result",
+                **self.scope,
+                run=run_id,
+            )
+            result = {}
+            for row in rows:
+                intent = SceneIntent.model_validate_json(row["intent"])
+                output = SceneResult.model_validate_json(row["result"])
+                if intent.action == "repair" and output.candidate_json is not None:
+                    if intent.action_selection is None:
+                        raise ValueError("Missing retained repair selection")
+                    child = candidate_record(
+                        run_id,
+                        json.loads(output.candidate_json),
+                        source_id=intent.intent_id,
+                        original_id=snapshot.original.candidate_id,
+                        parent_id=intent.candidate_id,
+                    )
+                    result[child.candidate_id] = SceneActionDecision.model_validate_json(
+                        json.dumps(intent.action_selection)
+                    )
+            return result
+
     def acknowledge_scene_cleanup(self, fence, evidence):
         """Retain exact physical-port evidence; never infer cleanup from cancellation."""
         fence = AttemptFence.model_validate_json(fence.model_dump_json())
@@ -4111,10 +4425,14 @@ class Neo4jWorkflowStore:
 
     def _finish_known_native_cancel(self, tx, run_id):
         run = self._run(tx, "run_id", run_id)
+        contract = None if run is None else parse_contract(run.contract_json)
         if (
             run is None
             or run.state != "cancel_requested"
-            or parse_contract(run.contract_json).schema_version not in ("3", "4")
+            or not (
+                contract.schema_version in ("3", "4")
+                or (contract.schema_version == "5" and contract.source.kind == "existing")
+            )
         ):
             return False
         from .scene_loop import SceneIntent
@@ -4175,6 +4493,7 @@ class Neo4jWorkflowStore:
             intent = snapshot.intent
             if intent.intent_id != intent_id or intent.status != "reserved":
                 return False
+            self._selected_scene_effect(snapshot)
             if snapshot.profile.owned_worker:
                 if fence is None or intent.worker_fence != fence or intent.worker_registration is None:
                     raise ValueError("exact scene worker registration required")
@@ -4191,7 +4510,7 @@ class Neo4jWorkflowStore:
             self._readiness(contract, readiness, now)
             if intent.policy_binding is not None and now >= intent.policy_binding.deadline_unix:
                 raise ValueError("policy trial deadline exhausted")
-            if contract.schema_version in ("3", "4"):
+            if contract.schema_version in ("3", "4", "5"):
                 original_auth = tx.run(
                     "MATCH (r:ArenaWorkflowRun "
                     + _SCOPE
@@ -4211,10 +4530,9 @@ class Neo4jWorkflowStore:
             if authorization.principal != AuthorizationSnapshot.model_validate_json(original_auth["auth"]).principal:
                 raise ValueError("scene principal mismatch")
             if (
-                (not contract.effects.allow_runtime and contract.schema_version != "4")
-                or now < original_auth["at"]
-                or now + intent.reservation.runtime_allowance_seconds
-                > original_auth["at"] + contract.budget.total_deadline_seconds
+                not contract.effects.allow_runtime and contract.schema_version != "4"
+            ) or not contract.budget.allows_time(
+                original_auth["at"], now, intent.reservation.runtime_allowance_seconds
             ):
                 raise ValueError("scene effects or deadline denied")
             released = intent.model_copy(update={"status": "released", "released_at": now})
@@ -4258,6 +4576,7 @@ class Neo4jWorkflowStore:
                 or s.run.state != "running"
             ):
                 raise ValueError("inactive scene release")
+            self._selected_scene_effect(s)
             if s.intent.policy_binding is not None and self._now() >= s.intent.policy_binding.deadline_unix:
                 raise ValueError("policy trial deadline exhausted")
             stored = self._intent(tx, intent_id)
@@ -4282,11 +4601,7 @@ class Neo4jWorkflowStore:
                 **self.scope,
                 id=run_id,
             ).single()["at"]
-            if (
-                now < admitted
-                or now + s.intent.reservation.runtime_allowance_seconds
-                > admitted + contract.budget.total_deadline_seconds
-            ):
+            if not contract.budget.allows_time(admitted, now, s.intent.reservation.runtime_allowance_seconds):
                 raise ValueError("scene deadline exhausted")
             return s.intent
 
@@ -4576,7 +4891,11 @@ class Neo4jWorkflowStore:
                         parent=candidate.parent_id,
                         original=candidate.original_id,
                     ).consume()
-                    decision = SceneDecision(action="observe", reason="fresh_child_cohort_required")
+                    decision = SceneDecision(
+                        action="capture" if contract.schema_version == "5" else "observe",
+                        reason="fresh_child_cohort_required",
+                        action_selection=s.intent.action_selection,
+                    )
             else:
                 raise ValueError("scene result action mismatch")
             produced = s.intent.model_copy(update={"status": "produced"})

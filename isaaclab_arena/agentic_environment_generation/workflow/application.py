@@ -117,7 +117,7 @@ class ForegroundWorkflow:
                 or native_support.profile != profile
                 or profile.codec_version != 2
                 or profile.assurance != "native-unverified"
-                or native_support.model_ceilings
+                or (profile.workflow_schema != "5" and native_support.model_ceilings)
             ):
                 raise ValueError("Explicit model-free native support required")
         elif profile.assurance != "synthetic":
@@ -140,7 +140,13 @@ class ForegroundWorkflow:
                 )
             )
         )
-        self.service = WorkflowService(store, authority, gate, validate_support=self._support.admit)
+        self.service = WorkflowService(
+            store,
+            authority,
+            gate,
+            validate_support=self._support.admit,
+            configurable_installed=profile.workflow_schema == "5",
+        )
         self.ownership = ownership_artifacts_factory(artifacts.area)
         self._owner_lease_factory = owner_lease_factory
         self._initial_receiver_factory = initial_receiver_factory
@@ -186,17 +192,33 @@ class ForegroundWorkflow:
         for role, bound in bounds.items():
             if canonical(self._support.model_ceilings[role].per_call_bound) != canonical(bound):
                 raise ValueError("Frozen role accounting mismatch")
-        for reservation in (
-            self._support.profile.observe,
-            self._support.profile.repair,
-        ):
+        selected = (
+            (self._support.profile.capture, self._support.profile.assess)
+            + (
+                (self._support.profile.repair,)
+                if contract.allowed_interventions and contract.budget.max_revisions
+                else ()
+            )
+            if contract.schema_version == "5"
+            else (self._support.profile.observe, self._support.profile.repair)
+        )
+        for reservation in selected:
             self._support.require_bounded_capability(principal, contract, reservation)
+        if contract.source.kind == "existing":
+            return
         generation = self._support.model_ceilings["generation"]
         reservation = self.generation_reservation
         if (
-            generation.max_calls > reservation.model_calls
-            or generation.max_tokens > reservation.model_tokens
-            or generation.timeout_seconds > reservation.runtime_allowance_seconds
+            reservation is None
+            or generation.max_calls > reservation.model_calls
+            or (
+                reservation.model_tokens is not None
+                and (generation.max_tokens is None or generation.max_tokens > reservation.model_tokens)
+            )
+            or (
+                reservation.runtime_allowance_seconds is not None
+                and generation.timeout_seconds > reservation.runtime_allowance_seconds
+            )
         ):
             raise ValueError("Initial generation reservation below configured bounds")
 
@@ -335,7 +357,7 @@ class ForegroundWorkflow:
                 _resume_authority_context.active = False
             if self.store.get_run(run.run_id) != run:
                 return self.status(principal, run.run_id)
-            if contract.schema_version in ("3", "4"):
+            if contract.source.kind == "existing":
                 return self._scene(principal, run.run_id, contract)
             return self._generate(principal, run, contract)
 
@@ -518,10 +540,14 @@ class ForegroundWorkflow:
         if local.stopped:
             self._cancellation.stop_local(self, principal, run_id)
         elif continuation:
-            local.ports.restore_observations(self.store.result_records(run_id), contract)
+            self._restore_scene_observations(local.ports, run_id, contract)
         return self._drive_scene(
             principal, run_id, local, **({} if resume_receipt is None else dict(resume_receipt=resume_receipt))
         )
+
+    def _restore_scene_observations(self, ports, run_id, contract):
+        selected = {"decisions": self.store.scene_action_selections(run_id)} if contract.schema_version == "5" else {}
+        ports.restore_observations(self.store.result_records(run_id), contract, **selected)
 
     def _drive_scene(self, principal, run_id, local, *, resume_receipt=None):
         local.busy = True
@@ -932,7 +958,7 @@ class ForegroundWorkflow:
                         self._scene(principal, run.run_id, contract, continuation=True, resume_receipt=receipt)
                     else:
                         local.ports.require_held_owner()
-                        local.ports.restore_observations(self.store.result_records(run.run_id), contract)
+                        self._restore_scene_observations(local.ports, run.run_id, contract)
                         self._drive_scene(principal, run.run_id, local, resume_receipt=receipt)
                 execution = "returned"
             except Exception:
@@ -1009,10 +1035,7 @@ class ForegroundWorkflow:
                     if local.ports is None or local.retired or local.stopped:
                         return self._blocked_status(principal, run_id)
                     local.ports.require_held_owner()
-                    local.ports.restore_observations(
-                        self.store.result_records(run_id),
-                        parse_contract(scene.run.contract_json),
-                    )
+                    self._restore_scene_observations(local.ports, run_id, contract)
                     return self._drive_scene(principal, run_id, local)
                 return self._blocked_status(principal, run_id)
             pending = self.store.pending_generation(run_id)

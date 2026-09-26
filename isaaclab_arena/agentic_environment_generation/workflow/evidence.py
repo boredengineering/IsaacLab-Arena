@@ -17,7 +17,18 @@ This pure utility is not production acceptance.
 
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, TypeAdapter, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    TypeAdapter,
+    model_serializer,
+    model_validator,
+)
+
+from .contracts import CriterionCoverage
 
 
 def _unique(values):
@@ -47,6 +58,54 @@ StepWindow = Annotated[tuple[Step, Step], AfterValidator(_ordered_window)]
 
 class Frozen(BaseModel):
     model_config = ConfigDict(frozen=True, strict=True, extra="forbid", revalidate_instances="always")
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def versioned_input(cls, value, validate, info):
+        if isinstance(value, cls):
+            fields, data = value.model_fields_set, value.__dict__
+        elif isinstance(value, dict):
+            fields, data = set(value), value
+        else:
+            return validate(value)
+        if "evaluator_version" in cls.model_fields:
+            versioned = data.get("evaluator_version") in ("numeric-v2", "full-scene-ternary-v1")
+            if not versioned and fields & {"coverage", "assessment_id", "conflict"}:
+                raise ValueError("legacy evidence fields are unchanged")
+            if versioned and data.get("coverage") is None:
+                raise ValueError("versioned evidence requires explicit coverage")
+        elif "semantics_version" in cls.model_fields:
+            if (
+                fields & {"semantics_version", "truth", "collection_status", "conflict"}
+                and data.get("semantics_version") is None
+            ):
+                raise ValueError("new truth/collection fields require versioned aggregation")
+        # The Python wrap handler otherwise turns JSON arrays into strict-Python
+        # list inputs. Preserve the original JSON tuple decoder, not Python coercion.
+        if info.mode == "json" and isinstance(value, dict):
+            value = dict(value)
+            for key in (
+                "coordinate_frames",
+                "step_window",
+                "subject_ids",
+                "observed_coordinate_frames",
+                "observed_step_window",
+                "limitations",
+                "missing_ids",
+                "failed_ids",
+                "historical_conflict_ids",
+            ):
+                if key in cls.model_fields and type(value.get(key)) is list:
+                    value[key] = tuple(value[key])
+        return validate(value)
+
+    @model_serializer(mode="wrap")
+    def legacy_coverage_bytes(self, serialize):
+        value = serialize(self)
+        for key in ("coverage", "assessment_id", "conflict", "truth", "collection_status", "semantics_version"):
+            if value.get(key) is None:
+                value.pop(key, None)
+        return value
 
 
 class CandidateBinding(Frozen):
@@ -78,6 +137,7 @@ class CriterionRequirement(Frozen):
     rubric_id: Identity
     state_independent: bool = False
     scope: Literal["scene", "policy"] = "scene"
+    coverage: CriterionCoverage | None = None
 
     @model_validator(mode="after")
     def static_is_structural(self):
@@ -101,6 +161,9 @@ class CriterionEvidence(Frozen):
     manifest_digest: Digest
     verdict: Literal["established", "violated", "inconclusive", "not_run"]
     limitations: Limitations = ()
+    coverage: CriterionCoverage | None = None
+    assessment_id: Digest | None = None
+    conflict: bool | None = None
 
 
 class SceneEvidenceAssessment(Frozen):
@@ -110,6 +173,28 @@ class SceneEvidenceAssessment(Frozen):
     """All matching verified failures, including diagnostic historical failures."""
     historical_conflict_ids: tuple[Identity, ...] = ()
     limitations: Limitations = ()
+    semantics_version: Literal["scene-evidence-ternary-v1"] | None = None
+    truth: Literal["true", "false", "unknown"] | None = None
+    collection_status: Literal["complete", "incomplete"] | None = None
+    conflict: bool | None = None
+
+
+def aggregate_truth(values, operator):
+    """Apply strong Kleene all/any to valid propositions, never execution errors."""
+    values = tuple(values)
+    if not values or any(value not in ("true", "false", "unknown") for value in values):
+        raise ValueError("nonempty valid ternary propositions required")
+    if operator not in ("all", "any"):
+        raise ValueError("unsupported truth aggregation")
+    decisive, neutral = ("false", "true") if operator == "all" else ("true", "false")
+    return decisive if decisive in values else "unknown" if "unknown" in values else neutral
+
+
+def negate_truth(value):
+    """Preserve UNKNOWN under negation; nonvisibility is not nonexistence."""
+    if value not in ("true", "false", "unknown"):
+        raise ValueError("valid ternary proposition required")
+    return {"true": "false", "false": "true", "unknown": "unknown"}[value]
 
 
 def assess_scene_evidence(
@@ -166,6 +251,8 @@ def assess_scene_evidence(
 
     passes = {r.criterion_id: set() for r in required}
     ambiguous = False
+    selected_truths = {}
+    reported_conflict = False
     for (criterion_id, observed_cohort), records in groups.items():
         req = requirements[criterion_id]
         selected = observed_cohort == selected_cohort
@@ -186,12 +273,20 @@ def assess_scene_evidence(
                 and record.modality == req.modality
                 and record.evaluator_version == req.evaluator_version
                 and record.rubric_id == req.rubric_id
+                and record.coverage == req.coverage
             )
             if not matches:
                 limitations.add("criterion_identity_mismatch")
                 continue
             if req.scope == "policy":
                 continue
+            if selected and record.verdict != "not_run":
+                selected_truths[criterion_id] = (
+                    "unknown"
+                    if record.conflict is True or len(records) > 1
+                    else {"established": "true", "violated": "false", "inconclusive": "unknown"}[record.verdict]
+                )
+                reported_conflict = reported_conflict or record.conflict is True
             if record.verdict == "violated":
                 failed.add(criterion_id)
                 if selected:
@@ -210,10 +305,23 @@ def assess_scene_evidence(
         if selected_failed
         else ("established" if not missing and not ambiguous and not unsupported else "inconclusive")
     )
+    semantics = {}
+    if all(r.coverage is not None for r in required):
+        conflict = ambiguous or reported_conflict
+        complete = set(selected_truths) == set(requirements) and not unsupported
+        semantics = dict(
+            semantics_version="scene-evidence-ternary-v1",
+            conflict=conflict,
+            collection_status="complete" if complete else "incomplete",
+            truth=aggregate_truth(tuple(selected_truths.values()), "all") if complete else None,
+        )
+        if conflict:
+            status = "inconclusive"
     return SceneEvidenceAssessment(
         status=status,
         missing_ids=tuple(r.criterion_id for r in required if r.criterion_id in missing - selected_failed),
         failed_ids=tuple(r.criterion_id for r in required if r.criterion_id in failed),
         historical_conflict_ids=tuple(r.criterion_id for r in required if r.criterion_id in historical_conflicts),
         limitations=tuple(sorted(limitations)),
+        **semantics,
     )

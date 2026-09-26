@@ -97,7 +97,17 @@ class SplitScenePorts(ScenePorts):
             ceiling = self.ceiling_for("repair" if reservation == self.profile.repair else "assess")
             allowance = ceiling.allowance(now=time.monotonic())
             bound = checked_workflow_accounting(ceiling.per_call_bound)
-            if (
+            accounting_only = contract.schema_version == "5" and reservation.accounting_policy == "accounting-only-v1"
+            if accounting_only:
+                if (
+                    not allowance.accounting_only
+                    or bound["version"] != 2
+                    or ceiling.max_calls > reservation.model_calls
+                    or ceiling.max_tokens is not None
+                    or ceiling.max_cost_usd is not None
+                ):
+                    raise ValueError("Exact accounting-only model selection required")
+            elif (
                 not allowance.token_cost_bounded
                 or ceiling.max_calls > reservation.model_calls
                 or ceiling.max_tokens > reservation.model_tokens
@@ -107,6 +117,13 @@ class SplitScenePorts(ScenePorts):
             ):
                 raise ValueError("configured model ceiling exceeds reservation or attested allowance")
             runtime = ceiling.timeout_seconds
+        if contract.schema_version == "5" and reservation == self.profile.capture:
+            if contract.budget.policy.runtime == "accounting_only":
+                if runtime is not None or reservation.runtime_allowance_seconds is not None:
+                    raise ValueError("Accounting-only native capture cannot hide a fixed timer")
+                return True
+            if contract.budget.policy.runtime == "advisory":
+                return True
         if (
             not math.isfinite(runtime)
             or runtime <= 0
@@ -153,6 +170,9 @@ class SplitScenePorts(ScenePorts):
             self.check_active()
             if not isinstance(output, Observation) or output.cohort != retained_observation.cohort:
                 raise ValueError("exact numeric assessment output required")
+            if contract.schema_version == "5":
+                self._retained[receipt.cohort.realization_id] = (candidate, receipt, None)
+                return self._evaluate(receipt.cohort.realization_id, contract, candidate, include_visual=True)
             return output
         if visual is not None:
             request = visual_request(
@@ -176,14 +196,14 @@ class SplitScenePorts(ScenePorts):
         if (
             not isinstance(output, Observation)
             or identity(output.model_dump(mode="json")) != intent.observation_digest
-            or len(output.verified_manifest_digests) != 1
+            or (contract.schema_version != "5" and len(output.verified_manifest_digests) != 1)
             or any(e.modality == "visual" for e in output.evidence)
         ):
             raise ValueError("exact retained capture required")
         checked = self.verify_observation(output, contract, candidate)
         return self._retained[checked.cohort.realization_id][1]
 
-    def _reopen(self, candidate, contract, cohort, digests):
+    def _reopen(self, candidate, contract, cohort, digests, *, assessment_id=None):
         if not 1 <= len(digests) <= 2 or len(set(digests)) != len(digests):
             raise ValueError("exact retained producer manifests required")
         binding = CandidateBinding(
@@ -192,7 +212,14 @@ class SplitScenePorts(ScenePorts):
             profile_digest=profile_digest(contract),
         )
         receipts = [
-            self.artifacts.load_receipt(binding, cohort, kind=kind, manifest_digest=digest, protect=self.protect)
+            self.artifacts.load_receipt(
+                binding,
+                cohort,
+                kind=kind,
+                manifest_digest=digest,
+                protect=self.protect,
+                assessment_id=assessment_id if kind == "visual-answer" else None,
+            )
             for kind, digest in zip(("observation", "visual-answer"), digests)
         ]
         self.admit(contract)
@@ -205,12 +232,15 @@ class SplitScenePorts(ScenePorts):
         output = super()._evaluate(
             tag, contract, candidate, include_visual=(answer is not None if include_visual is None else include_visual)
         )
+        if contract.schema_version == "5":
+            return output
         # Include exact raw-answer identity even when its evaluator rejects it.
         digests = (receipt.manifest_digest,) + (() if answer is None else (answer.manifest_digest,))
         return output.model_copy(update={"verified_manifest_digests": digests})
 
     def verify_observation(self, output, contract, candidate):
         self.check_active()
+        assessment_id = None
         if isinstance(output, PendingSceneEvidence):
             if output.candidate != candidate:
                 raise ValueError("capture candidate mismatch")
@@ -218,16 +248,29 @@ class SplitScenePorts(ScenePorts):
             digests = (output.observation.manifest_digest,) + (
                 () if output.answer is None else (output.answer.manifest_digest,)
             )
+            if contract.schema_version == "5" and output.answer is not None:
+                assessment_id = self.artifacts.verified_payload(output.answer, protect=self.protect)["assessment_id"]
         elif isinstance(output, Observation):
+            self.verify_diagnostic_references(output, candidate)
             cohort, digests = output.cohort, output.verified_manifest_digests
+            if contract.schema_version == "5":
+                if output.codec != "scene-observation-v2" or output.source_manifest_digest is None:
+                    raise ValueError("Versioned capture ancestry required")
+                digests = (output.source_manifest_digest,) + (
+                    () if output.answer_manifest_digest is None else (output.answer_manifest_digest,)
+                )
+                assessment_id = output.answer_assessment_id
         else:
             raise ValueError("exact retained evidence required")
-        receipt, answer = self._reopen(candidate, contract, cohort, digests)
+        receipt, answer = self._reopen(candidate, contract, cohort, digests, assessment_id=assessment_id)
         tag = cohort.realization_id
         previous = self._retained.get(tag)
         self._retained[tag] = (candidate, receipt, answer)
         try:
-            verified = self._evaluate(tag, contract, candidate)
+            selected = isinstance(output, Observation) and output.action_selection is not None
+            verified = self._evaluate(
+                tag, contract, candidate, include_visual=True if contract.schema_version == "5" and selected else None
+            )
             if isinstance(output, Observation) and output != verified:
                 raise ValueError("observation differs from retained producer evaluation")
         except BaseException:
@@ -239,8 +282,10 @@ class SplitScenePorts(ScenePorts):
         self._latest[candidate.candidate_id] = verified
         return verified
 
-    def restore_observations(self, records, contract):
+    def restore_observations(self, records, contract, *, decisions=None):
         """Reopen selected immutable captures/answers in exact repair lineage order."""
+        if contract.schema_version == "5":
+            return super().restore_observations(records, contract, decisions=decisions)
         pending = [
             (CandidateRecord.model_validate_json(row["candidate"]), Observation.model_validate_json(row["payload"]))
             for row in self._selected_restore_rows(records)

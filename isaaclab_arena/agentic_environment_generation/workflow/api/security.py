@@ -45,6 +45,8 @@ class TokenRegistry:
         self.clock = clock
         self._tokens = {}
         self._active = {}
+        self._issued_at = {}
+        self._current = {}
         self._lock = threading.Lock()
 
     def issue(self, *, principal: str, lifetime: float) -> str:
@@ -64,7 +66,113 @@ class TokenRegistry:
             )
             self._tokens[hashlib.sha256(token.encode("ascii")).digest()] = context
             self._active[context.handle] = context
+            self._issued_at[context.handle] = now
         return token
+
+    def bind_current(self, context, policy):
+        """Pin one installed principal; only the private operator channel may refresh it."""
+        from ..contracts import ControlPolicy
+        from ..control_protocol import PrincipalDescriptor
+
+        policy = ControlPolicy.model_validate(policy.model_dump(mode="json"))
+        now = self.clock()
+        with self._lock:
+            self._check(context, now)
+            assert context.handle not in self._current, "Principal already bound"
+            issued = self._issued_at[context.handle]
+            assert context.expires_at - issued <= policy.max_credential_lifetime_seconds
+            descriptor = PrincipalDescriptor(
+                schema_version=2,
+                binding=context.binding,
+                instance=context.instance,
+                principal=context.principal,
+                generation=context.generation,
+                credential_revision=1,
+                context_handle=context.handle,
+                issued_at=issued,
+                expires_at=context.expires_at,
+            )
+            self._current[context.handle] = (context, context, descriptor, policy)
+            return descriptor.model_dump(mode="json")
+
+    def current(self, anchor):
+        """Resolve a captured installed binding, never authenticate an old bearer."""
+        now = self.clock()
+        with self._lock:
+            bound = self._current.get(anchor.handle)
+            if bound is None:
+                context = anchor
+            else:
+                if bound[0] is not anchor:
+                    raise PermissionError("Unauthorized")
+                context = bound[1]
+            self._check(context, now)
+            return context
+
+    def refresh_current(self, anchor, *, deliver):
+        """Privately replace a finite credential after explicit local operator authorization.
+
+        Expiry may be crossed by the authenticated OS control peer, not an expired
+        bearer. Revocation/instance rotation cannot be crossed. The caller holds
+        the composition authority interlock; no workload grant is changed here.
+        Delivery failure leaves the replacement unusable and the old binding intact.
+        """
+        from ..control_protocol import PrincipalDescriptor, resolve_current_principal
+
+        now = self.clock()
+        assert callable(deliver) and math.isfinite(now) and now >= 0
+        token = secrets.token_urlsafe(32)
+        digest = hashlib.sha256(token.encode("ascii")).digest()
+        with self._lock:
+            bound = self._current.get(anchor.handle)
+            if bound is None or bound[0] is not anchor:
+                raise PermissionError("Unauthorized")
+            _, previous, descriptor, policy = bound
+            if self._active.get(previous.handle) is not previous or previous.generation != self.generation:
+                raise PermissionError("Unauthorized")
+            context = AuthContext(
+                previous.principal,
+                self.binding,
+                self.instance,
+                self.generation,
+                now + policy.max_credential_lifetime_seconds,
+                secrets.token_hex(16),
+            )
+            fresh = PrincipalDescriptor(
+                schema_version=2,
+                binding=context.binding,
+                instance=context.instance,
+                principal=context.principal,
+                generation=context.generation,
+                credential_revision=descriptor.credential_revision + 1,
+                context_handle=context.handle,
+                issued_at=now,
+                expires_at=context.expires_at,
+            )
+            self._active[context.handle] = context
+            self._tokens[digest] = context
+            try:
+                resolve_current_principal(
+                    descriptor,
+                    fresh,
+                    context,
+                    policy=policy,
+                    now=now,
+                    generation=self.generation,
+                    recheck=lambda value: self._check(value, now),
+                    action="read",
+                    contract_digest=None,
+                )
+                metadata = fresh.model_dump(mode="json")
+                deliver({**metadata, "bearer": token})
+            except BaseException:
+                self._active.pop(context.handle, None)
+                self._tokens.pop(digest, None)
+                raise
+            self._active.pop(previous.handle, None)
+            self._issued_at[context.handle] = now
+            self._current[anchor.handle] = (anchor, context, fresh, policy)
+            return metadata
 
     def authenticate(self, value: bytes) -> AuthContext:
         if not re.fullmatch(rb"Bearer [A-Za-z0-9_-]{43}", value):
@@ -103,6 +211,8 @@ class TokenRegistry:
             self.generation += 1
             self._active.clear()
             self._tokens.clear()
+            self._current.clear()
+            self._issued_at.clear()
 
 
 MAX_BODY_BYTES = 64 * 1024
@@ -236,7 +346,13 @@ def validate_document(body, schema, *, execution=False):
                     or counts["roots"] > (1 if mutation else 8)
                     or mutation
                     and at_root
-                    and node.name.value not in {"submitWorkflow", "cancelWorkflow", "resumeWorkflow"}
+                    and node.name.value
+                    not in {
+                        "submitWorkflow",
+                        "cancelWorkflow",
+                        "resumeWorkflow",
+                        "reassessWorkflowNumeric",
+                    }
                     or node.name.value in ("__schema", "__type")
                 ):
                     raise ValueError("Request rejected")

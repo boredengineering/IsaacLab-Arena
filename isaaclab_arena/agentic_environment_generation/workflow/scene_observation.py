@@ -13,27 +13,94 @@ import base64
 import hashlib
 import json
 import math
+import operator
 from types import MappingProxyType
 
 from .contracts import Criterion
 from .evidence import CriterionEvidence
-from .scene_evidence_artifacts import canonical
+from .observation_schedule import CollectionFailure
+from .observation_schedule import compile_acquisition as _compile_acquisition
+from .observation_schedule import criterion_coverage, select_frames, select_samples, validate_collection, validate_png
+from .scene_evidence_artifacts import _protected, assessment_identity, canonical
+from .ternary_evidence import validate_ternary_response
 
-# producer -> (kind, modality, units, comparison, exact supported rubric)
+# (producer, evaluator) -> (kind, modality, units, comparison, exact supported rubric)
 PRODUCER_REGISTRY = MappingProxyType({
-    "scene.linear-speed": ("runtime", "state", "m_per_s", "le", "maximum linear speed"),
-    "scene.settled": ("runtime", "state", "boolean", "eq", "linear and angular speeds below settling thresholds"),
-    "scene.filtered-support": ("runtime", "state", "N", "ge", "filtered contact with settled proximity"),
-    "scene.visible": ("visual", "rgb", "boolean", "eq", "subject visible in every retained frame"),
+    ("scene.linear-speed", "1"): ("runtime", "state", "m_per_s", "le", "maximum linear speed"),
+    ("scene.settled", "1"): (
+        "runtime",
+        "state",
+        "boolean",
+        "eq",
+        "linear and angular speeds below settling thresholds",
+    ),
+    ("scene.filtered-support", "1"): ("runtime", "state", "N", "ge", "filtered contact with settled proximity"),
+    ("scene.visible", "1"): ("visual", "rgb", "boolean", "eq", "subject visible in every retained frame"),
+    ("scene.linear-speed", "numeric-v2"): (
+        "runtime",
+        "state",
+        "m_per_s",
+        ("lt", "le", "eq", "ge", "gt"),
+        "selected velocity norm",
+    ),
+    ("scene.settled", "numeric-v2"): ("runtime", "state", "boolean", ("eq",), "selected stationary limits"),
+    ("scene.xy-target-error", "numeric-v2"): ("geometry", "state", "m", ("lt", "le"), "selected world XY target error"),
+    ("scene.visible", "full-scene-ternary-v1"): ("visual", "rgb", "boolean", ("eq",), "selected per-frame visibility"),
 })
 EVALUATOR_VERSION = "1"
 MAX_SAMPLES = 256
 SUPPORT_THRESHOLDS = MappingProxyType({"linear_m_per_s": 0.01, "angular_rad_per_s": 0.05, "xy_m": 0.05})
 
 
+def compile_acquisition(plan, criteria, *, candidate, cohort):
+    """Compile explicit acquisition through the existing producer facade."""
+    return _compile_acquisition(plan, criteria, candidate=candidate, cohort=cohort)
+
+
 def admit_criterion(criterion):
     """Reject unsupported semantics before any native/model callback is invoked."""
     criterion = Criterion.model_validate(criterion.model_dump(mode="python"))
+    if criterion.evaluator_version == "full-scene-ternary-v1":
+        profile = PRODUCER_REGISTRY.get((criterion.evidence_producer, criterion.evaluator_version))
+        parameters = criterion.parameters
+        if profile is None or parameters is None or parameters.metric != "visibility":
+            raise ValueError("unsupported full-scene visual capability")
+        kind, modality, unit, operators, rubric = profile
+        if (
+            (criterion.kind, criterion.required_modalities, criterion.limit.unit, criterion.rubric)
+            != (kind, (modality,), unit, rubric)
+            or criterion.limit.operator not in operators
+            or criterion.limit.value != 1
+            or not 1 <= len(criterion.subjects) <= 16
+            or len(set(criterion.subjects)) != len(criterion.subjects)
+            or set(criterion.coordinate_frames) != {image.camera for image in parameters.images}
+            or len(set(criterion.coordinate_frames)) != len(criterion.coordinate_frames)
+        ):
+            raise ValueError("unsupported full-scene visual semantics")
+        return criterion
+    if criterion.evaluator_version == "numeric-v2":
+        profile = PRODUCER_REGISTRY.get((criterion.evidence_producer, criterion.evaluator_version))
+        if profile is None or criterion.parameters is None:
+            raise ValueError("unsupported parameterized producer/version")
+        kind, modality, unit, operators, rubric = profile
+        if (
+            (criterion.kind, criterion.required_modalities, criterion.limit.unit, criterion.rubric)
+            != (kind, (modality,), unit, rubric)
+            or criterion.limit.operator not in operators
+            or criterion.limit.value < 0
+            or criterion.coordinate_frames != ("world",)
+            or not 1 <= len(criterion.subjects) <= 16
+            or len(set(criterion.subjects)) != len(criterion.subjects)
+            or criterion.parameters.metric
+            != {
+                "scene.linear-speed": "linear_speed",
+                "scene.settled": "stationary",
+                "scene.xy-target-error": "xy_target_error",
+            }.get(criterion.evidence_producer)
+            or (criterion.evidence_producer == "scene.settled" and criterion.limit.value != 1)
+        ):
+            raise ValueError("unsupported parameterized criterion semantics")
+        return criterion
     if criterion.evaluator_version == "visibility-v2":
         if (
             criterion.evidence_producer != "scene.visible"
@@ -50,7 +117,7 @@ def admit_criterion(criterion):
         ):
             raise ValueError("Unsupported retained visibility criterion")
         return criterion
-    profile = PRODUCER_REGISTRY.get(criterion.evidence_producer)
+    profile = PRODUCER_REGISTRY.get((criterion.evidence_producer, criterion.evaluator_version))
     if profile is None or criterion.evaluator_version != EVALUATOR_VERSION:
         raise ValueError("unsupported producer/version")
     kind, modality, unit, operator, rubric = profile
@@ -96,6 +163,8 @@ def _bound_payload(candidate, cohort, artifacts, receipt, protect):
     payload = artifacts.verified_payload(receipt, protect=protect)
     if payload.get("kind") != "observation" or payload.get("provenance") not in ("synthetic", "native-unverified"):
         raise ValueError("unsupported observation provenance")
+    if payload.get("codec") == "observation-v2":
+        validate_collection(payload, candidate=candidate, cohort=cohort)
     return payload
 
 
@@ -106,8 +175,17 @@ def _norm(value):
     return result
 
 
-def _evidence(criterion, candidate, cohort, receipt, verdict, limitations):
+def _evidence(criterion, candidate, cohort, receipt, verdict, limitations, *, assessment_id=None, conflict=None):
     digest = hashlib.sha256(canonical(criterion.model_dump(mode="json"))).hexdigest()
+    selected = (
+        {}
+        if criterion.parameters is None
+        else dict(
+            coverage=criterion_coverage(criterion),
+            assessment_id=assessment_id,
+            conflict=False if conflict is None else conflict,
+        )
+    )
     return CriterionEvidence(
         criterion_id=criterion.criterion_id,
         criterion_digest=digest,
@@ -123,10 +201,15 @@ def _evidence(criterion, candidate, cohort, receipt, verdict, limitations):
         manifest_digest=receipt.manifest_digest,
         verdict=verdict,
         limitations=tuple(limitations),
+        **selected,
     )
 
 
 def _window(criterion, cohort, payload):
+    if criterion.parameters is not None:
+        if criterion.parameters.metric == "visibility":
+            return select_frames(criterion, payload, cohort)
+        return select_samples(criterion, payload, cohort)
     samples = payload.get("samples")
     start, end = criterion.observation_window.start_step, criterion.observation_window.end_step
     if type(samples) is not list or not 1 <= len(samples) <= MAX_SAMPLES:
@@ -153,6 +236,30 @@ def evaluate_measurement(criterion, candidate, cohort, artifacts, receipt, *, pr
         ),
         "not_policy_success_or_causality",
     ]
+    if criterion.evaluator_version == "numeric-v2":
+        samples = _window(criterion, cohort, payload)
+        parameters = criterion.parameters
+        assert parameters is not None
+        subject_passes = []
+        for subject in criterion.subjects:
+            values = []
+            for sample in samples:
+                measured = sample["subjects"][subject]
+                if parameters.metric == "stationary":
+                    passed = _compare_limit(_norm(measured["linear_velocity_w"]), parameters.linear_limit)
+                    passed = _compare_limit(_norm(measured["angular_velocity_w"]), parameters.angular_limit) and passed
+                elif parameters.metric == "xy_target_error":
+                    position = _vector(measured["position_w"])
+                    error = _norm(
+                        [position[0] - parameters.target_xy_m[0], position[1] - parameters.target_xy_m[1], 0.0]
+                    )
+                    passed = _compare_limit(error, criterion.limit)
+                else:
+                    passed = _compare_limit(_norm(measured["linear_velocity_w"]), criterion.limit)
+                values.append(passed)
+            subject_passes.append((all if parameters.temporal_aggregation == "all" else any)(values))
+        passed = (all if parameters.subject_aggregation == "all" else any)(subject_passes)
+        return _evidence(criterion, candidate, cohort, receipt, "established" if passed else "violated", limitations)
     try:
         samples = _window(criterion, cohort, payload)
         if criterion.evidence_producer == "scene.filtered-support":
@@ -179,31 +286,69 @@ def evaluate_measurement(criterion, candidate, cohort, artifacts, receipt, *, pr
     return _evidence(criterion, candidate, cohort, receipt, verdict, limitations)
 
 
+def _compare_limit(value, limit):
+    return {"lt": operator.lt, "le": operator.le, "eq": operator.eq, "ge": operator.ge, "gt": operator.gt}[
+        limit.operator
+    ](value, limit.value)
+
+
 class ObservationRecorder:
     """Trusted capture callback with detached samples and bounded exact image bytes."""
 
-    def __init__(self, sample_state, *, provenance):
+    def __init__(self, sample_state, *, provenance, acquisition=None):
         if provenance not in ("synthetic", "native-unverified"):
             raise ValueError("unsupported provenance")
         self.sample_state = sample_state
         self.provenance = provenance
         self.samples = []
         self.frames = []
+        self.acquisition = acquisition
+        self._last_step = -1
+        self._collection = {"status": "incomplete"}
 
     def __call__(self, env, step):
+        if self.acquisition is not None:
+            if type(step) is not int or not 0 <= step <= self.acquisition.plan.horizon_steps or step <= self._last_step:
+                raise CollectionFailure(reason="duplicate_or_invalid_step")
+            self._last_step = step
+            if step not in self.acquisition.state_steps:
+                return
         if type(step) is not int or step < 0 or len(self.samples) >= MAX_SAMPLES:
             raise ValueError("sample bound")
-        value = json.loads(canonical(self.sample_state(env, step)))
+        try:
+            value = json.loads(canonical(self.sample_state(env, step)))
+        except (ValueError, TypeError) as error:
+            if self.acquisition is not None:
+                raise CollectionFailure(reason="invalid_numeric_sample") from error
+            raise
         if value.get("step") != step or (self.samples and step <= self.samples[-1]["step"]):
             raise ValueError("sample step mismatch")
+        if self.acquisition is not None:
+            if type(value["step"]) is not int or value.get("frame") != self.acquisition.plan.reference_frame:
+                raise CollectionFailure(reason="sample_clock_or_frame_mismatch")
+            value.update(self.acquisition.observation_identity(step))
+            if "measured_clocks" in value:
+                import math
+
+                clocks = value["measured_clocks"]
+                measured = clocks.get("simulation_time_seconds")
+                if (
+                    clocks.get("control_step") != step
+                    or clocks.get("reset_count") != 1
+                    or type(measured) not in (int, float)
+                    or not math.isfinite(measured)
+                    or not math.isclose(measured, value["time_seconds"], abs_tol=1e-7, rel_tol=1e-7)
+                ):
+                    raise CollectionFailure(reason="measured_acquisition_clock_mismatch")
+                value["time_seconds"] = measured
         canonical(self.payload() | {"samples": self.samples + [value]})
         self.samples.append(value)
 
-    def add_frame(self, *, camera, step, subject_ids, image_bytes):
+    def add_frame(self, *, camera, step, subject_ids, image_bytes, sensor_update_step=None, sensor_sequence=None):
         """Retain supplied PNG bytes, without asserting they are native camera output."""
         if type(image_bytes) is not bytes or not 1 <= len(image_bytes) <= 128 * 1024 or len(self.frames) >= 16:
             raise ValueError("image bound")
-        if type(step) is not int or step not in [s["step"] for s in self.samples]:
+        if self.acquisition is None and (type(step) is not int or step not in [s["step"] for s in self.samples]):
             raise ValueError("frame outside retained samples")
         if any((f["camera"], f["step"]) == (camera, step) for f in self.frames):
             raise ValueError("duplicate frame")
@@ -215,15 +360,57 @@ class ObservationRecorder:
             "sha256": hashlib.sha256(image_bytes).hexdigest(),
             "bytes": base64.b64encode(image_bytes).decode("ascii"),
         }
+        if self.acquisition is not None:
+            validate_png(image_bytes)
+            frame.update(self.acquisition.observation_identity(step, camera=camera))
+            if (
+                type(sensor_update_step) is not int
+                or sensor_update_step != step
+                or type(sensor_sequence) is not int
+                or sensor_sequence < 0
+                or tuple(subject_ids) != self.acquisition.plan.subjects
+            ):
+                raise CollectionFailure(reason="sensor_time_or_subject_coverage")
+            frame.update(sensor_update_step=sensor_update_step, sensor_sequence=sensor_sequence)
         canonical(self.payload() | {"frames": self.frames + [frame]})
         self.frames.append(frame)
 
     def payload(self):
+        if self.acquisition is not None:
+            return json.loads(
+                canonical(
+                    dict(
+                        kind="observation",
+                        codec="observation-v2",
+                        provenance=self.provenance,
+                        acquisition=self.acquisition.metadata(),
+                        collection=self._collection,
+                        samples=self.samples,
+                        frames=self.frames,
+                    )
+                )
+            )
         return json.loads(
             canonical(
                 {"kind": "observation", "provenance": self.provenance, "samples": self.samples, "frames": self.frames}
             )
         )
+
+    def complete(self, *, executed_steps, reset_count, terminated, truncated):
+        """Finalize valid collection, not a scientific passing result."""
+        if self.acquisition is None:
+            raise ValueError("explicit acquisition required for collection completion")
+        status = dict(
+            status="complete",
+            executed_steps=executed_steps,
+            reset_count=reset_count,
+            terminated=terminated,
+            truncated=truncated,
+        )
+        payload = self.payload() | {"collection": status}
+        validate_collection(payload, candidate=self.acquisition.candidate, cohort=self.acquisition.cohort)
+        self._collection = status
+        return payload
 
 
 def visual_request(criterion, candidate, cohort, artifacts, observation, *, protect):
@@ -232,6 +419,38 @@ def visual_request(criterion, candidate, cohort, artifacts, observation, *, prot
     if criterion.kind != "visual":
         raise ValueError("visual visibility only")
     payload = _bound_payload(candidate, cohort, artifacts, observation, protect)
+    if criterion.evaluator_version == "full-scene-ternary-v1":
+        frames = _window(criterion, cohort, payload)
+        if any(not set(criterion.subjects) <= set(frame["subjects"]) for frame in frames):
+            raise ValueError("visual subject coverage mismatch")
+        parameters = criterion.parameters
+        request = dict(
+            answer_schema="full-scene-ternary-v1",
+            criterion_id=criterion.criterion_id,
+            criterion=criterion.model_dump(mode="json"),
+            criterion_digest=hashlib.sha256(canonical(criterion.model_dump(mode="json"))).hexdigest(),
+            rubric=criterion.rubric,
+            candidate=candidate.model_dump(mode="json"),
+            cohort=cohort.model_dump(mode="json"),
+            observation_manifest_digest=observation.manifest_digest,
+            acquisition_id=payload["acquisition"]["acquisition_id"],
+            step_window=[criterion.observation_window.start_step, criterion.observation_window.end_step],
+            aggregation=dict(
+                temporal=parameters.temporal_aggregation,
+                camera=parameters.camera_aggregation,
+                subject=parameters.subject_aggregation,
+            ),
+            frames=[
+                {
+                    key: frame[key]
+                    for key in ("observation_id", "camera", "step", "clock", "time_seconds", "modality", "sha256")
+                }
+                | {"subjects": list(criterion.subjects)}
+                for frame in frames
+            ],
+        )
+        request["request_sha256"] = hashlib.sha256(canonical(request)).hexdigest()
+        return request
     _window(criterion, cohort, payload)
     frames = payload.get("frames")
     if type(frames) is not list or not 1 <= len(frames) <= 16:
@@ -327,6 +546,26 @@ def retain_visual_answer(criterion, candidate, cohort, artifacts, observation, r
     request = visual_request(criterion, candidate, cohort, artifacts, observation, protect=protect)
     if type(raw_response) is not bytes or not 1 <= len(raw_response) <= 65536:
         raise ValueError("response byte bound")
+    if criterion.evaluator_version == "full-scene-ternary-v1":
+        # Screen readable content as well as the exact encoded bytes. Decoding
+        # for screening never replaces the retained response or establishes truth.
+        _protected({"raw_response_for_screening": raw_response.decode("utf-8", errors="replace")}, protect)
+        digest = hashlib.sha256(raw_response).hexdigest()
+        selection = dict(request_sha256=request["request_sha256"], response_sha256=digest)
+        return artifacts.write(
+            candidate,
+            cohort,
+            dict(
+                kind="visual-answer",
+                codec="full-scene-answer-v1",
+                request=request,
+                source_manifest_digest=observation.manifest_digest,
+                assessment_id=assessment_identity("visual-answer", observation.manifest_digest, selection),
+                raw_response=dict(encoding="base64", bytes=base64.b64encode(raw_response).decode("ascii")),
+                response_sha256=digest,
+            ),
+            protect=protect,
+        )
     text = raw_response.decode("utf-8")
     return artifacts.write(
         candidate,
@@ -349,6 +588,36 @@ def evaluate_visual_answer(criterion, candidate, cohort, artifacts, observation,
     payload = artifacts.verified_payload(answer, protect=protect)
     if payload["kind"] != "visual-answer" or canonical(payload["request"]) != canonical(request):
         raise ValueError("answer request mismatch")
+    if criterion.evaluator_version == "full-scene-ternary-v1":
+        if payload.get("codec") != "full-scene-answer-v1" or payload["raw_response"]["encoding"] != "base64":
+            raise ValueError("versioned raw response retention required")
+        raw = base64.b64decode(payload["raw_response"]["bytes"], validate=True)
+        digest = hashlib.sha256(raw).hexdigest()
+        expected = assessment_identity(
+            "visual-answer",
+            observation.manifest_digest,
+            dict(
+                request_sha256=request["request_sha256"],
+                response_sha256=digest,
+            ),
+        )
+        if (
+            payload["assessment_id"] != expected
+            or payload["source_manifest_digest"] != observation.manifest_digest
+            or digest != payload["response_sha256"]
+        ):
+            raise ValueError("derived answer/source identity mismatch")
+        checked = validate_ternary_response(raw, request)
+        return _evidence(
+            criterion,
+            candidate,
+            cohort,
+            answer,
+            {"true": "established", "false": "violated", "unknown": "inconclusive"}[checked["truth"]],
+            checked["limitations"],
+            assessment_id=expected,
+            conflict=checked["conflict"],
+        )
     raw = payload["raw_response"].encode("utf-8")
     if hashlib.sha256(raw).hexdigest() != payload["response_sha256"]:
         raise ValueError("raw response mismatch")
@@ -386,7 +655,9 @@ def evaluate_visual_answer(criterion, candidate, cohort, artifacts, observation,
     )
 
 
-def effective_displacement(artifacts, before, after, *, subject, step, target_local, mapping, tolerance_m, protect):
+def effective_displacement(
+    artifacts, before, after, *, subject, step, target_local, mapping, tolerance_m, protect, hypothesis=None
+):
     """Check a realized translation, not repair success, using explicit origin mapping.
 
     AtPositionLossStrategy consumes solver positions directly. write_layout_to_sim
@@ -412,8 +683,10 @@ def effective_displacement(artifacts, before, after, *, subject, step, target_lo
     positions = []
     origins = []
     world_positions = []
+    acquisitions, selected_samples = [], []
     for receipt in (before, after):
         payload = _bound_payload(receipt.candidate, receipt.cohort, artifacts, receipt, protect)
+        acquisitions.append(payload.get("acquisition") if payload.get("codec") == "observation-v2" else None)
         samples = [s for s in payload["samples"] if type(s["step"]) is int and s["step"] == step]
         if len(samples) != 1 or samples[0]["frame"] != "world" or receipt.cohort.frame_id != "world":
             raise ValueError("exact world sample required")
@@ -422,11 +695,78 @@ def effective_displacement(artifacts, before, after, *, subject, step, target_lo
         origins.append(origin)
         world_positions.append(world)
         positions.append([p - o for p, o in zip(world, origin)])
+        selected_samples.append(samples[0])
     displacement = math.dist(*positions)
     world_displacement = math.dist(*world_positions)
     error = math.dist(positions[1], target_local)
     if not all(math.isfinite(value) for value in (displacement, world_displacement, error)):
         raise ValueError("nonfinite derived displacement")
+    if any(acquisitions):
+        from .scene_eligibility import RootXYHypothesis
+
+        if not all(acquisitions) or hypothesis is None:
+            raise ValueError("versioned displacement requires a bound hypothesis and compatible acquisitions")
+        h = RootXYHypothesis.model_validate_json(canonical(hypothesis.model_dump(mode="json")))
+        if (
+            any(a["plan"]["displacement_step"] != step for a in acquisitions)
+            or tolerance_m != h.displacement_tolerance_m
+            or h.step != step
+            or h.target_subject != subject
+            or h.source_acquisition_id != acquisitions[0]["acquisition_id"]
+            or h.before_world_xy_m != tuple(world_positions[0][:2])
+            or h.proposed_authored_xy_m != tuple(target_local[:2])
+            or origins[0] != origins[1]
+            or before.cohort.reset_id == after.cohort.reset_id
+            or acquisitions[0]["plan"]["control_dt_seconds"] != acquisitions[1]["plan"]["control_dt_seconds"]
+        ):
+            raise ValueError("selected displacement sample, hypothesis or matched clock/origin mismatch")
+        premise = artifacts.load_receipt(
+            before.candidate,
+            before.cohort,
+            kind="diagnostic",
+            assessment_id=h.diagnostic_assessment_id,
+            manifest_digest=h.diagnostic_manifest_digest,
+            protect=protect,
+        )
+        facts = artifacts.verified_payload(premise, protect=protect)
+        if (
+            facts["source_manifest_digest"] != before.manifest_digest
+            or facts["facts"]["observation_id"] != selected_samples[0]["observation_id"]
+            or facts["facts"]["repair_selection_digest"] != h.repair_selection_digest
+            or facts["facts"]["position_world_m"] != world_positions[0]
+        ):
+            raise ValueError("displacement hypothesis diagnostic ancestry mismatch")
+        actual_delta = [a - b for a, b in zip(world_positions[1], world_positions[0])]
+        predicted_delta = [*h.predicted_delta_world_xy_m, 0.0]
+        delta_error = _norm([a - b for a, b in zip(actual_delta, predicted_delta)])
+        return dict(
+            codec="measured-displacement-v2",
+            effective=world_displacement > tolerance_m and delta_error <= tolerance_m,
+            subject=subject,
+            clock="control_step",
+            step=step,
+            hypothesis_digest=h.digest(),
+            before_acquisition_id=acquisitions[0]["acquisition_id"],
+            after_acquisition_id=acquisitions[1]["acquisition_id"],
+            before_observation_id=selected_samples[0]["observation_id"],
+            after_observation_id=selected_samples[1]["observation_id"],
+            before_manifest_digest=before.manifest_digest,
+            after_manifest_digest=after.manifest_digest,
+            actual_delta_world_m=actual_delta,
+            predicted_delta_world_m=predicted_delta,
+            delta_error_m=delta_error,
+            authored_target_error_m=error,
+            tolerance_m=tolerance_m,
+            causal_status="unproven",
+            goal_assessment_required=True,
+            limitations=[
+                "weighted_constraint_not_guaranteed_pose_assignment",
+                "matched_declared_clock_not_calibration",
+                "displacement_is_not_goal_satisfaction_or_causal_proof",
+            ],
+        )
+    if hypothesis is not None:
+        raise ValueError("legacy displacement does not consume versioned hypotheses")
     return {
         "effective": displacement > tolerance_m and world_displacement > tolerance_m and error <= tolerance_m,
         "displacement_m": displacement,
@@ -440,7 +780,7 @@ def effective_displacement(artifacts, before, after, *, subject, step, target_lo
     }
 
 
-def make_native_sampler(criteria, *, subject_names, contact_sensors=None):
+def make_native_sampler(criteria, *, subject_names, contact_sensors=None, acquisition=None):
     """Create a lazy callback for an already initialized single Arena environment.
 
     Reuses native pose/velocity, settling and destination predicates. Diagnostic
@@ -450,6 +790,10 @@ def make_native_sampler(criteria, *, subject_names, contact_sensors=None):
     """
     criteria = tuple(admit_criterion(c) for c in criteria)
     subjects = {s for c in criteria for s in c.subjects}
+    if acquisition is not None:
+        if not subjects <= set(acquisition.subjects) or any(c.parameters is None for c in criteria):
+            raise ValueError("explicit acquisition requires supported criterion/subject mappings")
+        subjects = set(acquisition.subjects)
     if (
         not criteria
         or set(subject_names) != subjects
@@ -501,15 +845,27 @@ def make_native_sampler(criteria, *, subject_names, contact_sensors=None):
                 "linear_velocity_w": vector(get_root_lin_vel_w(native, name)),
                 "angular_velocity_w": vector(get_root_ang_vel_w(native, name)),
             }
-        result["diagnostic_predicates"]["objects_settled"] = bool(
-            objects_settled(
-                native,
-                list(names.values()),
-                lin_vel_threshold=SUPPORT_THRESHOLDS["linear_m_per_s"],
-                ang_vel_threshold=SUPPORT_THRESHOLDS["angular_rad_per_s"],
-                env_id=0,
-            ).item()
-        )
+        if acquisition is None:
+            result["diagnostic_predicates"]["objects_settled"] = bool(
+                objects_settled(
+                    native,
+                    list(names.values()),
+                    lin_vel_threshold=SUPPORT_THRESHOLDS["linear_m_per_s"],
+                    ang_vel_threshold=SUPPORT_THRESHOLDS["angular_rad_per_s"],
+                    env_id=0,
+                ).item()
+            )
+        else:
+            for criterion in criteria:
+                parameters = criterion.parameters
+                if parameters.metric == "stationary":
+                    result["diagnostic_predicates"][criterion.criterion_id] = all(
+                        _compare_limit(_norm(result["subjects"][subject]["linear_velocity_w"]), parameters.linear_limit)
+                        and _compare_limit(
+                            _norm(result["subjects"][subject]["angular_velocity_w"]), parameters.angular_limit
+                        )
+                        for subject in criterion.subjects
+                    )
         for c in criteria:
             if c.evidence_producer != "scene.filtered-support":
                 continue

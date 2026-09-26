@@ -22,7 +22,12 @@ from .private_files import Directory, decode, encode, fields
 PUBLIC = ["schema_version", "instance", "config_sha256", "binding_sha256", "endpoint", "generation", "state", "code"]
 STATES = {"launching", "ready", "stopping", "stopped", "failed", "exited_unclean"}
 MODULE = "isaaclab_arena.agentic_environment_generation.workflow.cli"
-EXECUTION_MODES = {"isolated-synthetic-execution-v1", "retained-native-validation-v1", "retained-visual-assessment-v1"}
+EXECUTION_MODES = {
+    "isolated-synthetic-execution-v1",
+    "retained-native-validation-v1",
+    "retained-visual-assessment-v1",
+    "full-scene-workflow-v1",
+}
 
 
 def instance_id(value):
@@ -87,6 +92,10 @@ def state(config, selected):
                 from .installed_assessment import CAPABILITIES
 
                 allowed = (CAPABILITIES,)
+            elif config.value["mode"] == "full-scene-workflow-v1":
+                from .installed_full_scene import CAPABILITIES
+
+                allowed = (CAPABILITIES, {**CAPABILITIES, "submit": False})
             if result["capabilities"] not in allowed:
                 raise ValueError("Execution capability binding differs")
     if (
@@ -158,7 +167,11 @@ def _frame(sock, deadline):
 
 
 def control(config, selected, operation, known):
-    if operation not in {"status", "stop"} or known["identity"] is None or not same_process(known["identity"]):
+    if (
+        operation not in {"status", "stop", "refresh-auth"}
+        or known["identity"] is None
+        or not same_process(known["identity"])
+    ):
         raise ValueError("Unknown control identity")
     with Directory(instance_path(config, selected)) as directory:
         info = os.stat("control.sock", dir_fd=directory.fd, follow_symlinks=False)
@@ -250,6 +263,19 @@ def _execution_environment(operator, *, native, assessment):
     return environment
 
 
+def _execution_approvals(config, native_authorized, assessment_authorized, workload_authorized):
+    native = config.value["mode"] == "retained-native-validation-v1"
+    assessment = config.value["mode"] == "retained-visual-assessment-v1"
+    full_scene = config.value["mode"] == "full-scene-workflow-v1"
+    if type(native_authorized) is not bool or native_authorized != native:
+        raise ValueError("Separate native approval must match the selected mode")
+    if type(assessment_authorized) is not bool or assessment_authorized != assessment:
+        raise ValueError("Separate assessment approval must match the selected mode")
+    if type(workload_authorized) is not bool or (workload_authorized and not full_scene):
+        raise ValueError("Separate full-scene approval must match the selected mode")
+    return native, assessment, full_scene
+
+
 def launch(
     config,
     selected,
@@ -258,18 +284,16 @@ def launch(
     previous_instance=None,
     native_authorized=False,
     assessment_authorized=False,
+    workload_authorized=False,
 ):
     """Launch a fresh instance, or explicitly hand over an exactly drained configuration."""
     from .installed_config import MAX_CONFIG
 
     instance_id(selected)
     transition = None
-    native = config.value["mode"] == "retained-native-validation-v1"
-    if type(native_authorized) is not bool or native_authorized != native:
-        raise ValueError("Separate native approval must match the selected mode")
-    assessment = config.value["mode"] == "retained-visual-assessment-v1"
-    if type(assessment_authorized) is not bool or assessment_authorized != assessment:
-        raise ValueError("Separate assessment approval must match the selected mode")
+    native, assessment, full_scene = _execution_approvals(
+        config, native_authorized, assessment_authorized, workload_authorized
+    )
     if previous_config is not None or previous_instance is not None:
         instance_id(previous_instance)
         if previous_config is None or selected == previous_instance or config.digest == previous_config.digest:
@@ -395,11 +419,13 @@ def launch(
                 str(gate),
             ]
             operator = config.value["operator"]
-            child_environment = _execution_environment(operator, native=native, assessment=assessment)
+            child_environment = _execution_environment(operator, native=native or full_scene, assessment=assessment)
             if assessment:
                 arguments.append("--authorize-assessment")
             if native:
                 arguments.append("--authorize-native")
+            if workload_authorized:
+                arguments.append("--authorize-full-scene")
             child = subprocess.Popen(
                 arguments,
                 executable=executable,

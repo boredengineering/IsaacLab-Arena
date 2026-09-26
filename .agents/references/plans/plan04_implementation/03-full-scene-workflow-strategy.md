@@ -3,15 +3,19 @@
 - Reviewed: 2026-09-26
 - Source baseline: `aec2b6b4781e9bd636bad08dccee6e668f7f6d39`; worktree clean at review entry.
 - Parent package: [03-full-scene-workflow.md](03-full-scene-workflow.md)
-- Status: **PROPOSED — ALL FOUR GOALS UNISSUED. This review performs planning edits, not application implementation, native/provider execution or acceptance.**
+- Status: **G1 COMPLETE — parent-verified source/evidence foundation with scoped checks and accepted independent critique. G2–G4 remain UNISSUED. No live application effect is authorized by this document.**
 - Proposed generated operation: `p04-i03-full-scene-v1`.
 - Proposed fixed-candidate repair-witness operation: `p04-i03-fixed-scene-proof-v1`; other empirical case IDs require explicit selection.
 
 This revision supersedes the earlier fixed-strict-evaluator recipe, unconditional uncertainty stop, 1,200-second live gates, TCC/refund proposal and unimplemented causal-oracle claims. The general harness is parameterized; the tabletop experiment is a selected profile. Issuing one goal does not issue another. Embedded `/goal` blocks are proposal data until explicitly issued.
 
+> [!NOTE]
+> **Contract Schema Versioning (Schema 5 vs. Schema 6):**
+> In previous planning discussions, the configurable full-scene workflow contract was informally referenced as "Schema 6". The implemented workflow selection is **`schema_version == "5"`** in [contracts.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/contracts.py). This is G1's configurable contract/evidence foundation, **not 100% of installed full-scene capability**. Its concrete codecs and consumers are listed in the handoff below. The service and legacy worker/effect boundaries refuse new execution until G2; a version label does not install those paths or grant effects. Legacy I01/I02 identities and the accepted uncertain result remain unchanged.
+
 ## 1. Source-backed findings
 
-These are source-inspection findings and predicted failure paths, not executed failures or runtime proof. Source links are repository-relative. No protected simulator, Docker, CI, credential or shared-service investigation is required to act on them.
+These findings describe the planning baseline above, not the post-G1 implementation. The G1 handoff below records implemented corrections and actual decoder/check results; remaining installed and empirical obligations are not promoted by them. Source links are repository-relative. No protected simulator, Docker, CI, credential or shared-service investigation is required to act on them.
 
 ### R1 — Canonical identity is a migration boundary
 
@@ -119,6 +123,47 @@ For the reference profile, retain I01's strict final-five values and 180-step ho
 ### G1 to G2: protocol foundation
 
 Deliver consumed typed semantics, the pure supported-mechanism/target eligibility evaluator, legacy compatibility and a source-backed map of remaining installed changes. Include worker-supervision/renewal, API credential-refresh/current-principal rebinding and derived-assessment protocols, not merely optional Python fields. No operational/private installation is needed to complete this source/decoder boundary.
+
+#### Implemented G1 selections and consumers
+
+Implementation entry: `7eec064165ba8d6798873f6563a1651cb939473a`. G1 changed no installed configuration, database schema, fixture files, simulator/asset behavior or historical evidence. These are independently versioned selections, not a common global version switch:
+
+| Selection | Implemented interpretation / consumer |
+| --- | --- |
+| Workflow `5`; `experiment-policy-v1`; `renewable-control-v1` | [contracts.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/contracts.py) validates explicit enforced/advisory/accounting-only modes, nullable aggregate runtime/deadline limits, finite backend/control bounds, immutable observation/intervention choices and supported coverage. Legacy serialization omits all new fields; new fields/operators remain refused in legacy criteria. |
+| `numeric-v2` | [scene_observation.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_observation.py) consumes world/control-step linear-speed, combined stationary and immutable XY-target-error parameters. Units, strict/inclusive limits, exact subjects/steps and ALL/ANY aggregation are enforced. Missing/invalid measurements fail collection, not scientific UNKNOWN. |
+| `explicit-acquisition-v1`; `observation-v2` | [observation_schedule.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/observation_schedule.py) compiles state, renderer-update and image selections; binds observations to candidate/cohort/configuration; validates exact collection and sensor clocks. Unsupported event/adaptive or binary/modality selections refuse. Numeric and image windows may differ. |
+| `native-capture-v2`; `native-settle-v2` | [native_capture.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_capture.py), [native_realization.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_realization.py) and [trajectory_capture.py](../../../../isaaclab_arena/agentic_environment_generation/trajectory_capture.py) consume selected limits and schedules. Settle owns the handoff observation; capture cannot duplicate it. Complete unsettled status is retained. Collection, reset/termination, unsafe-control and infrastructure failures remain distinct. Old versions retain their old mechanics/refusals. |
+| `full-scene-ternary-v1`; `full-scene-answer-v1` | [ternary_evidence.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/ternary_evidence.py) and the existing producer facade require exact request/frame/time/modality/subject coverage. Confidence and conflict are separate. [scene_evidence_artifacts.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_evidence_artifacts.py) retains raw bytes before interpretation and keys new answers by immutable source/request/response identity; malformed answers cannot become UNKNOWN. |
+| `scene-observation-v2` | [scene_loop.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_loop.py) carries source/answer manifests and keyed assessment identity separately from successful `CriterionEvidence`. Fresh readback must reopen the exact failed answer too; `invalid_visual_answer` cannot be verified with an absent answer. Legacy unversioned observation serialization/refusals remain unchanged. |
+| `retained-numeric-v1` | [derived_assessment.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/derived_assessment.py) implements `assess_retained_numeric` and `reopen_retained_numeric`. Regrading requires sufficient exact source coverage and keeps acquisition/contract/result bytes unchanged. Validation-labelled assessments must match a criterion in the source's frozen contract; post-hoc variants are exploratory. |
+| `scalar-xy-selection-v1`; `root-xy-diagnostic-v1`; `root-xy-hypothesis-v1`; `scene-eligibility-v1` | [repairs.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/repairs.py) binds one unique scalar `at_position` relation and explicitly validates the declared fixed-order pointers against the original candidate. [scene_eligibility.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_eligibility.py) computes and verifies stop/observe/diagnose/correct eligibility and exact proposals from real retained bytes, not caller-supplied `verified` flags. Decisions bind goal, diagnostic, policy, original/current and selection identities; none grants execution. |
+| `measured-displacement-v2` | `effective_displacement` consumes the bound hypothesis, its diagnostic ancestry and the separately selected displacement step/tolerance. It compares measured versus predicted displacement, not an assumed unconditional AtPosition assignment. Goal satisfaction and causal attribution remain separate. [scene_ports.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_ports.py) reopens keyed answers and repair ancestry, revalidates supplied retained decisions/proposals, and refuses new execution. |
+| Public principal-descriptor schema `2`; renewable supervision records | [control_protocol.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/control_protocol.py) checks exact principal/instance/scope, generation/revision/handle compatibility, revocation through the trusted rechecker and finite expiry. Read/cancel can use refreshed current authority while expired workload authority still refuses continuation. Supervision renewal binds the existing fence and immutable allocation; replay cannot slide a deadline. No credentials are issued here. |
+
+The initial physical adapter contract is DROID, one environment, supported rigid objects, world/control-step measurements and bounded RGB PNGs; it does not advertise generic robotics, IK, deformables or adaptive event policies. The I01-equivalent stationary selection is explicitly `lt 0.001 m_per_s` and `lt 0.01 rad_per_s` for both selected subjects. It does not rewrite I01's historical criterion/operator encoding.
+
+#### Remaining G2 obligations (not implemented acceptance)
+
+1. Install the new mode through the existing profile/configuration, owner, coordinator and worker boundaries. `WorkflowService.submit`, the legacy scene-effect adapter and the existing native worker wire explicitly refuse schema 5; their current refusal must not be removed until all required consumers exist.
+2. Supply the native v2 trusted `check_active`/current-grant and supervision callbacks, exact control scope/instance/principal, reset counter, explicit renderer/sensor acquisition and actual frame-clock ports. Pure callback checks do not establish actual sensor freshness, physical validity or live renewal.
+3. Produce the selected bounded `root_xy_mapping` and actual subject scene-name/prim/root-kind facts while the owned scene exists. G1 refuses absent or mismatched premises; it does not invent a physics oracle or a placement response. Weighted AtPosition constraints are hypotheses, not guaranteed pose assignments.
+4. Retain and consume `evaluate_action_eligibility` / `validate_action_proposal` results at routing, reservation, release, recovery and refiner feedback. Recheck current policy/authority and remaining issued counts independently. Pass exact retained decisions into repair readback; do not resurrect the old aggregate-visual-failure/any-intervention rule.
+5. Expose keyed derived numeric assessments and all new coverage/diagnostic/decision references through authenticated persistence, query DTOs, GraphQL and CLI, including nullable budget fields. Preserve old rows, reservations, consumption and same-key replay.
+6. Wire finite supervision and secure credential refresh through the real server, private client descriptor and captured installed-composition principal. G1's public descriptor validator does not install a bearer credential, refresh an approval or reset an allocation. G2 still owes the non-sending stale/refreshed-principal expiry-crossing witness.
+
+#### G1 checks and legacy identities
+
+After host formatting/lint, the four affected effect-safe modules passed **365 checks**; selected pure trajectory/native-adapter cases passed **72**, with **93 deselected**. Scoped host pre-commit passed. The two warnings are the existing forged-Boolean serialization check and a CPU ProxyArray deprecation, not native execution. No new test files, fixtures, live service, worker launch, provider request, database operation, policy execution, prior retrieval or credential installation was used.
+
+Read-only decoding of real retained public files confirmed:
+
+- I01 contract `c66ee9406a09c1428927ac64efe1d477571c6a3e47037e65404b6d5eb57b2e24`, profile `4b21b69b0a6fc9e99728969cafc22b04a4d79134df59c7b092acf1fcf0f09353`, settings `9099687b0a1ea681450adc3d4789dca56da4b867dd33125a6432e1bd69a712b7` and evidence `3647e6b04a5d8be843d9aed008a705402ae4d49494161b23aa86b6efc438ea94`; both legacy criterion encodings and settings canonical bytes are identical.
+- I02 successor contract `e60c66954fcc1642099d879ba81d4feb770f8cfceaae9393c022e4a472cd27a1` and raw answer `a01d086208f31441f5cf10534bb743005de253c495ac3df3fb4de31e9f0ec071`; the unchanged `visibility-v2` decoder returns exactly the retained six-answer **uncertain** result. The original I02 consumer contract also decodes without rewriting it.
+
+The pre-boundary critic returned `CONTINUE`. Final scoped review (`deleg_1917bdef`) returned `BLOCKED` on three G1 boundaries: legacy native envelopes admitting new criteria, nonchronological image schedules, and loss of failed-answer identity during fresh readback. Parent reproduced all three and corrected their existing-module checks and consumers: v1 rejects parameterized criteria; schedules require nondecreasing image steps without changing same-step ordering; versioned observation metadata reopens the exact malformed response. Focused delta review (`deleg_5bc4bfd5`) returned **ACCEPT**, with no remaining findings. Parent verified the corrected source boundaries, passing check outputs and retained-byte decoder results, and closes G1 for its authorized source/pure-check scope only. These checks close no G2 installed or G3/G4 native/provider/calibration obligation.
+
+The two check groups run in separate fresh Python invocations. Placing the trajectory callback fixture before the CPU ProxyArray producer checks in one interpreter exposed import-order-dependent shape failures; the established separated invocations pass. No fixture or simulator change was made to suppress that interaction.
 
 ### G2 to G3: installed implementation and case matrix
 

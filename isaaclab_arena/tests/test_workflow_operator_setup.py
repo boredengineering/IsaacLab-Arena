@@ -147,6 +147,16 @@ class OperatorSetup(unittest.TestCase):
                         resource.private_roles().model_config(role)
                 with self.assertRaisesRegex(ValueError, "unavailable"):
                     resource.private_roles().prior_read()
+            from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import (
+                validate_role_bindings,
+            )
+
+            selected = value["role_bindings"]
+            selected["prior_read"] = "not_requested"
+            for role in ("generation", "assessment", "repair"):
+                selected[role]["credential_source"] = "assessment"
+                selected[role]["credential_alias"] = selected["assessment"]["credential_alias"]
+            validate_role_bindings(selected, resource.config.profiles, configurable=True)
 
     def test_public_configuration_rejects_unbound_profile_transport_and_authentication(self):
         from isaaclab_arena.agentic_environment_generation.workflow.api.installed_config import load

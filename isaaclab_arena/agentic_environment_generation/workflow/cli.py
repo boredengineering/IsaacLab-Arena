@@ -55,6 +55,16 @@ def _add_installed_arguments(commands):
     )
     preview.add_argument("--config", required=True)
     preview.add_argument("--contract", required=True)
+    scene_preview = commands.add_parser(
+        "scene-preview", allow_abbrev=False, help="Inspect selected full-scene sources with all sends denied"
+    )
+    scene_preview.add_argument("--config", required=True)
+    scene_preview.add_argument("--contract", required=True)
+    scene_inspect = commands.add_parser(
+        "scene-inspect", allow_abbrev=False, help="Authenticated installed non-sending selection"
+    )
+    scene_inspect.add_argument("--client", required=True)
+    scene_inspect.add_argument("--contract", required=True)
     for name in ("credentials-update", "credentials-remove"):
         credentials = commands.add_parser(name, allow_abbrev=False)
         credentials.add_argument("--config", required=True)
@@ -81,6 +91,14 @@ def _add_installed_arguments(commands):
     result.add_argument("--client", required=True)
     result.add_argument("--operation-id", required=True)
     result.add_argument("--wait-terminal-seconds", type=int, required=True)
+    for name in ("numeric-reassess", "numeric-result"):
+        numeric = commands.add_parser(
+            name, help="Keyed retained numeric assessment, without worker release", allow_abbrev=False
+        )
+        numeric.add_argument("--client", required=True)
+        numeric.add_argument("--operation-id", required=True)
+        if name == "numeric-reassess":
+            numeric.add_argument("--selection", required=True)
     profiles = commands.add_parser("profiles", help="Query retained profiles over HTTP", allow_abbrev=False)
     profiles.add_argument("--client", required=True)
     for name in (
@@ -97,6 +115,7 @@ def _add_installed_arguments(commands):
         "evidence",
         "artifact-inventory",
         "assessment",
+        "supervision",
     ):
         query = commands.add_parser(name, allow_abbrev=False)
         query.add_argument("--client", required=True)
@@ -112,6 +131,7 @@ def _add_installed_arguments(commands):
             "evidence",
             "artifact-inventory",
             "assessment",
+            "supervision",
         }:
             query.add_argument("identifier")
         if name == "profile":
@@ -122,7 +142,9 @@ def _add_installed_arguments(commands):
             query.add_argument("--first", required=True, type=int)
             query.add_argument("--after")
         if name == "artifact":
-            query.add_argument("--kind", required=True, choices=("PRIOR", "CANDIDATE", "GENERATION", "EVIDENCE"))
+            query.add_argument(
+                "--kind", required=True, choices=("PRIOR", "CANDIDATE", "GENERATION", "EVIDENCE", "NUMERIC_ASSESSMENT")
+            )
             query.add_argument("--reference-id", required=True)
             query.add_argument(
                 "--name",
@@ -132,10 +154,12 @@ def _add_installed_arguments(commands):
             query.add_argument("--sha256", required=True)
             query.add_argument("--offset", default="0")
             query.add_argument("--limit", type=int, default=65536)
-        if name in {"candidate", "generation", "evidence", "artifact-inventory", "assessment"}:
+        if name in {"candidate", "generation", "evidence", "artifact-inventory", "assessment", "supervision"}:
             query.add_argument("--reference-id", required=True)
         if name == "artifact-inventory":
-            query.add_argument("--kind", required=True, choices=("PRIOR", "CANDIDATE", "GENERATION", "EVIDENCE"))
+            query.add_argument(
+                "--kind", required=True, choices=("PRIOR", "CANDIDATE", "GENERATION", "EVIDENCE", "NUMERIC_ASSESSMENT")
+            )
     admin = commands.add_parser("admin", help="Explicit query scope administration", allow_abbrev=False)
     actions = admin.add_subparsers(dest="action", required=True)
     for name in ("initialize-schema", "initialize-scope", "initialize-artifacts", "register-profile"):
@@ -149,7 +173,15 @@ def _add_installed_arguments(commands):
     native_cancel.add_argument("--config", required=True)
     native_cancel.add_argument("--run-id", required=True)
     native_cancel.add_argument("--instance", help="Exact dead assessment instance for fenced cleanup and retirement")
-    for name in ("api-launch", "api-handover", "api-status", "api-stop", "api-reconcile", "api-serve"):
+    for name in (
+        "api-launch",
+        "api-handover",
+        "api-status",
+        "api-stop",
+        "api-reconcile",
+        "api-serve",
+        "api-refresh-auth",
+    ):
         command = commands.add_parser(name, allow_abbrev=False)
         command.add_argument("--config", required=True)
         command.add_argument("--instance", required=True)
@@ -161,6 +193,11 @@ def _add_installed_arguments(commands):
                 "--authorize-assessment",
                 action="store_true",
                 help="Approve only the frozen retained assessment selection",
+            )
+            command.add_argument(
+                "--authorize-full-scene",
+                action="store_true",
+                help="Use separately issued exact full-scene workload authority",
             )
         if name == "api-handover":
             command.add_argument(
@@ -180,6 +217,8 @@ def _launch_instance(options, config, selected):
     approval = {"native_authorized": True} if options.authorize_native else {}
     if getattr(options, "authorize_assessment", False):
         approval["assessment_authorized"] = True
+    if getattr(options, "authorize_full_scene", False):
+        approval["workload_authorized"] = True
     if options.command == "api-launch":
         return launch(config, selected, **approval)
     return launch(
@@ -197,6 +236,8 @@ def _serve_instance(options, config, selected):
     approval = {"native_authorized": True} if options.authorize_native else {}
     if getattr(options, "authorize_assessment", False):
         approval["assessment_authorized"] = True
+    if getattr(options, "authorize_full_scene", False):
+        approval["workload_authorized"] = True
     return serve(
         config,
         selected,
@@ -264,21 +305,72 @@ def _run_setup_readiness(options):
     return 0
 
 
+def _run_numeric(options):
+    try:
+        from .api.client import query
+
+        raw = None
+        if options.command == "numeric-reassess":
+            fd = os.open(options.selection, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            try:
+                metadata = os.fstat(fd)
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 65536:
+                    raise ValueError("Numeric selection exceeds bound")
+                with os.fdopen(fd, "rb", closefd=False) as stream:
+                    raw = stream.read(65537).decode("utf-8")
+            finally:
+                os.close(fd)
+        result = query(options.client, options.command, identifier=options.operation_id, raw_selection=raw)
+    except Exception:
+        print("workflow: retained numeric operation unavailable", file=sys.stderr)
+        return 2
+    print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
+def _run_scene_inspection(options):
+    try:
+        contract = _read_contract(options.contract)
+        if options.command == "scene-preview":
+            from .api.installed_config import load
+            from .api.installed_full_scene import preview
+
+            result = preview(load(options.config), contract)
+        else:
+            from .api.client import query
+            from .contracts import canonical_json
+
+            result = query(options.client, "scene-inspect", raw_contract=canonical_json(contract))
+    except Exception:
+        print("workflow: configurable inspection unavailable", file=sys.stderr)
+        return 2
+    print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
+def _run_assessment_preview(options):
+    try:
+        from .api.installed_assessment import preview
+        from .api.installed_config import load
+
+        result = preview(load(options.config), _read_contract(options.contract))
+    except Exception:
+        print("workflow: retained assessment preview unavailable", file=sys.stderr)
+        return 2
+    print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
 def _run_installed(options):
     """Execute only the explicitly selected installed operation with static errors."""
     if options.command == "setup-readiness":
         return _run_setup_readiness(options)
+    if options.command in {"numeric-reassess", "numeric-result"}:
+        return _run_numeric(options)
+    if options.command in {"scene-preview", "scene-inspect"}:
+        return _run_scene_inspection(options)
     if options.command == "assessment-preview":
-        try:
-            from .api.installed_assessment import preview
-            from .api.installed_config import load
-
-            result = preview(load(options.config), _read_contract(options.contract))
-        except Exception:
-            print("workflow: retained assessment preview unavailable", file=sys.stderr)
-            return 2
-        print(json.dumps(result, sort_keys=True, separators=(",", ":")))
-        return 0
+        return _run_assessment_preview(options)
     if options.command in {"submit", "cancel", "resume", "result"}:
         try:
             from .api.client import query
@@ -344,6 +436,7 @@ def _run_installed(options):
         "evidence",
         "artifact-inventory",
         "assessment",
+        "supervision",
     }:
         try:
             from .api.client import query
@@ -383,6 +476,10 @@ def _run_installed(options):
                 return _serve_instance(options, config, selected)
             if options.command in {"api-launch", "api-handover"}:
                 result, code = _launch_instance(options, config, selected)
+            elif options.command == "api-refresh-auth":
+                from .api.instance import control, state
+
+                result, code = control(config, selected, "refresh-auth", state(config, selected)), 0
             else:
                 result, code = observe(
                     config, selected, stop=options.command == "api-stop", reconcile=options.command == "api-reconcile"

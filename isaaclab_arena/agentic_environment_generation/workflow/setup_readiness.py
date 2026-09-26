@@ -480,6 +480,36 @@ def setup_readiness(raw=None):
 def setup_readiness_from_config(config):
     """Project validated public configuration without opening its credential source."""
     value = config.value
+    if value["schema_version"] == 6:
+        from .api.installed_full_scene import inspect, selection
+
+        chosen = selection(config)
+        return dict(
+            schema_version=2,
+            outcome="scene-only",
+            configuration_sha256=config.digest,
+            selection_sha256=chosen.digest(),
+            execution_authorized=False,
+            credential_generation="not_observed",
+            access_checked_at=None,
+            capability_checked_at=None,
+            roles=value["role_bindings"],
+            prior_status="not_requested",
+            control=chosen.cases[0].contract.budget.control.model_dump(mode="json"),
+            installed_boundary=dict(
+                mode=value["mode"],
+                native_worker_credentials=False,
+                private_api_refresh="same_principal_instance_scope",
+                first_release="not_exercised",
+                provider_access="not_checked",
+                native_measurement_validity="empirical",
+            ),
+            cases=[inspect(config, case.contract) for case in chosen.cases],
+            limitations=[
+                "Setup is not workload authority; no provider dispatch or native release occurred.",
+                "Non-sending inspection is not live admission or released-worker proof.",
+            ],
+        )
     roles = {}
     for role, binding in value.get("role_bindings", {}).items():
         credential = dict(alias=binding["credential_alias"], source="private_file", source_role=SOURCE_ROLES[role])

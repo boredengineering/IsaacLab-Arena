@@ -352,3 +352,382 @@ def test_construction_does_not_import_runtime(monkeypatch):
     before = set(sys.modules)
     w.parse_contract(json.dumps(request()))
     assert not any(name.startswith(forbidden) for name in set(sys.modules) - before)
+
+
+def test_parameterized_predicate_preserves_legacy_identity_and_refusals():
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import Criterion
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_observation import admit_criterion
+
+    w = api()
+    legacy = w.parse_contract(json.dumps(request()))
+    assert w.contract_digest(legacy) == "4b7ac7c1cfbbb3fc8a01d977721b1176a2e54044385b0c2c8eb107097e8c67dc"
+    assert "parameters" not in legacy.criteria[0].model_dump(mode="json")
+    raw = request()["criteria"][0] | dict(
+        criterion_id="speed",
+        kind="runtime",
+        evidence_producer="scene.linear-speed",
+        evaluator_version="numeric-v2",
+        required_modalities=["state"],
+        subjects=["red_block", "blue_bin"],
+        observation_window=dict(start_step=176, end_step=180),
+        rubric="selected velocity norm",
+        limit=dict(operator="lt", value=0.001, unit="m_per_s"),
+        parameters=dict(
+            metric="linear_speed",
+            reference_frame="world",
+            clock="control_step",
+            sample_steps=[176, 177, 178, 179, 180],
+            temporal_aggregation="all",
+            subject_aggregation="all",
+            missing_data="reject",
+            invalid_data="reject",
+        ),
+    )
+    selected = admit_criterion(Criterion.model_validate(raw))
+    assert selected.parameters.sample_steps == (176, 177, 178, 179, 180)
+    assert selected.subjects == ("red_block", "blue_bin")
+    assert selected.limit.operator == "lt"
+    for operator in ("lt", "le", "eq", "ge", "gt"):
+        assert admit_criterion(Criterion.model_validate(raw | {"limit": raw["limit"] | {"operator": operator}}))
+    for field, value in (("clock", "physics_step"), ("reference_frame", "tool"), ("missing_data", "zero_fill")):
+        with pytest.raises(ValueError):
+            admit_criterion(Criterion.model_validate(raw | {"parameters": raw["parameters"] | {field: value}}))
+    with pytest.raises(ValueError):
+        admit_criterion(Criterion.model_validate(raw | {"limit": raw["limit"] | {"unit": "N"}}))
+    with pytest.raises(ValueError):
+        Criterion.model_validate(raw | {"parameters": raw["parameters"] | {"sample_steps": [176, 176, 180]}})
+    old = request()
+    old["criteria"][0]["limit"]["operator"] = "lt"
+    with pytest.raises(ValueError):
+        w.WorkflowContract.model_validate(old)
+    old = request()
+    old["criteria"][0]["parameters"] = None
+    with pytest.raises(ValueError):
+        w.WorkflowContract.model_validate(old)
+    with pytest.raises(ValueError):
+        Criterion.model_validate(old["criteria"][0])
+    del old["criteria"][0]["parameters"]
+    old["criteria"][0]["limit"]["operator"] = "lt"
+    with pytest.raises(ValueError):
+        Criterion.model_validate(old["criteria"][0])
+
+
+def test_schema5_accounting_only_is_explicit_and_projects_distinct_windows():
+    from isaaclab_arena.agentic_environment_generation.workflow.evidence_contracts import project_required_criteria
+    from isaaclab_arena.tests._workflow_scene_fixture import criterion
+
+    w = api()
+    raw = request()
+    raw.update(schema_version="5", preserved=[], allowed_interventions=[])
+    raw["criteria"] = [
+        criterion(
+            criterion_id=identifier,
+            evaluator_version="numeric-v2",
+            rubric="selected velocity norm",
+            observation_window=dict(start_step=steps[0], end_step=steps[-1]),
+            limit=dict(operator="lt", value=0.001, unit="m_per_s"),
+            parameters=dict(
+                metric="linear_speed",
+                reference_frame="world",
+                clock="control_step",
+                sample_steps=steps,
+                temporal_aggregation="all",
+                subject_aggregation="all",
+                missing_data="reject",
+                invalid_data="reject",
+            ),
+        ).model_dump(mode="json")
+        for identifier, steps in (("history", [176, 177, 178, 179, 180]), ("terminal", [180]))
+    ]
+    raw["acquisition"] = dict(
+        codec="explicit-acquisition-v1",
+        adapter="droid-rigid-world-v1",
+        clock="control_step",
+        reference_frame="world",
+        control_dt_seconds=0.02,
+        horizon_steps=180,
+        subjects=["cup"],
+        state_steps=[176, 177, 178, 179, 180],
+        images=[],
+        renderer_update_steps=[],
+        displacement_step=180,
+    )
+    raw["action_policy"] = dict(
+        codec="scene-action-policy-v1",
+        on_unknown="stop",
+        on_false="stop",
+        target_subject=None,
+        mechanism=None,
+        goal_criterion_id=None,
+        prerequisite_criterion_ids=[],
+        observation=None,
+    )
+    raw["budget"].update(
+        max_steps=180,
+        max_realizations=1,
+        max_observations=1,
+        max_runtime_seconds=None,
+        total_deadline_seconds=None,
+        max_model_tokens=None,
+        max_cost_usd=None,
+        policy=dict(
+            codec="experiment-policy-v1",
+            runtime="accounting_only",
+            deadline="accounting_only",
+            model_tokens="accounting_only",
+            cost="accounting_only",
+        ),
+        control=dict(
+            codec="renewable-control-v1",
+            max_supervision_lease_seconds=60.0,
+            heartbeat_seconds=20.0,
+            max_credential_lifetime_seconds=300.0,
+            client_descriptor_schema="2",
+        ),
+    )
+    raw["effects"]["allow_runtime"] = True
+    contract = w.parse_contract(json.dumps(raw))
+    assert contract.budget.max_runtime_seconds is contract.budget.total_deadline_seconds is None
+    assert contract.budget.experiment_limit_status("runtime", 1000000.0) == "accounted"
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.read_model import inspection_budget
+
+    projected = inspection_budget(
+        SimpleNamespace(contract=contract, submission=SimpleNamespace(admitted_at=100.0)),
+        [dict(model_calls=1, model_tokens=None, cost_ceiling_usd=None, runtime_allowance_seconds=12.0)],
+    )
+    assert projected.deadline is None
+    assert projected.reserved.runtime_allowance_seconds == 12
+    assert projected.remaining.runtime_allowance_seconds is None
+
+    from isaaclab_arena.agentic_environment_generation.workflow.service import WorkflowService
+
+    calls = []
+    retained = object()
+    service = WorkflowService(
+        SimpleNamespace(lookup_submission=lambda *args: calls.append("lookup") or retained),
+        SimpleNamespace(require_read=lambda principal: calls.append("read")),
+        None,
+        validate_support=lambda value: pytest.fail("replay reached mutable support"),
+    )
+    assert service.submit("reader", "replay", contract.model_dump_json()).run is retained
+    assert calls == ["read", "lookup"]
+    from isaaclab_arena.agentic_environment_generation.workflow.api.schema import frozen_intent
+
+    public = frozen_intent(contract)
+    assert public.budget.max_runtime_seconds is None
+    assert public.budget.total_deadline_seconds is None
+    assert public.budget.policy.runtime == "accounting_only"
+    assert public.criteria[0].parameters.metric == "linear_speed"
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import SceneReservation
+
+    allocation = SceneReservation(
+        model_calls=0,
+        model_tokens=0,
+        cost_ceiling_usd=0.0,
+        runtime_allowance_seconds=None,
+        time_policy="accounting_only",
+        realizations=1,
+        observations=1,
+        steps=180,
+    )
+    assert allocation.model_dump(mode="json")["runtime_allowance_seconds"] is None
+    assert allocation.model_dump(mode="json")["time_policy"] == "accounting_only"
+    assert projected.reserved.model_calls == 1
+    assert projected.reserved.model_tokens is None
+    assert projected.reserved.cost_ceiling_usd is None
+    assert projected.policy.model_dump(mode="json") == contract.budget.policy.model_dump(mode="json")
+    assert contract.budget.allows_time(100.0, 1000000.0, None)
+    assert contract.budget.allows_time(100.0, 1000000.0, 10.0)
+    assert not contract.budget.allows_time(100.0, 99.0, 10.0)
+    assert contract.budget.allows_resource("cost", None)
+    assert contract.budget.allows_resource("runtime", None)
+    required = project_required_criteria(contract)
+    assert [r.step_window for r in required] == [(176, 180), (180, 180)]
+    assert [r.coverage.state_steps for r in required] == [(176, 177, 178, 179, 180), (180,)]
+    assert w.parse_contract(w.canonical_json(contract)) == contract
+    assert (
+        w.contract_digest(w.parse_contract(json.dumps(request())))
+        == "4b7ac7c1cfbbb3fc8a01d977721b1176a2e54044385b0c2c8eb107097e8c67dc"
+    )
+    raw["budget"]["policy"]["runtime"] = "enforced"
+    with pytest.raises(ValueError):
+        w.WorkflowContract.model_validate(raw)
+    raw["budget"]["max_runtime_seconds"] = 10.0
+    raw["budget"]["policy"]["runtime"] = "advisory"
+    advisory = w.WorkflowContract.model_validate(raw)
+    assert advisory.budget.experiment_limit_status("runtime", 20.0) == "advisory_exceeded"
+    raw["budget"]["policy"]["runtime"] = "enforced"
+    assert w.WorkflowContract.model_validate(raw).budget.experiment_limit_status("runtime", 20.0) == "enforced_exceeded"
+    raw["schema_version"] = "1"
+    with pytest.raises(ValueError):
+        w.WorkflowContract.model_validate(raw)
+
+
+def test_finite_control_refresh_does_not_renew_workload_or_slide_lease():
+    from dataclasses import replace
+
+    from isaaclab_arena.agentic_environment_generation.workflow import control_protocol as control
+    from isaaclab_arena.agentic_environment_generation.workflow.api.security import AuthContext
+    from isaaclab_arena.agentic_environment_generation.workflow.attempts import AttemptFence, AuthorizationSnapshot
+    from isaaclab_arena.agentic_environment_generation.workflow.contracts import ControlPolicy
+    from isaaclab_arena.agentic_environment_generation.workflow.scope_binding import ScopeBinding
+
+    scope = ScopeBinding(
+        schema_version=1,
+        authority_id="authority",
+        operational_schema_version=1,
+        artifact_marker_schema=1,
+        store_id="store",
+        registry_id="registry",
+        database="db",
+        deployment_id="deployment",
+        workspace_id="workspace",
+    )
+    policy = ControlPolicy(
+        codec="renewable-control-v1",
+        max_supervision_lease_seconds=60.0,
+        heartbeat_seconds=20.0,
+        max_credential_lifetime_seconds=300.0,
+        client_descriptor_schema="2",
+    )
+    old = control.PrincipalDescriptor(
+        schema_version=2,
+        binding=scope,
+        instance="instance",
+        generation=1,
+        credential_revision=1,
+        principal="operator",
+        context_handle="old-context",
+        issued_at=0.0,
+        expires_at=100.0,
+    )
+    current = AuthContext("operator", scope, "instance", 2, 201.0, "current-context")
+    fresh = control.PrincipalDescriptor.model_validate(
+        old.model_dump(mode="python")
+        | dict(
+            generation=2,
+            credential_revision=2,
+            context_handle=current.handle,
+            issued_at=101.0,
+            expires_at=201.0,
+        )
+    )
+
+    def recheck(context):
+        if context is not current:
+            raise PermissionError("expired or revoked context")
+
+    auth = AuthorizationSnapshot(
+        database="db",
+        deployment_id="deployment",
+        workspace_id="workspace",
+        principal="operator",
+        grant_ref="grant",
+        contract_digest="a" * 64,
+        expires_at=150.0,
+        capabilities=("native_validation",),
+    )
+    args = dict(policy=policy, now=101.0, recheck=recheck, generation=2, contract_digest="a" * 64)
+    assert control.resolve_current_principal(old, fresh, current, action="read", **args) is current
+    assert control.resolve_current_principal(old, fresh, current, action="cancel", **args) is current
+    with pytest.raises(PermissionError):
+        control.resolve_current_principal(old, fresh, current, action="continue", **args)
+    assert (
+        control.resolve_current_principal(
+            old, fresh, current, action="continue", authority=auth, capability="native_validation", **args
+        )
+        is current
+    )
+    with pytest.raises(PermissionError):
+        control.resolve_current_principal(old, fresh, replace(current, handle="revoked"), action="read", **args)
+    with pytest.raises(PermissionError):
+        control.resolve_current_principal(
+            old,
+            fresh,
+            current,
+            action="continue",
+            authority=auth,
+            capability="native_validation",
+            **(args | {"now": 151.0}),
+        )
+    fence = AttemptFence(
+        run_id="run", intent_id="intent", attempt_id="attempt", generation=1, owner_id="owner", owner_epoch=1
+    )
+    lease = control.SupervisionLease(
+        codec="supervision-lease-v1",
+        fence=fence,
+        scope_sha256=scope.body_sha256,
+        instance="instance",
+        principal="operator",
+        contract_digest="a" * 64,
+        allocation_digest="b" * 64,
+        generation=1,
+        credential_generation=2,
+        credential_expires_at=201.0,
+        issued_at=101.0,
+        expires_at=111.0,
+    )
+    cursor = control.SupervisionCursor(
+        policy=policy,
+        scope=scope,
+        instance="instance",
+        principal="operator",
+        fence=fence,
+        contract_digest="a" * 64,
+        allocation_digest="b" * 64,
+    )
+    assert cursor.check(lease, authority=auth, wall_now=101.0, monotonic_now=1001.0) == 1011.0
+    assert cursor.check(lease, authority=auth, wall_now=101.0, monotonic_now=1002.0) == 1011.0
+    renewed = control.SupervisionLease.model_validate(
+        lease.model_dump(mode="python")
+        | dict(
+            generation=2,
+            issued_at=102.0,
+            expires_at=121.0,
+        )
+    )
+    assert cursor.check(renewed, authority=auth, wall_now=102.0, monotonic_now=1002.0) == 1021.0
+    changed = control.SupervisionLease.model_validate(
+        renewed.model_dump(mode="python")
+        | dict(
+            allocation_digest="c" * 64,
+            generation=3,
+            issued_at=103.0,
+            expires_at=122.0,
+        )
+    )
+    with pytest.raises(PermissionError):
+        cursor.check(changed, authority=auth, wall_now=103.0, monotonic_now=1003.0)
+    with pytest.raises(TimeoutError):
+        cursor.check(renewed, authority=auth, wall_now=122.0, monotonic_now=1022.0)
+    clocks = [101.0, 1001.0]
+    owned = control.OwnedSupervision(
+        policy=policy,
+        scope=scope,
+        instance="instance",
+        principal="operator",
+        fence=fence,
+        contract_digest="a" * 64,
+        allocation_digest="b" * 64,
+        wall_clock=lambda: clocks[0],
+        monotonic_clock=lambda: clocks[1],
+    )
+    acknowledgement = owned.accept(lease, auth)
+    clocks[1] = 1002.0
+    assert owned.accept(lease, auth) == acknowledgement
+    assert owned.cursor.monotonic_deadline == 1011.0
+    clocks[:] = [102.0, 1002.0]
+    assert owned.accept(renewed, auth)["generation"] == 2
+    clocks[:] = [122.0, 1022.0]
+    with pytest.raises(TimeoutError):
+        owned.check_active()
+    assert owned.retained_state()["last_acknowledgement"]["generation"] == 2
+    with pytest.raises(TimeoutError):
+        owned.accept(renewed, auth)
+    for value in (None, float("inf"), True):
+        with pytest.raises(ValueError):
+            control.finite_backend_timeout(value, ceiling=120.0)
+        with pytest.raises(ValueError):
+            control.legacy_monotonic_deadline(value, wall_now=101.0, monotonic_now=1001.0)

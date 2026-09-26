@@ -50,6 +50,64 @@ class ExecutionOwner:
         self._closing = None
         self.cleanup_unknown = False
         self._close_failure = None
+        self.installed_inspection = None
+        self.installed_mode = None
+        self.numeric_reassessment_enabled = False
+
+    async def reassess_numeric(self, auth, operation_id, selection=None):
+        """Use this owner's CPU/readback lane, not a native or model drive."""
+        from ..scene_evidence_artifacts import SceneEvidenceArtifacts
+
+        def operation():
+            self.tokens.recheck(auth)
+            self.root.authority.require_read(auth.principal)
+            validate_operation_id(operation_id)
+            if not self.numeric_reassessment_enabled or not self._accepting:
+                raise PermissionError("Retained numeric endpoint unavailable")
+            if selection is None:
+                result = self.root.store.get_numeric_reassessment(operation_id)
+            else:
+                if self._authorize_control is None:
+                    raise PermissionError("Numeric write authority unavailable")
+                self._authorize_control("numeric_reassessment", auth.principal, selection["run_id"])
+                with self.root.authority.mutation_guard():
+                    self.tokens.recheck(auth)
+                    result = self.root.store.reassess_numeric(
+                        operation_id, selection, artifacts=SceneEvidenceArtifacts(self.area), protect=self.protect
+                    )
+                if self.root.store.get_numeric_reassessment(operation_id) != result:
+                    raise RuntimeError("Retained numeric readback changed")
+            if result is not None:
+                self.protect(result.model_dump(mode="json"))
+            return result
+
+        return await self.admissions.run(lambda: self._run(operation))
+
+    async def supervision(self, auth, run_id, intent_id):
+        def operation():
+            self.tokens.recheck(auth)
+            self.root.authority.require_read(auth.principal)
+            validate_operation_id(run_id)
+            validate_operation_id(intent_id)
+            value = self.root.store.get_scene_supervision(run_id, intent_id)
+            self.protect(value)
+            return value
+
+        return await self.admissions.run(lambda: self._run(operation))
+
+    async def inspect(self, auth, raw_contract):
+        """Authenticate an installed non-sending selection without admission or a drive."""
+
+        def operation():
+            self.tokens.recheck(auth)
+            self.root.authority.require_read(auth.principal)
+            if not self._accepting or self.installed_inspection is None:
+                raise PermissionError("Installed inspection unavailable")
+            result = self.installed_inspection(parse_contract(raw_contract))
+            self.protect(result)
+            return result
+
+        return await self.admissions.run(lambda: self._run(operation))
 
     def _run(self, operation):
         """Bind the adapter context in the owned thread, independently of the HTTP request."""
@@ -85,7 +143,7 @@ class ExecutionOwner:
                             if self._accepting:
                                 self._drive = self._driver.submit(self._run, drive)
                 receipt = self.root.service.read_submission(auth.principal, operation_id, protect=self.protect)
-                if receipt is not None:
+                if receipt is not None and retained is None:
                     self._run_ids.add(receipt.run_id)
                 return receipt
 
@@ -103,7 +161,11 @@ class ExecutionOwner:
         def operation():
             self.tokens.recheck(auth)
             result = self.root.cancel_keyed(auth.principal, operation_id, run_id, authorize_cancel=permission)
-            if result.receipt is not None and result.receipt.before_version is not None:
+            if (
+                result.receipt is not None
+                and result.receipt.before_version is not None
+                and result.local_stop.delivery == "delivered"
+            ):
                 self._run_ids.add(run_id)
             return result
 
@@ -288,6 +350,15 @@ class ExecutionContext:
 
     async def submit(self, operation_id, raw_contract):
         return await self.owner.submit(self.query.auth, operation_id, raw_contract)
+
+    async def inspect(self, raw_contract):
+        return await self.owner.inspect(self.query.auth, raw_contract)
+
+    async def supervision(self, run_id, intent_id):
+        return await self.owner.supervision(self.query.auth, run_id, intent_id)
+
+    async def reassess_numeric(self, operation_id, selection=None):
+        return await self.owner.reassess_numeric(self.query.auth, operation_id, selection)
 
     async def cancel(self, operation_id, run_id):
         return await self.owner.cancel(self.query.auth, operation_id, run_id)

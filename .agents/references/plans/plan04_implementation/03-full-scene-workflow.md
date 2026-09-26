@@ -85,12 +85,12 @@ identifies additional constraints; no application correction is claimed by this 
 | Gap | Source File | Verified Codebase Constraint | Resolution in P04-I03 |
 | :--- | :--- | :--- | :--- |
 | **1. No Installed Full-Scene Mode** | [`installed_config.py:89`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_config.py#L89) | Currently admits only `query-only`, `isolated-synthetic-execution-v1`, `retained-native-validation-v1` (schema 4), and `retained-visual-assessment-v1` (schema 5). No full-scene composition exists. | Implement `installed_full_scene.py` and register the new mode `full-scene-execution-v1` under schema_version 6 in `installed_config.py`. |
-| **2. Contract Schema Conflicts** | [`contracts.py:275`](../../../../isaaclab_arena/agentic_environment_generation/workflow/contracts.py#L275)<br>[`service.py:924`](../../../../isaaclab_arena/agentic_environment_generation/workflow/service.py#L924) | Schema 4 is retained-assessment-only; other current schemas reject null token/cost caps; operational writes must be explicitly permitted. | Implement a separately versioned full-scene policy through contracts, authorization, all reservations, model allowances and readers. Select new-source generation or an exact existing-source empirical case explicitly. Preserve every old schema. |
-| **3. Evidence Window & Producer Mismatch** | [`evidence_contracts.py:66`](../../../../isaaclab_arena/agentic_environment_generation/workflow/evidence_contracts.py#L66)<br>[`scene_observation.py:23`](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_observation.py#L23)<br>[`native_capture.py:85`](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_capture.py#L85) | Legacy common-window, subject-count and evaluator rules do not represent the requested strict final-five measurements plus two-subject tri-state visibility in three terminal images. | Version coverage/evaluation together: numeric samples 176–180 and three images at step 180, bound to one exact candidate/reset/cohort. Preserve old guards and evaluator meanings rather than merely renaming producers. |
-| **4. Uncertainty $\neq$ Repair** | [`scene_loop.py:368`](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_loop.py#L368) | Ambiguous / inconclusive visual receipts route to `action="observe", reason="evidence_not_established"`, **not** repair. Repair strictly requires `assessment.status == "not_established"` with confirmed `supported_visual_failure` (`assessment.failed_ids <= visual`). | Declare an explicit decision policy: one bounded repair is permitted *only* on a confirmed, supported visual failure. Inconclusive or ambiguous receipts preserve uncertainty and do not trigger illegal repair. |
+| **2. Contract Schema Conflicts & Budget Clamps** | [`contracts.py:275, 304–315`](../../../../isaaclab_arena/agentic_environment_generation/workflow/contracts.py#L275)<br>[`service.py:924`](../../../../isaaclab_arena/agentic_environment_generation/workflow/service.py#L924) | Schema 4 is retained-assessment-only; other schemas reject null token/cost caps. Validators hardcode artificial clamps (`< 570s`, `< 600s`), aborting valid long-running trials. | Implement Schema 6 for full-scene execution. Decouple sanity checks from policy: remove arbitrary numerical clamps, support operational profiles (`debug`, `ci`, `benchmark`), and permit accounting-only modes. |
+| **3. Evidence Window & Producer Mismatch** | [`evidence_contracts.py:66`](../../../../isaaclab_arena/agentic_environment_generation/workflow/evidence_contracts.py#L66)<br>[`scene_observation.py:23`](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_observation.py#L23)<br>[`native_capture.py:85, 114`](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_capture.py#L85) | Legacy common-window rule forces camera capture to match settling steps (yielding 15 images instead of 3 terminal snapshots). Evaluators hardcode rigid thresholds (`ge=0.01, le=0.01`) and single subjects. | Decouple continuous physics settling sampling ($t=176..180$) from discrete camera rendering schedules ($t=180$). Parameterize settling velocity thresholds and subject lists in the API contract. |
+| **4. Uncertainty $\neq$ Repair & Ternary Logic** | [`scene_loop.py:368`](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_loop.py#L368)<br>[`scene_observation.py:370`](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_observation.py#L370) | Evaluator enforces binary booleans (`type(item["visible"]) is bool`). Inconclusive receipts route to `action="observe"` (triggering endless capture relaunches). | Implement Kleene 3-valued logic (`visible`, `not_visible`, `uncertain`). Route `uncertain` to an epistemic stop (`stop(reason="inconclusive_sensing")`). Only confirmed visual failures addressable by the target intervention may trigger repair. |
 | **5. Repair Representation Incompatibility** | [`repairs.py:120`](../../../../isaaclab_arena/agentic_environment_generation/workflow/repairs.py#L120) | The repair guard strictly requires `coordinate_frame="env_local"` and paths matching `/relations/{index}/params/x` or `/y`. It rejects world poses and object paths. | The generation prompt must output the canonical Arena scene representation with a structured `relations` list (`is_anchor`, `on`, `at_position`), allowing repair rules to target exact scalar offsets in `env_local`. |
-| **6. Benchmark & Physical Semantics** | Evaluators & Registries | Workspace radius is not reachability; visibility is not reachability; physical settling is not collision-free support. | Use the registered DROID / `maple_table_robolab` / `red_block_basic_robolab` / `bin_b03_vomp_robolab` family. Bind required physical and sensing metadata to actual sources or scoped observations; do not use test-only synthetic vocabulary or claim unverified dimensions/calibration. |
-| **7. Reservation Ledger Mismatch** | [`neo4j_store.py:3566`](../../../../isaaclab_arena/agentic_environment_generation/workflow/neo4j_store.py#L3566) | Every execution intent reserves from `b.max_runtime_seconds`; six 120s stages still total 720s, exceeding the illustrative 600s cap. | Freeze evidence-supported numeric stage/cleanup reservations and final readback/drain headroom before live issuance. If they cannot fit the 1,200s case window, stop for a decision rather than guessing shorter timeouts. |
+| **6. Benchmark & Physical Semantics** | Evaluators & Registries | Workspace radius is not reachability; visibility is not reachability; physical settling is not collision-free support. | Use the registered DROID / `maple_table_robolab` / `red_block_basic_robolab` / `bin_b03_vomp_robolab` family. Programmatically evaluate reachability via analytical IK and support via PhysX contact manifolds. |
+| **7. Reservation Ledger Mismatch & Lifecycle** | [`neo4j_store.py:3553–3623`](../../../../isaaclab_arena/agentic_environment_generation/workflow/neo4j_store.py#L3553-L3623) | Monolithic stage reservations debit cumulative run time without refunds ($6 \times 120\text{s} = 720\text{s} > 600\text{s}$). Risk of leaking headless Isaac Sim CUDA processes. | Implement Two-Phase Reservation / TCC with dynamic headroom reclamation (refunding unused stage seconds) and heartbeated lease supervisors for Isaac Sim processes. |
 | **8. Conflation of Acceptance Claims** | Plan 03 V1 ([`event-mapping-refactoring_plan_03.md:251`](../event_mapping/event-mapping-refactoring_plan_03.md#L251)) | Pipeline integration, scene disposition, and repair loop coverage are distinct outcomes. If Candidate 1 passes immediately, the repair loop is unproven. | Decouple closeout into 6 independent, non-overlapping claims. |
 
 ---
@@ -109,21 +109,77 @@ identifies additional constraints; no application correction is claimed by this 
 ├───────────────────────────────┼─────────────────────────────────┼───────────────────────────────┤
 │ Contract Validation           │ Schema 4 enforces retained-     │ Schema 6: permits new source, │
 │ (contracts.py)                │ only; others require token /    │ model dispatches, runtime,    │
-│                               │ monetary cost audits.           │ and accounting-only bounds.   │
+│                               │ monetary cost audits; clamps.   │ dynamic budgets, and profiles.│
 ├───────────────────────────────┼─────────────────────────────────┼───────────────────────────────┤
-│ Evidence Criteria             │ Legacy common-window and        │ Versioned strict numeric and  │
-│ (evidence_contracts.py)        │ evaluator semantics.            │ tri-state image coverage.     │
+│ Evidence Criteria             │ Legacy common-window, rigid     │ Decoupled render schedule,    │
+│ (evidence_contracts.py,       │ 0.01 m/s clamps, single subject,│ parameterized thresholds, and │
+│  native_capture.py)           │ and boolean visual logic.       │ complete ternary perception.  │
 ├───────────────────────────────┼─────────────────────────────────┼───────────────────────────────┤
 │ Scene Generation Output       │ ArenaEnvGraphSpec validation;   │ Validate selected ordering,   │
 │ (scene_engines.py)            │ repair shape not guaranteed.    │ identities and scalar paths.  │
 ├───────────────────────────────┼─────────────────────────────────┼───────────────────────────────┤
-│ Repair Adapter                │ Rejects world coordinates and   │ Targets env_local scalar      │
-│ (repairs.py)                  │ non-relation schema paths.      │ /relations/{i}/params/x, y.   │
+│ Repair Adapter & Oracles      │ Rejects world coordinates;      │ Targets env_local scalar x,y; │
+│ (repairs.py, simulation)      │ speculative LLM diagnosis.      │ pre-simulation causal oracles.│
 ├───────────────────────────────┼─────────────────────────────────┼───────────────────────────────┤
-│ Execution Owner & Leases      │ Handles isolated single-worker  │ Coordinates sequential owner  │
-│ (execution_owner.py)          │ lifecycle.                      │ and NativeGpuLease handover.  │
+│ Execution Owner & Leases      │ Handles isolated single-worker  │ Sequential owner coordination,│
+│ (execution_owner.py, neo4j)   │ lifecycle; no budget refund.    │ GPU lease TTL, and TCC refund.│
 └───────────────────────────────┴─────────────────────────────────┴───────────────────────────────┘
 ```
+
+---
+
+## 3.1 Architectural Deep Dive & Feasibility Blueprint
+
+This blueprint outlines the six strategic design principles that transform P04-I03 from a single brittle test harness into a robust, general-purpose physical AI environment generation pipeline:
+
+### 1. Dynamic Settling Semantics in API Contracts
+- **Limitation**: Hardcoded static constants (`SUPPORT_THRESHOLDS` in [`scene_observation.py:31`](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_observation.py#L31) and `ge=0.01, le=0.01` in [`native_capture.py:77`](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_capture.py#L77)) prevent the platform from adapting to different physical domains.
+- **Architectural Solution**: Parameterize settling thresholds inside the API contract's `Criterion` definition. Expose `linear_velocity_threshold_m_per_s`, `angular_velocity_threshold_rad_per_s`, `min_consecutive_settled_steps`, and dynamic `subjects: tuple[Identifier, ...]`.
+- **Generalist Feasibility**: Enables empirical parameter exploration (e.g., $0.05$, $0.01$, $0.001\text{ m/s}$) across varying asset categories—from heavy high-friction blocks to rolling spheres, articulated tools, and deformable cables—without modifying engine source code.
+
+### 2. Ternary Perception Pipeline & Multi-Camera Kleene Algebra
+- **Limitation**: Binary boolean logic (`true`/`false`) forces an epistemic dilemma when camera views are ambiguous, while legacy routing converts `uncertain` into an expensive re-capture loop.
+- **Architectural Solution**: Formally implement Kleene 3-valued logic (`visible`, `not_visible`, `uncertain`):
+  - **Ontic vs. Epistemic Disentanglement**: `not_visible` indicates a physical geometry defect (candidate-repairable). `uncertain` indicates an epistemic sensing limitation (low resolution, glare, or camera lens blocked by the robot's own arm). Moving the object in response to epistemic uncertainty wastes compute and degrades scene validity.
+  - **Multi-Camera Fusion**: $\text{visible} \lor \text{uncertain} = \text{visible}$; $\text{not\_visible} \land \text{uncertain} = \text{not\_visible}$.
+  - **End-to-End Codec**: Propagated across all four operational layers:
+    1. *Installed Worker* ([`split_scene_ports.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/split_scene_ports.py)): VLM prompt formatting and structured tri-state JSON parsing.
+    2. *Retention Layer* ([`scene_evidence_artifacts.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_evidence_artifacts.py)): Storing raw response bytes and structured tri-state verdicts.
+    3. *Evidence Projection* ([`scene_observation.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_observation.py)): Mapping `visible` $\to$ `established`, `not_visible` $\to$ `violated`, `uncertain` $\to$ `inconclusive`.
+    4. *Router* ([`scene_loop.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_loop.py)): Mapping `uncertain` to an epistemic stop (`stop(reason="inconclusive_sensing")`), preventing illegal repairs or runaway simulation loops.
+
+### 3. Decoupled Observation & Camera Rendering Schedules
+- **Limitation**: [`native_capture.py:114`](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_capture.py#L114) coupled camera rendering to settling steps, rendering 3 cameras $\times$ 5 steps = 15 images ($>2\text{ MB}$ payload and $\approx 15,000$ VLM tokens).
+- **Architectural Solution**: Decouple high-frequency temporal physics sampling ($t=176..180$) from discrete camera sensor rendering ($t=180$). Expose distinct schedules in [`contracts.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/contracts.py):
+  - `physics_sampling_window`: `{"start_step": 176, "end_step": 180}`
+  - `camera_capture_schedule`: `{"render_steps": [180], "camera_keys": ["external_camera_rgb", "external_camera_2_rgb", "wrist_camera_rgb"]}`
+- **Feasibility**: Reduces rendering time by 80% and cuts VLM token consumption from $\approx 15,000$ to $\approx 3,000$ tokens per evaluation.
+
+### 4. Lifecycle, Leased GPU Execution & Two-Phase Dynamic Reservations
+- **Limitation**: Static stage reservations ($6 \times 120\text{s} = 720\text{s}$) exhaust the cumulative 600s budget without refunds ([`neo4j_store.py:3553`](../../../../isaaclab_arena/agentic_environment_generation/workflow/neo4j_store.py#L3553)), and crashes risk leaving orphaned Isaac Sim CUDA processes.
+- **Architectural Solution**:
+  - **Two-Phase Reservation / TCC (Try-Confirm-Cancel)**: Stages acquire temporary lease reservations. Upon completion, actual execution time is committed, and unused reservation headroom is refunded to the shared run budget.
+  - **Durable Finite State Machine (Saga with Checkpoints)**: Journal state transitions (`Pending` $\to$ `Generating` $\to$ `Simulating` $\to$ `Assessing` $\to$ `Repairing` $\to$ `Completed`) with idempotency keys in Neo4j/SQL, enabling clean recovery on container drops without restarting from step 0.
+  - **Principle of Least Privilege**: `PlannerRole` (LLM tokens, zero GPU), `SimulatorRole` (leased Isaac Sim slot, zero LLM secrets), `EvaluatorRole` (read-only state inspection).
+  - **Leased GPU Lifecycle**: Manage headless Isaac Sim (Kit) processes with a heartbeated supervisor and TTL to prevent orphaned CUDA processes.
+
+### 5. Programmatic Causal Justification in Physical Simulation
+- **Limitation**: Speculative LLM commentary diagnoses failures without physical verification, and repairs are executed without proving that moving the object cures the defect.
+- **Architectural Solution**: In physical robotics simulation, the environment is a deterministic, glass-box oracle (USD + PhysX + RTX). Causality is computed programmatically:
+  1. *Line-of-Sight (LOS) & Raycast Frustum Oracle*: Cast PhysX rays from camera optical centers to target 3D bounding box vertices. Intersections with intervening meshes yield deterministic causal output: `CausalFailure(type="OCCLUSION", occluder="bin_b03", occlusion_percentage=0.82)`.
+  2. *Contact Graph & Normal Support Oracle*: Inspect PhysX contact manifold points and normal vectors. Non-vertical normals or center-of-mass falling outside the contact polygon yield: `CausalFailure(type="UNSTABLE_SUPPORT", root_cause="LEANING_ON_RIM")`.
+  3. *Kinematic Reachability Oracle*: Analytical inverse kinematics (IK) from robot base to target grasp pose: `CausalFailure(type="UNREACHABLE", distance_m=0.94, reach_limit_m=0.85)`.
+  4. *Pre-Simulation Counterfactual Repair Filter*: The geometric oracle tests candidate repair coordinates $(\Delta x, \Delta y)$ in 2ms: *Does $(x+\Delta x, y+\Delta y)$ clear the container's occlusion shadow cone?* If not, reject immediately before launching Isaac Sim, saving significant GPU cycles.
+
+### 6. Dynamic Budgeting & Operational Profiles
+- **Limitation**: Hardcoded validator clamps in [`contracts.py:304–306`](../../../../isaaclab_arena/agentic_environment_generation/workflow/contracts.py#L304-L306) (`max_runtime_seconds > 570`, `total_deadline_seconds > 600`) prematurely abort legitimate development and testing runs.
+- **Architectural Solution**:
+  - Decouple logical sanity validation (`per_operation_timeout <= total_deadline`) from policy limits.
+  - Support operational profiles in API contracts:
+    - `Development / Debug Profile`: `total_deadline_seconds = 3600`, `per_operation_timeout_seconds = 600`, accounting-only (accommodates step-through debugging, profilers, and cold-start shader compilation).
+    - `CI / Regression Profile`: Fast fail-fast timeouts (e.g., 300s).
+    - `Production / Autonomous Benchmark`: Strict SLA boundaries.
+  - Dynamically reclaim unused reservation headroom so downstream stages are not prematurely throttled.
 
 ---
 
@@ -262,12 +318,48 @@ technical request/completion limits.
 ## 7. Staged Goal Prompts for Operator Issuance
 
 The three earlier sketches are superseded by **four independently issuable,
-unissued actor–critic goals** in the [strategy](03-full-scene-workflow-strategy.md#5-proposed-goal-prompts):
+unissued actor–critic goals** detailed in the [strategy](03-full-scene-workflow-strategy.md#5-proposed-goal-prompts):
 
-1. [I03-G1 — Truthful protocol and accounting semantics](03-full-scene-workflow-strategy.md#i03-g1--implement-truthful-protocol-and-accounting-semantics): source/decoder/evaluator work; no provider, native, API service or database effects.
-2. [I03-G2 — Installed owner, private roles and recovery](03-full-scene-workflow-strategy.md#i03-g2--join-the-installed-owner-private-roles-and-recovery-path): scoped setup and actual non-sending installed boundaries, not a new mock loop.
-3. [I03-G3 — Fixed-candidate empirical proof](03-full-scene-workflow-strategy.md#i03-g3--prove-the-fixed-candidate-nativeevidence-boundary): separately issued native/evidence/conditional-repair case, capped at 2 native and 3 provider effects.
-4. [I03-G4 — Generated-scene workflow](03-full-scene-workflow-strategy.md#i03-g4--prove-the-generated-scene-workflow-and-close-verified-scope): main single-submission case, capped at 2 native and 4 provider effects.
+1. **[I03-G1 — Parameterized general contracts, evidence semantics, and budget policies](03-full-scene-workflow-strategy.md#i03-g1-parameterized-general-contracts-evidence-semantics-and-budget-policies)**:
+   - **Scope**: Simulation-free, provider-free foundation and pure unit regressions.
+   - **Key Deliverables**:
+     - Implement Schema 6 (`schema_version: "6"`) in [`contracts.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/contracts.py) supporting both `NewSource` generation and `ExistingSource` fixed-candidate verification.
+     - Parameterize `settled-v2` criteria with typed linear/angular velocity thresholds, operators, multi-subject tuples, and consecutive step requirements.
+     - Decouple camera frame rendering schedules (`step: 180`) from physics state observation windows (`start_step: 176, end_step: 180`).
+     - Relax artificial validator clamps in [`contracts.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/contracts.py) (lines 304–306, 311–317) and [`native_capture.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_capture.py) (lines 66, 77–79).
+     - Implement raw measurement retention and first-class Kleene ternary logic algebra (`TRUE`, `FALSE`, `UNKNOWN`) in [`scene_observation.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/scene_observation.py).
+     - Add pure unit regressions in existing test modules without Kit or network dependencies.
+   - **Effects**: Zero provider dispatches, zero Kit/native launches, zero API service starts, zero database I/O.
+
+2. **[I03-G2 — Coherent installed execution, authority, lifecycle, and dynamic policy handling](03-full-scene-workflow-strategy.md#i03-g2-coherent-installed-execution-authority-lifecycle-and-dynamic-policy-handling)**:
+   - **Scope**: Installed composition joining, execution owner lifecycle, admission edge-case inspection, and non-sending preview.
+   - **Key Deliverables**:
+     - Define `InstalledFullSceneConfig` and `FullScenePorts` in [`installed_config.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/installed_config.py), joining coordinator, `InitialGenerationWorker`, `SplitScenePorts`, visual assessment, and `SceneRefiner`.
+     - Inspect admission edge cases in `submitWorkflow` ([`service.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/service.py)), verifying Schema 6 admission under `allow_operational_writes=true`.
+     - Implement long-running execution owner lifecycle (Google AIP-151) with durable operation IDs and AWS-style idempotent admission returning prior receipts on replay.
+     - Enforce clean separation of Intent, Capability, and Authority; implement Google AIP-154 concurrency-safe dynamic budget amendments with ETag checks.
+     - Implement Kubernetes finalizer verified cleanup before GPU lease release, and Temporal heartbeat liveness supervision.
+     - Authorize private binding of generation, assessment, and repair roles from environment `OPENAI_API_KEY`.
+     - Freeze the exact fixed-candidate G3 selection artifact and digest.
+   - **Effects**: Approved application/Neo4j setup only; zero provider sends, zero Kit/native releases.
+
+3. **[I03-G3 — Configurable measurement and programmatic causal-intervention proof](03-full-scene-workflow-strategy.md#i03-g3-configurable-measurement-and-programmatic-causal-intervention-proof)**:
+   - **Scope**: Fixed-candidate empirical proof on `p04-i03-fixed-scene-proof-v1`.
+   - **Key Deliverables**:
+     - Execute the 6-step programmatic causal justification protocol using Omniverse Replicator annotators and Isaac Lab contact sensors.
+     - Use simulator ground truth as a labelled diagnostic oracle (isolated from policy inputs).
+     - Complete Kleene ternary assessment of both subjects across all step-180 cameras.
+     - Conditional single repair only on confirmed `supported_visual_failure`, verifying physical displacement in simulation.
+     - Exact causal readback, idempotent replay, verified cleanup, and GPU lease release.
+   - **Effects**: At most 2 native launches, 3 provider sends (0 initial generation, at most 1 repair, 2 assessments).
+
+4. **[I03-G4 — Generated-scene integration through the configurable composition](03-full-scene-workflow-strategy.md#i03-g4-generated-scene-integration-through-the-configurable-composition)**:
+   - **Scope**: Full prompt-driven generated-scene trial on `p04-i03-full-scene-v1`.
+   - **Key Deliverables**:
+     - Application-owned execution: generation $\to$ candidate validation $\to$ native realization/settling $\to$ Kleene ternary visual assessment $\to$ conditional permitted repair $\to$ re-realization $\to$ reassessment $\to$ disposition.
+     - Exact causal readback, idempotent replay, verified worker cleanup, GPU and scope lease release, API drain.
+     - Complete Post-Execution Closeout Report across all six acceptance claims and resource consumption ledger.
+   - **Effects**: At most 2 native launches, 4 provider sends (at most 1 initial generation, 1 repair, 2 assessments).
 
 Each incorporates [AC-I03](03-full-scene-workflow-strategy.md#4-shared-actorcritic-protocol-ac-i03): parent sole writer/operator, one independent read-only critic at a time,
 material cited blockers, bounded hypothesis/correction loops, meaningful
@@ -277,10 +369,10 @@ issued goal is active; do not execute the next goal automatically.
 
 ---
 
-## 8. Appendix: Illustrative Target Contract JSON (Non-Executable Draft)
+## 8. Appendix: Illustrative Target Contract JSON (Modernized Blueprint)
 
 > [!NOTE]
-> The JSON below is a **superseded, non-executable design sketch**, retained for comparison. Adding Schema 6 would not make it valid: its evaluator subject counts, thresholds, observation coverage, reservation totals and placeholder hashes still conflict with the selected design. Do not change code or tests to accept this sketch. The real contract must be produced through the implemented protocol and frozen selection described in the strategy before a live goal is issued.
+> The JSON below illustrates the **modernized Schema 6 contract design**, incorporating dynamic settling thresholds, decoupled camera snapshot schedules, ternary visual rubrics, and dynamic budget profiles. Adding Schema 6 requires implementing the corresponding decoders, evaluators, and oracles before a live goal is issued.
 
 ```json
 {
@@ -295,26 +387,34 @@ issued goal is active; do not execute the next goal automatically.
       "kind": "runtime",
       "evidence_producer": "scene.settled",
       "requirement": "required",
-      "evaluator_version": "1",
+      "evaluator_version": "settled-v2",
       "required_modalities": ["state"],
       "coordinate_frames": ["world"],
       "observation_window": {"start_step": 176, "end_step": 180},
-      "rubric": "linear and angular speeds below settling thresholds",
+      "rubric": "linear speed < 0.001 m/s and angular speed < 0.01 rad/s across final 5 steps",
       "subjects": ["red_block", "blue_bin"],
-      "limit": {"operator": "eq", "value": 1.0, "unit": "boolean"}
+      "limit": {
+        "operator": "le",
+        "linear_velocity_threshold_m_per_s": 0.001,
+        "angular_velocity_threshold_rad_per_s": 0.01,
+        "min_consecutive_settled_steps": 5
+      }
     },
     {
       "criterion_id": "crit_visible",
       "kind": "visual",
       "evidence_producer": "scene.visible",
       "requirement": "required",
-      "evaluator_version": "1",
+      "evaluator_version": "visibility-v2",
       "required_modalities": ["rgb"],
       "coordinate_frames": ["external_camera_rgb", "external_camera_2_rgb", "wrist_camera_rgb"],
-      "observation_window": {"start_step": 176, "end_step": 180},
-      "rubric": "subject visible in every retained frame",
+      "observation_window": {"start_step": 180, "end_step": 180},
+      "rubric": "per-camera per-subject ternary assessment (visible, not_visible, uncertain)",
       "subjects": ["red_block", "blue_bin"],
-      "limit": {"operator": "eq", "value": 1.0, "unit": "boolean"}
+      "limit": {
+        "operator": "eq",
+        "expected_verdict": "visible"
+      }
     }
   ],
   "preserved": [
@@ -375,9 +475,10 @@ issued goal is active; do not execute the next goal automatically.
     "dcrg": null
   },
   "budget": {
+    "profile": "development_debug",
     "max_candidates": 2,
     "max_revisions": 1,
-    "max_runtime_seconds": 600.0,
+    "max_runtime_seconds": 1200.0,
     "max_model_calls": 4,
     "max_model_tokens": null,
     "max_cost_usd": null,
@@ -386,7 +487,7 @@ issued goal is active; do not execute the next goal automatically.
     "max_observations": 4,
     "max_policy_episodes": 0,
     "max_policy_steps": 0,
-    "per_operation_timeout_seconds": 120.0,
+    "per_operation_timeout_seconds": 300.0,
     "total_deadline_seconds": 1200.0
   },
   "effects": {
@@ -430,3 +531,19 @@ issued goal is active; do not execute the next goal automatically.
 - **Final Critic Decision**: `[ACCEPT / BLOCKED]`
 - **Remaining Parent-Plan Obligations**: `[Repair witness / positive scene / calibration / other unproven criteria]`
 ```
+
+---
+
+## 10. Architectural References
+
+- [1] **Google AIP-151**: Long-running Operations (https://google.aip.dev/151)
+- [2] **AWS Architecture Center**: Making retries safe with idempotent APIs (https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs)
+- [4] **Temporal Documentation**: Long-running Activity Execution and Heartbeating (https://docs.temporal.io/design-patterns/long-running-activity)
+- [6] **Kubernetes Concepts**: Working with Finalizers for Verified Resource Teardown (https://kubernetes.io/docs/concepts/overview/working-with-objects/finalizers)
+- [12] **DoWhy / EconML**: Causal Inference and Counterfactual Intervention Analysis (https://pywhy.org/dowhy/v0.11/example_notebooks/tutorial-causalinference-machinelearning-using-dowhy-econml.html)
+- [14] **OpenTelemetry Specification**: Context Propagation and Distributed Tracing (https://opentelemetry.io/docs/concepts/context-propagation)
+- [16] **Google AIP-154**: Resource-version and ETag Concurrency Controls (https://google.aip.dev/154)
+- [17] **PostgreSQL Documentation**: Three-Valued Logic Algebra (https://www.postgresql.org/docs/current/functions-logical.html)
+- [18] **NVIDIA Omniverse Replicator**: Core Annotators and Synthetic Data Generation (https://docs.omniverse.nvidia.com/py/replicator/1.11.16/source/extensions/omni.replicator.core/docs/annotators_details.html)
+- [20] **NVIDIA Isaac Lab Documentation**: Contact Sensors and Simulation Physics (https://isaac-sim.github.io/IsaacLab/main/source/overview/core-concepts/sensors/contact_sensor.html)
+- [21] **NVIDIA Isaac Lab Documentation**: Simulation Reproducibility and Determinism (https://isaac-sim.github.io/IsaacLab/main/source/features/reproducibility.html)

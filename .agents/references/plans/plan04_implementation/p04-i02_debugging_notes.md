@@ -2,11 +2,11 @@
 
 - Document ID: `P04-I02-DEBUG`
 - Created: 2026-09-25
-- Status: Tracking & Analysis; Pre-issuance Review
+- Status: RESOLVED & PARENT-CLOSED (2026-09-25)
 - Target Package: [P04-I02 — Installed visual assessment of retained native evidence](02-installed-visual-assessment.md)
-- Reference Operation: `p04-i02-visibility`
-- Reference Run: `0664fc8038961d9ea079f89c6c35cc5d305f2c56a1255d2253c64ce089d33e19`
-- Reference API Instance: `9a8eebfcbe9845498ec26fb81bb049ca`
+- Reference Operation (Original Failed): `p04-i02-visibility` (`0664fc8038961d9ea079f89c6c35cc5d305f2c56a1255d2253c64ce089d33e19`)
+- Successor Operation (Verified & Closed): `p04-i02-visibility-r2` (`a78483e679c0710ab8534bc455f4b72380ee20c3b38b7d9c3d3ea7ced6999935`)
+- Final Outcome: Final Critic `ACCEPT` ([`deleg_06edd9b3`](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/recovery-r2/critic-final.json)); Bounded Software Integration Slice Parent-Closed; Visual Verdict Uncertain (not scene acceptance).
 
 ---
 
@@ -333,3 +333,56 @@ Zero additional native/Kit, capture, generation, scene repair, policy or prior-r
 
 Update the existing operation record, package, index, Plan 04 and canonical handoff. Report lifecycle recovery, assessment integration, visual verdict, readback/replay and final cleanup separately. No broader completion claim.
 ```
+
+---
+
+## 5. Execution Outcome & Resolution Verification
+
+The comprehensive recovery goal was issued on 2026-09-25 and executed to full parent closeout:
+
+1. **Phase 1: Lifecycle Recovery (`r2-lifecycle`) — PASSED**
+   - Run `0664fc8038961d9ea079f89c6c35cc5d305f2c56a1255d2253c64ce089d33e19` transitioned from `cancel_requested` to terminal `cancelled` in Neo4j via schema-4 support in [`neo4j_store.py:4089`](../../../../isaaclab_arena/agentic_environment_generation/workflow/neo4j_store.py#L4089).
+   - Epoch-6 durable owner was retired cleanly (`dirty=False`).
+   - Foreground lock lease was reacquired and released without provider sends (`sends: 0`).
+   - Handover gate in [`instance.py:328-333`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/instance.py#L328-L333) permitted recovery transition from `exited_unclean`.
+   - Verified in [`lifecycle-readback.json`](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/recovery-r2/lifecycle-readback.json).
+
+2. **Phase 2: Pre-Send Boundary Repairs (`r2-pre-send`) — PASSED**
+   - Principal propagation restored via `getattr(self, "principal", None)` in [`retained_assessment.py:131`](../../../../isaaclab_arena/agentic_environment_generation/workflow/retained_assessment.py#L131), preserving public `execute()` signature for `service.py:749`.
+   - `ExistingSource` rubric validation routed correctly in [`foreground_generation.py:238`](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_generation.py#L238).
+   - Shutdown barriers across [`execution_owner.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/execution_owner.py#L225), [`application.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/application.py#L154), and [`server.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/server.py#L103) coordinated to observe drain task completion without indefinite parking.
+   - Sanitized causal failure retention implemented via `safe_failure` and `retain_failure` in [`web_api/scene_worker.py`](../../../../isaaclab_arena_examples/agentic_environment_generation/web_api/scene_worker.py#L101) and [`service.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/service.py#L758).
+   - All 5 in-container test suites and scoped host lints passed without regressions; source sealed in `source-freeze-retry-retention.json`.
+
+3. **Phase 3: Gate A & Pre-Send Critique (`r2-gate`) — PASSED**
+   - Input fidelity verified on all 3 step-180 PNGs, candidate, and evidence hashes ([`http-input-verification.json`](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/recovery-r2/http-input-verification.json)).
+   - Authority headroom verified with >2,600s remaining.
+   - Pre-send critic `deleg_e3b2bd0f` cleared execution (`CONTINUE`).
+   - Successor run `a78483e679c0710ab8534bc455f4b72380ee20c3b38b7d9c3d3ea7ced6999935` admitted.
+
+4. **Phase 4: Installed Assessment (`r2-assess`) — PASSED**
+   - Dispatched 1 `gpt-6-astra` provider call (15.05s latency, 1,849 total tokens: 1,168 prompt, 681 completion).
+   - Produced complete structured visual verdict across all 3 camera frames:
+     - `external_camera_rgb`: `red_block` = uncertain, `blue_bin` = visible
+     - `external_camera_2_rgb`: `red_block` = uncertain, `blue_bin` = visible
+     - `wrist_camera_rgb`: `red_block` = uncertain, `blue_bin` = uncertain
+   - Application stopped cleanly at first complete result without retrying.
+
+5. **Phase 5: Readback, Replay, & Cleanup (`r2-readback`) — PASSED**
+   - Fresh authenticated client recovered exact input, request, raw response, and result bytes (all hashes matching sealed artifacts).
+   - Replay verified identical result with zero additional provider sends and no allocation mutation ([`no-effect-replay-verification.json`](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/recovery-r2/no-effect-replay-verification.json)).
+   - Exact worker process group 2325 absent, durable owner epoch 7 retired/clean, leases released, and API cleanly stopped/drained in 457.5s (within 600s deadline).
+
+6. **Phase 6: Final Acceptance & Parent Closeout (`r2-closeout`) — PASSED**
+   - Independent final critic `deleg_06edd9b3` reviewed all 22 evidence artifacts and issued `ACCEPT` with 0 unmet criteria ([`critic-final.json`](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/recovery-r2/critic-final.json)).
+   - Parent officially marked `P04-I02` as `CLOSED` for the bounded software integration slice in [`operation-record.json`](../../../../outputs/workflow/plan04-implementation/milestone1/installed-native-20260925T012042Z/p04-i02/retained-assessment/operation-record.json#L214).
+   - All plan and handoff documents synchronized; zero broken links.
+
+---
+
+## 6. Readiness & Unlocking Stage 3: P04-I03 (Full Scene Workflow)
+
+With the successful resolution and closure of P04-I02:
+1. **Infrastructure Validated:** The installed execution owner, API lifespan, supervisor drain, principal authorization, and worker dispatch pipelines are now proven and stable.
+2. **Milestone Gate Unlocked:** The completion of Stage 2 (`P04-I02`) officially fulfills the prerequisite unlocking Milestone 2: Stage 3 (`P04-I03` Goal D: Full Scene Workflow).
+3. **Addressing the Visual Uncertainty:** In `P04-I02`, candidate `a5` had fixed static frames and the rules forbade scene modification or recapture. In `P04-I03`, the workflow is autonomous and closed-loop: if an initial visual assessment indicates object occlusion or uncertainty, the system has the explicit authority to perform bounded scene repair (adjusting camera angles, object poses, or re-settling) to achieve truthful scene disposition.

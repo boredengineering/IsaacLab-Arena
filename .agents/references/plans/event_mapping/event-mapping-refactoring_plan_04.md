@@ -265,16 +265,16 @@ flowchart TD
 | **A04-06** | Dedicated operational scope, noninterference with production data | Admin-approved metadata/write | T13/T15/T17 | **Passed** |
 | **A04-07** | 180-step native realization; strict final five linear/angular samples for both subjects; three same-cohort PNGs | Real Isaac Lab container | T06/T14 | **Verified for P04-I01/a5, not calibration** |
 | **A04-08** | Same sealed artifact store; authenticated candidate/evidence/PNG bytes and unchanged replay | Installed GraphQL API | T06/T08/T14 | **Verified for P04-I01/a5** |
-| **A04-09** | Native worker cleanup before model execution; no live owned simulator workers | Container lifecycle observation | T09/T14/T15 | **Native cleanup verified; live VLM boundary pending P04-I02** |
+| **A04-09** | Native worker cleanup before model execution; no live owned simulator workers | Container lifecycle observation | T09/T14/T15 | **Native cleanup verified; installed assessment integration verified & closed** |
 | **A04-10** | GR00T policy service readiness, modality serialization, joint mapping | GR00T service container | T08/T19 | Open |
 | **A04-11** | One installed submission drives full scene generation $\to$ settle $\to$ VLM | Approved Live V1 | T03/T05/T06/T18 | Gated on Goal D |
 | **A04-12** | Bounded XY repair on visual failure $\to$ fresh capture $\to$ reassessment | Controlled live witness | T07/T14/T18 | Gated on Goal D |
 | **A04-13** | Two-seed policy rollout on A2 task; complete predicate evaluations | Approved Live V2 | T08/T18/T19, G09 | Gated on Goal E |
-| **A04-14** | Fresh-client causal traversal and immutable artifact verification | Fresh authenticated reader | T10/T12/T15/T16, G03–G10 | **Native slice verified; full assessment/policy lineage open** |
-| **A04-15** | Cumulative effect-count enforcement and truthful usage/cost accounting; monetary/token caps enforced only where issued | Observed live ledger | T03/T08/T14/T15 | **Native-only accounting verified; revised live policy unimplemented** |
+| **A04-14** | Fresh-client causal traversal and immutable artifact verification | Fresh authenticated reader | T10/T12/T15/T16, G03–G10 | **Native and assessment slices verified; full policy lineage open** |
+| **A04-15** | Cumulative effect-count enforcement and truthful usage/cost accounting; monetary/token caps enforced only where issued | Observed live ledger | T03/T08/T14/T15 | **Verified for P04-I01 and P04-I02 (1 send consumed, 2 unspent, truth-in-accounting preserved)** |
 | **A04-16** | Final owned cleanup, shared service preservation, truthful failure logging | Final exact readback | T09/T11/T15/T18 | **Verified** |
 | **A04-17** | Scoped adapter contract binds only consumed vocabulary and content digest | Isolated orchestration slice | G04-13, A04-01–03 | **Passed** |
-| **A04-18** | Installed assessment of immutable a5 images; source/consumer lineage, one bounded send, raw/structured readback, no-send replay and cleanup | Revised assessment-only prompt; no operation admitted | G04-08/G04-16/G04-17 | **Paused; revision not issued, no integration or visual acceptance** |
+| **A04-18** | Installed assessment of immutable a5 images; source/consumer lineage, one bounded send, raw/structured readback, no-send replay and cleanup | Approved installed successor `p04-i02-visibility-r2` | G04-08/G04-16/G04-17 | **Integration verified & parent-closed; visual verdict uncertain (not scene acceptance)** |
 
 ---
 

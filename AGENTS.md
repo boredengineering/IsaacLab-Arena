@@ -33,6 +33,10 @@ docker exec "$ARENA_CONTAINER" su $(id -un) -c \
 
 Lint and format tooling (`pre-commit` and the hooks it runs — black, flake8, isort, pyupgrade, codespell) runs **on the host**.
 
+### Repository path and link invariant
+
+The workspace operates inside a devcontainer where the repository is mounted (as a named volume or host bind). **Never hardcode absolute filesystem paths or `file:///` URIs in plans, documentation, or links** (e.g. `file:///workspaces/...`). Always use repository-relative links (`../../../../...`) so paths resolve identically across host environments, devcontainers, editor extensions, and Git remotes.
+
 ## Repository layout
 
 - `isaaclab_arena/` — core package: `tasks/`, `policy/`, `evaluation/`, `embodiments/`, `scene/`, `assets/`, `tests/`

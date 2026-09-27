@@ -26,6 +26,16 @@ from .foreground_generation import DiagnosticRetentionFailed, ForegroundGenerati
 from .web_api.native_scene_worker import open_area
 
 
+def _validated_semantic_sha256(document, validate_document):
+    """Hash the validated spec projection, not its callback envelope."""
+    if not callable(validate_document):
+        raise ValueError("Selected semantic validator required")
+    result = validate_document(document)
+    if type(result) is not dict or result.get("valid") is not True or type(result.get("spec")) is not dict:
+        raise ValueError("Successful semantic validation with a spec required")
+    return hashlib.sha256(protocol.canonical(result["spec"])).hexdigest()
+
+
 class SceneChildFailed(RuntimeError):
     """Actual child exit failure, even when it managed to retain a receipt."""
 
@@ -250,10 +260,9 @@ class _ForegroundStageWorker(ForegroundGenerationWorker):
                 raise ValueError("exact active prepared stage release required")
             selected = {}
             if contract.schema_version == "5":
-                if not callable(self.validate_document):
-                    raise ValueError("Selected semantic validator required")
-                semantic = self.validate_document(candidate.scene_json)
-                selected["validated_semantic_sha256"] = hashlib.sha256(protocol.canonical(semantic)).hexdigest()
+                selected["validated_semantic_sha256"] = _validated_semantic_sha256(
+                    candidate.scene_json, self.validate_document
+                )
                 if self.action == "capture":
                     control = self._control_value(intent, contract)
                     assert control is not None, "Initial owned supervision required"

@@ -175,18 +175,19 @@ def _configure_native_tmp(scratch_root):
         return directory.path
 
 
-def _validate_spec(candidate, semantic_digest=None):
+def _validate_spec(request):
     # Schema/registry imports are deliberately after Kit initialization.
     import hashlib
 
     from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
+    candidate = request.candidate
     if hashlib.sha256(candidate.scene_json.encode("utf-8")).hexdigest() != candidate.digest:
         raise ValueError("Canonical candidate identity changed")
     spec = ArenaEnvGraphSpec.model_validate_json(candidate.scene_json)
-    if semantic_digest is not None:
+    if request.contract.schema_version == "5":
         actual = hashlib.sha256(protocol.canonical(spec.model_dump(mode="json"))).hexdigest()
-        if actual != semantic_digest:
+        if actual != request.validated_semantic_sha256:
             raise ValueError("Validated semantic identity changed")
     return spec
 
@@ -279,10 +280,7 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None, on_
             app = _initialize_kit(request.settings)
             active()
             phase = "validate_spec"
-            if request.contract.schema_version == "5":
-                spec = _validate_spec(request.candidate, request.validated_semantic_digest)
-            else:
-                spec = _validate_spec(request.candidate)
+            spec = _validate_spec(request)
             if renewals is not None:
                 from isaaclab_arena.agentic_environment_generation.workflow.native_capture import IsaacCaptureAdapter
 

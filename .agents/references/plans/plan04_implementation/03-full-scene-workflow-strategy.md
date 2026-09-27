@@ -1,13 +1,15 @@
 # P04-I03 — Source Review, Implementation Strategy and Actor–Critic Goals
 
-- Reviewed: 2026-09-26
-- Source baseline: `aec2b6b4781e9bd636bad08dccee6e668f7f6d39`; worktree clean at review entry.
+- Reviewed: 2026-09-27
+- Original design-review baseline: `aec2b6b4781e9bd636bad08dccee6e668f7f6d39`; worktree clean at that historical review entry, not a claim about the current checkout.
 - Parent package: [03-full-scene-workflow.md](03-full-scene-workflow.md)
-- Status: **G1 COMPLETE — parent-verified source/evidence foundation with scoped checks and accepted independent critique. G2–G4 remain UNISSUED. No live application effect is authorized by this document.**
+- Status: **G1 and non-sending G2 COMPLETE (`ACCEPT_NON_SENDING_G2`). G3's bounded execution STOPPED after one native release with no retained native evidence; the run is cancelled and owned cleanup is verified. Final critic and parent accept the stopped-attempt closeout only, not empirical G3. G4 remains unissued.**
 - Proposed generated operation: `p04-i03-full-scene-v1`.
-- Proposed fixed-candidate repair-witness operation: `p04-i03-fixed-scene-proof-v1`; other empirical case IDs require explicit selection.
+- Issued fixed-candidate operation: `p04-i03-g3-programmatic-root-xy-pair-v1`; `p04-i03-fixed-scene-proof-v1` is an unissued reference example, not another selected case.
 
 This revision supersedes the earlier fixed-strict-evaluator recipe, unconditional uncertainty stop, 1,200-second live gates, TCC/refund proposal and unimplemented causal-oracle claims. The general harness is parameterized; the tabletop experiment is a selected profile. Issuing one goal does not issue another. Embedded `/goal` blocks are proposal data until explicitly issued.
+
+The next proposed work is [G03 blocker resolution](#g03-blockers), beginning with non-sending [G3-R1](#g3-r1). The original G3 operation is stopped and cancelled; its old prompt/selection is historical provenance, not authority for another attempt. All four recovery prompts below remain unissued.
 
 > [!NOTE]
 > **Contract Schema Versioning (Schema 5 vs. Schema 6):**
@@ -182,6 +184,117 @@ Implement the selected telemetry/diagnostic producers, retained eligibility-deci
 
 The original **proposed** G3 2-native/3-send option is a minimal repair-pair case, not the whole calibration campaign. G2 must determine which required witnesses can share its observations and which need additional cases. The operator issues the actual G3 matrix; this document authorizes no additional effects. Do not make unknown runtime estimates an issuance gate, and do not silently spend G4 on diagnostics.
 
+#### Implemented G2 boundary and parent closeout (ACCEPT_NON_SENDING_G2)
+
+G2 implementation and non-sending verification closed with parent decision **`ACCEPT_NON_SENDING_G2`** ([G2-CLOSEOUT.md](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/G2-CLOSEOUT.md)). G3 was unissued at that closeout (0 native releases, 0 provider dispatches); the subsequent [operator issuance](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-issuance.json) does not broaden G2's evidence.
+
+- **Verified application boundary:**
+  - Public numeric mutation (`reassessWorkflowNumeric`), keyed replay, and changed-intent refusal work through GraphQL and CLI.
+  - The retained legacy source truthfully yields `legacy_source_has_no_explicit_acquisition`, not a manufactured positive result. Original run version 12, verdict, and accounting remain unchanged.
+  - Both `NewSource` and `ExistingSource` pass installed non-sending public inspection. The exact frozen single-case G3 proposal passes the actual non-sending CLI preview on the amended source.
+  - Derived numeric artifacts have a bounded keyed inventory/chunk route (`NUMERIC_ASSESSMENT`) with fresh child/source receipt verification. Produced bytes were exercised only with explicitly synthetic CPU data.
+  - Requested API instance `3e2008a056ed0b3c140a14cfec9c7033` and final verification instance `32f9e1cb839a1bda45ea695eaa3303f5` are cleanly stopped and drained: empty owned process groups, released lifetime leases, closed endpoints, and clean matching durable retirement. Historical unclean exit records are preserved without relabeling.
+  - Affected CPU check suite: **976 passed**, 6 approved exclusions, 14 subtests. Amended files pass scoped formatting, import sorting, flake8, and git diff checks; the approved test exclusions remain explicit.
+  - **Zero provider dispatches, native/Kit releases, policy executions, or research-prior retrievals.**
+- **Key Closeout Artifacts & Digests:**
+  - Selection SHA-256: `ddb19beff14731c9e7e1a76bfe7c58dc7d15b044fb740574303e1c7bf7a52926` ([g3-selection.json](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-selection.json), [g3-selection.sha256](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-selection.sha256))
+  - Source snapshot SHA-256: `3f3c2b47f1a13b5941059acc11130a909037b72a4cb120ba9027011b88924448` ([g2-source-manifest-after-critic.json](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g2-source-manifest-after-critic.json))
+  - Controlled pair: `p04-i03-programmatic-root-xy-pair-v1` (operation `p04-i03-g3-programmatic-root-xy-pair-v1`)
+  - Witness matrix & stopping rules: [g3-witness-to-case-matrix.md](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-witness-to-case-matrix.md)
+  - Ceilings: at most 2 native releases, 1 repair send, 2 assessment sends; no repeat case authorized.
+
+#### G2 debugging, blocker resolutions, and critic review log
+
+During G2 execution, several critical defects and gaps were identified, isolated, and resolved:
+
+1. **GraphQL Mutation Security Allowlist:**
+   - *Problem:* The new numeric reassessment mutation (`reassessWorkflowNumeric`) was rejected with a security validation error because [workflow/api/security.py:349](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/security.py#L349) permitted only `{"submitWorkflow", "cancelWorkflow", "resumeWorkflow"}`.
+   - *Resolution:* Added `"reassessWorkflowNumeric"` to the mutation allowlist. Document validation checked the request shape; fresh installed mutation/readback separately proved authenticated execution. A source edit alone did not change an already-running API.
+
+2. **Shutdown & Historical Workload Ownership Defect:**
+   - *Problem:* Historical cancellation/readback was incorrectly added to the API's locally owned work in [execution_owner.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/api/execution_owner.py). When the API shut down, it attempted to verify and terminate a historical worker PID belonging to a prior boot, causing shutdown stalls.
+   - *Resolution:* Corrected ownership tracking to isolate locally spawned processes from historical readbacks. The stuck API was contained with verified PID tracking, and its `exited_unclean` record was preserved rather than mislabeled as a graceful drain.
+
+3. **Independent Pre-Send Critic Review (`g2-final-pre-send-critic.json`):**
+   - An independent read-only critic review evaluated the pre-closeout snapshot and returned **`NEEDS_WORK`**, identifying 5 specific findings (F1–F5). Hermes resolved all 5 using strict Test-Driven Development (TDD) with explicit Red/Green evidence recorded in [g2-critic-resolutions.json](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g2-critic-resolutions.json):
+     - **F1 (BLOCKER_SOURCE - Attribute Joins):** `NativeCaptureSettings` lacked `ik_subjects` (only `subjects` exists), and `AcquisitionSchedule` defines `renderer_update_steps`, not `render_steps`.
+       - *Red:* Isolated in `test_parameterized_capture_settings_consume_stationary_selection` ([critic-f1-construction-red.json](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/critic-f1-construction-red.json), [critic-f1-schedule-red.json](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/critic-f1-schedule-red.json)).
+       - *Green:* Removed the nonexistent `ik_subjects` guard at [native_capture.py:438](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_capture.py#L438), preserving codec/contact refusals; it was not replaced by a nonempty `subjects` rejection. Changed rendering access to `renderer_update_steps` at [native_capture.py:551](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_capture.py#L551) ([critic-f1-green.json](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/critic-f1-green.json)).
+     - **F2 (BLOCKER_SOURCE - Worker Callback Signature):** The installed native worker supplied `sample_state=adapter.sample_state` to `NativeCaptureProducer`, raising `TypeError` and bypassing adapter measured-clock checks.
+       - *Red:* Invocation raised `TypeError` in `test_trajectory_assessment.py:1449` ([critic-f2-red.json](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/critic-f2-red.json)).
+       - *Green:* Added and consumed the trusted `sample_state` argument through the guarded producer path in [native_capture.py:1182](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_capture.py#L1182). Existing `build_environment` support and downstream `observe_step` wiring are distinct from that new producer argument ([critic-f2-green.json](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/critic-f2-green.json)).
+     - **F3 (BLOCKER_SOURCE - Dense Settling vs. Explicit v2 Schedules):** Settling required camera frames on every physics settle step. This selection captures images at step 180; requiring earlier undeclared images caused `camera_unavailable`. Explicit schedules in general are not terminal-only.
+       - *Red:* Analyzed coupling between settle validation and image acquisition in [native_realization.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_realization.py).
+       - *Green:* Decoupled camera settling with `camera_names=()` under explicit acquisition and used `_explicit_observer` through downstream `observe_step` callbacks, acquiring only each step's selected cameras. The targeted run passed 43 tests, with 124 deselected, in 1.52s ([critic-f3-green.json](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/critic-f3-green.json)); the later selected-camera correction is preserved in the finding-resolution record.
+     - **F4 (MEDIUM_SOURCE_EVIDENCE_GAP - Camera Frustum & Transform Retention):** Diagnostic producer dropped camera pose, resolution, and clipping ranges needed for the G3 witness matrix.
+       - *Red:* Highlighted omitted metrics in [critic-f4-red.json](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/critic-f4-red.json).
+       - *Green:* Retained USD row-vector camera-to-world matrix, resolution (`image_shape`), clipping range, stage metre units, and pixel scales in `camera_support_proxy` ([critic-f4-green.json](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/critic-f4-green.json)).
+     - **F5 (MEDIUM_SOURCE_READBACK_GAP - Derived Assessment Recovery Route):** `reassessWorkflowNumeric` stored manifests in Neo4j, but the public artifact query looked up manifests only through the immutable source observation.
+       - *Red:* Route lookup failed for derived manifests in [critic-f5-routing-red.json](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/critic-f5-routing-red.json).
+       - *Green:* Added `NUMERIC_ASSESSMENT` to artifact chunk schema, client, and CLI in [artifacts.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/artifacts.py#L59) and [service.py](../../../../isaaclab_arena/agentic_environment_generation/workflow/service.py#L457) ([critic-f5-green.json](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/critic-f5-green.json)).
+
+#### G3 issuance and ordered launch prerequisites
+
+The operator has [explicitly issued G3](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-issuance.json) for the frozen selection-file SHA-256 `ddb19beff14731c9e7e1a76bfe7c58dc7d15b044fb740574303e1c7bf7a52926`, controlled pair `p04-i03-programmatic-root-xy-pair-v1`, operation `p04-i03-g3-programmatic-root-xy-pair-v1`. Only its C0, conditional C1 and retained N1/N2 are selected: cumulative maxima 2 native releases, 1 repair send, 2 assessment sends, no repeat or extra observation. This does not issue G4.
+
+1. Recheck the frozen manifest, nested artifact/configuration/selector identities, source snapshot and explicitly reused operational scope. The two named G2 closeout instances were cleanly drained; revalidate their exact ownership/retirement, preserving older unclean records.
+2. Check basic GPU/driver access and scoped resource ownership in the discovered container. The selected worker is headless, so no `DISPLAY=:1` gate, globally idle hardware requirement, unrelated process cleanup or uncounted Kit smoke is added.
+3. Obtain the fresh read-only pre-boundary critic under AC-I03. After parent review, preserve the private proposal and exact previous G2 configuration; create a separate authority-only configuration with the issued 60-minute finite expiry immediately before launch. Record its new effective configuration and selector digests, not the frozen manifest hash as a substitute. A null expiry remains correct in the preserved proposal.
+4. Use exact `api-handover` with the previous configuration/instance and `--authorize-full-scene`, then verify fresh endpoint readiness. The startup submission flag is not enabled by a later expiry edit or API credential refresh.
+5. Submit the selected workflow once through the installed application. Its eligibility decision owns conditional C1; N1/N2 require actual C0 coverage. Stop further effects at the frozen boundaries, but finish containment, fresh readback and no-effect replay before the final scoped critic.
+
+The finite 60-minute workload grant is not an aggregate investigation/runtime budget and is not automatically extended. Existing credential refresh and fenced lease renewal remain permitted only inside the issued scope; neither resets allowances. G2 does not establish real placement, causal repair or positive explicit-acquisition reassessment.
+
+<a id="pre-boundary-source-blockers"></a>
+
+##### Pre-boundary source blockers — no first release
+
+The fresh [G3 critic](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-pre-boundary-critic.json) returned `BLOCKED`. At the original pre-boundary snapshot, parent source inspection and one [CPU-only actual schema/catalogue/hash check](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-pre-boundary-parent-verification.json) independently confirmed these historical defects:
+
+1. The schema-5 child reads `request.validated_semantic_digest`, but [SceneWorkerRequest](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_worker_protocol.py#L23) declares `validated_semantic_sha256`; [the child access](../../../../isaaclab_arena_examples/agentic_environment_generation/web_api/native_scene_worker.py#L283) would fail after Kit initialization.
+2. The installed callback returns a validation envelope (`valid` and `spec`), which [the parent hashes whole](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_native_scene.py#L255); [the child hashes only the normalized spec](../../../../isaaclab_arena_examples/agentic_environment_generation/web_api/native_scene_worker.py#L188). The CPU probe verified distinct digests; the child projection matches the frozen manifest's validated semantic digest.
+3. The exact frozen candidate retains empty `object_references` and `cli_override_specs` arrays. Schema normalization produces null/omitted fields, so neither spec serialization equals the retained candidate. [NativeCaptureProducer._check_spec](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_capture.py#L958) allows semantic revalidation only with `evidence_only=True`, while this full-scene selection is false. Raw source bytes must not be rewritten to bypass that rejection.
+
+The original parent decision was `BLOCK_BEFORE_FIRST_RELEASE`. No released record, candidate run, native output or grant was manufactured for that probe. At that checkpoint no package source, proposal, candidate, contract, case matrix or previous configuration had changed; the source snapshot was `3f3c2b47f1a13b5941059acc11130a909037b72a4cb120ba9027011b88924448`. No grant, API service or workload was started. G2's accepted non-sending scope remains intact.
+
+The operator subsequently chose **"Authorize fixes and amended-source G3 continuation"**, retained in the [source amendment authorization](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-source-amendment-authorization.json). The parent corrected these three joins in three production files with focused regressions in the existing trajectory test module; no fixture files or experiment inputs changed. The [actual frozen-input check](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-corrected-frozen-source-check.json) passes the corrected parent/child semantic functions and producer admission/spec check with the original raw arrays intact. This does not construct a released request or initialize Kit.
+
+The [source applicability amendment](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-source-applicability-amendment.json), SHA-256 `ad2fa7c94a69e0858d1ba8235b790ff689e26d44d477cd2da36c5fe6c5c807fd`, explicitly binds the corrected snapshot `8d369e113fb57a753e4d8bfcfd6d559534225b6b333f268397d9f2ffc999486e` over the same 56-file set. Its manifest file SHA-256 is `92421be20061c97d119402e9322e9a543b80551af1f9e70287e6976dfde579e7`. The original selection, G2 snapshot and all nine public artifact bindings are unchanged; the old snapshot is historical, not claimed to match corrected code. The final existing CPU scope returned **979 passed, 6 approved deselections, 9 warnings and 14 subtests passed**; host black/isort/flake8 and whitespace checks passed. Original findings and the initial F3 test-setup failure are preserved rather than relabelled.
+
+The [focused delta critique](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-source-delta-critic.json) subsequently returned `CONTINUE`. Its three corrections and amended-source applicability were independently verified; the critique did not accept native execution.
+
+##### G3 actual execution — stopped, empirical acceptance incomplete
+
+The [authorized launch](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-authorized-launch.json) preserved the proposal and previous configuration, changed only the new configuration's `full_scene.approval_expires_at`, and used exact `api-handover --authorize-full-scene`. The finite window was `2026-09-27T06:00:32.928694+00:00` to `2026-09-27T07:00:32.928694+00:00`. Effective configuration digest `21287c3b918e1cc502d95def026cf71643e65d19c92217e5ee50457f67c90924` and selector digest `4975a7c6c527276f1093ce401e90559c08d806a2c28da37f83b90aa869865260` are distinct from the unchanged proposal/selection identities.
+
+The installed application admitted the selected operation once as run `2a4a08ca2bfbb69a07e5cf39e2e3263d605d4f990a5d58e5f68dab688ee11451`. C0 registered and released one native worker, then entered `reconciliation_required`; no native evidence or assessment was retained. Bounded recovery of its exact registration found no matching final native input, output, failure or model-phase artifact, and no authoritative causal-failure link. **The initiating exception was not retained or recovered.** This is a failed released handoff, not proof of a particular Kit/GPU failure or successful startup.
+
+The parent enforced the stop rule. C1 had no validated C0 repair trigger; N1/N2 had no retained C0 velocity coverage, so none was executed. Total consumption was **one native release, zero repair sends, zero assessment sends**, with no initial generation, retry, repeat, extra observation, policy execution or prior retrieval. One realization, one observation and 180 steps remain reserved; actual native consumption is unknown, not zero, and reservations were not refunded.
+
+Fresh exact-key replay preserved the receipt, retained state and reservations. Public result/candidate/inventory/chunk readback succeeded; the tool elided exported base64, so a separate scoped retained reader independently verified all 3,457 original candidate bytes rather than presenting the elided export as original data. Supported cancellation was read back as `cancelled`, version 9. API `fb338170304dd7facc04782aeee53ca8` was stopped/drained; independent checks verified zero API/native owned members, closed endpoint, free lifetime/GPU locks and clean matching owner retirement at epoch 8. All 56 corrected-source bindings remained unchanged. See [G3-CLOSEOUT.md](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/G3-CLOSEOUT.md), [aggregate evidence](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-execution-closeout-evidence.json) and [retirement verification](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-retirement-verification.json).
+
+The [final scoped critic](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-final-scoped-critic.json) returned `ACCEPT` for the truthful stopped-attempt closeout only, with `g3_empirical_acceptance=false`. The parent accepts that limited closeout under `EXECUTION_STOPPED_NO_G3_ACCEPTANCE`. The critic retains `OPEN_G3_RETENTION_GAP_NOT_A_STOPPED_CLOSEOUT_BLOCKER`: clean retirement does not recover the initiating exception, and later source hypotheses cannot establish that historical cause. G3's physical/mapping/repair/reassessment and released-supervision obligations remain unexercised. The smallest proposed next step is a separately authorized no-native/no-provider source-level diagnosis at the failed parent/child handoff. No diagnosis, correction, retry, successor release or G4 execution is issued by this closeout or unused ceilings.
+
+<a id="pre-g3-readiness"></a>
+
+<a id="read-only-g3-readiness-prompt"></a>
+
+##### Original read-only G3 readiness prompt
+
+Historical first-campaign readiness text follows. It does not select a successor or reopen the cancelled operation; use the [G03 recovery sequence](#g03-blockers) for new work.
+
+```text
+/goal Perform read-only readiness verification for P04-I03-G3.
+
+Read the full I03-G3 goal and AC-I03 in .agents/references/plans/plan04_implementation/03-full-scene-workflow-strategy.md and its linked overview. Read G2-CLOSEOUT.md, g3-selection.json and g3-witness-to-case-matrix.md under outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/.
+
+Verify selection-file SHA-256 ddb19beff14731c9e7e1a76bfe7c58dc7d15b044fb740574303e1c7bf7a52926, its independent artifact bindings and source snapshot. Check scoped API retirement/ownership and basic headless GPU/driver readiness in the discovered container. Report missing scope, authority or operational prerequisites without broadening the inspection.
+
+A null expiry is expected in the preserved proposal. Do not change configurations/grants, launch services or Kit, dispatch providers, execute policies, retrieve priors or alter shared resources. This readiness prompt alone issues no workload.
+```
+
+The [original full I03-G3 prompt](#i03-g3) retains the parent acceptance requirements, not renewed execution authority. Use the canonical [G03 recovery prompts](#g03-blockers) rather than reissuing its spent operation or maintaining shortened copies that omit critics, source/selection binding, accounting or cleanup.
+
 ### G3 to G4: empirical transfer, not blanket acceptance
 
 G3 establishes the selected native/camera/support/coordinate validity and supported repair witness required by the parent, with limitations. The same measurements can support several claims only when their actual coverage and controls justify it. A causal comparison, repeatability, positive scene acceptance and software integration remain separate.
@@ -192,7 +305,7 @@ A final G4 selection must reconcile any implementation/profile changes since G3 
 
 ### Resource policy and immutable intent
 
-No G3/G4 development-profile aggregate time or total-deadline cap is imposed. A finite experiment procedure and issued effect counts still limit what may happen. The proposed minimal G4 remains one generation, at most one repair, at most two assessments and two native releases. Its allocation is separate from G3 and never renewed implicitly.
+No G3/G4 development-profile aggregate time or total-deadline cap is imposed. Specifically, the 60-minute active investigation ceiling from [Plan 04 Section 8](../event_mapping/event-mapping-refactoring_plan_04.md#8-anti-dopamine-invariants--investigation-budgets) applied strictly to pre-boundary code-debugging loops (G1/G2) and is explicitly lifted for G3 and forward: physical simulation stepping, shader compilation, Kit rendering, and model evaluation run to completion under renewable worker supervision and per-operation transport timeouts without an aggregate wall-clock investigation cutoff. A finite experiment procedure and issued effect counts still limit what may happen. The proposed minimal G4 remains one generation, at most one repair, at most two assessments and two native releases. Its allocation is separate from G3 and never renewed implicitly.
 
 Preserve existing reservations, actual usage and uncertain consumption. Do not implement refunds to fit an artificial time cap. Programmatic future-stage selection inside a frozen policy is permitted when implemented and issued; it is append-only, version/fence checked and replayed exactly. Changing the admitted policy/criterion/model/seed beyond that selection mechanism requires the appropriate new operation, not a generic in-place mutation. Derived numeric reassessment never updates the original acceptance decision.
 
@@ -206,7 +319,7 @@ Every proposed goal incorporates this protocol. The parent is the ACTOR, sole wr
 2. Before a meaningful boundary, state the concrete obligation/hypothesis, smallest correction/check and predicted observation. Critics may inspect public source/evidence only; no edits, tests, constructors, services, application requests, private files/credentials, provider/native calls or database writes.
 3. Require `CONTINUE`, `ACCEPT`, `BLOCKED` or `NEED_EVIDENCE`, with criterion, source/evidence anchor, material issue and smallest discriminating next action/effects. `CONTINUE` is not proof or permission. Request one focused clarification of an unusable critique rather than opening a general audit.
 4. Parent verifies findings and makes supported in-scope corrections. Normal checkpoints are a pre-boundary critique and a final outcome critique, plus a focused fresh delta critique when material semantics change—not a review between every worker or routine edit. No extra operator approval for routine work already within an issued scope.
-5. Stop after three unsuccessful corrections to the same defect. Preserve counts across contexts/reissues. Honor [Plan 04's investigation ceilings](../event_mapping/event-mapping-refactoring_plan_04.md#8-anti-dopamine-invariants--investigation-budgets) for a new architectural blocker: two hypothesis/challenge rounds, three isolated diagnostic invocations and 60 minutes of active investigation. These agent-debugging bounds are not simulation runtime/deadline gates.
+5. Stop after three unsuccessful corrections to the same defect. Preserve counts across contexts/reissues. Honor [Plan 04's investigation ceilings](../event_mapping/event-mapping-refactoring_plan_04.md#8-anti-dopamine-invariants--investigation-budgets) for pure code-editing and architectural blockers during pre-boundary implementation: two hypothesis/challenge rounds, three isolated diagnostic invocations, and a 60-minute investigation budget. **For Goal I03-G3 and forward, this 60-minute investigation limit is explicitly lifted**: empirical campaigns, Isaac Sim / Kit execution, camera rendering, and VLM assessment runs are governed strictly by physical progress, renewable worker supervision leases (60s), per-operation transport timeouts (180s), and issued effect ceilings—not an aggregate wall-clock investigation timer.
 6. Complete needed containment/cleanup before waiting on a final critic. Parent closes only witnessed criteria. Report the furthest installed boundary and the exact remaining decision; test totals, inspection packets, plans and review passes do not substitute for application acceptance.
 
 ### Common source, check and operational boundaries
@@ -225,7 +338,7 @@ Every proposed goal incorporates this protocol. The parent is the ACTOR, sole wr
 
 ## 5. Proposed goal prompts
 
-All four blocks are **DRAFT — NOT ISSUED**. A pasted goal must be issued explicitly with any required scope/selection. The common protocol and linked overview remain part of each goal. No next goal executes automatically.
+These blocks preserve the G1–G4 goal/acceptance contract, not new grants merely because they are present in a document. G1 and non-sending G2 have accepted historical executions; the original G3 issuance ended in the stopped-attempt closeout above, and G4 remains unissued. New work starts with the separately proposed [G03 recovery prompts](#g03-blockers). The common protocol and linked overview remain binding. No next goal executes automatically.
 
 <a id="i03-g1"></a>
 
@@ -255,6 +368,10 @@ Exit with consumed protocol/evaluator semantics, actual decoder/check results, e
 
 ### I03-G2 — Coherent installed execution, authority, lifecycle, and dynamic policy handling
 
+> [!NOTE]
+> **STATUS: COMPLETE (`ACCEPT_NON_SENDING_G2`)**
+> G2 implementation and non-sending verification are parent-accepted ([G2-CLOSEOUT.md](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/G2-CLOSEOUT.md)). Verified with 976 passing CPU checks, cleanly drained APIs (`3e2008a0...`, `32f9e1cb...`), and all 5 critic findings resolved via TDD. G3 was unissued at that closeout; its subsequent operator issuance is separate.
+
 ```text
 /goal Implement and exercise P04-I03's installed configurable composition and non-sending boundary, including the real adapters and readback needed by its empirical campaign.
 
@@ -283,12 +400,18 @@ Exit only after the implemented installed/non-sending boundary, public outputs a
 
 ### I03-G3 — Configurable measurement and programmatic causal-intervention proof
 
+> **Historical issuance template — do not restart the stopped operation.** The following body is preserved unchanged, including its original operation and two-release ceiling. Its scientific and lifecycle obligations remain the parent contract. A successor needs [G3-R1 through G3-R4](#g03-blockers), exact new applicability/selection binding and explicitly approved cumulative effects; copying this old block supplies none of those.
+
 ```text
-/goal Execute the separately issued P04-I03 fixed-candidate empirical campaign through the installed composition, establish the required measurement/mapping and supported-repair witnesses, and close only what the observations prove.
+/goal I explicitly issue P04-I03-G3 only: execute the selected fixed-candidate empirical campaign through the installed composition, establish the required measurement/mapping and supported-repair witnesses, and close only what the observations prove.
 
-Prerequisites: parent-accepted G1/G2; operator-confirmed exact G3 selection artifact/digest, operational scope and individually identified case/effect permissions; implemented selected diagnostics/supervision; no unresolved ownership or mandatory adapter blocker. Read .agents/references/plans/plan04_implementation/03-full-scene-workflow.md and .agents/references/plans/plan04_implementation/03-full-scene-workflow-strategy.md, including AC-I03. This issuance does not issue G4 or renew I01/I02. Parent is sole operator/writer; one read-only pre-boundary critic and a final scoped critic, with focused delta review after a material supported correction.
+Prerequisites: parent-accepted G1/G2; operator-confirmed exact G3 selection artifact/digest (ddb19beff14731c9e7e1a76bfe7c58dc7d15b044fb740574303e1c7bf7a52926), operational scope and individually identified case/effect permissions; implemented selected diagnostics/supervision; no unresolved ownership or mandatory adapter blocker. Read .agents/references/plans/plan04_implementation/03-full-scene-workflow.md and .agents/references/plans/plan04_implementation/03-full-scene-workflow-strategy.md, including AC-I03. This issuance does not issue G4 or renew I01/I02. Parent is sole operator/writer; one read-only pre-boundary critic and a final scoped critic, with focused delta review after a material supported correction.
 
-Effects are EXACTLY those in the issued G3 case matrix, including any explicitly selected diagnostic/control/alternate-schedule/repeat cases. Initial-generation sends are ZERO. The reference p04-i03-fixed-scene-proof-v1 case allows at most TWO native releases, ONE repair send and TWO assessment sends; it is not automatically enough for every calibration or repeatability obligation. No additional case/repeat follows merely because time-budget enforcement is off. No overall runtime/deadline gate, guessed wall-time allowance or preset monetary/aggregate-token veto applies to the development profile. Preserve actual usage, conservative reservations, finite backend/request bounds, renewable supervision and valid authority. No hidden probes, provider retries, fallbacks or same-image re-judging.
+Selection: outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-selection.json, SHA-256 ddb19beff14731c9e7e1a76bfe7c58dc7d15b044fb740574303e1c7bf7a52926. Controlled pair: p04-i03-programmatic-root-xy-pair-v1. Operation: p04-i03-g3-programmatic-root-xy-pair-v1. Explicitly reuse only the installation, operational/artifact scope and credential-source bindings documented by this frozen manifest. Other reference examples are not issued.
+
+After the fresh pre-boundary critique, preserve the proposal and previous G2 configuration, prepare a separate authority-only configuration with a 60-minute finite expiry immediately before authorized launch, and record the new effective configuration and selector digests separately from the selection-file hash. Use the supported api-handover with the exact previous configuration/instance and --authorize-full-scene; verify endpoint readiness. Existing credential refresh and fenced supervision renewal are permitted only within this scope and grant. No automatic authority extension or allowance reset is permitted.
+
+Effects are EXACTLY C0, application-eligible C1, and retained N1/N2 in the frozen matrix: at most TWO native releases, ONE repair send and TWO assessment sends cumulatively, including failures and uncertainty. Initial-generation sends, extra observations, provider retries, repeats, between-case source/configuration corrections, policy execution, prior retrieval and G4 execution are ZERO. This pair is not automatically enough for every calibration or repeatability obligation. No additional case follows merely because time-budget enforcement is off. No overall runtime/deadline gate, 60-minute investigation ceiling, guessed wall-time allowance or preset monetary/aggregate-token veto applies to the development profile; the expressly issued finite workload grant remains independently enforced. Preserve actual usage, conservative reservations, finite backend/request bounds and renewable supervision. No hidden probes, fallbacks or same-image re-judging.
 
 1. Recheck exact source/selection applicability, previous cleanup/handover, private role references, scope and effective authentication/grants. Critique the actual witness matrix and predicted observations before release. Immediately before each permitted case admission, check effective authority and the implemented API credential-refresh, grant/supervision-renewal and cleanup policies independently. Use only the issued refresh/renewal scope. Do not require authority to cover an infinite duration, silently renew it, or substitute a long fixed timeout for supported supervision.
 2. Submit each selected case once through the real installed API. The application alone owns its native capture, evaluation, hypothesis/repair selection and subsequent stages. Verify actual sample/image identities, reset/clock, hold action, settings and sensor freshness. Show non-default parameter/schedule consumption through the public inputs and actual output, not just a valid DTO. Exercise at least two parameter selections using the new retained-numeric-assessment path where coverage permits; record expected versus observed outcomes and label post-hoc choices exploratory. If measurements cannot distinguish a claimed behavior, do not invent a boundary witness.
@@ -322,23 +445,149 @@ The reference procedure authorizes p04-i03-full-scene-v1 with the frozen NewSour
 Report installed integration, physical measurement validity, complete assessment, actual repair/causal scope, scientific disposition and readback/replay/cleanup independently. A positive initial candidate legitimately leaves this run's repair branch unexercised; cite the actual applicable G3 witness rather than inventing another repair. A negative/uncertain complete result can prove integration but does not close Plan 04's positive-scene requirement. Update the existing operation/package/status handoff only with verified scope and explicit remaining obligations. No policy execution, live prior integration/promotion, generic calibration, full Milestone 1 or full Plan 04 completion claim.
 ```
 
-## 6. Issuance and closeout checklist
+<a id="g03-blockers"></a>
 
-- [ ] Parent/operator explicitly issues G1; new semantics and old bytes/refusal/replay behavior are checked.
-- [ ] G2 has an approved operational scope and actual installed non-sending/public-readback/control evidence.
-- [ ] Optional time policies, worker supervision/renewal and cleanup behavior are implemented through every consumer, not merely named in a contract.
-- [ ] Finite API credentials refresh through private delivery and current-principal rebinding; stale authentication fails and refreshed readback/cancellation works without renewing workload allocations.
-- [ ] The pure diagnostic eligibility evaluator is consumed at retained routing, reservation/release, recovery and refiner feedback; wrong-target repair and unpermitted observation are refused.
-- [ ] Selected diagnostics exist before G3; implementation support and empirical validity are not conflated.
-- [ ] G3 selection identifies real candidates/cases, required witnesses and exact effect permissions; operator issues it separately.
+## 6. G03 blockers and proposed recovery goals
+
+**All four prompts in this section are PROPOSED, NOT ISSUED.** The operator requested analysis and prompt/document updates, not source correction, configuration changes or another launch. “G03” denotes the existing G3 milestone; historical identifiers are unchanged. Read this section with [AC-I03](#ac-i03) and the [overview's recovery sequence](03-full-scene-workflow.md#g03-blockers). G1/G2 acceptance is preserved; neither the stopped closeout nor this revision accepts empirical G3 or issues G4.
+
+<a id="g03-blocker-analysis"></a>
+
+### Reviewed root-problem analysis and evidence limits
+
+The supplied [execution-blockers/root-cause note](../../quick_notes/g3_execution_blockers_and_root_cause_analysis.md) is preserved as investigation input. Its proposed causes/remedies are not all established by the [actual stopped closeout](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/G3-CLOSEOUT.md) or current source. The following review controls the new prompts; it does not rewrite the note or reconstruct the missing historical exception.
+
+| Finding | Source/evidence and classification | Required response; claim limit |
+| --- | --- | --- |
+| A. Schema-5 first-failure retention is excluded at multiple layers. | **Confirmed source defect.** [Service recorder](../../../../isaaclab_arena/agentic_environment_generation/workflow/service.py#L825) selects only schema `4`; [foreground failure recorder](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_scene_ports.py#L156) returns for other schemas; [Neo4j binding admission](../../../../isaaclab_arena/agentic_environment_generation/workflow/neo4j_store.py#L4608) also requires `4`. Preparation/failure-hook binding has separate schema guards in [the same port](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_scene_ports.py#L119). | Trace and correct the selected schema-5 service/port/worker/artifact/store/readback chain, not just one `if`. Preserve supported legacy versions, exact scope/fence/registration binding, first-writer semantics and separate causal/cleanup records. This explains an error-reporting gap, not the initiating execution fault. |
+| B. Stderr and early exceptions can leave no useful child diagnostic. | **Confirmed source blind spots.** [Native spawn](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_native_scene.py#L76) inherits [discarded stderr](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_generation.py#L172). The [outer native exception handler](../../../../isaaclab_arena_examples/agentic_environment_generation/web_api/native_scene_worker.py#L465) can return status `1` without a diagnostic; [structured capture retention](../../../../isaaclab_arena_examples/agentic_environment_generation/web_api/native_scene_worker.py#L277) does not cover every earlier entry phase. | Cover parent pre-send and early child failures through existing protected diagnostic mechanisms. A stderr pipe alone cannot recover an exception that was caught without emission. Any necessary stderr fallback must be bounded, continuously drained, screened and ownership-bound; never mix raw logs into stdout's protocol or expose private inputs. No historical child-death timing is established. |
+| C. Missing graphical/driver environment caused Kit failure. | **Unproved hypothesis, not an accepted root cause.** The [environment allowlist](../../../../isaaclab_arena_examples/agentic_environment_generation/web_api/provider_security.py#L36) omits `DISPLAY` and `VK_ICD_FILENAMES`; the [native extension](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_native_scene.py#L81) forwards selected runtime paths. But [Kit initialization](../../../../isaaclab_arena_examples/agentic_environment_generation/web_api/native_scene_worker.py#L160) explicitly uses `headless=True`, and the historical attempt retained no Kit-start witness. | Do not add `DISPLAY=:1`, copy the ambient environment or widen the shared provider allowlist speculatively. Change only a demonstrably required, nonsecret native runtime binding after tracing the selected launcher/installation; otherwise leave this hypothesis unresolved for an authorized observation. |
+| D. No final native input/output identifies an earliest unproved handoff, not a GPU diagnosis. | **Retained evidence limit.** The [closeout](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/G3-CLOSEOUT.md#failed-boundary-and-diagnosis-limit) records release/reconciliation with no final input, output, failure or model-phase artifact. The parent performs [semantic/control checks before request retention and stdin send](../../../../isaaclab_arena_examples/agentic_environment_generation/foreground_native_scene.py#L244); the child [reads/validates a packet before capture](../../../../isaaclab_arena_examples/agentic_environment_generation/web_api/native_scene_worker.py#L418). | Start with the actual post-release authorization/control/request path and its diagnostic sinks. Keep parent-side failure, child entry failure and native initialization failure as distinct hypotheses. A later reproducible source defect is not retrospectively the missing historical exception. |
+| E. An “offline” headless probe would be free. | **Rejected effect classification.** The note proposes a `native_scene_worker.py` probe without campaign consumption. The frozen matrix permits no extra native observation, repeat or Kit smoke. | Non-sending checks must not launch Kit/native workers. Any future native diagnostic case requires exact independent selection and counted authority; it is not added by these prompts. Preserve cleanup witnesses as scoped owned-process/resource release, not a global “zero GPU memory leaks” claim. |
+
+The original F1/F2/F3 pre-release findings remain resolved under the [source amendment](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/g3-source-applicability-amendment.json). In particular, the serialization correction preserved exact raw candidate and validated semantic identities with a selected v2/legacy distinction; it did not generally waive byte checks. Do not repeat those fixes or reopen all of G2 without a new supported defect.
+
+### Shared recovery boundaries, checkpoints and allocation
+
+- The canonical sequence is **R1 non-sending correction → R2 frozen successor proposal/pre-boundary critique → separately issued R3 application execution and cleanup → R4 retained-evidence acceptance**. These are smaller scopes, not additional experimental cases. No next goal is automatically issued.
+- Parent remains sole writer/operator. Apply AC-I03 and its protected-file, secret, effect-safe-check and correction limits. Use the normal campaign critic at R2 and final scoped critic at R4; obtain a focused delta review only after a material reviewed-source/selection change. Do not create a review loop between ordinary workers. R1 source/check completion and R3 execution completion do not close empirical G3; final acceptance remains pending R4.
+- The parent acceptance contract remains the full I03-G3 measurement, mapping, ternary assessment, evidence-bound repair and lifecycle obligations plus the [six independent dimensions](03-full-scene-workflow.md#6-six-independent-closeout-dimensions). Splitting prompts cannot waive a witness. The original `g3-selection.json` and matrix remain frozen historical artifacts, including their proposal-era text; new status/applicability belongs in linked successor records.
+- C0 and conditional C1 are stages of **one installed workflow submission**. The application owns capture, assessment, eligibility, refinement, fresh realization and reassessment. Do not submit C1 manually, create a second executor or invent a pause/resume API. N1/N2 are separate retained-numeric operations over actual C0 bytes, not further native/provider sends. R3 must finish their eligible derivations/readback, no-effect replay and all owned cleanup before R4.
+- Preserve original operation `p04-i03-g3-programmatic-root-xy-pair-v1`, cancelled run `2a4a08ca2bfbb69a07e5cf39e2e3263d605d4f990a5d58e5f68dab688ee11451`, selection SHA-256 `ddb19beff14731c9e7e1a76bfe7c58dc7d15b044fb740574303e1c7bf7a52926`, source amendment and all failure/reservation history. Exact replay returns the old receipt; changed intent conflicts. A new key never resets the campaign allocation.
+- **Pending operator decision:** the stopped attempt consumed **1 native / 0 repair / 0 assessment**. The proposed successor pair adds at most **2 native / 1 repair / 2 assessment**, for a cumulative maximum of **3 native / 1 repair / 2 assessment**. That native ceiling exceeds the original `2` and is **not approved by this document**. R2 must expose the decision; R3 requires explicit approval. A baseline-only alternative is a different exact selection/permission decision, not an automatic use of the old unused slot. Use existing run/intent records for accounting, not another ledger.
+- Preserve accounting-only aggregate runtime/deadline/cost/token policy; no 60-minute investigation ceiling, guessed wall-time budget or preset monetary/token veto is added to these G3 recovery goals. Effect ceilings, finite backend/request bounds, current credentials, a separately issued 60-minute workload grant and fenced supervision remain independently enforced. No permission or allowance renews automatically.
+
+<a id="g3-r1"></a>
+
+### G3-R1 — Non-sending handoff diagnosis and first-failure repair
+
+**Proposed next goal.** No operational setup or live evidence is needed to issue this source/CPU scope. Its result cannot retrospectively prove the cancelled run's initiating exception.
+
+```text
+/goal I explicitly issue P04-I03-G3-R1 only: diagnose and narrowly correct the released-handoff and first-causal-failure-retention boundaries without live effects.
+
+Read .agents/references/plans/plan04_implementation/03-full-scene-workflow.md and .agents/references/plans/plan04_implementation/03-full-scene-workflow-strategy.md, including the G03-blockers review, shared recovery boundaries and AC-I03. Read the supplied quick note as qualified by that review and the actual G3-CLOSEOUT.md; do not adopt its unproved Kit/graphics cause. Parent is the sole writer. G1/G2 acceptance, the cancelled G3 run, its one consumed native release, all frozen artifacts and the unknown historical first cause remain unchanged.
+
+Authorized scope: indispensable workflow/foreground/native-worker diagnostic source and documentation edits, affected existing simulation-free/database-free CPU checks, and host lint. ZERO provider calls, Kit/native worker launches, API-service starts, database I/O, policy execution, prior retrieval, credential/configuration/grant writes or infrastructure changes. No new executor, ledger, test files, fixtures, mock simulator/provider end-to-end system or proof runner. Classify checks by actual effects; an offline native probe is not permitted.
+
+1. Trace the actual released parent authorization/control/semantic-validation/request-retention/stdin path and early child entry. Inspect definitions, consumers and the source applicability of the failed run. State a falsifiable mechanism and smallest discriminating CPU check before correcting a defect. Do not require recovery of an exception that was never retained, or substitute a guessed SDK/GPU failure for it.
+2. Correct the selected schema-5 first-failure path coherently across service dispatch, foreground port/worker hooks, protected artifact binding, store admission and required readback consumers. Preserve legacy identities/refusals, exact principal/scope/fence/registration checks and immutable first-causal records. Cleanup failures remain separate; cleanup must still run if causal retention itself fails. Preserve non-retryable DiagnosticRetentionFailed and unknown consumption.
+3. Cover parent pre-send and early child failures that cannot reach the current capture diagnostic. Reuse existing diagnostic channels. Where a stderr fallback is necessary, bound and drain it without blocking the child, screen before export, bind it to the owned registration and preserve stdout framing. Never retain raw private packets, credentials, environment dumps, locals or unscreened tracebacks. Do not globally change provider-worker behavior merely to diagnose a native worker.
+4. Do not pass DISPLAY, Vulkan paths or the ambient environment speculatively. A native-only nonsecret environment correction requires a source-supported requirement for the selected headless installation and a discriminating effect-safe check; otherwise report the unresolved hypothesis. No Kit smoke, native constructor probe or hidden provider ping is allowed.
+5. Use affected existing checks and only indispensable pure regressions in existing modules, observing their failure before correction. Verify real production interfaces rather than a parallel implementation. Never manufacture released records, active grants, native outputs or database states to make a non-sending check pass. Record which durable/installed/native branches remain unexercised. Follow AC-I03 correction limits without an aggregate investigation timer.
+
+Exit with the narrow corrected-source delta, actual CPU/lint results, supported failure mechanism(s), preserved guards and the earliest remaining empirical boundary. This is source readiness, not recovered historical causality or G3 acceptance. Stop rather than broaden into a G2 reimplementation. Do not prepare authority, submit a workflow or execute G3-R2/R3/R4 automatically.
+```
+
+<a id="g3-r2"></a>
+
+### G3-R2 — Freeze and critique the successor proposal
+
+**Proposed; depends on parent-accepted R1 source/check results.** This phase produces the real successor selection path/digest that a later live issuance must explicitly confirm. No placeholder operation/hash or precomputed future observation substitutes for that output.
+
+```text
+/goal I explicitly issue P04-I03-G3-R2 only: prepare and review one exact, non-authorizing successor campaign proposal after the scoped G03 source corrections.
+
+Read both 03-full-scene workflow documents, their G03-blockers/shared recovery section and AC-I03, the parent-accepted R1 results, original G3 selection/source amendment and stopped closeout. Parent alone writes the proposal. Explicitly reuse only the documented installation, operational/artifact scope and credential-source references from the original selection; missing nonsecret scope is one narrow decision, not permission to discover unrelated credentials or services.
+
+Allowed effects: scoped proposal/configuration/selection artifacts through existing supported mechanisms, pure validation and non-sending inspection whose actual effects have been checked. A separate successor proposal configuration may be prepared only with no workload grant and approval_expires_at=null. Preserve all old configurations. ZERO API/service starts, database I/O, native/Kit releases, provider calls, policy execution, prior retrieval, credential installation/refresh or workload-grant creation. Source correction is not part of this phase; a new material blocker returns to the R1 boundary.
+
+1. Recheck exact original artifact/source bindings and the corrected source. Preserve the original selection, candidate, matrix, configurations, critique verdicts and cancelled run. Produce a separately identified successor selection and applicability record, with actual file/snapshot/selector/configuration digests distinguished. Select new explicitly linked workflow/derived-operation identities; do not change an old key's intent or label a new operation with the original selection-file hash.
+2. Preserve the original experimental candidate, required criteria, acquisition/settings, diagnostic and root-XY repair policy unless the operator separately selects a changed experiment. Freeze only C0, application-eligible C1 and retained N1/N2. C0/C1 share one application-owned workflow; generated repair/evidence/request bytes will be bound when they actually exist. Record expected observations, technical bounds, unavailable witnesses and every stopping rule. Equal N1/N2 classifications cannot prove threshold discrimination; the pair cannot prove repeatability.
+3. Propose explicit accounting across the old run and successor: already consumed 1 native release, 0 repair sends, 0 assessment sends; proposed additional maxima 2 native, 1 repair, 2 assessment; proposed cumulative maxima 3 native, 1 repair, 2 assessment. Mark the increase from the original native ceiling of 2 as requiring fresh operator approval. No allowance reset/refund, further retry, extra native probe, observation or new case is implied. Preserve actual/reserved/unknown accounting through existing records.
+4. Name the reused nonsecret scope/role references, actual predecessor configuration/instance and supported handover/readback/cleanup entrypoints. Preserve the last G3 configuration as well as the G2/proposal history; do not assume G2 is still the predecessor. Separate historical cleanup evidence from the fresh ownership/readiness/authentication checks required immediately before a later launch. Do not start an API or set the 60-minute grant early to make the proposal look ready.
+5. Obtain one independent read-only pre-boundary critique of the corrected source joins, actual successor witness matrix, predicted observations, ownership/authority plan and cumulative allocation. Parent verifies its findings. The critic cannot execute checks, inspect private credentials, write files or grant effects. A material source/selection change after review needs a focused delta critique before any launch; do not start a general audit.
+
+Exit with the real successor selection path and SHA-256, applicable source/configuration/selector bindings, per-case and cumulative effects, critic disposition and exact remaining operator decisions. The proposal is not live readiness, a finite grant or native success. Do not issue or execute R3 automatically.
+```
+
+<a id="g3-r3"></a>
+
+### G3-R3 — Execute the explicitly issued successor and finish owned cleanup
+
+**Not launchable until R2 produces an accepted selection and the operator explicitly confirms its actual path/digest and increased cumulative allocation.** The following template does not supply those missing bindings. Its one successor baseline is an expressly approved new attempt after the historical failed C0, not replay or free continuation. Additional retries remain zero.
+
+```text
+/goal I explicitly issue P04-I03-G3-R3 only: execute the exact operator-confirmed successor fixed-candidate selection through one installed workflow, then complete retained reassessment, fresh readback/replay and verified owned cleanup.
+
+Prerequisites: parent-accepted R1/R2; the operator explicitly confirms R2's actual successor selection artifact path and SHA-256, exact linked operation/case identities, reused operational/artifact/private-role scope, and the allocation below. If any binding or approval is absent, stop at that narrow decision before configuration/grant writes or launch. Read both 03-full-scene workflow documents, G03-blocker/shared recovery boundaries, AC-I03, all applicable full I03-G3 acceptance requirements and the successor witness matrix. Parent is sole writer/operator. This goal neither issues R4/G4 nor renews I01/I02.
+
+This issuance expressly authorizes one successor baseline and its application-eligible repair branch after the old stopped attempt: at most TWO additional native releases, ONE repair send and TWO assessment sends. Including the historical one native release, the cumulative ceilings across original and successor are THREE native releases, ONE repair send and TWO assessment sends. All failures and uncertainty count. The successor matrix must match these per-case/cumulative maxima; do not silently choose a different allocation. N1/N2 have zero native/provider sends. No initial generation, further retry/repeat, extra observation, Kit smoke, provider retry/fallback/output correction, same-image re-judging, between-case source/configuration correction, policy run, prior retrieval or G4 execution is permitted. Retain reservations and unknown consumption; no refunds or new-key resets.
+
+1. Recheck the reviewed exact source/selection, current scoped owner/resource state, prior retirement, private role references and effective authentication. Resolve any mandatory blocker before release. Require the applicable fresh read-only pre-boundary critique; a material change since R2 needs focused delta review, not silent acceptance. Do not inspect unrelated services, require globally idle hardware or impose DISPLAY=:1 on the headless worker.
+2. Preserve the non-authorizing successor proposal and all prior configurations. Immediately before the authorized launch, create its separate authority-only derivative with a 60-minute finite workload expiry. Record effective configuration and selector digests independently of selection-file and source hashes. Use supported api-handover with the exact actual predecessor configuration/instance and --authorize-full-scene; verify endpoint readiness. Use only existing scoped credential refresh and fenced acknowledged supervision renewal. Neither may extend the workload grant or effect ceilings automatically.
+3. Submit the selected workflow ONCE through the real installed API. The application alone owns C0 capture/evaluation and any conditional C1 selection, refiner send, candidate validation, fresh realization and reassessment. Do not submit C1 independently or introduce a manual pause/resume path. Recheck effective authority through the implemented admission/release controls before each permitted effect.
+4. Recover actual C0 source/sample/image/settings/reset/clock/hold identities and sensor freshness. Compare requested non-default parameters/schedules with resolved settings and observed coverage. Verify subject/prim/root/support mapping, camera conventions, synchronized measurements and scoped diagnostic validity. Label proxies and keep privileged diagnostics out of RGB-only inputs. Separate missing/corrupt evidence and transport/retention failure from complete measured FALSE or scientific UNKNOWN.
+5. C1 requires the application's retained and validated evidence/policy-bound hypothesis/eligibility decision, controlling reservation, release and declared refiner feedback. Require established prerequisites, addressable scalar paths, original-centered permissions and preserved fields. Model negativity or explanatory prose alone is insufficient. Do not force repair if C0 converges or the policy stops on uncertainty/unsupported causality. For an eligible repair, measure actual versus predicted displacement and consequence using fresh matched before/after evidence, preserved settings/reset/settling/support conditions and the selected tolerance. Report uncontrolled factors, ineffective edits and missing causal witnesses; do not claim repeatability or general calibration.
+6. Where actual C0 velocity coverage permits, submit each selected retained-numeric N1/N2 operation once through the existing path over identical source bytes. Bind actual source/derived identities, recover derived artifact bytes and compare expected/observed outcomes. No native/model call or original acceptance/accounting mutation is allowed. Preserve exploratory labels; equal classifications or insufficient coverage do not establish a discriminating threshold witness. Do not create missing observations.
+7. On a material fault, ownership/authority loss or DiagnosticRetentionFailed, stop further workload effects and retain/contain the affected case. Preserve first-causal and separate cleanup failures, including explicit diagnostic loss. No hot-patch, unissued correction/retry, reconstructed simulator checkpoint or remaining-slot improvisation follows. This live trial can end without empirical acceptance.
+8. Before exiting, use a fresh authenticated client to recover exact available source/candidate, observations, diagnostics, derived records, model request/response and decision bytes. Verify same-key no-effect replay and unchanged accounting. Verify exact owned worker exit, GPU/resource release, durable owner retirement, lease release and owned API stop/drain independently. Cleanup remains mandatory after workload expiry and when diagnostics fail. Never mutate historical database states, unlock leases manually, signal stale PIDs or touch shared services. Finish containment before awaiting the final critic; do not leave resources for R4.
+
+No aggregate runtime/deadline gate, 60-minute investigation limit, guessed wall-time allowance or preset monetary/aggregate-token veto applies. The finite workload grant, backend/request bounds, current credential lifetime, physical progress and renewable supervision remain independently enforced. Report actual usage, conservative reservations and unknowns.
+
+Exit with each issued case's real disposition/effects, available exact-byte evidence and independent cleanup witnesses. Execution completion is not parent G3 acceptance: the final scoped critique and six-dimension disposition belong to R4, after containment. No additional case or next goal is automatically issued.
+```
+
+<a id="g3-r4"></a>
+
+### G3-R4 — Final scoped critique and evidence-only acceptance
+
+**Proposed; requires R3's completed containment/readback record.** This goal is not permission to restart an API or obtain evidence missing from R3. Until its review completes, overall G3 acceptance remains open.
+
+```text
+/goal I explicitly issue P04-I03-G3-R4 only: review the contained successor's retained evidence and close only the G3 obligations it actually proves.
+
+Read both 03-full-scene workflow documents, the G03-blocker/shared recovery section, AC-I03, accepted R1/R2 records, the exact issued R3 selection and retained execution/readback/cleanup evidence, and the original stopped-attempt closeout. Parent is the sole acceptance owner and document writer. Allowed work is public retained-artifact/source review and scoped closeout/plan updates. ZERO new application requests, services, database I/O, native/provider calls, probes, observations, source/configuration/grant changes, policy execution or prior retrieval. This goal does not issue G4.
+
+1. Confirm R3 already completed physical/durable/API containment and fresh-client byte recovery/replay. Do not infer clean retirement from process absence or treat elided exported bytes as full byte recovery. If required evidence is absent or ownership remains unresolved, report the exact blocker; do not issue operational recovery or fabricate an acceptance witness.
+2. Obtain the final independent read-only scoped critique after containment. Give it the exact acceptance criteria, source/selection applicability, original-plus-successor effect totals, retained case outcomes and cleanup evidence. It may not edit, execute tests, inspect private files, call the application or authorize further work. Parent independently verifies and applies the limited disposition.
+3. Report all six dimensions separately: installed integration; physical measurement validity; assessment fidelity; intervention/causal status; scientific disposition; and exact readback/replay/lifecycle. Name each C0/C1/N1/N2 disposition, actual/reserved/unknown consumption, parameter/schedule/mapping witnesses and any missing source/model/diagnostic bytes. Derived exploratory results cannot replace the original criteria.
+4. Preserve the historical missing initiating exception, failed release, cancelled run and prior critique verdicts. A later source finding or successful successor does not rewrite that history. Distinguish an eligible/effective repair from an authored edit, a successful initial scene from repair coverage, and a single pair from repeatability/calibration. Leave released-supervision modes or other matrix-uncovered obligations unproved unless separately witnessed.
+
+Exit with a parent-verified scoped disposition and exact remaining witness/selection decisions. A clean technical failure, complete uncertain result or positive initial scene may close only its supported slice. No automatic G4 eligibility, policy/prior promotion, full-plan completion claim, additional case or renewed allowance follows.
+```
+
+<a id="6-issuance-and-closeout-checklist"></a>
+
+## 7. Issuance and closeout checklist
+
+- [x] Parent/operator explicitly issues G1; new semantics and old bytes/refusal/replay behavior are checked.
+- [x] G2 has an approved operational scope and actual installed non-sending/public-readback/control evidence (`ACCEPT_NON_SENDING_G2`).
+- [x] Optional time policies, worker supervision/renewal and cleanup behavior are implemented through every consumer, not merely named in a contract.
+- [x] Finite API credentials refresh through private delivery and current-principal rebinding; stale authentication fails and refreshed readback/cancellation works without renewing workload allocations.
+- [x] The pure diagnostic eligibility evaluator is consumed at retained routing, reservation/release, recovery and refiner feedback; wrong-target repair and unpermitted observation are refused.
+- [x] Selected diagnostics exist before G3 (5 critic findings resolved via TDD); implementation support and empirical validity are not conflated.
+- [x] G3 selection identifies real candidates/cases, required witnesses and exact effect permissions; the operator has separately issued the exact frozen selection.
 - [ ] Required measurement/mapping and supported repair witnesses are obtained, or exact missing cases remain open.
 - [ ] G4 has applicable empirical prerequisites, exact final selection and its own issuance.
 - [ ] Each case preserves immutable intent, actual/uncertain usage, original historical records and exact cleanup evidence.
 - [ ] Unexercised branches, unresolved causal/repeatability/calibration claims and any nonaccepted scene remain explicit.
 
-All boxes are intentionally open. A planning critique cannot check them off as implementation or runtime progress.
+G1 and non-sending G2 are formally closed in their verified scopes. The original G3 issuance ended in `EXECUTION_STOPPED_NO_G3_ACCEPTANCE`; its final critic accepted only that stopped closeout. The [G03 recovery sequence](#g03-blockers) is proposed, not issued. Corrected-source readiness, successor approval, live execution and empirical acceptance remain separate boundaries. G4 is not issued.
 
-## 7. Architectural references and limits
+<a id="7-architectural-references-and-limits"></a>
+
+## 8. Architectural references and limits
 
 Long-running operation identity and idempotent commands guide reuse of the existing owner.[1][2]
 

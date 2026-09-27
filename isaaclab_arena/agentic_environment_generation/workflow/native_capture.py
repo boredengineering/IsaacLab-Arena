@@ -964,7 +964,7 @@ class NativeCaptureProducer:
         if hashlib.sha256(candidate.scene_json.encode()).hexdigest() != candidate.digest:
             raise ValueError("validated spec must match exact retained candidate")
         if candidate.scene_json not in (_scene_json(scene), _scene_json(spec.model_dump(mode="json"))):
-            if not s.evidence_only:
+            if not s.evidence_only and s.codec != "native-capture-v2":
                 raise ValueError("validated spec must match exact retained candidate")
             from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 

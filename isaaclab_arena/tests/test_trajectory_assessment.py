@@ -1175,8 +1175,11 @@ def test_parameterized_capture_settings_consume_stationary_selection(tmp_path, m
         NativeCaptureProducer,
         NativeCaptureSettings,
     )
-    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import identity
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import candidate_record, identity
     from isaaclab_arena.agentic_environment_generation.workflow.scope_binding import ScopeBinding
+    from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+    from isaaclab_arena.tests.utils.agentic_environment_generation import minimal_spec_dict
+    from scripts.workflow_graphql_execution_join_fixture import synthetic_catalogue
 
     raw = _native_capture_settings().model_dump(mode="json")
     legacy_bytes = _native_capture_settings().canonical_bytes()
@@ -1344,6 +1347,35 @@ def test_parameterized_capture_settings_consume_stationary_selection(tmp_path, m
         admission_producer = NativeCaptureProducer(
             settings=settings, artifacts=fixture.artifacts, protect=lambda _: None, output_root=tmp_path
         )
+        source = minimal_spec_dict()
+        source.update(object_references=[], cli_override_specs=[])
+        source["embodiment"]["registry_name"] = "droid_abs_joint_pos"
+        source["objects"].append(
+            {"id": "object", "registry_name": "mug_ycb_robolab", "params": {"prim_path": "/World/object"}}
+        )
+        retained_candidate = candidate_record("schema-only", source, source_id="unit-source")
+        original_bytes = retained_candidate.scene_json
+        assert settings.evidence_only is False and fixture.settings.evidence_only is False
+        with synthetic_catalogue().activate():
+            validated = ArenaEnvGraphSpec.model_validate(source)
+            admission_producer._check_spec(validated, retained_candidate, True)
+            assert retained_candidate.scene_json == original_bytes
+            assert json.loads(original_bytes)["object_references"] == []
+            assert json.loads(original_bytes)["cli_override_specs"] == []
+            with pytest.raises(ValueError, match="candidate"):
+                admission_producer._check_spec(
+                    validated.model_copy(update={"env_name": "different"}), retained_candidate, True
+                )
+            with pytest.raises(ValueError, match="candidate"):
+                admission_producer._check_spec(
+                    validated, retained_candidate.model_copy(update={"digest": "0" * 64}), True
+                )
+            legacy_producer = NativeCaptureProducer(
+                settings=fixture.settings, artifacts=fixture.artifacts, protect=lambda _: None, output_root=tmp_path
+            )
+            with pytest.raises(ValueError, match="candidate"):
+                legacy_producer._check_spec(validated, retained_candidate, True)
+        assert fixture.events == []
         support = SplitScenePorts(
             profile=profile,
             artifacts=fixture.artifacts,
@@ -1800,6 +1832,73 @@ def test_native_capture_producer_joins_actual_capture_sampler_numeric_receipt(tm
         )
     finally:
         fixture.area.close()
+
+
+@pytest.mark.parametrize("schema", ["3", "5"])
+def test_native_worker_validates_protocol_semantic_identity_without_environment(schema):
+    from dataclasses import fields
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.native_worker_protocol import SceneWorkerRequest
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import canonical
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import candidate_record
+    from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+    from isaaclab_arena.tests.utils.agentic_environment_generation import minimal_spec_dict
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import native_scene_worker
+
+    raw = minimal_spec_dict() | {"object_references": [], "cli_override_specs": []}
+    spec = ArenaEnvGraphSpec.model_validate(raw)
+    candidate = candidate_record("schema-only", raw, source_id="unit-source")
+    semantic = hashlib.sha256(canonical(spec.model_dump(mode="json"))).hexdigest()
+    # Project the real protocol's schema fields, without a released intent or authority.
+    request = SimpleNamespace(
+        candidate=candidate,
+        contract=SimpleNamespace(schema_version=schema),
+        validated_semantic_sha256=semantic if schema == "5" else None,
+    )
+    assert set(vars(request)) <= {field.name for field in fields(SceneWorkerRequest)}
+    assert native_scene_worker._validate_spec(request).model_dump(mode="json") == spec.model_dump(mode="json")
+    if schema == "5":
+        for invalid in (None, "0" * 64):
+            with pytest.raises(ValueError, match="Validated semantic identity changed"):
+                native_scene_worker._validate_spec(
+                    SimpleNamespace(**(vars(request) | {"validated_semantic_sha256": invalid}))
+                )
+    changed = candidate.model_copy(update={"scene_json": candidate.scene_json + " "})
+    with pytest.raises(ValueError, match="Canonical candidate identity changed"):
+        native_scene_worker._validate_spec(SimpleNamespace(**(vars(request) | {"candidate": changed})))
+
+
+def test_native_parent_hashes_actual_validated_spec_not_callback_envelope():
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import canonical
+    from isaaclab_arena.agentic_environment_generation.workflow.scene_loop import candidate_record
+    from isaaclab_arena.environment_spec.execution_catalogue import ExecutionCatalogue
+    from isaaclab_arena.tests.test_execution_catalogue_boundary import CATALOGUE
+    from isaaclab_arena.tests.utils.agentic_environment_generation import minimal_spec_dict
+    from isaaclab_arena_examples.agentic_environment_generation import foreground_native_scene
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import native_scene_worker
+
+    raw = minimal_spec_dict() | {"object_references": [], "cli_override_specs": []}
+    candidate = candidate_record("schema-only", raw, source_id="unit-source")
+    catalogue = ExecutionCatalogue(CATALOGUE)
+    envelope = catalogue.validate_document(candidate.scene_json)
+    digest = foreground_native_scene._validated_semantic_sha256(candidate.scene_json, catalogue.validate_document)
+    assert digest == hashlib.sha256(canonical(envelope["spec"])).hexdigest()
+    assert digest != hashlib.sha256(canonical(envelope)).hexdigest()
+    with catalogue.activate():
+        spec = native_scene_worker._validate_spec(
+            SimpleNamespace(
+                candidate=candidate, contract=SimpleNamespace(schema_version="5"), validated_semantic_sha256=digest
+            )
+        )
+    assert spec.model_dump(mode="json") == envelope["spec"]
+    for result in ({"valid": False, "spec": envelope["spec"]}, {"valid": True}, envelope["spec"]):
+        with pytest.raises(ValueError, match="semantic validation"):
+            foreground_native_scene._validated_semantic_sha256(candidate.scene_json, lambda _: result)
+    with pytest.raises(ValueError, match="semantic validator"):
+        foreground_native_scene._validated_semantic_sha256(candidate.scene_json, None)
 
 
 def test_native_capture_accepts_exact_generation_serialization_without_dropping_nulls(tmp_path, monkeypatch):

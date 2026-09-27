@@ -7,7 +7,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Shared effect-free result projection; reservations never imply actual consumption."""
 
+import hashlib
 import json
+import re
 from decimal import Decimal
 
 from .contracts import contract_digest, parse_contract
@@ -187,6 +189,53 @@ def inspection_scene(contract, candidate, decision, evidence, assessment_id, dec
         criteria=tuple(criteria),
         limitations=tuple(limitations),
     )
+
+
+def scene_failure_references(run_id, contract, rows):
+    """Project bounded exact diagnostic links without claiming fresh artifact verification."""
+    from .scene_evidence_artifacts import canonical
+
+    if contract.schema_version not in ("4", "5"):
+        return None
+    if len(rows) > 1000 or len({row["intent_id"] for row in rows}) != len(rows):
+        raise ValueError("Bounded unique scene failure intents required")
+    failures = []
+    for row in sorted(rows, key=lambda item: item["intent_id"]):
+        links = {}
+        for category in ("causal", "cleanup"):
+            raw = row.get(category + "_failure")
+            if raw is None:
+                continue
+            if type(raw) is not str or len(raw.encode()) > 65536:
+                raise ValueError("Bounded scene failure reference required")
+            reference = json.loads(raw)
+            binding = dict(
+                codec="scene-model-failure-v1",
+                run_id=run_id,
+                intent_id=row["intent_id"],
+                contract_digest=contract_digest(contract),
+                fence=row["fence"],
+                category=category,
+            )
+            if (
+                type(reference) is not dict
+                or set(reference) != {"family", "version", "manifest_digest", "binding"}
+                or reference["family"] != "scene-model-phase"
+                or reference["binding"] != binding
+                or reference["version"] != hashlib.sha256(canonical(binding)).hexdigest()
+                or type(reference["manifest_digest"]) is not str
+                or re.fullmatch(r"[a-f0-9]{64}", reference["manifest_digest"]) is None
+                or canonical(reference).decode() != raw
+            ):
+                raise ValueError("Exact retained scene failure reference required")
+            links[category] = reference
+        if links:
+            failures.append(dict(intent_id=row["intent_id"], **links))
+    if not failures:
+        return None
+    value = dict(failures=failures, fresh_artifact_verification="not_performed")
+    canonical(value, max_bytes=2 * 1024 * 1024)
+    return value
 
 
 def workflow_result(store, run_id, *, protect):
@@ -418,4 +467,20 @@ def workflow_result(store, run_id, *, protect):
         )
         value["budget"].update(accounting="accounting-only-v1", actual_consumption="see_attempt_usage_or_unknown")
         value["limitations"] = ["retained_images_not_fresh_capture", "visibility_only_not_scene_acceptance"]
+    failures = scene_failure_references(
+        run_id,
+        contract,
+        [
+            dict(
+                intent_id=row["intent_id"],
+                fence=json.loads(row["scene"]).get("worker_fence") if row["scene"] is not None else None,
+                causal_failure=row.get("causal_failure"),
+                cleanup_failure=row.get("cleanup_failure"),
+            )
+            for row in records["intents"]
+            if row.get("causal_failure") is not None or row.get("cleanup_failure") is not None
+        ],
+    )
+    if failures is not None:
+        value["scene_failures"] = failures
     return json.loads(_protected(value, protect))

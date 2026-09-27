@@ -243,7 +243,7 @@ def native_supervision_context(*, config, tokens, auth, store, authority, admiss
             raise PermissionError("Exact current released native owner required")
         admission(api.principal, run.operation_id, contract)
         grant = authority.require_scene_execute(api.principal, contract, run_id=run_id, retained_run=run)
-        admitted = store.inspection_bundle(run_id)["admitted_at"]
+        admitted = store.get_admitted_at(run_id)
         return dict(
             scope=config.binding,
             instance=api.instance,

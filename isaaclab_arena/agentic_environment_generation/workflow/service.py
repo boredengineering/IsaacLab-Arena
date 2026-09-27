@@ -823,8 +823,8 @@ class WorkflowService:
 
     @staticmethod
     def _record_scene_failure(ports, intent, contract, phase, error):
-        """Select retained-only causal diagnostics without changing other modes."""
-        if contract.schema_version == "4":
+        """Select retained-assessment and full-scene diagnostics without granting effects."""
+        if contract.schema_version in ("4", "5"):
             ports.record_failure(intent, phase, error, contract=contract)
 
     def _authorize_scene_stage(self, ports, principal, run_id, snapshot, contract):

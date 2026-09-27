@@ -17,6 +17,7 @@ import os
 import selectors
 import threading
 import time
+from contextlib import suppress
 from pathlib import Path
 
 from isaaclab_arena.agentic_environment_generation.workflow import native_worker_protocol as protocol
@@ -241,6 +242,21 @@ class _ForegroundStageWorker(ForegroundGenerationWorker):
     def send(self, *args, **kwargs):
         raise ValueError("fixed native/numeric send port required; no model envelope")
 
+    def _record_failure(self, owned, phase, error, *, cleanup=False):
+        """Use the bound sink without losing diagnostic-loss classification."""
+        from .web_api.scene_worker import safe_failure
+
+        retain = getattr(owned, "retain_failure", None)
+        if callable(retain):
+            try:
+                reference = retain(phase, error, **({"cleanup": True} if cleanup else {}))
+                if reference is None and owned.contract.schema_version == "5":
+                    raise RuntimeError("Owned diagnostic was not linked")
+            except BaseException as retention_error:
+                if isinstance(error, DiagnosticRetentionFailed):
+                    raise error from retention_error
+                raise DiagnosticRetentionFailed(safe_failure(phase, error)) from retention_error
+
     def _send_stage(
         self, prepared, intent, candidate, original, contract, *, protect, deadline, retained_observation=None
     ):
@@ -249,78 +265,88 @@ class _ForegroundStageWorker(ForegroundGenerationWorker):
             if owned.attempted:
                 raise RuntimeError("Private stage send already attempted")
             owned.attempted = True  # Includes failed validation and ambiguous writes.
-            if (
-                contract != owned.contract
-                or intent.worker_registration != prepared.registration
-                or intent.worker_fence != prepared.registration.fence
-                or intent.action != self.action
-                or owned.cleanup is not None
-                or time.monotonic() >= owned.deadline
-            ):
-                raise ValueError("exact active prepared stage release required")
-            selected = {}
-            if contract.schema_version == "5":
-                selected["validated_semantic_sha256"] = _validated_semantic_sha256(
-                    candidate.scene_json, self.validate_document
+            phase = "parent_packet_validation"
+            try:
+                if (
+                    contract != owned.contract
+                    or intent.worker_registration != prepared.registration
+                    or intent.worker_fence != prepared.registration.fence
+                    or intent.action != self.action
+                    or owned.cleanup is not None
+                    or time.monotonic() >= owned.deadline
+                ):
+                    raise ValueError("exact active prepared stage release required")
+                selected = {}
+                if contract.schema_version == "5":
+                    phase = "parent_semantic_validation"
+                    selected["validated_semantic_sha256"] = _validated_semantic_sha256(
+                        candidate.scene_json, self.validate_document
+                    )
+                    if self.action == "capture":
+                        phase = "parent_control_validation"
+                        control = self._control_value(intent, contract)
+                        assert control is not None, "Initial owned supervision required"
+                        selected["control"] = control
+                        deadline = control["lease"]["expires_at"]
+                phase = "parent_request_retention"
+                packet = protocol.retain_request(
+                    self.artifacts.area,
+                    root=self.artifact_root,
+                    action=self.action,
+                    intent=intent,
+                    candidate=candidate,
+                    original=original,
+                    contract=contract,
+                    settings=self.settings,
+                    deadline=deadline,
+                    protect=protect,
+                    retained_observation=retained_observation,
+                    **selected,
                 )
-                if self.action == "capture":
-                    control = self._control_value(intent, contract)
-                    assert control is not None, "Initial owned supervision required"
-                    selected["control"] = control
-                    deadline = control["lease"]["expires_at"]
-            packet = protocol.retain_request(
-                self.artifacts.area,
-                root=self.artifact_root,
-                action=self.action,
-                intent=intent,
-                candidate=candidate,
-                original=original,
-                contract=contract,
-                settings=self.settings,
-                deadline=deadline,
-                protect=protect,
-                retained_observation=retained_observation,
-                **selected,
-            )
-            # Open the actual configured path now, not just the caller's existing fd.
-            with open_area(packet) as area:
-                request = protocol.read_request(area, packet, protect=protect)
-                if self.action == "assess":
-                    protocol.numeric_evaluate(area, request, protect=protect)
-            owned.packet, owned.request = packet, request
-            mono = time.monotonic()
-            if selected.get("control") is not None:
-                self._bind_supervision(owned, prepared, intent, contract)
-            else:
-                self._arm(
-                    owned,
-                    min(
-                        owned.deadline,
-                        mono + deadline - time.time(),
-                        owned.started + intent.reservation.runtime_allowance_seconds,
-                    ),
-                )
-            raw = protocol._protected(packet, protect, max_bytes=512 * 1024 - 1) + b"\n"
-            fd = owned.process.stdin.fileno()
-            os.set_blocking(fd, False)
-            with selectors.DefaultSelector() as selector:
-                selector.register(fd, selectors.EVENT_WRITE)
-                offset = 0
-                while offset < len(raw):
-                    remaining = owned.deadline - time.monotonic()
-                    if remaining <= 0 or not selector.select(remaining):
-                        raise TimeoutError("stage release write deadline")
-                    try:
-                        sent = os.write(fd, raw[offset:])
-                    except BlockingIOError:
-                        continue
-                    if sent <= 0:
-                        raise RuntimeError("stage release write incomplete")
-                    offset += sent
-            if selected.get("control") is None:
-                owned.process.stdin.close()
-            else:
-                owned.supervision_thread.start()
+                phase = "parent_request_validation"
+                # Open the actual configured path now, not just the caller's existing fd.
+                with open_area(packet) as area:
+                    request = protocol.read_request(area, packet, protect=protect)
+                    if self.action == "assess":
+                        protocol.numeric_evaluate(area, request, protect=protect)
+                owned.packet, owned.request = packet, request
+                mono = time.monotonic()
+                if selected.get("control") is not None:
+                    self._bind_supervision(owned, prepared, intent, contract)
+                else:
+                    self._arm(
+                        owned,
+                        min(
+                            owned.deadline,
+                            mono + deadline - time.time(),
+                            owned.started + intent.reservation.runtime_allowance_seconds,
+                        ),
+                    )
+                phase = "parent_packet_write"
+                raw = protocol._protected(packet, protect, max_bytes=512 * 1024 - 1) + b"\n"
+                fd = owned.process.stdin.fileno()
+                os.set_blocking(fd, False)
+                with selectors.DefaultSelector() as selector:
+                    selector.register(fd, selectors.EVENT_WRITE)
+                    offset = 0
+                    while offset < len(raw):
+                        remaining = owned.deadline - time.monotonic()
+                        if remaining <= 0 or not selector.select(remaining):
+                            raise TimeoutError("stage release write deadline")
+                        try:
+                            sent = os.write(fd, raw[offset:])
+                        except BlockingIOError:
+                            continue
+                        if sent <= 0:
+                            raise RuntimeError("stage release write incomplete")
+                        offset += sent
+                if selected.get("control") is None:
+                    owned.process.stdin.close()
+                else:
+                    owned.supervision_thread.start()
+            except BaseException as exc:
+                self._record_failure(owned, phase, exc)
+                raise
 
     def _receive_stage(self, prepared, *, protect):
         owned = self._get(prepared)
@@ -347,14 +373,20 @@ class _ForegroundStageWorker(ForegroundGenerationWorker):
         except BaseException as exc:
             primary_failure = exc
             try:
+                self._record_failure(owned, "parent_receive", exc)
+            except DiagnosticRetentionFailed as retention_error:
+                primary_failure = retention_error
+            try:
                 self.stop_owned(prepared, timeout_s=3)
             except BaseException as cleanup_error:
                 owned.cleanup_failure = cleanup_error
+                with suppress(BaseException):
+                    self._record_failure(owned, "cleanup", cleanup_error, cleanup=True)
                 note = getattr(exc, "add_note", None)
                 if callable(note):
                     note("Owned cleanup also failed: " + type(cleanup_error).__name__)
-            if isinstance(exc, DiagnosticRetentionFailed):
-                raise
+            if isinstance(primary_failure, DiagnosticRetentionFailed):
+                raise primary_failure
             supervision = getattr(owned, "supervision", None)
             if supervision is not None and supervision.first_failure is not None:
                 raise supervision.first_failure from exc
@@ -370,6 +402,8 @@ class _ForegroundStageWorker(ForegroundGenerationWorker):
                 self.stop_owned(prepared, timeout_s=3)
             except BaseException as cleanup_error:
                 owned.cleanup_failure = cleanup_error
+                with suppress(BaseException):
+                    self._record_failure(owned, "cleanup", cleanup_error, cleanup=True)
                 if primary_failure is None:
                     raise
 

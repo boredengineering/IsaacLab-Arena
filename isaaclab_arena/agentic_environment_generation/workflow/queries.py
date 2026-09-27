@@ -306,10 +306,13 @@ class RunInspection(FrozenModel):
     retained_revision: Hash
     response_revision: Hash
     retained_assessment_json: str | None = None
+    scene_failures_json: Annotated[str, Field(max_length=2 * 1024 * 1024)] | None = None
 
     @model_serializer(mode="wrap")
     def retain_legacy_inspection_shape(self, handler):
         data = handler(self)
         if self.retained_assessment_json is None:
             data.pop("retained_assessment_json", None)
+        if self.scene_failures_json is None:
+            data.pop("scene_failures_json", None)
         return data

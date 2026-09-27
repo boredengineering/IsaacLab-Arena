@@ -3,13 +3,14 @@
 - Reviewed: 2026-09-27
 - Original design-review baseline: `aec2b6b4781e9bd636bad08dccee6e668f7f6d39`; worktree clean at that historical review entry, not a claim about the current checkout.
 - Parent package: [03-full-scene-workflow.md](03-full-scene-workflow.md)
-- Status: **G1 and non-sending G2 COMPLETE (`ACCEPT_NON_SENDING_G2`). G3's bounded execution STOPPED after one native release with no retained native evidence; the run is cancelled and owned cleanup is verified. Final critic and parent accept the stopped-attempt closeout only, not empirical G3. G4 remains unissued.**
+- Status: **G1 and non-sending G2 COMPLETE (`ACCEPT_NON_SENDING_G2`). Original G3 remains a stopped-attempt closeout, not empirical acceptance. R1/R2 are complete in their non-sending scopes. Explicitly issued R3 STOPPED on a native reset-clock API mismatch after one additional native release; cancellation, readback/replay and owned cleanup are verified, with exited zombie residue recorded. Empirical G3 is unaccepted; R4/G4 remain unissued.**
 - Proposed generated operation: `p04-i03-full-scene-v1`.
 - Issued fixed-candidate operation: `p04-i03-g3-programmatic-root-xy-pair-v1`; `p04-i03-fixed-scene-proof-v1` is an unissued reference example, not another selected case.
+- Issued R3 successor operation: `p04-i03-g3-successor-root-xy-pair-v1`; stopped and cancelled, not authority for another attempt.
 
 This revision supersedes the earlier fixed-strict-evaluator recipe, unconditional uncertainty stop, 1,200-second live gates, TCC/refund proposal and unimplemented causal-oracle claims. The general harness is parameterized; the tabletop experiment is a selected profile. Issuing one goal does not issue another. Embedded `/goal` blocks are proposal data until explicitly issued.
 
-The next proposed work is [G03 blocker resolution](#g03-blockers), beginning with non-sending [G3-R1](#g3-r1). The original G3 operation is stopped and cancelled; its old prompt/selection is historical provenance, not authority for another attempt. All four recovery prompts below remain unissued.
+Separately issued non-sending [G3-R1](#g3-r1) is complete as [source readiness](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g3-r1/G3-R1-CLOSEOUT.md); [G3-R2](#g3-r2) produced the [reviewed non-authorizing successor proposal](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g3-r2/G3-R2-CLOSEOUT.md). The operator subsequently confirmed that exact selection, approved the cumulative native-ceiling increase to 3 and issued R3 only. Its [stopped execution/cleanup closeout](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g3-r3/G3-R3-CLOSEOUT.md) records the `PhysxManager.get_time` reset-clock failure and cumulative consumption 2 native / 0 repair / 0 assessment. Neither stopped run is empirical acceptance or authority for a retry. R4 and G4 remain unissued; both original and successor histories remain preserved.
 
 > [!NOTE]
 > **Contract Schema Versioning (Schema 5 vs. Schema 6):**
@@ -449,13 +450,15 @@ Report installed integration, physical measurement validity, complete assessment
 
 ## 6. G03 blockers and proposed recovery goals
 
-**All four prompts in this section are PROPOSED, NOT ISSUED.** The operator requested analysis and prompt/document updates, not source correction, configuration changes or another launch. “G03” denotes the existing G3 milestone; historical identifiers are unchanged. Read this section with [AC-I03](#ac-i03) and the [overview's recovery sequence](03-full-scene-workflow.md#g03-blockers). G1/G2 acceptance is preserved; neither the stopped closeout nor this revision accepts empirical G3 or issues G4.
+**G3-R1 is source/CPU-complete; R2 is proposal/review-complete; explicitly issued R3 stopped at a new native-capture blocker and finished owned cleanup. R4/G4 remain NOT ISSUED.** The original analysis/prompt revision granted no execution. R1 produced [corrected-source evidence](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g3-r1/G3-R1-CLOSEOUT.md) without live effects, successor selection or authority preparation. R2 produced the [reviewed non-authorizing proposal](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g3-r2/G3-R2-CLOSEOUT.md). Subsequent operator approval and [R3 execution](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g3-r3/G3-R3-CLOSEOUT.md) are separately retained; R3 made no source correction or retry after the actual clock-API failure. The new blocker returns to a separately issued correction boundary. “G03” denotes the existing G3 milestone; historical identifiers are unchanged. Read this section with [AC-I03](#ac-i03) and the [overview's recovery sequence](03-full-scene-workflow.md#g03-blockers). G1/G2 acceptance is preserved; these records do not accept empirical G3 or issue R4/G4.
 
 <a id="g03-blocker-analysis"></a>
 
 ### Reviewed root-problem analysis and evidence limits
 
 The supplied [execution-blockers/root-cause note](../../quick_notes/g3_execution_blockers_and_root_cause_analysis.md) is preserved as investigation input. Its proposed causes/remedies are not all established by the [actual stopped closeout](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g2-preview/G3-CLOSEOUT.md) or current source. The following review controls the new prompts; it does not rewrite the note or reconstruct the missing historical exception.
+
+The source findings below describe the R1 entry baseline. R1 corrected the diagnostic chain and the concrete nonexistent `inspection_bundle()` call in the pre-send supervision path; [its closeout](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g3-r1/G3-R1-CLOSEOUT.md) records 492 passing final CPU checks, host lint and the remaining durable/installed/native boundaries. Historical causality and the graphics hypothesis remain unknown.
 
 | Finding | Source/evidence and classification | Required response; claim limit |
 | --- | --- | --- |
@@ -481,7 +484,7 @@ The original F1/F2/F3 pre-release findings remain resolved under the [source ame
 
 ### G3-R1 — Non-sending handoff diagnosis and first-failure repair
 
-**Proposed next goal.** No operational setup or live evidence is needed to issue this source/CPU scope. Its result cannot retrospectively prove the cancelled run's initiating exception.
+**Issued and source/CPU-complete only:** [R1 closeout](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g3-r1/G3-R1-CLOSEOUT.md). The complete canonical prompt is preserved below. No operational setup or live effects occurred, and its result cannot retrospectively prove the cancelled run's initiating exception or issue R2.
 
 ```text
 /goal I explicitly issue P04-I03-G3-R1 only: diagnose and narrowly correct the released-handoff and first-causal-failure-retention boundaries without live effects.
@@ -503,7 +506,7 @@ Exit with the narrow corrected-source delta, actual CPU/lint results, supported 
 
 ### G3-R2 — Freeze and critique the successor proposal
 
-**Proposed; depends on parent-accepted R1 source/check results.** This phase produces the real successor selection path/digest that a later live issuance must explicitly confirm. No placeholder operation/hash or precomputed future observation substitutes for that output.
+**Issued and proposal/review-complete only:** [R2 closeout](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g3-r2/G3-R2-CLOSEOUT.md), [actual successor selection](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g3-r2/successor-selection.json) and [parent-verified CONTINUE critique](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g3-r2/parent-critic-verification.json). The complete canonical prompt is preserved below. Exact selection confirmation, approval of the cumulative native-ceiling increase and separate R3 issuance remain pending; no finite grant or live readiness is established.
 
 ```text
 /goal I explicitly issue P04-I03-G3-R2 only: prepare and review one exact, non-authorizing successor campaign proposal after the scoped G03 source corrections.
@@ -567,6 +570,39 @@ Read both 03-full-scene workflow documents, the G03-blocker/shared recovery sect
 Exit with a parent-verified scoped disposition and exact remaining witness/selection decisions. A clean technical failure, complete uncertain result or positive initial scene may close only its supported slice. No automatic G4 eligibility, policy/prior promotion, full-plan completion claim, additional case or renewed allowance follows.
 ```
 
+<a id="g3-clock-recovery"></a>
+
+### P04-I03-G3-CLOCK-RECOVERY — Fix clock blocker and prepare reviewed successor
+
+**Proposed; bounded non-sending recovery preparation.** Following the stopped R3 execution (where C0 halted at `AttributeError: type object 'PhysxManager' has no attribute 'get_time'` in [`native_capture.py`](../../../../isaaclab_arena/agentic_environment_generation/workflow/native_capture.py)), this goal combines the narrow clock adapter correction, simulation-free CPU verification, successor proposal generation, and independent delta critique into one scoped preparation phase. It does not repeat the disconnected multi-step R1/R2 cycles, nor does it authorize live execution, workload grants, or another native attempt.
+
+#### Allocation and ceiling increase decision
+
+The cancelled R3 run and its cleanup are complete. We cannot resume that run or reuse its submission key for another execution. From the retained accounting (in native / repair / assessment order):
+- **Already counted across stopped runs:** `2 / 0 / 0` (1 from original G3 stopped baseline, 1 from R3 stopped baseline)
+- **Current cumulative ceiling:** `3 / 1 / 2`
+- **Fresh baseline (C0) + conditional repair (C1) requirement:** `2 / 1 / 2` additional
+- **Required cumulative ceiling:** `4 / 1 / 2`
+
+Preserving the full C0/C1 empirical opportunity without prematurely truncating the campaign to baseline-only requires the operator to separately approve increasing the cumulative native ceiling from 3 to 4. The single remaining slot under the current ceiling (3) is not retry authority.
+
+#### Canonical prompt
+
+```text
+/goal I explicitly issue P04-I03-G3-CLOCK-RECOVERY only: fix the clock adapter blocker, verify via focused CPU checks, and prepare one reviewed successor proposal without live execution.
+
+Prerequisites: parent-accepted R1/R2; retained and contained R3 execution closeout with verified owned cleanup. The previous R3 run is cancelled and complete; its run receipt, intent and key cannot be resumed or reused. Read .agents/references/plans/plan04_implementation/03-full-scene-workflow.md and .agents/references/plans/plan04_implementation/03-full-scene-workflow-strategy.md, including AC-I03 and the G03 blockers section. Parent is sole writer/operator. This issuance authorizes NO live execution, NO API/service starts, NO native releases, NO provider calls, and NO workload grant creation.
+
+Scope and obligations:
+1. Correct only the Arena clock adapter and indispensable cleanup wiring. Address both reset-origin (native_capture.py:494) and subsequent clock reads (native_capture.py:515). Preserve measured timing, sensor freshness, reset and render checks. Treat the proposed PhysX post-step clock as a remedy to validate, not an already-proven fix.
+2. Run focused, simulation-free CPU checks and host lint. Use existing test modules and only indispensable regressions under AC-I03. No Kit smoke test, native launch, provider call, database I/O or service startup.
+3. Prepare a separately identified successor proposal. Bind the corrected source and new linked operation identities. Preserve the candidate, criteria, acquisition settings and conditional repair policy. Preserve both failed runs, their reservations, configurations and evidence. Any proposal configuration remains non-authorizing, with approval_expires_at=null.
+4. Obtain one focused independent read-only delta critique. Review the actual correction and successor selection—not another general audit. Parent verifies the findings.
+5. Stop with an execution-ready proposal. Deliver the selection path/hash, source bindings, actual check results, critique and exact remaining approvals. Do not create a workload grant or execute R3/R4/G4 automatically.
+
+Exit with the successor selection path and SHA-256, source bindings, check results, critique disposition, and explicit remaining approvals (including the cumulative native ceiling increase from 3 to 4). Do not issue or execute the successor automatically.
+```
+
 <a id="6-issuance-and-closeout-checklist"></a>
 
 ## 7. Issuance and closeout checklist
@@ -583,7 +619,7 @@ Exit with a parent-verified scoped disposition and exact remaining witness/selec
 - [ ] Each case preserves immutable intent, actual/uncertain usage, original historical records and exact cleanup evidence.
 - [ ] Unexercised branches, unresolved causal/repeatability/calibration claims and any nonaccepted scene remain explicit.
 
-G1 and non-sending G2 are formally closed in their verified scopes. The original G3 issuance ended in `EXECUTION_STOPPED_NO_G3_ACCEPTANCE`; its final critic accepted only that stopped closeout. The [G03 recovery sequence](#g03-blockers) is proposed, not issued. Corrected-source readiness, successor approval, live execution and empirical acceptance remain separate boundaries. G4 is not issued.
+G1 and non-sending G2 are formally closed in their verified scopes. The original G3 issuance ended in `EXECUTION_STOPPED_NO_G3_ACCEPTANCE`; its final critic accepted only that original stopped closeout. R1 and R2 of the [G03 recovery sequence](#g03-blockers) completed their non-sending scopes. The operator then confirmed the successor, approved the cumulative native-ceiling increase and issued R3 only. The [R3 closeout](../../../../outputs/workflow/plan04-implementation/milestone1/p04-i03-g3-r3/G3-R3-CLOSEOUT.md) records a new native reset-clock failure after one additional release, exact diagnostic/readback/replay evidence and verified owned cleanup, with exited zombie residue explicit. R4/G4 remain unissued; unused headroom grants no retry or new case. Corrected-source readiness, successor approval, bounded execution/cleanup and empirical acceptance remain separate boundaries.
 
 <a id="7-architectural-references-and-limits"></a>
 

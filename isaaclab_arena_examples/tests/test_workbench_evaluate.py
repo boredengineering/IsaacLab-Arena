@@ -479,6 +479,136 @@ def test_native_transport_one_shot_send_is_latched_before_invalid_release(tmp_pa
         f.area.close()
 
 
+@pytest.mark.parametrize("boundary", ["semantic", "control"])
+def test_native_presend_failure_reaches_bound_sink_before_request_or_pipe(boundary):
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import PreparedWorker
+    from isaaclab_arena_examples.agentic_environment_generation.foreground_native_scene import (
+        ForegroundNativeCaptureWorker,
+    )
+    from isaaclab_arena_examples.agentic_environment_generation.web_api.scene_worker import safe_failure
+
+    # Unreleased opaque test handles: validation fails before a request can exist.
+    contract = SimpleNamespace(schema_version="5")
+    registration = SimpleNamespace(fence=object())
+    owned = SimpleNamespace(
+        registration=registration,
+        contract=contract,
+        lock=threading.RLock(),
+        attempted=False,
+        cleanup=None,
+        deadline=time.monotonic() + 5,
+    )
+    worker = ForegroundNativeCaptureWorker.__new__(ForegroundNativeCaptureWorker)
+    worker._owned = [owned]
+    error = PermissionError("private input must not escape")
+
+    def deny(*args):
+        raise error
+
+    worker.validate_document = deny if boundary == "semantic" else lambda _: {"valid": True, "spec": {}}
+    worker.supervision_context = deny
+    prepared = PreparedWorker(registration, owned)
+    failures = []
+
+    def retain(phase, error):
+        failures.append(safe_failure(phase, error))
+        return True
+
+    worker.bind_failure_retention(prepared, retain)
+    intent = SimpleNamespace(worker_registration=registration, worker_fence=registration.fence, action="capture")
+    candidate = SimpleNamespace(scene_json="{}")
+    with pytest.raises(PermissionError) as caught:
+        worker.send_capture(prepared, intent, candidate, candidate, contract, protect=lambda _: None, deadline=0)
+    assert caught.value is error
+    assert failures == [
+        dict(phase=f"parent_{boundary}_validation", exception_type="PermissionError", reason="operation_failed")
+    ]
+    assert not hasattr(owned, "packet")
+    with pytest.raises(RuntimeError, match="already attempted"):
+        worker.send_capture(prepared, intent, candidate, candidate, contract, protect=lambda _: None, deadline=0)
+    assert len(failures) == 1
+
+
+def test_native_receive_retention_failure_still_attempts_cleanup(monkeypatch):
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.coordinator import PreparedWorker
+    from isaaclab_arena_examples.agentic_environment_generation.foreground_generation import (
+        DiagnosticRetentionFailed,
+        ForegroundGenerationReceiver,
+    )
+    from isaaclab_arena_examples.agentic_environment_generation.foreground_native_scene import (
+        ForegroundNativeCaptureWorker,
+    )
+
+    worker = ForegroundNativeCaptureWorker.__new__(ForegroundNativeCaptureWorker)
+    owned = SimpleNamespace(
+        registration=object(),
+        cleanup=None,
+        process=SimpleNamespace(returncode=1),
+        contract=SimpleNamespace(schema_version="5"),
+    )
+    worker._owned = [owned]
+    prepared = PreparedWorker(owned.registration, owned)
+    events = []
+    causal = DiagnosticRetentionFailed(
+        dict(phase="child_entry", exception_type="ValueError", reason="diagnostic_retention_failed")
+    )
+
+    def read(*args):
+        raise causal
+
+    def retain(*args, **kwargs):
+        events.append("retain")
+        raise OSError("diagnostic sink unavailable")
+
+    def stop(*args, **kwargs):
+        events.append("cleanup")
+
+    owned.retain_failure = retain
+    monkeypatch.setattr(ForegroundGenerationReceiver, "_read", read)
+    monkeypatch.setattr(worker, "stop_owned", stop)
+    with pytest.raises(DiagnosticRetentionFailed) as caught:
+        worker.receive_capture(prepared, protect=lambda _: None)
+    assert caught.value.safe_causal_failure == causal.safe_causal_failure
+    assert events[0] == "retain" and "cleanup" in events[1:]
+
+
+@pytest.mark.parametrize("entry", ["parent_guard", "packet_decode"])
+def test_native_early_entry_emits_only_screened_failure(tmp_path, monkeypatch, entry):
+    import io
+    import json
+    from types import SimpleNamespace
+
+    from isaaclab_arena_examples.agentic_environment_generation.web_api import native_scene_worker as child
+
+    def guard(parent):
+        if entry == "parent_guard":
+            raise PermissionError("private entry detail")
+
+    monkeypatch.setattr(child, "_parent_guard", guard)
+    monkeypatch.setattr(child, "_initialize_kit", lambda _: pytest.fail("entry failure reached Kit"))
+    monkeypatch.setattr(child.sys, "stdin", SimpleNamespace(buffer=io.BytesIO(b"private invalid packet\n")))
+    monkeypatch.setattr(child.os, "dup2", lambda *args: None)
+    with (tmp_path / "channel").open("w+") as channel:
+        monkeypatch.setattr(child.sys, "stdout", channel)
+        assert child.main(["--parent-pid", "1", "--stage", "capture"]) == 1
+        channel.seek(0)
+        raw = channel.read()
+    assert "private" not in raw
+    assert json.loads(raw) == {
+        "diagnostic_retention_failed": dict(
+            phase="child_entry",
+            exception_type="PermissionError" if entry == "parent_guard" else "ValueError",
+            reason="operation_failed",
+        )
+    }
+
+
 def test_native_packet_decoder_rejects_ambiguous_json():
     from isaaclab_arena.agentic_environment_generation.workflow import native_worker_protocol as protocol
 

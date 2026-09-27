@@ -118,7 +118,7 @@ class ForegroundScenePorts(ScenePorts):
 
     def prepare_worker(self, intent, candidate, original, contract, **stage_args):
         """Latch exact claimed fence before spawn; never erase ambiguous preparation."""
-        if contract.schema_version == "4":
+        if contract.schema_version in ("4", "5"):
             self._failure_contracts[intent.intent_id] = contract
         with self._interlock:
             if self._stopped:
@@ -147,16 +147,19 @@ class ForegroundScenePorts(ScenePorts):
                 self._prepared_workers[intent.intent_id] = exc.prepared
                 raise
             self._prepared_workers[intent.intent_id] = prepared
-            if contract.schema_version == "4":
+            if contract.schema_version in ("4", "5"):
                 self.worker.bind_failure_retention(
-                    prepared, lambda phase, error: self.record_failure(intent, phase, error, contract=contract)
+                    prepared,
+                    lambda phase, error, **options: self.record_failure(
+                        intent, phase, error, contract=contract, **options
+                    ),
                 )
             return prepared.registration
 
     def record_failure(self, intent, phase, error, *, contract=None, cleanup=False):
         """Retain the first screened causal error independently of later cleanup."""
         contract = contract or self._failure_contracts.get(intent.intent_id)
-        if contract is None or contract.schema_version != "4":
+        if contract is None or contract.schema_version not in ("4", "5"):
             return None
         self._failure_contracts[intent.intent_id] = contract
         prepared = self._prepared_workers.get(intent.intent_id)

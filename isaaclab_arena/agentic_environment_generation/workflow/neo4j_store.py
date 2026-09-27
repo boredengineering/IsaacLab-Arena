@@ -857,7 +857,7 @@ class Neo4jWorkflowStore:
                 try:
                     dependencies = []
                     cleanup = self._run_cleanup(tx, run_id, dependencies=dependencies)
-                    reservations, readiness, attempts, outputs = self._inspection_ledger(
+                    reservations, readiness, attempts, outputs, failures = self._inspection_ledger(
                         tx, intent, cleanup, dependencies
                     )
                     run = SimpleNamespace(
@@ -881,6 +881,7 @@ class Neo4jWorkflowStore:
                         scene=scene,
                         generation_outputs=outputs,
                         retained_assessment_json=self._retained_assessment_history(tx, intent),
+                        scene_failures_json=failures,
                         actions=InspectionActions(
                             cancel_applicable=intent.state
                             in ("pending", "running", "cancel_requested", "reconciliation_required"),
@@ -1082,9 +1083,13 @@ class Neo4jWorkflowStore:
 
     def _inspection_ledger(self, tx, intent, cleanup, dependencies):
         from .queries import CorruptRunInspection, GenerationOutputReference, RetainedReadiness
+        from .read_model import scene_failure_references
+        from .scene_evidence_artifacts import canonical
         from .scene_loop import SceneReservation
 
         fields = ("intent_id", "reservation_json", "readiness_json")
+        if intent.contract.schema_version in ("4", "5"):
+            fields += ("causal_failure_json", "cleanup_failure_json")
         query = (
             "MATCH (i:ArenaExecutionIntent "
             + _SCOPE
@@ -1102,6 +1107,10 @@ class Neo4jWorkflowStore:
             try:
                 row = dict(record)
                 size += len(json.dumps(row, allow_nan=False).encode())
+                # Absent diagnostic links must not change legacy dependency identities.
+                for key in ("causal_failure_json", "cleanup_failure_json"):
+                    if row["intent"].get(key) is None:
+                        row["intent"].pop(key, None)
             except (ValueError, TypeError, KeyError, RecursionError):
                 raise CorruptRunInspection() from None
             if len(rows) >= 1000 or size > 8 * 1024 * 1024:
@@ -1177,7 +1186,30 @@ class Neo4jWorkflowStore:
                             disposition=a["receipt_disposition"],
                         )
                     )
-            return reservations, tuple(readiness), attempts, tuple(outputs)
+            failures = scene_failure_references(
+                intent.run_id,
+                intent.contract,
+                [
+                    dict(
+                        intent_id=row["intent"]["intent_id"],
+                        fence=(
+                            obligations[row["intent"]["intent_id"]].fence.model_dump(mode="json")
+                            if obligations[row["intent"]["intent_id"]].fence is not None
+                            else None
+                        ),
+                        causal_failure=row["intent"].get("causal_failure_json"),
+                        cleanup_failure=row["intent"].get("cleanup_failure_json"),
+                    )
+                    for row in rows
+                ],
+            )
+            return (
+                reservations,
+                tuple(readiness),
+                attempts,
+                tuple(outputs),
+                (None if failures is None else canonical(failures, max_bytes=2 * 1024 * 1024).decode()),
+            )
         except (ValueError, TypeError, KeyError, RecursionError):
             raise CorruptRunInspection() from None
 
@@ -4622,7 +4654,7 @@ class Neo4jWorkflowStore:
                 category="cleanup" if cleanup else "causal",
             )
             if (
-                contract.schema_version != "4"
+                contract.schema_version not in ("4", "5")
                 or intent.worker_fence != fence
                 or type(reference) is not dict
                 or set(reference) != {"family", "version", "manifest_digest", "binding"}

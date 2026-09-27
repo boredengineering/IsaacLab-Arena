@@ -133,10 +133,10 @@ DOCUMENTS["assessment"] = (
 DOCUMENTS["result"] = (
     "query Result($id: ID!, $operation: ID!) { workflow(id:$id) { "
     + "__typename ... on Workflow {  id operationId state phase version retainedRevision retainedDependenciesRevision "
-    " policyOutcome publicationOutcome experimentOutcome retainedAssessmentJson cleanup { projectionRevision"
-    " currentScopeOwner { id epoch dirty }   intents { intentId kind registrationId releaseState cleanupState"
-    " cleanupEvidenceRef cleanupObservation remoteEffects retiredOwner { id epoch dirty } } }  scene { acceptance"
-    " assessmentStatus selectedAssessed action reason evidenceId assessmentId decisionId "
+    " policyOutcome publicationOutcome experimentOutcome retainedAssessmentJson sceneFailuresJson cleanup {"
+    " projectionRevision currentScopeOwner { id epoch dirty }   intents { intentId kind registrationId releaseState"
+    " cleanupState cleanupEvidenceRef cleanupObservation remoteEffects retiredOwner { id epoch dirty } } }  scene {"
+    " acceptance assessmentStatus selectedAssessed action reason evidenceId assessmentId decisionId "
     + SCIENTIFIC_FIELDS
     + " selectedCandidateReference"
     " { candidateId digest sourceId originalId parentId }   criteria { criterionId requirement verdict"

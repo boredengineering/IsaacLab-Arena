@@ -22,6 +22,7 @@ import socket
 import sys
 import tempfile
 import time
+from contextlib import suppress
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -30,6 +31,8 @@ from isaaclab_arena.agentic_environment_generation.workflow import native_worker
 from isaaclab_arena.agentic_environment_generation.workflow.native_capture import NativeCaptureProducer
 from isaaclab_arena.agentic_environment_generation.workflow.native_resources import native_scratch_root
 from isaaclab_arena.agentic_environment_generation.workflow.scene_evidence_artifacts import SceneEvidenceArtifacts
+
+from .scene_worker import retain_failure, safe_failure
 
 
 class _RenewalChannel:
@@ -221,6 +224,25 @@ def _diagnostic_message(cause):
     return "".join(c if c.isprintable() or c == "\n" else " " for c in message)[:2048]
 
 
+def _retain_causal_failure(area, request, phase, error, *, protect, cleanup=False):
+    """Share the selected parent's first-write diagnostic identity, not workload authority."""
+    if request.contract.schema_version == "5":
+        registration = request.intent.worker_registration
+        return retain_failure(
+            area,
+            run_id=request.intent.worker_fence.run_id,
+            intent_id=request.intent.intent_id,
+            contract_sha256=request.binding()["contract_digest"],
+            fence=request.intent.worker_fence.model_dump(mode="json"),
+            registration=registration.model_dump(mode="json"),
+            phase=phase,
+            error=error,
+            protect=protect,
+            cleanup=cleanup,
+        )
+    return None
+
+
 def execute(packet, *, protect, action, arm_deadline=None, on_retained=None, on_protocol=None):
     """Execute once in the child; optional timer seam is supplied by main, not JSON."""
     from isaaclab_arena.agentic_environment_generation.workflow.control_protocol import legacy_monotonic_deadline
@@ -366,6 +388,7 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None, on_
                     for item in cause.errors(include_input=False, include_context=False, include_url=False)[:24]
                 ]
             try:
+                _retain_causal_failure(area, request, phase, exc, protect=protect)
                 protocol._retain(area, "native-scene-failure", request.binding(), diagnostic, protect)
             except BaseException as retention_error:
                 from isaaclab_arena_examples.agentic_environment_generation.foreground_generation import (
@@ -373,8 +396,8 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None, on_
                 )
 
                 if on_protocol is not None:
-                    on_protocol({"diagnostic_retention_failed": diagnostic})
-                raise DiagnosticRetentionFailed(diagnostic) from retention_error
+                    on_protocol({"diagnostic_retention_failed": safe_failure(phase, exc)})
+                raise DiagnosticRetentionFailed(safe_failure(phase, exc)) from retention_error
             raise
         finally:
             try:
@@ -383,7 +406,10 @@ def execute(packet, *, protect, action, arm_deadline=None, on_retained=None, on_
                     signal.signal(signal.SIGTERM, previous_term_handler)
                 if app is not None:
                     app.close()
-            except BaseException:
+            except BaseException as cleanup_error:
+                if not (isinstance(cleanup_error, SystemExit) and cleanup_error.code in (None, 0) and failure is None):
+                    with suppress(BaseException):
+                        _retain_causal_failure(area, request, "cleanup", cleanup_error, protect=protect, cleanup=True)
                 if failure is None:
                     raise
                 note = getattr(failure, "add_note", None)
@@ -416,41 +442,62 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--parent-pid", type=int, required=True)
     parser.add_argument("--stage", choices=("capture", "assess"), required=True)
-    args = parser.parse_args(argv)
     published = False
-    try:
-        _parent_guard(args.parent_pid)
-        line = sys.stdin.buffer.readline(512 * 1024 + 1)
-        if len(line) > 512 * 1024 or not line.endswith(b"\n"):
-            return 1
-        packet = protocol.decode_packet(line)
+    reported_failure = False
+    packet = None
+    phase = "child_entry"
 
-        # No provider secret exists in this transport. Strict codecs and canonical
-        # protection still apply in child; parent additionally uses current policy.
-        def protect(value):
-            protocol.canonical(value)
+    # No provider secret exists in this transport. Strict codecs and canonical
+    # protection still apply in child; parent additionally uses current policy.
+    def protect(value):
+        protocol.canonical(value)
 
-        logging.disable(sys.maxsize)
-        # Isolate native C/C++ writes to fd 1 as well as Python stdout.
-        with os.fdopen(os.dup(sys.stdout.fileno()), "w") as channel, open(os.devnull, "w") as sink:
-            os.dup2(sink.fileno(), sys.stdout.fileno())
-            import threading
+    logging.disable(sys.maxsize)
+    # Establish the existing framed channel before any fallible child entry step.
+    # Isolate native C/C++ writes to fd 1 as well as Python stdout.
+    with os.fdopen(os.dup(sys.stdout.fileno()), "w") as channel, open(os.devnull, "w") as sink:
+        os.dup2(sink.fileno(), sys.stdout.fileno())
+        import threading
 
-            output_lock = threading.RLock()
+        output_lock = threading.RLock()
 
-            def emit(message):
-                protocol._protected(message, protect)
-                with output_lock:
-                    channel.write(json.dumps(message, allow_nan=False) + "\n")
-                    channel.flush()
+        def emit(message):
+            nonlocal reported_failure
+            protocol._protected(message, protect)
+            with output_lock:
+                channel.write(json.dumps(message, allow_nan=False) + "\n")
+                channel.flush()
+                if "diagnostic_retention_failed" in message:
+                    reported_failure = True
 
-            def publish(receipt):
-                nonlocal published
-                if published:
-                    raise ValueError("duplicate native result frame")
-                emit({"result": receipt})
-                published = True
+        def publish(receipt):
+            nonlocal published
+            if published:
+                raise ValueError("duplicate native result frame")
+            emit({"result": receipt})
+            published = True
 
+        def report(error):
+            if reported_failure:
+                return
+            try:
+                # No artifact may be bound to an unvalidated or foreign packet.
+                with open_area(packet) as area:
+                    request = protocol.read_request(area, packet, protect=protect, for_execution=False)
+                    _verify_identity(request)
+                    _retain_causal_failure(area, request, phase, error, protect=protect)
+            except BaseException:
+                with suppress(BaseException):
+                    emit({"diagnostic_retention_failed": safe_failure(phase, error)})
+
+        try:
+            args = parser.parse_args(argv)
+            _parent_guard(args.parent_pid)
+            line = sys.stdin.buffer.readline(512 * 1024 + 1)
+            if len(line) > 512 * 1024 or not line.endswith(b"\n"):
+                raise ValueError("Bounded complete native packet required")
+            packet = protocol.decode_packet(line)
+            phase = "child_execute"
             receipt = execute(
                 packet,
                 protect=protect,
@@ -461,15 +508,17 @@ def main(argv=None):
             )
             if not published:
                 publish(receipt)
-        return 0
-    except SystemExit as exc:
-        if type(exc.code) is int and exc.code != 0:
-            return exc.code
-        return 0 if published and exc.code in (None, 0) else 1
-    except BaseException:
-        # Retained diagnostics are not acceptance. Never coerce a failed native
-        # run/shutdown into success just because an artifact exists.
-        return 1
+            return 0
+        except SystemExit as exc:
+            if published and exc.code in (None, 0):
+                return 0
+            report(exc)
+            return exc.code if type(exc.code) is int and exc.code != 0 else 1
+        except BaseException as exc:
+            report(exc)
+            # Retained diagnostics are not acceptance. Never coerce a failed
+            # run/shutdown into success just because an artifact exists.
+            return 1
 
 
 if __name__ == "__main__":

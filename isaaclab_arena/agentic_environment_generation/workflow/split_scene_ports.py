@@ -416,6 +416,10 @@ class OwnedSceneStageAdapter:
         self.require_gpu_released()
         return self._worker(prepared, role=self.model_worker).bind_model_send(prepared, guard)
 
+    def bind_failure_retention(self, prepared, retain):
+        """Bind diagnostics to the exact owned stage without granting another send."""
+        return self._worker(prepared).bind_failure_retention(prepared, retain)
+
     def receive(self, prepared, *args, **kwargs):
         self.require_gpu_released()
         return self._worker(prepared, role=self.model_worker).receive(prepared, *args, **kwargs)

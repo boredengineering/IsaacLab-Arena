@@ -144,6 +144,10 @@ def safe_failure(phase, error):
         "parent_prepare",
         "parent_execute",
         "parent_packet_validation",
+        "parent_semantic_validation",
+        "parent_control_validation",
+        "parent_request_retention",
+        "parent_request_validation",
         "parent_packet_write",
         "send_authorization",
         "parent_receive",
@@ -151,6 +155,11 @@ def safe_failure(phase, error):
         "parent_retention",
         "child_entry",
         "child_execute",
+        "configure_native_tmp",
+        "initialize_kit",
+        "validate_spec",
+        "native_capture",
+        "retain_capture",
         "cleanup",
     }
     assert phase in phases, "Fixed failure phase required"

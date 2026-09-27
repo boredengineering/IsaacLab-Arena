@@ -961,6 +961,7 @@ class Workflow:
     generation_outputs: list[GenerationOutputReference]
     readiness: list[RetainedReadiness]
     retained_assessment_json: str | None
+    scene_failures_json: str | None
 
     @strawberry.field
     @safe_resolver
@@ -1252,6 +1253,7 @@ def workflow_view(value):
         ),
         frozen_intent=frozen_intent(value.intent.contract),
         retained_assessment_json=value.retained_assessment_json,
+        scene_failures_json=value.scene_failures_json,
         available_actions=[
             action
             for action, allowed in (

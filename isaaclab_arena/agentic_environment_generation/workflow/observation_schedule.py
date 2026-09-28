@@ -145,6 +145,30 @@ def _vector(value):
         raise CollectionFailure(reason="nonfinite_or_invalid_vector")
 
 
+def validate_measured_clocks(sample, *, step, time_seconds):
+    """Validate optional measured clocks independently of nominal identity time.
+
+    Args:
+        sample: JSON-decoded sample retaining the original measured clock fields.
+        step: Expected control step.
+        time_seconds: Nominal schedule time in seconds.
+    """
+    if "measured_clocks" not in sample:
+        return
+    clocks = sample["measured_clocks"]
+    if type(clocks) is not dict:
+        raise CollectionFailure(reason="measured_acquisition_clock_mismatch")
+    measured = clocks.get("simulation_time_seconds")
+    if (
+        clocks.get("control_step") != step
+        or clocks.get("reset_count") != 1
+        or (type(measured) is not int and type(measured) is not float)
+        or not math.isfinite(measured)
+        or not math.isclose(measured, time_seconds, abs_tol=1e-7, rel_tol=1e-7)
+    ):
+        raise CollectionFailure(reason="measured_acquisition_clock_mismatch")
+
+
 def validate_collection(payload, *, candidate, cohort):
     """Refuse invalid collection before scientific grading, independently of truth."""
     if payload.get("codec") != "observation-v2" or payload.get("kind") != "observation":
@@ -174,6 +198,7 @@ def validate_collection(payload, *, candidate, cohort):
             identity = compiled.observation_identity(sample["step"])
             if canonical({k: sample.get(k) for k in identity}) != canonical(identity):
                 raise CollectionFailure(reason="state_clock_or_identity_mismatch")
+            validate_measured_clocks(sample, step=sample["step"], time_seconds=identity["time_seconds"])
             if set(sample["subjects"]) != set(plan.subjects):
                 raise CollectionFailure(reason="state_subject_mismatch")
             _vector(sample["origin_w"])

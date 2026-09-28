@@ -20,7 +20,14 @@ from .contracts import Criterion
 from .evidence import CriterionEvidence
 from .observation_schedule import CollectionFailure
 from .observation_schedule import compile_acquisition as _compile_acquisition
-from .observation_schedule import criterion_coverage, select_frames, select_samples, validate_collection, validate_png
+from .observation_schedule import (
+    criterion_coverage,
+    select_frames,
+    select_samples,
+    validate_collection,
+    validate_measured_clocks,
+    validate_png,
+)
 from .scene_evidence_artifacts import _protected, assessment_identity, canonical
 from .ternary_evidence import validate_ternary_response
 
@@ -327,20 +334,8 @@ class ObservationRecorder:
             if type(value["step"]) is not int or value.get("frame") != self.acquisition.plan.reference_frame:
                 raise CollectionFailure(reason="sample_clock_or_frame_mismatch")
             value.update(self.acquisition.observation_identity(step))
-            if "measured_clocks" in value:
-                import math
-
-                clocks = value["measured_clocks"]
-                measured = clocks.get("simulation_time_seconds")
-                if (
-                    clocks.get("control_step") != step
-                    or clocks.get("reset_count") != 1
-                    or type(measured) not in (int, float)
-                    or not math.isfinite(measured)
-                    or not math.isclose(measured, value["time_seconds"], abs_tol=1e-7, rel_tol=1e-7)
-                ):
-                    raise CollectionFailure(reason="measured_acquisition_clock_mismatch")
-                value["time_seconds"] = measured
+            # Identity time stays nominal; the measured clock remains separate.
+            validate_measured_clocks(value, step=step, time_seconds=value["time_seconds"])
         canonical(self.payload() | {"samples": self.samples + [value]})
         self.samples.append(value)
 

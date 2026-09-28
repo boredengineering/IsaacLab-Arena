@@ -1115,15 +1115,229 @@ def test_native_capture_settings_are_executable_frozen_sha_bound():
         settings.subjects[0].scene_name = "other"
 
 
-def test_native_diagnostic_uses_validated_background_identity():
+def test_native_adapter_clock_tracks_post_steps_and_releases_subscription(monkeypatch):
+    import numpy as np
+    import sys
+    from types import ModuleType, SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow import native_capture, native_realization
+
+    # Clock-only ports: no simulator, released intent, scene or evidence is constructed.
+    callbacks, cleanup = [], []
+
+    class Subscription:
+        def unsubscribe(self):
+            cleanup.append("subscription")
+            callbacks.clear()
+
+    def subscribe(fn, pre_step, order):
+        assert pre_step is False and order == 0
+        callbacks.append(fn)
+        return Subscription()
+
+    omni = ModuleType("omni")
+    physx = ModuleType("omni.physx")
+    monkeypatch.setattr(
+        physx, "get_physx_interface", lambda: SimpleNamespace(subscribe_physics_on_step_events=subscribe), raising=False
+    )
+    monkeypatch.setattr(omni, "physx", physx, raising=False)
+    monkeypatch.setitem(sys.modules, "omni", omni)
+    monkeypatch.setitem(sys.modules, "omni.physx", physx)
+    raw = _native_capture_settings().model_dump(mode="json")
+    raw.update(
+        codec="native-capture-v2",
+        evaluator_version="numeric-v2",
+        max_runtime_seconds=None,
+        camera_keys=[],
+        timestep_seconds=0.005,
+    )
+    for name in ("evaluator_linear_m_per_s", "evaluator_angular_rad_per_s", "evaluator_xy_m"):
+        raw.pop(name)
+    raw["criteria"] = raw["criteria"][:1]
+    raw["criteria"][0].update(
+        evaluator_version="numeric-v2",
+        rubric="selected velocity norm",
+        parameters=dict(
+            metric="linear_speed",
+            reference_frame="world",
+            clock="control_step",
+            sample_steps=[2, 3],
+            temporal_aggregation="all",
+            subject_aggregation="all",
+            missing_data="reject",
+            invalid_data="reject",
+        ),
+    )
+    raw["acquisition"] = dict(
+        codec="explicit-acquisition-v1",
+        adapter="droid-rigid-world-v1",
+        clock="control_step",
+        reference_frame="world",
+        control_dt_seconds=0.01,
+        horizon_steps=3,
+        subjects=["object"],
+        state_steps=[2, 3],
+        images=[],
+        renderer_update_steps=[1, 2],
+        displacement_step=3,
+    )
+    settings = native_capture.NativeCaptureSettings.model_validate(raw)
+    base = SimpleNamespace(
+        _reset_idx=lambda ids: "reset-return",
+        _sim_step_counter=12,
+        sim=SimpleNamespace(physics_manager=type("PhysxManager", (), {}), render=lambda: None),
+    )
+    original_reset = base._reset_idx
+    env = SimpleNamespace(unwrapped=base, close=lambda: cleanup.append("environment"))
+    monkeypatch.setattr(native_realization, "build_native_environment", lambda **kwargs: env)
+    adapter = native_capture.IsaacCaptureAdapter(settings, None, None, None, None)
+    assert adapter.build_environment(None, builder_cfg=None, enable_cameras=False, kit_cameras_enabled=False) is env
+    dt = float(np.float32(settings.timestep_seconds))
+    for callback in callbacks:
+        callback(dt)
+        callback(dt)
+    assert base._reset_idx([0]) == "reset-return"
+    assert adapter.clocks(env) == {
+        "control_step": 0,
+        "simulation_time_seconds": 0.0,
+        "physics_step": 0,
+        "reset_count": 1,
+    }
+    assert len(callbacks) == 1
+    base._sim_step_counter += 2
+    callbacks[0](dt)
+    callbacks[0](dt)
+    measured = adapter.clocks(env)
+    assert measured == {
+        "control_step": 1,
+        "simulation_time_seconds": 2 * dt,
+        "physics_step": 2,
+        "reset_count": 1,
+    }
+    assert measured["simulation_time_seconds"] != 2 * settings.timestep_seconds
+    monkeypatch.setattr(adapter, "diagnostics", lambda env, step: {})
+    assert adapter.acquire_images(env, 1, (), {}) == {"camera_obs": {}}
+    assert adapter.clocks(env) == measured
+    with pytest.raises(ValueError, match="Wrong measured environment"):
+        adapter.clocks(SimpleNamespace(unwrapped=base))
+    base._sim_step_counter += 2
+    with pytest.raises(ValueError, match="post-step count"):
+        adapter.clocks(env)
+    callbacks[0](dt)
+    callbacks[0](dt)
+    assert adapter.clocks(env)["control_step"] == 2
+    monkeypatch.setattr(base.sim, "render", lambda: callbacks[0](dt))
+    with pytest.raises(ValueError, match="post-step count"):
+        adapter.acquire_images(env, 2, (), {})
+    callbacks[0](float("nan"))
+    with pytest.raises(ValueError, match="Invalid PhysX post-step duration"):
+        adapter.clocks(env)
+    callbacks[0](dt)
+    with pytest.raises(ValueError, match="Invalid PhysX post-step duration"):
+        base._reset_idx([0])
+    env.close()
+    assert cleanup == ["subscription", "environment"] and not callbacks
+    assert base._reset_idx is original_reset
+    with pytest.raises(ValueError, match="Unmeasured reset origin"):
+        adapter.clocks(env)
+
+
+def test_native_adapter_clock_cleanup_preserves_first_error_and_closes_environment():
+    from types import SimpleNamespace
+
+    from isaaclab_arena.agentic_environment_generation.workflow.native_capture import IsaacCaptureAdapter
+
+    closed = []
+    first_error = RuntimeError("clock unsubscribe failed")
+
+    def unsubscribe():
+        raise first_error
+
+    def close():
+        closed.append("environment")
+        raise RuntimeError("environment close failed")
+
+    adapter = IsaacCaptureAdapter.__new__(IsaacCaptureAdapter)
+    adapter.env = SimpleNamespace(unwrapped=SimpleNamespace(_reset_idx=None))
+    adapter._original_reset = lambda: None
+    adapter._environment_close = close
+    adapter._clock_subscription = SimpleNamespace(unsubscribe=unsubscribe)
+    with pytest.raises(RuntimeError, match="clock unsubscribe failed") as result:
+        adapter._close_environment()
+    assert result.value is first_error
+    assert "Environment cleanup also failed" in first_error.__notes__
+    assert closed == ["environment"]
+    assert adapter.env.unwrapped._reset_idx is adapter._original_reset
+    assert adapter.time_origin is adapter.physics_origin is adapter._step_origin is None
+
+
+def test_native_diagnostic_uses_validated_background_identity(monkeypatch):
+    import sys
     from types import SimpleNamespace
 
     from isaaclab_arena.agentic_environment_generation.workflow.native_capture import IsaacCaptureAdapter
 
     adapter = IsaacCaptureAdapter.__new__(IsaacCaptureAdapter)
-    adapter.spec = SimpleNamespace(background=SimpleNamespace(id="workbench"))
+    registry_name = "maple_table_robolab"
+    adapter.spec = SimpleNamespace(background=SimpleNamespace(id="workbench", registry_name=registry_name))
     adapter.candidate = SimpleNamespace(scene_json='{"background":{"id":"workbench"}}')
     assert adapter.background_scene_name() == "workbench"
+    adapter.settings = SimpleNamespace(camera_keys=())
+    asset = SimpleNamespace(get_object_cfg=lambda: (registry_name, None))
+    adapter.arena = SimpleNamespace(scene=SimpleNamespace(assets={registry_name: asset}))
+    scene = SimpleNamespace(
+        cfg=SimpleNamespace(**{registry_name: SimpleNamespace(prim_path="{ENV_REGEX_NS}/Table")}),
+        env_prim_paths=["/World/envs/env_0"],
+        env_regex_ns="/World/envs/env_.*",
+    )
+    env = SimpleNamespace(unwrapped=SimpleNamespace(scene=scene))
+    boxes = {
+        "/World/envs/env_0/Table": ([-1.0, -1.0, 0.0], [1.0, 1.0, 1.0]),
+        "/World/envs/env_0/red_block": ([0.0, 0.0, 1.0], [0.1, 0.1, 1.2]),
+    }
+    stage = SimpleNamespace(GetPrimAtPath=lambda path: SimpleNamespace(path=path, IsValid=lambda: path in boxes))
+    cache = SimpleNamespace(
+        ComputeWorldBound=lambda prim: SimpleNamespace(
+            ComputeAlignedRange=lambda: SimpleNamespace(
+                GetMin=lambda: boxes[prim.path][0], GetMax=lambda: boxes[prim.path][1]
+            )
+        )
+    )
+    usd = SimpleNamespace(get_context=lambda: SimpleNamespace(get_stage=lambda: stage))
+    monkeypatch.setitem(sys.modules, "omni", SimpleNamespace(usd=usd))
+    monkeypatch.setitem(sys.modules, "omni.usd", usd)
+    monkeypatch.setitem(
+        sys.modules,
+        "pxr",
+        SimpleNamespace(
+            Gf=SimpleNamespace(),
+            Usd=SimpleNamespace(TimeCode=SimpleNamespace(Default=lambda: None)),
+            UsdGeom=SimpleNamespace(
+                Tokens=SimpleNamespace(default_="default", render="render"), BBoxCache=lambda *_: cache
+            ),
+        ),
+    )
+    roots = {"red_block": {"physical_root_prim": "/World/envs/env_0/red_block"}}
+    diagnostic = adapter._camera_support_proxy(env, roots)
+    assert set(diagnostic["bounds"]) == {"red_block", "workbench"}
+    assert diagnostic["bounds"]["workbench"] == {
+        "prim_path": "/World/envs/env_0/Table",
+        "min_world_m": [-1.0, -1.0, 0.0],
+        "max_world_m": [1.0, 1.0, 1.0],
+    }
+    assert diagnostic["support_proxy"] == {
+        "red_block": {
+            "background_prim": "/World/envs/env_0/Table",
+            "vertical_aabb_gap_m": 0.0,
+            "xy_aabb_overlap": True,
+        }
+    }
+    assert adapter.candidate.scene_json == '{"background":{"id":"workbench"}}'
+    adapter.arena.scene.assets = {"workbench": asset, registry_name: SimpleNamespace()}
+    assert adapter._camera_support_proxy(env, roots) == diagnostic
+    adapter.arena.scene.assets = {}
+    with pytest.raises(KeyError, match=registry_name):
+        adapter._camera_support_proxy(env, roots)
 
 
 def test_native_camera_geometry_binds_source_and_encoded_frames():

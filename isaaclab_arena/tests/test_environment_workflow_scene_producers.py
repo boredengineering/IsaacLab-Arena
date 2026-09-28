@@ -66,6 +66,7 @@ def test_explicit_acquisition_and_strict_multisubject_measurement(tmp_path):
     import base64
     import io
     import json
+    import struct
 
     from PIL import Image
 
@@ -115,11 +116,19 @@ def test_explicit_acquisition_and_strict_multisubject_measurement(tmp_path):
     assert compiled.collection_steps == (175, 176, 177, 178, 179, 180)
     assert compiled.renderer_update_steps == (175, 180)
     sampled = []
+    # Synthetic float32 callback durations, not native clock evidence.
+    callback_dt = struct.unpack("f", struct.pack("f", 0.005))[0]
 
     def measured(_env, step):
         sampled.append(step)
         value = sample(step, 0.0005)
         value["subjects"]["bin"] = sample(step, 0.001)["subjects"]["cup"]
+        value["measured_clocks"] = dict(
+            control_step=step,
+            reset_count=1,
+            physics_step=step * 4,
+            simulation_time_seconds=sum(callback_dt for _ in range(step * 4)),
+        )
         return value
 
     recorder = producers.ObservationRecorder(measured, provenance="synthetic", acquisition=compiled)
@@ -141,6 +150,10 @@ def test_explicit_acquisition_and_strict_multisubject_measurement(tmp_path):
         recorder(None, 180)
     payload = recorder.complete(executed_steps=180, reset_count=1, terminated=False, truncated=False)
     assert payload["collection"]["status"] == "complete"
+    for value in payload["samples"]:
+        assert value["time_seconds"] == value["step"] * plan.control_dt_seconds
+        assert value["measured_clocks"]["simulation_time_seconds"] == value["step"] * 4 * callback_dt
+        assert value["time_seconds"] != value["measured_clocks"]["simulation_time_seconds"]
     assert payload["frames"][0]["observation_id"] != payload["frames"][1]["observation_id"]
     area, store = artifacts(tmp_path)
     try:
@@ -325,7 +338,12 @@ def test_explicit_acquisition_and_strict_multisubject_measurement(tmp_path):
                 purpose="exploratory",
                 protect=lambda _: None,
             )
-        assert store.verified_payload(retained, protect=lambda _: None) == payload
+        replayed = store.verified_payload(retained, protect=lambda _: None)
+        assert replayed == payload
+        producers.validate_collection(replayed, candidate=candidate, cohort=cohort)
+        replayed["samples"][0]["measured_clocks"]["simulation_time_seconds"] += plan.control_dt_seconds
+        with pytest.raises(ValueError, match="measured_acquisition_clock_mismatch"):
+            producers.validate_collection(replayed, candidate=candidate, cohort=cohort)
         with pytest.raises(ValueError, match="collection") as reset:
             recorder.complete(executed_steps=180, reset_count=2, terminated=False, truncated=False)
         assert reset.value.category == "unexpected_reset"

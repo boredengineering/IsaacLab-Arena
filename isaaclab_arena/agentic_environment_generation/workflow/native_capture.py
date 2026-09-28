@@ -11,7 +11,9 @@ for hard process deadlines/cleanup. Hashes establish integrity, not calibration.
 """
 
 import hashlib
+import math
 from dataclasses import dataclass
+from threading import Lock
 from typing import Annotated, Literal
 
 from pydantic import Field, model_serializer, model_validator
@@ -442,6 +444,13 @@ class IsaacCaptureAdapter:
         self.resets = 0
         self.time_origin = None
         self.physics_origin = None
+        self._step_origin = None
+        self._physics_clock = (0, 0.0)
+        self._clock_lock = Lock()
+        self._clock_error = None
+        self._clock_subscription = None
+        self._original_reset = None
+        self._environment_close = None
         self.env = None
         self.arena = None
         self.frame_clocks = {}
@@ -477,6 +486,7 @@ class IsaacCaptureAdapter:
     def build_environment(self, spec, *, builder_cfg, enable_cameras, kit_cameras_enabled):
         from .native_realization import build_native_environment
 
+        assert self.env is None, "Capture adapter already owns an environment"
         env = build_native_environment(
             spec=spec,
             builder_cfg=builder_cfg,
@@ -487,16 +497,84 @@ class IsaacCaptureAdapter:
         self.env = env
         base = env.unwrapped
         reset = base._reset_idx
+        self._original_reset = reset
+        self._environment_close = env.close
 
         def measured_reset(*args, **kwargs):
             self.resets += 1
+            self.time_origin = self.physics_origin = self._step_origin = None
             result = reset(*args, **kwargs)
-            self.time_origin = float(base.sim.physics_manager.get_time())
+            self._step_origin, self.time_origin = self._read_physics_clock()
             self.physics_origin = base._sim_step_counter
             return result
 
-        base._reset_idx = measured_reset
+        try:
+            # The worker has already initialized Kit. Observe completed PhysX
+            # steps, not a manager accessor or a predicted schedule timestamp.
+            import omni.physx
+
+            self._clock_subscription = omni.physx.get_physx_interface().subscribe_physics_on_step_events(
+                self._record_physics_step, pre_step=False, order=0
+            )
+            assert self._clock_subscription is not None, "Physics clock subscription required"
+            base._reset_idx = measured_reset
+            env.close = self._close_environment
+        except BaseException as error:
+            try:
+                self._close_environment()
+            except BaseException:
+                error.add_note("Clock adapter environment cleanup also failed")
+            raise
         return env
+
+    def _record_physics_step(self, dt):
+        """Accumulate actual completed-step durations; retain invalid callbacks."""
+        with self._clock_lock:
+            if self._clock_error is not None:
+                return
+            if (
+                type(dt) not in (int, float)
+                or not math.isfinite(dt)
+                or dt <= 0
+                or not math.isclose(dt, self.settings.timestep_seconds, rel_tol=1e-7, abs_tol=0.0)
+            ):
+                # Native callback dispatch may swallow exceptions. Refuse later
+                # reads even if another callback or reset follows this failure.
+                self._clock_error = "Invalid PhysX post-step duration"
+                return
+            steps, elapsed = self._physics_clock
+            if not math.isfinite(elapsed + dt):
+                self._clock_error = "Non-finite PhysX post-step clock"
+                return
+            self._physics_clock = (steps + 1, elapsed + dt)
+
+    def _read_physics_clock(self):
+        with self._clock_lock:
+            if self._clock_error is not None:
+                raise ValueError(self._clock_error)
+            return self._physics_clock
+
+    def _close_environment(self):
+        """Detach the clock before closing the environment, including on failure."""
+        assert self.env is not None and self._environment_close is not None, "No owned capture environment"
+        failure = None
+        if self._clock_subscription is not None:
+            try:
+                self._clock_subscription.unsubscribe()
+            except BaseException as error:
+                failure = error
+            else:
+                self._clock_subscription = None
+        self.time_origin = self.physics_origin = self._step_origin = None
+        self.env.unwrapped._reset_idx = self._original_reset
+        try:
+            self._environment_close()
+        except BaseException:
+            if failure is None:
+                raise
+            failure.add_note("Environment cleanup also failed")
+        if failure is not None:
+            raise failure
 
     def read_reset_count(self, env):
         if env is not self.env:
@@ -505,14 +583,17 @@ class IsaacCaptureAdapter:
 
     def clocks(self, env):
         base = env.unwrapped
-        if self.time_origin is None or self.physics_origin is None:
+        if self.time_origin is None or self.physics_origin is None or self._step_origin is None:
             raise ValueError("Unmeasured reset origin")
+        completed_steps, elapsed = self._read_physics_clock()
         ticks = base._sim_step_counter - self.physics_origin
-        if type(ticks) is not int or ticks % self.settings.decimation:
+        if type(ticks) is not int or ticks < 0 or ticks % self.settings.decimation:
             raise ValueError("Unsupported control clock")
+        if completed_steps - self._step_origin != ticks:
+            raise ValueError("PhysX post-step count differs from environment clock")
         return {
             "control_step": ticks // self.settings.decimation,
-            "simulation_time_seconds": float(base.sim.physics_manager.get_time()) - self.time_origin,
+            "simulation_time_seconds": elapsed - self.time_origin,
             "physics_step": ticks,
             "reset_count": self.read_reset_count(env),
         }
@@ -660,7 +741,8 @@ class IsaacCaptureAdapter:
         stage = omni.usd.get_context().get_stage()
         cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), [UsdGeom.Tokens.default_, UsdGeom.Tokens.render])
         background = self.background_scene_name()
-        name, _ = self.arena.scene.assets[background].get_object_cfg()
+        asset_key = background if background in self.arena.scene.assets else self.spec.background.registry_name
+        name, _ = self.arena.scene.assets[asset_key].get_object_cfg()
         configured = str(getattr(scene.cfg, name).prim_path)
         background_path = configured.format(ENV_REGEX_NS=scene.env_prim_paths[0]).replace(
             scene.env_regex_ns, scene.env_prim_paths[0]

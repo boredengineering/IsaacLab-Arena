@@ -46,11 +46,11 @@ flowchart TD
         S4 --> S5["Stage 5: P6 Independent Causal Traversal & Full Plan 04 Closeout"]
     end
 
-    style S1 fill:#d4edda,stroke:#28a745,stroke-width:2px;
-    style S2 fill:#fff3cd,stroke:#ffc107,stroke-width:2px;
-    style S3 fill:#f8f9fa,stroke:#6c757d,stroke-width:1px;
-    style S4 fill:#f8f9fa,stroke:#6c757d,stroke-width:1px;
-    style S5 fill:#f8f9fa,stroke:#6c757d,stroke-width:1px;
+    style S1 fill:#14532d,stroke:#22c55e,stroke-width:2px,color:#ffffff;
+    style S2 fill:#14532d,stroke:#22c55e,stroke-width:2px,color:#ffffff;
+    style S3 fill:#9a3412,stroke:#f97316,stroke-width:2px,color:#ffffff;
+    style S4 fill:#312e81,stroke:#818cf8,stroke-width:2px,color:#ffffff;
+    style S5 fill:#1e293b,stroke:#94a3b8,stroke-width:2px,color:#ffffff;
 ```
 
 - **Milestone 1**: Proves individual components work end-to-end through the installed application.

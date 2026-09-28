@@ -135,3 +135,10 @@ eval_output/**/*.mp4
 # Local environment variables & secrets
 .env
 .env.*
+
+# temp
+consulting_services_agreement_signed_version.md
+cybernetic_physics_review_02.md
+cybernetic_physics_review_updated.md
+calendar_vs_engineering_days.md
+project-progress-report.md

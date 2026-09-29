@@ -209,14 +209,18 @@ class EnvironmentVersionManager:
                     yaml.safe_dump(default_cfg, f, sort_keys=False)
             else:
                 default_cfg = {
-                    "language_instruction": prompt or "pick up the object and place it into the container",
                     "action_horizon": 32,
                     "action_chunk_length": 16,
                     "embodiment_tag": "OXE_DROID",
                     "video_backend": "decord",
-                    "modality_config_path": "isaaclab_arena_gr00t/embodiments/droid/droid_sim_data_config.py",
-                    "pov_cam_name_sim": "external_camera_rgb",
-                    "wrist_cam_name_sim": "wrist_camera_rgb",
+                    "policy_joints_config_path": "isaaclab_arena_gr00t/embodiments/droid/gr00t_8dof_joint_space.yaml",
+                    "action_joints_config_path": "isaaclab_arena_gr00t/embodiments/droid/8dof_joint_space.yaml",
+                    "state_joints_config_path": "isaaclab_arena_gr00t/embodiments/droid/13dof_joint_space.yaml",
+                    "task_mode_name": "droid_manipulation",
+                    "pov_cam_name_sim": ["external_camera_rgb", "wrist_camera_rgb"],
+                    "original_image_size": [720, 1280, 3],
+                    "target_image_size": [180, 320, 3],
+                    "language_instruction": prompt or "pick up the object and place it into the container",
                 }
                 with open(target_policy_file, "w", encoding="utf-8") as f:
                     yaml.safe_dump(default_cfg, f, sort_keys=False)

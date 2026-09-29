@@ -272,7 +272,7 @@ class SpatialFactorGraph:
 
                 x_viol = torch.relu(min_x - rel_x) + torch.relu(rel_x - max_x)
                 y_viol = torch.relu(min_y - rel_y) + torch.relu(rel_y - max_y)
-                z_target = parent.mu[2] + bounds[4]
+                z_target = parent.mu[2].detach() + bounds[4]
                 z_viol = torch.abs(child.mu[2] - z_target)
 
                 e = factor["weight"] * (x_viol**2 + y_viol**2 + 5.0 * (z_viol**2))

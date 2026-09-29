@@ -4,6 +4,7 @@ set -euo pipefail
 HOST_REPO=${HOST_REPO:-/home/tarfy/Documents/GitHub/BoredEngineer/IsaacLab-Arena}
 HOST_HF_CACHE=${HOST_HF_CACHE:-/root/.cache/huggingface}
 SERVER_NAME=${SERVER_NAME:-gr00t-server}
+PORT=${PORT:-5557}
 # Refuse to silently destroy an existing container. Stop/rename it explicitly first.
 if docker container inspect "$SERVER_NAME" >/dev/null 2>&1; then
     printf '%s\n' "Container $SERVER_NAME already exists; stop/rename it before launching." >&2
@@ -23,6 +24,7 @@ docker run -d --name "$SERVER_NAME" --gpus all --network host --ipc host \
     --mount "type=bind,source=$HOST_REPO/submodules/Isaac-GR00T/gr00t/policy/server_client.py,target=/workspace/gr00t/gr00t/policy/server_client.py,readonly" \
     --entrypoint /bin/bash gr00t-dev:latest -c '
         set -euo pipefail
+        PORT="${1:-5557}"
         # The image stores its Python under root-only /root. Relocate just the
         # interpreter, rather than opening root permissions or running inference as root.
         cp -a /root/.local/share/uv/python/cpython-3.10.21-linux-x86_64-gnu /opt/arena-python
@@ -31,5 +33,5 @@ docker run -d --name "$SERVER_NAME" --gpus all --network host --ipc host \
         exec setpriv --reuid=1000 --regid=1000 --clear-groups \
             /opt/arena-python/bin/python3.10 gr00t/eval/run_gr00t_server.py \
             --model-path nvidia/GR00T-N1.6-DROID \
-            --embodiment-tag OXE_DROID --device cuda --host 127.0.0.1 --port 5559
-    '
+            --embodiment-tag OXE_DROID --device cuda --host 127.0.0.1 --port "$PORT"
+    ' bash "$PORT"

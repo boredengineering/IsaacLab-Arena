@@ -41,7 +41,7 @@ class Gr00tClosedloopPolicyCfg:
         metadata={"description": "Target size for images after resizing and padding as (height, width, channels)."},
     )
     policy_joints_config_path: Path = field(
-        default=Path(__file__).parent.resolve() / "config" / "g1" / "gr00t_43dof_joint_space.yaml",
+        default=Path(__file__).parents[2].resolve() / "embodiments" / "g1" / "gr00t_43dof_joint_space.yaml",
         metadata={"description": "Path to the YAML file specifying the joint ordering configuration for GR00T policy."},
     )
     task_mode_name: str = field(
@@ -50,7 +50,7 @@ class Gr00tClosedloopPolicyCfg:
     )
     # robot simulation specific parameters
     action_joints_config_path: Path = field(
-        default=Path(__file__).parent.parent.resolve() / "config" / "g1" / "43dof_joint_space.yaml",
+        default=Path(__file__).parents[2].resolve() / "embodiments" / "g1" / "43dof_joint_space.yaml",
         metadata={
             "description": (
                 "Path to the YAML file specifying the joint ordering configuration for GR1 action space in Lab."
@@ -58,7 +58,7 @@ class Gr00tClosedloopPolicyCfg:
         },
     )
     state_joints_config_path: Path = field(
-        default=Path(__file__).parent.parent.resolve() / "config" / "g1" / "43dof_joint_space.yaml",
+        default=Path(__file__).parents[2].resolve() / "embodiments" / "g1" / "43dof_joint_space.yaml",
         metadata={
             "description": (
                 "Path to the YAML file specifying the joint ordering configuration for GR1 state space in Lab."
@@ -91,6 +91,25 @@ class Gr00tClosedloopPolicyCfg:
         assert (
             self.action_chunk_length <= self.action_horizon
         ), "action_chunk_length must be less than or equal to action_horizon"
+
+        def _resolve_path(p: Path | str | None) -> Path | None:
+            if p is None:
+                return None
+            path_obj = Path(p)
+            if path_obj.exists():
+                return path_obj
+            repo_root = Path(__file__).parents[3]
+            candidate = repo_root / path_obj
+            if candidate.exists():
+                return candidate
+            return path_obj
+
+        self.policy_joints_config_path = _resolve_path(self.policy_joints_config_path)
+        self.action_joints_config_path = _resolve_path(self.action_joints_config_path)
+        self.state_joints_config_path = _resolve_path(self.state_joints_config_path)
+        if self.modality_config_path:
+            self.modality_config_path = _resolve_path(self.modality_config_path)
+
         # assert all paths exist
         assert Path(
             self.policy_joints_config_path

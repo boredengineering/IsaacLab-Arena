@@ -525,6 +525,14 @@ def resolve_surface_anchor_bounding_box(
             return [-0.40, -0.20, 1.50], [0.40, 0.20, 1.60], None, 1.55
         return [-0.40, -0.20, 0.72], [0.40, 0.20, 0.78], None, 0.76
 
+    elif "maple_table" in bg_lower:
+        return (
+            [0.20, -0.50, -0.05],
+            [0.90, 0.50, 0.05],
+            [[0.20, -0.50], [0.90, -0.50], [0.90, 0.50], [0.20, 0.50]],
+            0.0,
+        )
+
     elif "packing_table" in bg_lower or "office_table" in bg_lower or "table" in bg_lower or "desk" in bg_lower:
         return (
             [-0.45, -0.30, 0.72],

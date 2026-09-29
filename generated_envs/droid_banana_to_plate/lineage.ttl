@@ -1,0 +1,30 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:droid_banana_to_plate a arena:EnvironmentFamily ;
+    arena:currentVersion 3 .
+
+:droid_banana_to_plate_v3 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-28T18:13:41.673969+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_banana_to_plate_v2 ;
+    arena:evalDir "/workspaces/isaaclab_arena/eval_output/droid_banana_to_plate/viz_run/2026-09-28_22-16-18"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 3 .
+
+:droid_banana_to_plate_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-28T17:50:21.756698+00:00"^^xsd:dateTime ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 1 .
+
+:droid_banana_to_plate_v2 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-28T18:05:17.897840+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_banana_to_plate_v1 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 2 .
+

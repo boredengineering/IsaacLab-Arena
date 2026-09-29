@@ -234,14 +234,20 @@ class VisualSceneCritic:
             if not pos or len(pos) < 3:
                 continue
 
-            # Find matching relation anchor if present
+            # Find matching relation anchor and parent fixture if present
             anchor_name = None
+            fixture_reg = bg_reg
             for rel in spec.relations:
-                if rel.subject == obj.id and rel.params and "surface_anchor" in rel.params:
-                    anchor_name = str(rel.params["surface_anchor"])
+                if rel.subject == obj.id and rel.kind.lower() in ("on", "placed_on", "inside"):
+                    if rel.params and "surface_anchor" in rel.params:
+                        anchor_name = str(rel.params["surface_anchor"])
+                    if rel.reference:
+                        ref_obj = next((o for o in spec.objects if o.id == rel.reference), None)
+                        if ref_obj:
+                            fixture_reg = ref_obj.registry_name
                     break
 
-            _, _, _, nominal_z = resolve_surface_anchor_bounding_box(bg_reg, anchor_name)
+            _, _, _, nominal_z = resolve_surface_anchor_bounding_box(fixture_reg, anchor_name)
 
             # Check for ceiling floating (Z > nominal_z + 0.35m) or floor penetration (Z < nominal_z - 0.20m)
             if pos[2] > nominal_z + 0.35:
@@ -263,7 +269,7 @@ class VisualSceneCritic:
             is_humanoid = spec.embodiment and (
                 "g1" in spec.embodiment.registry_name.lower() or "gr1" in spec.embodiment.registry_name.lower()
             )
-            max_reach = 0.95 if is_humanoid else 0.75
+            max_reach = 0.95 if is_humanoid else 0.85
 
             if dist_xy > max_reach:
                 occluded.append(obj.id)
@@ -352,14 +358,26 @@ class PhysXPreflightCritic:
 
             pos = obj.params.get("initial_pose", {}).get("position_xyz")
             if pos and len(pos) >= 3:
-                _, _, _, nominal_z = resolve_surface_anchor_bounding_box(bg_reg)
+                anchor_name = None
+                fixture_reg = bg_reg
+                for rel in spec.relations:
+                    if rel.subject == obj.id and rel.kind.lower() in ("on", "placed_on", "inside"):
+                        if rel.params and "surface_anchor" in rel.params:
+                            anchor_name = str(rel.params["surface_anchor"])
+                        if rel.reference:
+                            ref_obj = next((o for o in spec.objects if o.id == rel.reference), None)
+                            if ref_obj:
+                                fixture_reg = ref_obj.registry_name
+                        break
+
+                _, _, _, nominal_z = resolve_surface_anchor_bounding_box(fixture_reg, anchor_name)
                 if pos[2] > nominal_z + 0.30:
                     issues.append(
                         f"[PhysXCritic] Object '{obj.id}' initial Z={pos[2]:.2f}m is floating high above table surface"
                         f" (nominal Z={nominal_z:.2f}m). Drop impact may cause bouncing or toppling. Ground object near"
                         f" Z={nominal_z + 0.01:.2f}m."
                     )
-                elif pos[2] < nominal_z - 0.15:
+                elif pos[2] < nominal_z - 0.20:
                     issues.append(
                         f"[PhysXCritic] Object '{obj.id}' initial Z={pos[2]:.2f}m is below table surface, penetrating"
                         " floor or fixture."

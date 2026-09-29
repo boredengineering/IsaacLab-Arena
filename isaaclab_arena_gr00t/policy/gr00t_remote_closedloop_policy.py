@@ -14,6 +14,7 @@ from __future__ import annotations
 import gymnasium as gym
 import numpy as np
 import torch
+import zmq
 from collections import deque
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -138,6 +139,16 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
             strict=False,
             **verified_kwargs,
         )
+        if hasattr(client, "context") and client.context is not None:
+            try:
+                client.context.setsockopt(zmq.LINGER, 0)
+            except Exception:
+                pass
+        if hasattr(client, "socket") and client.socket is not None:
+            try:
+                client.socket.setsockopt(zmq.LINGER, 0)
+            except Exception:
+                pass
         self._client: Gr00tPolicyClient | None = client
         try:
             if self._expected_server_info is not None:
@@ -146,7 +157,10 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
                 else:
                     verify_native_connection(client, self._expected_server_info)
             elif not client.ping():
-                raise ConnectionError(f"Cannot reach GR00T policy server at {config.remote_host}:{config.remote_port}")
+                raise ConnectionError(
+                    f"Cannot reach GR00T policy server at {config.remote_host}:{config.remote_port}. "
+                    "Please verify that the GR00T policy server is running and listening on that port."
+                )
 
             if self.policy_config.modality_config_path:
                 self.modality_configs = load_gr00t_modality_config_from_file(
@@ -255,11 +269,16 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
     def _extract_hold_action(self, observation: dict[str, Any]) -> torch.Tensor:
         """Build the action vector that waiting envs should hold: their current sim joint positions
         copied into the action slots that share a joint name with the state config."""
-        joint_pos_sim = observation["policy"]["robot_joint_pos"].to(device=self.device, dtype=torch.float)
+        policy_obs = observation.get("policy", {})
+        joint_tensor = policy_obs.get("robot_joint_pos")
+        if joint_tensor is None:
+            joint_tensor = policy_obs.get("joint_pos")
+        assert joint_tensor is not None, "Neither 'robot_joint_pos' nor 'joint_pos' found in observation['policy']"
+        joint_pos_sim = joint_tensor.to(device=self.device, dtype=torch.float)
         hold_action = torch.zeros((self.num_envs, self.action_dim), dtype=torch.float, device=self.device)
         for joint_name, action_idx in self.robot_action_joints_config.items():
             state_idx = self.robot_state_joints_config.get(joint_name)
-            if state_idx is not None:
+            if state_idx is not None and state_idx < joint_pos_sim.shape[-1]:
                 hold_action[:, action_idx] = joint_pos_sim[:, state_idx]
         return hold_action
 
@@ -372,17 +391,26 @@ class Gr00tRemoteClosedloopPolicy(PolicyBase[Gr00tRemoteClosedloopPolicyCfg]):
         client = self._client
         try:
             if client is not None:
+                context = getattr(client, "context", None)
+                if context is not None:
+                    try:
+                        context.setsockopt(zmq.LINGER, 0)
+                    except Exception:
+                        pass
+                socket = getattr(client, "socket", None)
+                if socket is not None:
+                    try:
+                        socket.close(linger=0)
+                    except Exception:
+                        pass
                 if callable(getattr(client, "close", None)):
                     client.close()
                     return
-                socket = getattr(client, "socket", None)
-                context = getattr(client, "context", None)
-                try:
-                    if socket is not None:
-                        socket.close(linger=0)
-                finally:
-                    if context is not None:
+                if context is not None:
+                    try:
                         context.term()
+                    except Exception:
+                        pass
         finally:
             self._client = None
             self._chunking_state = None

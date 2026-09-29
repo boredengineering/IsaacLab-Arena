@@ -154,8 +154,14 @@ def _extract_joints_from_nested_obs(
         (N, num_joints) array in sim joint order.
     """
     assert group_key in nested_obs, f"{group_key} is not in observation"
-    assert joint_pos_name in nested_obs[group_key], f"{joint_pos_name} is not in {group_key}"
-    val = nested_obs[group_key][joint_pos_name]
+    if joint_pos_name in nested_obs[group_key]:
+        val = nested_obs[group_key][joint_pos_name]
+    elif "robot_joint_pos" in nested_obs[group_key]:
+        val = nested_obs[group_key]["robot_joint_pos"]
+    elif "joint_pos" in nested_obs[group_key]:
+        val = nested_obs[group_key]["joint_pos"]
+    else:
+        raise AssertionError(f"Neither '{joint_pos_name}' nor fallback joint position keys in {group_key}")
     return to_numpy(val) if convert_to_numpy else val
 
 

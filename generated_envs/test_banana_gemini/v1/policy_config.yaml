@@ -1,0 +1,9 @@
+language_instruction: Grasp the yellow banana from the right side of the table and
+  set it onto the white ceramic plate on the left.
+action_horizon: 32
+action_chunk_length: 16
+embodiment_tag: OXE_DROID
+video_backend: decord
+modality_config_path: isaaclab_arena_gr00t/embodiments/droid/droid_sim_data_config.py
+pov_cam_name_sim: external_camera_rgb
+wrist_cam_name_sim: wrist_camera_rgb

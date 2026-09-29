@@ -617,6 +617,10 @@ def _apply_strict_constraints(node: dict | list) -> None:
         if node.get("type") == "object" and "properties" in node:
             node["additionalProperties"] = False
             node["required"] = list(node["properties"].keys())
+        if node.get("type") == "array" and "prefixItems" in node:
+            p_items = node.pop("prefixItems")
+            if "items" not in node or node.get("items") is False:
+                node["items"] = p_items[0] if p_items else {}
         # Strict mode forbids ``default`` keys (every field is required, so
         # defaults can never apply). Drop them defensively at every level.
         node.pop("default", None)

@@ -27,6 +27,7 @@ class _ExampleCfg:
     visible: bool = True
     labels: list[str] = field(default_factory=list)
     threshold: float | None = None
+    metadata: dict[str, str] | None = None
     shared_value: int = 1
 
 
@@ -50,6 +51,8 @@ def test_generated_arguments_reconstruct_typed_dataclass():
         "right",
         "--threshold",
         "1.5",
+        "--metadata",
+        '{"env": "test"}',
         "--shared_value",
         "2",
     ])
@@ -62,5 +65,6 @@ def test_generated_arguments_reconstruct_typed_dataclass():
         visible=False,
         labels=["left", "right"],
         threshold=1.5,
+        metadata={"env": "test"},
         shared_value=2,
     )

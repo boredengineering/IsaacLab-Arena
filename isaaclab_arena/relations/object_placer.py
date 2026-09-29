@@ -542,16 +542,19 @@ class ObjectPlacer:
 
             parent_reg_name = getattr(on_relation.parent, "registry_name", getattr(on_relation.parent, "name", ""))
             sec_bounds = get_fixture_sector_bounds(parent_reg_name, sec_name)
-            parent_center_x = float((parent_bbox.min_point[0, 0] + parent_bbox.max_point[0, 0]) / 2)
-            parent_center_y = float((parent_bbox.min_point[0, 1] + parent_bbox.max_point[0, 1]) / 2)
-            offset_z = float(parent_bbox.min_point[0, 2])
+            parent_pose = on_relation.parent.get_initial_pose() if hasattr(on_relation.parent, "get_initial_pose") else None
+            p_x = float(parent_pose.position_xyz[0]) if parent_pose is not None and hasattr(parent_pose, "position_xyz") else 0.0
+            p_y = float(parent_pose.position_xyz[1]) if parent_pose is not None and hasattr(parent_pose, "position_xyz") else 0.0
+            p_z = float(parent_pose.position_xyz[2]) if parent_pose is not None and hasattr(parent_pose, "position_xyz") else 0.0
 
-            parent_min_x = sec_bounds[0] + parent_center_x
-            parent_max_x = sec_bounds[1] + parent_center_x
-            parent_min_y = sec_bounds[2] + parent_center_y
-            parent_max_y = sec_bounds[3] + parent_center_y
+            parent_min_x = sec_bounds[0] + p_x
+            parent_max_x = sec_bounds[1] + p_x
+            parent_min_y = sec_bounds[2] + p_y
+            parent_max_y = sec_bounds[3] + p_y
             if sec_bounds[4] != 0.0:
-                surface_z = sec_bounds[4] + offset_z
+                surface_z = sec_bounds[4] + p_z
+            else:
+                surface_z = float(parent_bbox.max_point[0, 2])
 
         if getattr(on_relation, "nominal_height", None) is not None:
             surface_z = float(on_relation.nominal_height)

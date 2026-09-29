@@ -1,0 +1,143 @@
+env_name: grasp_banana_from_right_to_plate_left
+embodiment:
+  id: droid_robot
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.55
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: table
+  registry_name: maple_table_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.15
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+objects:
+- id: banana
+  registry_name: banana_ycb_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.1263
+      - -0.1531
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: plate
+  registry_name: clay_plates_hot3d_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.1263
+      - 0.1531
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: table
+  params: {}
+- kind: 'on'
+  subject: banana
+  reference: table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_right
+- kind: 'on'
+  subject: plate
+  reference: table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_left
+reified_relations:
+- reifier_id: reifier_banana_table
+  source_id: banana
+  relation_type: PLACED_ON
+  target_id: table
+  surface_anchor: table_top
+  surface_sector: front_right
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+- reifier_id: reifier_plate_table
+  source_id: plate
+  relation_type: PLACED_ON
+  target_id: table
+  surface_anchor: table_top
+  surface_sector: front_left
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_y:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  delta_z:
+    min_val: -0.05
+    max_val: 0.05
+    nominal: 0.0
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+placement_validators: {}
+task:
+  composition: atomic
+  description: Grasp the yellow banana from the right side of the table and set it
+    onto the white ceramic plate on the left.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: banana
+      destination_location: plate
+      background_scene: table
+      episode_length_s: 6.0

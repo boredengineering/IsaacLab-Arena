@@ -340,6 +340,7 @@ class OnLossStrategy(RelationLossStrategy):
         parent_y_max = parent_world_bbox.max_point[:, 1]
         parent_z_max = parent_world_bbox.max_point[:, 2]  # Top surface
 
+        m = relation.edge_margin_m
         sec_name = getattr(relation, "surface_sector", None) or getattr(relation, "surface_anchor", None)
         if sec_name is not None:
             from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import get_fixture_sector_bounds
@@ -353,18 +354,31 @@ class OnLossStrategy(RelationLossStrategy):
             sec_x_max = torch.as_tensor(sec_bounds[1] + p_x, device=child_pos.device, dtype=child_pos.dtype)
             sec_y_min = torch.as_tensor(sec_bounds[2] + p_y, device=child_pos.device, dtype=child_pos.dtype)
             sec_y_max = torch.as_tensor(sec_bounds[3] + p_y, device=child_pos.device, dtype=child_pos.dtype)
-            parent_x_min = torch.maximum(parent_x_min, sec_x_min)
-            parent_x_max = torch.minimum(parent_x_max, sec_x_max)
-            parent_y_min = torch.maximum(parent_y_min, sec_y_min)
-            parent_y_max = torch.minimum(parent_y_max, sec_y_max)
 
-        # Compute valid position ranges such that child's entire footprint is within parent,
-        # with the parent's extent inset by edge_margin_m so the footprint stays off the rim.
-        m = relation.edge_margin_m
-        valid_x_min = parent_x_min + m - child_bbox.min_point[:, 0]  # child's left at parent's left + margin
-        valid_x_max = parent_x_max - m - child_bbox.max_point[:, 0]  # child's right at parent's right - margin
-        valid_y_min = parent_y_min + m - child_bbox.min_point[:, 1]
-        valid_y_max = parent_y_max - m - child_bbox.max_point[:, 1]
+            # Keep child footprint within parent table (inset by edge_margin_m) and within sector
+            bound_x_min = torch.maximum(parent_x_min + m, sec_x_min)
+            bound_x_max = torch.minimum(parent_x_max - m, sec_x_max)
+            bound_y_min = torch.maximum(parent_y_min + m, sec_y_min)
+            bound_y_max = torch.minimum(parent_y_max - m, sec_y_max)
+            valid_x_min = bound_x_min - child_bbox.min_point[:, 0]
+            valid_x_max = bound_x_max - child_bbox.max_point[:, 0]
+            valid_y_min = bound_y_min - child_bbox.min_point[:, 1]
+            valid_y_max = bound_y_max - child_bbox.max_point[:, 1]
+
+            # If the child footprint is wider than the sector, center it within the sector
+            center_x = (bound_x_min + bound_x_max) / 2.0 - (child_bbox.min_point[:, 0] + child_bbox.max_point[:, 0]) / 2.0
+            center_y = (bound_y_min + bound_y_max) / 2.0 - (child_bbox.min_point[:, 1] + child_bbox.max_point[:, 1]) / 2.0
+            valid_x_min = torch.where(valid_x_min > valid_x_max, center_x, valid_x_min)
+            valid_x_max = torch.where(valid_x_min > valid_x_max, center_x, valid_x_max)
+            valid_y_min = torch.where(valid_y_min > valid_y_max, center_y, valid_y_min)
+            valid_y_max = torch.where(valid_y_min > valid_y_max, center_y, valid_y_max)
+        else:
+            # Compute valid position ranges such that child's entire footprint is within parent,
+            # with the parent's extent inset by edge_margin_m so the footprint stays off the rim.
+            valid_x_min = parent_x_min + m - child_bbox.min_point[:, 0]  # child's left at parent's left + margin
+            valid_x_max = parent_x_max - m - child_bbox.max_point[:, 0]  # child's right at parent's right - margin
+            valid_y_min = parent_y_min + m - child_bbox.min_point[:, 1]
+            valid_y_max = parent_y_max - m - child_bbox.max_point[:, 1]
 
         # The bounds invert (lower > upper) when the margin is too large for the surface or the
         # child is oversized. The loss becomes a non-zero constant with gradient zero.

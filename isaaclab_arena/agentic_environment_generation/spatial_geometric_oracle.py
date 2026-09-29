@@ -47,9 +47,9 @@ FIXTURE_SECTOR_BOUNDS: dict[str, dict[str, tuple[float, float, float, float, flo
         "table_top": (0.25, 0.88, -0.48, 0.48, 0.0),
     },
     "maple_table_robolab": {
-        "front_center": (0.25, 0.65, -0.20, 0.16, 0.0),
-        "front_left": (0.35, 0.55, 0.08, 0.30, 0.0),
-        "front_right": (0.35, 0.55, -0.30, -0.08, 0.0),
+        "front_center": (0.25, 0.65, -0.20, 0.20, 0.0),
+        "front_left": (0.25, 0.65, 0.05, 0.45, 0.0),
+        "front_right": (0.25, 0.65, -0.45, -0.05, 0.0),
         "front_half": (0.25, 0.65, -0.48, 0.48, 0.0),
         "robot_front": (0.25, 0.65, -0.48, 0.48, 0.0),
         "rear_center": (0.55, 0.88, -0.15, 0.15, 0.0),
@@ -486,22 +486,42 @@ def relax_spec_spatial_factor_graph(spec: ArenaEnvGraphSpec) -> tuple[ArenaEnvGr
     # 3. Add Robot Embodiment
     if spec.embodiment:
         emb_id = spec.embodiment.id
+        default_emb_x = -0.15 if "maple_table" in bg_lower else -0.55
         init_emb = (
-            spec.embodiment.params.get("initial_pose", {}).get("position_xyz", [-0.55, 0.0, floor_z])
+            spec.embodiment.params.get("initial_pose", {}).get("position_xyz", [default_emb_x, 0.0, floor_z])
             if spec.embodiment.params
-            else [-0.55, 0.0, floor_z]
+            else [default_emb_x, 0.0, floor_z]
         )
         fg.add_variable(emb_id, [init_emb[0], init_emb[1], init_emb[2], 0.0], is_fixed=False)
         fg.add_ground_factor(emb_id, floor_z=floor_z)
 
     # 4. Add Manipulands & Receptacles
+    default_obj_z = floor_z + (0.0 if "maple_table" in bg_lower else 0.75)
     for obj in spec.objects:
         if obj.id in furniture_ids:
             continue
+        obj_z = default_obj_z
+        for rel in spec.relations:
+            if rel.kind == "on" and rel.subject == obj.id and rel.reference:
+                p_reg = (
+                    spec.background.registry_name
+                    if rel.reference == bg_name
+                    else next((o.registry_name for o in spec.objects if o.id == rel.reference), "table")
+                )
+                sec = (rel.params.get("surface_sector") or rel.params.get("surface_anchor")) if rel.params else None
+                bnds = get_fixture_sector_bounds(p_reg, sec)
+                p_z = 0.0
+                if rel.reference in furniture_ids:
+                    p_obj = next((o for o in spec.objects if o.id == rel.reference), None)
+                    if p_obj and p_obj.params and "initial_pose" in p_obj.params:
+                        p_z = p_obj.params["initial_pose"]["position_xyz"][2]
+                obj_z = p_z + bnds[4]
+                break
+
         init_p = (
-            obj.params.get("initial_pose", {}).get("position_xyz", [0.0, 0.0, floor_z + 0.75])
+            obj.params.get("initial_pose", {}).get("position_xyz", [0.0, 0.0, obj_z])
             if obj.params
-            else [0.0, 0.0, floor_z + 0.75]
+            else [0.0, 0.0, obj_z]
         )
         fg.add_variable(obj.id, [init_p[0], init_p[1], init_p[2], 0.0], is_fixed=False)
 
@@ -513,7 +533,7 @@ def relax_spec_spatial_factor_graph(spec: ArenaEnvGraphSpec) -> tuple[ArenaEnvGr
                 if rel.reference == bg_name
                 else next((o.registry_name for o in spec.objects if o.id == rel.reference), "table")
             )
-            sector = rel.params.get("surface_sector") if rel.params else None
+            sector = (rel.params.get("surface_sector") or rel.params.get("surface_anchor")) if rel.params else None
             # On tabletop environments, default unassigned manipulands to front_center and receptacles to front_left
             if not sector and (
                 "table" in parent_reg.lower() or "desk" in parent_reg.lower() or "counter" in parent_reg.lower()
@@ -531,7 +551,7 @@ def relax_spec_spatial_factor_graph(spec: ArenaEnvGraphSpec) -> tuple[ArenaEnvGr
     # 7. Add Reachability Factors to Robot
     if spec.embodiment:
         for obj_id in placeable_objs:
-            fg.add_reachability_factor(spec.embodiment.id, obj_id, target_distance=0.60, tolerance=0.20)
+            fg.add_reachability_factor(spec.embodiment.id, obj_id, target_distance=0.55, tolerance=0.15)
         # Prevent robot colliding with furniture
         for furn_id in furniture_ids:
             fg.add_clearance_factor(spec.embodiment.id, furn_id, min_distance=0.45)

@@ -61,3 +61,10 @@ Bounded implementation work packages, approval boundaries, acceptance gates and 
 - [P04-I02 issue-recovery proposal](plan04_implementation/02-installed-visual-assessment.md#issue-recovery-proposal--draft-for-review) — Historical reviewed draft, separately issued and executed. Old reservations/history remain; one cumulative send, no further sending after the complete result. After reboot use the [canonical restart checkpoint](dashboard_cli_workflow_parity/research-stack-implementation-handoff.md#resume-after-a-computer-restart), not historical PID coordinates.
 - [P04-GUIDE-01: What remains to finish Plan 04](plan04_implementation/how-far-to-finish-plan04.md) — Evidence-based current position, assessment/scene/policy sequence and explicit remaining gates; no completion percentage or fixed ETA.
 - [New work-package template](plan04_implementation/_template.md) — Scope, authority, evidence, gates, goal prompt and closeout.
+
+### 9. [`local-inference/`](local-inference/README.md)
+Architectural plans, operational runbooks, serving benchmarks, and integration guides for running self-hosted local LLMs and VLMs with Isaac Lab-Arena.
+- [`install-multi-gpu.md`](local-inference/install-multi-gpu.md) — Hardware installation and electrical integration guide for adding the RTX 5090 to the RTX PRO 6000 Blackwell workstation (PSU, 12V-2x6, PCIe bifurcation, and display routing).
+- [`local_llm_vlm_agentic_env_gen_plan.md`](local-inference/local_llm_vlm_agentic_env_gen_plan.md) — End-to-end plan for running local LLMs (spec synthesis and Active Inference repair) and local VLMs (Tier 2 visual scene perception critic) for `agentic_environment_generation`.
+
+

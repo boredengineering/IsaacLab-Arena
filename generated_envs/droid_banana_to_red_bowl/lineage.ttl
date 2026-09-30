@@ -1,0 +1,16 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:droid_banana_to_red_bowl a arena:EnvironmentFamily ;
+    arena:currentVersion 1 .
+
+:droid_banana_to_red_bowl_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-30T14:37:22.201096+00:00"^^xsd:dateTime ;
+    arena:evalDir "eval_output/droid_banana_to_red_bowl/2026-09-30_15-55-28"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 1 .
+

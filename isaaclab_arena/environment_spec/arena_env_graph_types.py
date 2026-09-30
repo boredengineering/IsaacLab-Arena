@@ -232,6 +232,13 @@ class SpatialRelationSpec(BaseModel):
         description="Optional kind-specific parameters; leave empty by default.",
     )
 
+    @field_validator("reference", mode="before")
+    @classmethod
+    def _normalize_empty_reference(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
     @model_validator(mode="after")
     def _validate_kind_and_arity(self, info: ValidationInfo) -> SpatialRelationSpec:
         catalogue = current_catalogue(info)

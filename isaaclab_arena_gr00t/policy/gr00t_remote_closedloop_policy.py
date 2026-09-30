@@ -12,6 +12,7 @@ This policy connects to a GR00T policy server (launched via
 from __future__ import annotations
 
 import gymnasium as gym
+import io
 import numpy as np
 import torch
 import zmq
@@ -19,7 +20,27 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from gr00t.policy.server_client import PolicyClient as Gr00tPolicyClient
+from gr00t.policy.server_client import MsgSerializer, PolicyClient as Gr00tPolicyClient
+
+
+# Ensure wire compatibility with gr00t-server images using __ndarray_class__ payload envelope
+def _compat_safe_encode(obj, chain=None):
+    if isinstance(obj, np.ndarray):
+        if obj.dtype.kind == "O":
+            raise TypeError(
+                f"Refusing to encode object-dtype ndarray (shape={obj.shape}); "
+                f"msgpack_numpy would invoke pickle. Convert to a concrete "
+                f"numeric dtype before sending."
+            )
+        output = io.BytesIO()
+        np.save(output, obj, allow_pickle=False)
+        return {"__ndarray_class__": True, "as_npy": output.getvalue()}
+    if chain:
+        return chain(obj)
+    return obj
+
+
+MsgSerializer._safe_encode = staticmethod(_compat_safe_encode)
 
 from isaaclab_arena.agentic_environment_generation.policy_contract import (
     canonical_metadata_digest,

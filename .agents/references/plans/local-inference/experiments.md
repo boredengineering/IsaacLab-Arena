@@ -634,7 +634,7 @@ docker run --rm --gpus '"device=1"' --network host \
     --env_graph_spec_yaml generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
     --policy_type isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy \
     --viz kit \
-    --num_steps 300 \
+    --num_steps 1300 \
     --num_envs 1 \
     --enable_cameras \
     --output_base_dir eval_output/droid_banana_to_red_bowl/zero_action
@@ -683,7 +683,6 @@ docker run --rm --gpus '"device=1"' --network host \
     --remote_port 5556 \
     --viz kit \
     --num_episodes 1 \
-    --num_steps 2000 \
     --enable_cameras \
     --output_base_dir eval_output/droid_banana_to_red_bowl
 ```
@@ -701,7 +700,6 @@ docker run --rm --gpus '"device=1"' --network host \
     --remote_port 5556 \
     --headless \
     --num_episodes 5 \
-    --num_steps 2000 \
     --enable_cameras \
     --output_base_dir eval_output/droid_banana_to_red_bowl
 ```

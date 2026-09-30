@@ -21,6 +21,7 @@ The goal of the local inference track is to decouple Isaac Lab-Arena from extern
 | **[`install-multi-gpu.md`](install-multi-gpu.md)** | Physical and electrical hardware integration guide for adding the RTX 5090 to the RTX PRO 6000 Blackwell rig (PSU, 12V-2x6, PCIe bifurcation, and display cabling). | ASUS ROG X870E, Ryzen 9 9950X, RTX PRO 6000 96GB + RTX 5090 32GB, Driver 595+ | **Completed / Dual-Blackwell Verified** |
 | **[`local_llm_vlm_agentic_env_gen_plan.md`](local_llm_vlm_agentic_env_gen_plan.md)** | End-to-end local inference execution plan for `agentic_environment_generation` (LLM spec synthesis, Active Inference repair, and Tier 2 local VLM visual scene critic). | Dual-Blackwell (RTX PRO 6000 96GB + RTX 5090 32GB), vLLM, Qwen2.5-72B, Qwen2.5-VL, GR00T-3B | **Active / Ready for Execution** |
 | **[`experiments.md`](experiments.md)** | Live human-readable experimental journal, baseline verification records, telemetry logs, and step-by-step validation gates for local dual-GPU execution. | Dual-Blackwell, vLLM (Qwen2.5-Coder-32B / LLaMA-70B), Neo4j 5.26, Isaac Sim 6.0, GR00T-DROID | **Active Research & Execution** |
+| **[`experiment_01.md`](experiment_01.md)** | Dedicated mental model tracking ledger for Experiment 1 (Banana to Red Bowl): Expected vs. Actual results, telemetry delta, physics settling, and adjustments. | Scenario A2, Franka DROID, Qwen2.5-Coder-32B, Qwen2.5-VL-7B, ZeroAction, GR00T-N1.6 | **Active Execution & Tracking** |
 
 ---
 

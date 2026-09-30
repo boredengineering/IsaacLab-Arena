@@ -672,19 +672,20 @@ Allows researchers to watch the Franka Panda arm execute pick-and-place trajecto
 xhost +local:docker > /dev/null 2>&1 || xhost +local:root > /dev/null 2>&1
 
 docker run --rm --gpus '"device=1"' --network host \
-  -e DISPLAY="$DISPLAY" \
-  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-  -v $(pwd):/workspaces/isaaclab_arena \
-  isaaclab_arena:latest \
-  /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
-    --env_graph_spec_yaml generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
-    --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
-    --remote_host 127.0.0.1 \
-    --remote_port 5556 \
-    --viz kit \
-    --num_episodes 1 \
-    --enable_cameras \
-    --output_base_dir eval_output/droid_banana_to_red_bowl
+-e DISPLAY="$DISPLAY" \
+-v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+-v $(pwd):/workspaces/isaaclab_arena \
+isaaclab_arena:latest \
+/isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+  --env_graph_spec_yaml generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
+  --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
+  --policy_config_yaml_path isaaclab_arena_gr00t/policy/config/droid_manip_gr00t_closedloop_config.yaml \
+  --remote_host 127.0.0.1 \
+  --remote_port 5556 \
+  --viz kit \
+  --num_episodes 1 \
+  --enable_cameras \
+  --output_base_dir eval_output/droid_banana_to_red_bowl
 ```
 
 ##### Option B: Scaled Headless Benchmark Rollout (`--headless`)

@@ -421,6 +421,43 @@ The issue stems from Docker's `ENTRYPOINT` and argument handling:
   | **Episode 4** | Success (Grasp & Place) | — | — | — | ⏳ Pending |
   | **Aggregate Rate** | $\ge 80.0\%$ | — | — | — | ⏳ Pending |
 
+#### Incident & Root Cause Analysis: Missing `--policy_config_yaml_path` Argument
+
+When attempting to launch Phase 1.6 under both interactive (`--viz kit`, Option A) and headless (`--headless`, Option B) configurations without `--policy_config_yaml_path`, the process fails immediately during initialization with:
+```text
+policy_runner.py: error: the following arguments are required: --policy_config_yaml_path
+argparse.ArgumentError: the following arguments are required: --policy_config_yaml_path
+```
+
+This failure pattern is driven by the dynamic CLI architecture of Isaac Lab Arena:
+
+1. **Dynamic Policy Argument Injection**:
+   In `policy_runner.py`, CLI arguments are not static. Upon reading `--policy_type`, the runner inspects `PolicyRegistry().get_policy_cfg_type(policy_type)`. For `Gr00tRemoteClosedloopPolicy`, the config hierarchy inherits from `Gr00tBasePolicyCfg`:
+   ```python
+   @dataclass
+   class Gr00tBasePolicyCfg:
+       policy_config_yaml_path: str  # Mandatory field: NO default value provided
+   ```
+   Because `policy_config_yaml_path` has no default, `argparse` treats `--policy_config_yaml_path` as a mandatory CLI flag. Any invocation—whether interactive or headless—that omits this argument causes `argparse` to raise an `ArgumentError` and exit with `SystemExit: 2` before Omniverse Kit even constructs the simulation stage.
+
+2. **Why GR00T Requires `--policy_config_yaml_path`**:
+   The GR00T policy server (`nvidia/GR00T-N1.6-DROID`) is an embodiment-agnostic foundation model operating in normalized neural token space, whereas Isaac Sim operates in physical USD joint spaces and camera prims. The configuration YAML file bridges this abstraction gap:
+   - **POV Camera Mapping**: Names the camera observation tensors to read from the simulation scene (`pov_cam_name_sim: ["external_camera_rgb", "wrist_camera_rgb"]`).
+   - **Visual Preprocessing & Padding**: Sets the expected native and target neural resolutions (`original_image_size: [720, 1280, 3]`, `target_image_size: [180, 320, 3]`).
+   - **Joint Space Remapping**: Binds Isaac Sim joint index positions to the policy's action space via joint-space specs (`policy_joints_config_path: gr00t_8dof_joint_space.yaml`, `action_joints_config_path: 8dof_joint_space.yaml`, `state_joints_config_path: 13dof_joint_space.yaml`).
+   - **Action Horizon & Chunking**: Dictates the temporal prediction window and execution cadence (`action_horizon: 32`, `action_chunk_length: 32`).
+
+   For DROID Franka Panda, the configuration lives at:
+   `isaaclab_arena_gr00t/policy/config/droid_manip_gr00t_closedloop_config.yaml`
+
+3. **Conflicting Rollout Budgets (`--num_episodes` vs `--num_steps`)**:
+   Passing both `--num_episodes 1` and `--num_steps 2000` creates a semantic conflict. In `policy_runner.py`, `args_cli.num_steps is not None` overrides `num_episodes` by setting `num_episodes = None`. As a consequence:
+   - The simulation will run for a rigid step count (2,000 steps) rather than terminating upon task success or failure.
+   - For closed-loop policy evaluation where task completion rate is the primary metric, only `--num_episodes <N>` should be specified.
+
+4. **Remediation & Ledger Rule**:
+   All execution recipes targeting `Gr00tRemoteClosedloopPolicy` must supply `--policy_config_yaml_path isaaclab_arena_gr00t/policy/config/droid_manip_gr00t_closedloop_config.yaml` and specify only `--num_episodes <N>`. Both Option A and Option B command templates have been updated accordingly.
+
 ---
 
 ### Phase 1.7: Post-Run Telemetry Consolidation & Artifact Audit
@@ -482,6 +519,7 @@ flowchart TD
     Issue{"Observed Variance"}
     
     Issue -->|Docker ENTRYPOINT SyntaxError| FixEntry["Reset image metadata to ENTRYPOINT [] and CMD ['/bin/bash'].<br/>Prevents /isaac-sim/python.sh from executing itself."]
+    Issue -->|Missing --policy_config_yaml_path| FixPolicyCfg["Always pass --policy_config_yaml_path for Gr00tRemoteClosedloopPolicy.<br/>Specify only --num_episodes (omit conflicting --num_steps)."]
     Issue -->|GR00T Video Key Dict Error| FixWire["Install MsgSerializer compatibility hook in isaaclab_arena_gr00t.<br/>Encodes ndarrays with __ndarray_class__ envelope."]
     Issue -->|CUDA OOM on GPU 0| FixOOM["Reduce --gpu-memory-utilization on Port 8000 from 0.40 to 0.35<br/>or reduce max-model-len from 16384 to 8192."]
     Issue -->|Empty Reference String in Spec| FixSchema["Coerce empty string '' to None in SpatialRelationSpec via field_validator.<br/>Points destination_location directly to target object ID."]
@@ -506,16 +544,22 @@ This section documents empirical discoveries, architectural traps, and actionabl
    - *Symptom*: Running `docker run ... isaaclab_arena:latest /isaac-sim/python.sh <script>` produced `SyntaxError: invalid syntax` on line 21 (`echo`).
    - *Cause*: The image had `ENTRYPOINT ["/isaac-sim/python.sh"]`. Docker appended the CLI arguments, resulting in Python attempting to interpret `/isaac-sim/python.sh` (a Bash script) as Python code.
    - *Remediation*: Rebuilt image with `ENTRYPOINT []` and `CMD ["/bin/bash"]`.
-2. **GR00T Server Wire Serialization Mismatch**:
+2. **Dynamic CLI Policy Config Obligation**:
+   - *Symptom*: Running `policy_runner.py` with `Gr00tRemoteClosedloopPolicy` without `--policy_config_yaml_path` fails immediately with `argparse.ArgumentError: the following arguments are required: --policy_config_yaml_path` on both GUI and headless modes.
+   - *Cause*: `policy_runner.py` dynamically injects the target policy's configuration dataclass (`Gr00tBasePolicyCfg`), which has a mandatory `policy_config_yaml_path: str` without a default value.
+   - *Remediation*: All runner scripts targeting GR00T policies must explicitly provide `--policy_config_yaml_path` (e.g. `isaaclab_arena_gr00t/policy/config/droid_manip_gr00t_closedloop_config.yaml`) and specify a single rollout budget (`--num_episodes`).
+3. **GR00T Server Wire Serialization Mismatch**:
    - *Symptom*: Calling `get_action` on `gr00t-server` raised `RuntimeError: Server error: Video key 'exterior_image_1_left' must be a numpy array. Got <class 'dict'>`.
    - *Cause*: `gr00t-server` (`gr00t-dev:latest`) unpacks ndarrays via `{"__ndarray_class__": True, "as_npy": ...}`, while upstream client code transitioned to raw `msgpack_numpy` envelopes (`b'nd': True`).
    - *Remediation*: Added `_compat_safe_encode` in `isaaclab_arena_gr00t/policy/gr00t_remote_closedloop_policy.py` to transparently emit the server-compatible envelope.
-3. **Hallucinated Reference Prims in Spec Generation**:
+4. **Hallucinated Reference Prims in Spec Generation**:
    - *Symptom*: LLM emitted `reference: ""` and non-existent `object_references` for simple tabletop pick-and-place tasks.
    - *Remediation*: Added `@field_validator("reference", mode="before")` in `SpatialRelationSpec` to coerce `""` to `None`, and validated that `destination_location` can point directly to asset IDs (`red_bowl`).
 
 ### Required Adjustments for Experiment 02:
 1. **Container Image Hardening**: Enforce `ENTRYPOINT []` across all Arena Docker tags to eliminate interpreter nesting traps.
-2. **Wire Compatibility Standardization**: Ensure the `MsgSerializer` backward-compatibility adapter is loaded by default in `isaaclab_arena_gr00t.__init__`.
-3. **Prompt Schema Refinement**: Include explicit few-shot examples demonstrating that `destination_location` takes a direct object ID without requiring intermediate `ObjectReference` wrappers unless referencing articulated internal prims (e.g. drawers).
+2. **Standardized Runner Invocations**: Standardize GR00T runner invocation templates to always pass `--policy_config_yaml_path` and use a single budget parameter (`--num_episodes`).
+3. **Wire Compatibility Standardization**: Ensure the `MsgSerializer` backward-compatibility adapter is loaded by default in `isaaclab_arena_gr00t.__init__`.
+4. **Prompt Schema Refinement**: Include explicit few-shot examples demonstrating that `destination_location` takes a direct object ID without requiring intermediate `ObjectReference` wrappers unless referencing articulated internal prims (e.g. drawers).
+
 

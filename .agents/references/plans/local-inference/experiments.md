@@ -1,6 +1,6 @@
 # Dual-GPU Local Inference Experiments & Validation Log
 
-**Document Version:** 1.2.0  
+**Document Version:** 1.5.0  
 **Date:** 2026-09-30  
 **Status:** Active Research & Execution  
 **Authors / Researchers:** Antigravity & Renan  
@@ -268,26 +268,174 @@ flowchart TD
 
 ---
 
-### 6.3 Dual-Run Experimental Protocol
+### 6.3 Multi-Stage Verification & Evaluation Protocol
 
-Every scenario evaluated in this campaign is tested in two sequential verification steps:
-1. **Run 1.4a (`--mode resolve` on GPU 0)**: Validates pure cognitive factor graph synthesis, active repair, and VLM perception in isolation.
-2. **Run 1.4b (`--mode full` on GPU 1)**: Validates end-to-end stage instantiation, USD asset loading, transfer-readiness auditing, and PhysX gravity settling.
-3. **Run 1.5 (`policy_runner.py` on GPU 1)**: Executes multi-episode closed-loop neural policy rollouts driven by the live GR00T model on port 5556 to record benchmark video demonstrations.
+Every scenario evaluated in this campaign is tested through a strict 3-stage validation progression:
+1. **Run 1.4 (`environment_generation_runner.py --mode resolve` on GPU 0)**: Validates pure cognitive factor graph synthesis, active repair, and VLM perception in isolation without simulation engine overhead.
+2. **Run 1.5 (`policy_runner.py` with `ZeroActionPolicy` on GPU 1)**: **Pre-flight physics and scene verification.** Before running neural policies, we verify that the USD assets instantiate cleanly, physics settles under gravity without clipping or explosion, and camera perspectives are valid. Offers both **Interactive Kit GUI (`--viz kit`)** for researcher visual inspection and **Headless (`--headless`)** for automated validation.
+3. **Run 1.6 (`policy_runner.py` with `Gr00tRemoteClosedloopPolicy` on GPU 1)**: Executes closed-loop robotic manipulation driven by the live neural policy server over ZeroMQ on port 5556, evaluating real task success rates and recording multi-camera demonstration videos. Offers both **Interactive Kit GUI (`--viz kit`)** and **Headless Benchmark (`--headless`)**.
 
 ---
 
-## 7. Multi-Stage Experimental Architecture
+## 7. Multi-Layer Telemetry & Observability Infrastructure
 
-Each experiment executes a single evaluated scenario through a standardized 5-phase sequential pipeline:
+To systematically benchmark and diagnose experimental workloads across cognitive language/vision generation (GPU 0), physics simulation, and policy inference (GPU 1), a unified 3-layer telemetry infrastructure is established. Decoupling telemetry specifications from individual experiment definitions prevents duplication and provides a standardized observability contract across all experimental campaigns.
+
+```mermaid
+flowchart TD
+    subgraph Layer1["Layer 1: Cognitive Reasoning (Client-Side)"]
+        C1["Agent Telemetry Tracker<br/>(render_summary_card)"]
+        C2["Active Inference Free Energy<br/>& Repair Iterations"]
+        C3["SHACL & Spatial Clearance<br/>Conformance Flags"]
+    end
+
+    subgraph Layer2["Layer 2: Engine Performance (vLLM Prometheus /metrics)"]
+        E1["Prefill Latency (TTFT Histogram)"]
+        E2["Decode Throughput (TPOT / Tokens/s)"]
+        E3["KV Cache Saturation (gpu_cache_usage_factor)"]
+        E4["Token Counters & Request Totals"]
+    end
+
+    subgraph Layer3["Layer 3: Hardware Dynamics (NVIDIA Blackwell System)"]
+        H1["Peak GDDR7 Allocation (MiB)"]
+        H2["Streaming Multiprocessor (SM) %"]
+        H3["Board Power Draw (Watts) & Thermals"]
+    end
+
+    Layer1 -.-> Report["Consolidated Artifacts:<br/>• metadata.json (spec lineage)<br/>• telemetry.json (engine & hardware)<br/>• gpu0_hardware_telemetry.csv"]
+    Layer2 -.-> Report
+    Layer3 -.-> Report
+```
+
+### 7.1 Telemetry Layer Architecture & Descriptions
+
+#### 1. Layer 1: Cognitive Reasoning & Semantic Conformance (Client-Side)
+- **Origin:** Emitted directly by `EnvironmentGenerationAgent` in [`agent.py`](../../../../isaaclab_arena_examples/agentic_environment_generation/agent.py) and summarized by `render_summary_card()`.
+- **Recorded In:** `generated_envs/<env_name>/v<N>/metadata.json`
+- **Core Parameters:**
+  - `iterations`: Total active repair loops required to reach SHACL and spatial compliance.
+  - `free_energy`: Convergence metric measuring residual constraint violation.
+  - `shacl_conformance`: Boolean flag indicating semantic compliance with W3C RDF-star schemas.
+  - `spatial_clearance_passed`: Boolean flag from Geometric Oracle indicating non-overlapping AABBs and table containment.
+  - `vlm_visual_critic_passed`: Verification from Tier 2 VLM critic confirming line-of-sight and physical realism.
+
+#### 2. Layer 2: Engine Performance & Latency (vLLM Prometheus `/metrics`)
+- **Origin:** Exposed by vLLM inference engine instances on Port 8000 (`arena-vllm-spec`) and Port 8001 (`arena-vllm-visual`).
+- **Configuration Requirement:** Both containers are launched with `--enable-request-id-headers` to enable deterministic per-request tracing.
+- **Scraped Via:** Standard Prometheus scrape format at `http://127.0.0.1:<port>/metrics`.
+
+#### 3. Layer 3: Hardware Dynamics & Power Budget (Host / `nvidia-smi`)
+- **Origin:** NVIDIA System Management Interface querying discrete Blackwell GPUs at 1 Hz.
+- **Recorded In:** `eval_output/<env_name>/gpu0_hardware_telemetry.csv` (and `gpu1_hardware_telemetry.csv`).
+- **Core Parameters:** Timestamp, GPU utilization %, memory utilization %, allocated VRAM (MiB), instantaneous power draw (Watts), and GPU die temperature (°C).
+
+---
+
+### 7.2 vLLM Engine Prometheus Metrics Reference
+
+The following Prometheus metrics are monitored on Port 8000 (Spec Generator) and Port 8001 (Visual Critic):
+
+| Metric Identifier | Metric Type | Experimental Significance | Target Threshold / Healthy Range |
+| :--- | :--- | :--- | :--- |
+| `vllm:time_to_first_token_seconds` | Histogram | Measures **prefill latency** when processing massive multi-KB asset ontologies and relation prompts. | $< 1.5\text{ s}$ for 16K context |
+| `vllm:time_per_output_token_seconds` | Histogram | Measures **decode speed** (TPOT). Validates Blackwell AWQ INT4/FP8 compute throughput. | $> 45\text{ tokens/s}$ (Spec) / $> 30\text{ tokens/s}$ (VLM) |
+| `vllm:gpu_cache_usage_factor` | Gauge | Tracks **KV cache saturation** on GPU 0 ($0.0 \rightarrow 1.0$). Indicates headroom before memory exhaustion. | $< 0.70$ (nominal) / Alert if $> 0.85$ |
+| `vllm:prompt_tokens_total` | Counter | Cumulative prompt tokens consumed across all resolution and repair passes. | Tracks cognitive cost per scenario |
+| `vllm:generation_tokens_total` | Counter | Cumulative output tokens generated (synthesized factor graphs + repair patches). | Quantifies graph verbosity |
+| `vllm:num_preemptions_total` | Counter | Number of pre-empted/swapped requests. | **Must be 0**. Non-zero indicates VRAM thrashing. |
+| `vllm:request_success_total` | Counter | Total successfully completed inference requests. | Equal to total dispatched calls |
+
+---
+
+### 7.3 Telemetry Acquisition & Inspection Playbook
+
+Human researchers can extract and inspect telemetry using three standardized access methods:
+
+#### Method 1: Instant Prometheus CLI Inspection
+Fast one-line inspection of running vLLM engine health and cache state:
+```bash
+# Query Cognitive Spec Generator (Port 8000):
+curl -s http://127.0.0.1:8000/metrics | grep -E "vllm:(gpu_cache_usage_factor|prompt_tokens_total|generation_tokens_total|request_success_total|num_preemptions_total)"
+
+# Query Visual Scene Critic (Port 8001):
+curl -s http://127.0.0.1:8001/metrics | grep -E "vllm:(gpu_cache_usage_factor|prompt_tokens_total|generation_tokens_total|request_success_total|num_preemptions_total)"
+```
+
+#### Method 2: Automated Pre/Post Inference Snapshot Hook (Python)
+Researchers or automated harness scripts can snapshot metrics before and after an experiment phase to compute exact token delta and latency distribution:
+```python
+import json
+import re
+import urllib.request
+
+def snapshot_vllm_telemetry(port: int = 8000) -> dict:
+    """Scrapes and extracts key vLLM Prometheus metrics into a clean dictionary."""
+    url = f"http://127.0.0.1:{port}/metrics"
+    try:
+        with urllib.request.urlopen(url, timeout=3) as r:
+            raw = r.read().decode("utf-8")
+    except Exception as e:
+        return {"error": f"Failed to connect to port {port}: {e}"}
+
+    patterns = {
+        "gpu_cache_usage_factor": r"vllm:gpu_cache_usage_factor\{.*?\}\s+([0-9\.]+)",
+        "prompt_tokens_total": r"vllm:prompt_tokens_total\{.*?\}\s+([0-9\.]+)",
+        "generation_tokens_total": r"vllm:generation_tokens_total\{.*?\}\s+([0-9\.]+)",
+        "request_success_total": r"vllm:request_success_total\{.*?\}\s+([0-9\.]+)",
+        "num_preemptions_total": r"vllm:num_preemptions_total\{.*?\}\s+([0-9\.]+)",
+    }
+    return {k: float(m.group(1)) if (m := re.search(p, raw)) else None for k, p in patterns.items()}
+
+# Example usage:
+# before = snapshot_vllm_telemetry(8000)
+# ... run Phase 1.4 ...
+# after = snapshot_vllm_telemetry(8000)
+# tokens_spent = after["prompt_tokens_total"] - before["prompt_tokens_total"]
+```
+
+#### Method 3: Continuous Hardware Dynamics Logging (`nvidia-smi`)
+Capture real-time Blackwell power draw, thermal behavior, and VRAM utilization during active generation or simulation rollouts:
+```bash
+# Start background 1 Hz logger for GPU 0 (LLM/VLM):
+mkdir -p eval_output/<env_name>
+nvidia-smi -i 0 --query-gpu=timestamp,utilization.gpu,utilization.memory,memory.used,power.draw,temperature.gpu \
+  --format=csv -l 1 > eval_output/<env_name>/gpu0_hardware_telemetry.csv &
+GPU0_LOGGER_PID=$!
+
+# (Optional) Start background 1 Hz logger for GPU 1 (Sim/Policy):
+nvidia-smi -i 1 --query-gpu=timestamp,utilization.gpu,utilization.memory,memory.used,power.draw,temperature.gpu \
+  --format=csv -l 1 > eval_output/<env_name>/gpu1_hardware_telemetry.csv &
+GPU1_LOGGER_PID=$!
+
+# Execute experiment commands...
+
+# Terminate logging when run completes:
+kill $GPU0_LOGGER_PID $GPU1_LOGGER_PID 2>/dev/null || true
+```
+
+---
+
+### 7.4 Telemetry Artifact Schema & Consolidated Storage
+
+Upon completion of any experiment, telemetry artifacts are persisted alongside the environment specification and evaluation output:
+- `generated_envs/<env_name>/latest/metadata.json`: Client-side reasoning iterations, active repair transitions, token consumption, and W3C PROV-O commit hashes.
+- `eval_output/<env_name>/gpu0_hardware_telemetry.csv`: Hardware telemetry time series (SM load, power in Watts, GDDR7 usage).
+- `eval_output/<env_name>/episode_results_rank0.jsonl`: Control cycle physics telemetry ($50\text{ Hz}$ joint state, contact forces, and action deltas).
+- `eval_output/<env_name>/summary_metrics.json`: High-level benchmark task success rate, execution duration, and termination reason.
+
+---
+
+## 8. Multi-Stage Experimental Architecture
+
+Each experiment executes a single evaluated scenario through a standardized 6-phase sequential pipeline:
 
 ```mermaid
 flowchart LR
-    P1["Phase 1.1: Cognitive (LLM) & Visual (VLM) Engines<br/>(GPU 0: PRO 6000 | Ports 8000 & 8001)"] --> P4a["Phase 1.4a: Spec Resolution (--mode resolve)<br/>(GPU 0: PRO 6000)"]
-    P2["Phase 1.2: Neo4j Experience Store<br/>(Host CPU: Ports 7475 & 7688)"] --> P4a
-    P4a --> P4b["Phase 1.4b: Stage & Physics Settling (--mode full)<br/>(GPU 1: RTX 5090)"]
-    P3["Phase 1.3: GR00T Policy Server<br/>(GPU 1: RTX 5090 | Port 5556)"] --> P5["Phase 1.5: Gym Evaluation & Policy Rollout<br/>(policy_runner.py on GPU 1)"]
-    P4b --> P5
+    P1["Phase 1.1: Cognitive (LLM) & Visual (VLM) Engines<br/>(GPU 0: PRO 6000 | Ports 8000 & 8001)"] --> P4["Phase 1.4: Spec Resolution (--mode resolve)<br/>(GPU 0: PRO 6000)"]
+    P2["Phase 1.2: Neo4j Experience Store<br/>(Host CPU: Ports 7475 & 7688)"] --> P4
+    P4 --> P5["Phase 1.5: Zero-Action Physics Validation<br/>(policy_runner.py on GPU 1)<br/>• Interactive: --viz kit<br/>• Headless: --headless"]
+    P3["Phase 1.3: GR00T Policy Server<br/>(GPU 1: RTX 5090 | Port 5556)"] --> P6["Phase 1.6: Closed-Loop Policy Rollout<br/>(policy_runner.py with GR00T on GPU 1)<br/>• Interactive: --viz kit<br/>• Headless: --headless"]
+    P5 --> P6
 ```
 
 ### Pipeline Phase Breakdown
@@ -297,17 +445,17 @@ flowchart LR
 | **Phase 1.1** | Cognitive (LLM) & Visual (VLM) Bring-Up | GPU 0 (RTX PRO 6000) | Local inference servers respond on port 8000 (LLM schema decoding) and port 8001 (VLM multimodal critic). |
 | **Phase 1.2** | Neo4j Knowledge Store Bring-Up | Host CPU / Docker | Neo4j listens on bolt port 7688; Cypher queries read/write factor graphs without error. |
 | **Phase 1.3** | GR00T Policy Server Bring-Up | GPU 1 (RTX 5090) | ZeroMQ RPC server serves `nvidia/GR00T-N1.6-DROID` on port 5556; responds to observation pings. |
-| **Phase 1.4a** | Cognitive Spec Resolution (`--mode resolve`) | GPU 0 (RTX PRO 6000) | Runner resolves human prompt into valid `ArenaEnvGraphSpec` with SHACL and multimodal VLM satisfaction. |
-| **Phase 1.4b** | Simulation Stage & Physics Settling (`--mode full`) | GPU 1 (RTX 5090) | Monolithic runner loads stage in Isaac Sim, audits transfer readiness, and steps zero-action physics stably for 20 frames. |
-| **Phase 1.5** | Closed-Loop Simulation & Policy Rollout | GPU 1 (RTX 5090) | Isaac Sim executes environment rollout on RTX 5090 driven by live GR00T actions over port 5556. |
+| **Phase 1.4** | Cognitive Spec Resolution (`--mode resolve`) | GPU 0 (RTX PRO 6000) | Runner resolves human prompt into valid `ArenaEnvGraphSpec` with SHACL and multimodal VLM satisfaction. |
+| **Phase 1.5** | Zero-Action Physics & Scene Verification | GPU 1 (RTX 5090) | `policy_runner.py` with `ZeroActionPolicy` verifies gravity settling, asset stability, and camera FOV. (Interactive: `--viz kit` \| Headless: `--headless`). |
+| **Phase 1.6** | Closed-Loop Neural Policy Evaluation | GPU 1 (RTX 5090) | `policy_runner.py` with `Gr00tRemoteClosedloopPolicy` executes pick-and-place task via GR00T on port 5556. (Interactive: `--viz kit` \| Headless: `--headless`). |
 
 ---
 
-## 8. Experiment Execution Logs & Validation Records
+## 9. Experiment Execution Logs & Validation Records
 
-### 8.1 Experiment 1: Dual-Blackwell Single-Scenario Evaluation (Scenario A2: Banana to Red Bowl)
+### 9.1 Experiment 1: Dual-Blackwell Single-Scenario Evaluation (Scenario A2: Banana to Red Bowl)
 
-#### 8.1.0 Experiment 1 Setup & Models Running
+#### 9.1.0 Experiment 1 Setup & Models Running
 This experiment evaluates **one scenario only** with a single dedicated dual-GPU setup from initial prompt through active constraint repair to physical policy execution.
 
 ##### Scenario & Problem Definition
@@ -337,10 +485,10 @@ This experiment evaluates **one scenario only** with a single dedicated dual-GPU
 
 ---
 
-#### 8.1.1 Phase 1.1: Cognitive & Visual Engine Bring-Up (vLLM on GPU 0)
+#### 9.1.1 Phase 1.1: Cognitive & Visual Engine Bring-Up (vLLM on GPU 0)
 - **Target Device:** `CUDA_VISIBLE_DEVICES=0` (RTX PRO 6000 Blackwell 96 GB)
 
-##### 8.1.1.1 Component A: Cognitive Spec Generator LLM (Port 8000)
+##### 9.1.1.1 Component A: Cognitive Spec Generator LLM (Port 8000)
 - **Primary Model:** `Qwen/Qwen2.5-Coder-32B-Instruct-AWQ`
 - **Execution Endpoint:** HTTP `127.0.0.1:8000/v1`
 - **Proposed Command:**
@@ -355,11 +503,12 @@ This experiment evaluates **one scenario only** with a single dedicated dual-GPU
     --port 8000 \
     --max-model-len 16384 \
     --guided-decoding-backend outlines \
-    --gpu-memory-utilization 0.40
+    --gpu-memory-utilization 0.40 \
+    --enable-request-id-headers
   ```
 - **Validation Test:** HTTP GET `http://localhost:8000/v1/models` and test JSON-schema completion.
 
-##### 8.1.1.2 Component B: Visual Scene Critic VLM (Port 8001)
+##### 9.1.1.2 Component B: Visual Scene Critic VLM (Port 8001)
 - **Primary Model:** `Qwen/Qwen2.5-VL-7B-Instruct`
 - **Execution Endpoint:** HTTP `127.0.0.1:8001/v1`
 - **Proposed Command:**
@@ -373,16 +522,27 @@ This experiment evaluates **one scenario only** with a single dedicated dual-GPU
     --model Qwen/Qwen2.5-VL-7B-Instruct \
     --port 8001 \
     --max-model-len 8192 \
-    --gpu-memory-utilization 0.25
+    --gpu-memory-utilization 0.25 \
+    --enable-request-id-headers
   ```
 - **Validation Test:** HTTP GET `http://localhost:8001/v1/models` and multimodal chat test with base64 image.
 
+##### 9.1.1.3 Telemetry Readiness & Baseline Engine Probe
+Before dispatching synthesis prompts, verify that both vLLM instances export healthy Prometheus metrics and zero initial cache utilization according to the protocol defined in [Section 7 (Multi-Layer Telemetry & Observability Infrastructure)](#7-multi-layer-telemetry--observability-infrastructure):
+
+```bash
+# Verify vLLM metrics endpoints are responsive and cache is clear:
+curl -s http://127.0.0.1:8000/metrics | grep "vllm:gpu_cache_usage_factor"
+curl -s http://127.0.0.1:8001/metrics | grep "vllm:gpu_cache_usage_factor"
+```
+
+- **Validation Test:** Both endpoints return HTTP 200 with `vllm:gpu_cache_usage_factor` initialized (nominal: $0.0$).
 - **Results & Metrics:** *(To be recorded upon execution)*
 - **Observations:** *(To be recorded)*
 
 ---
 
-#### 8.1.2 Phase 1.2: Neo4j Experience Database Bring-Up (Host CPU / Docker)
+#### 9.1.2 Phase 1.2: Neo4j Experience Database Bring-Up (Host CPU / Docker)
 - **Target Device:** Host CPU & System RAM (Port 7475 HTTP, Port 7688 Bolt)
 - **Proposed Command:**
   ```bash
@@ -394,7 +554,7 @@ This experiment evaluates **one scenario only** with a single dedicated dual-GPU
 
 ---
 
-#### 8.1.3 Phase 1.3: GR00T Policy Server Bring-Up (GPU 1: RTX 5090)
+#### 9.1.3 Phase 1.3: GR00T Policy Server Bring-Up (GPU 1: RTX 5090)
 - **Target Device:** `CUDA_VISIBLE_DEVICES=1` (RTX 5090 32 GB)
 - **Proposed Command:**
   ```bash
@@ -416,11 +576,9 @@ This experiment evaluates **one scenario only** with a single dedicated dual-GPU
 
 ---
 
-#### 8.1.4 Phase 1.4: Agentic Spec Generation & Stage Verification
-
-##### 8.1.4.1 Step 1.4a: Cognitive Spec Resolution (`--mode resolve` on GPU 0)
+#### 9.1.4 Phase 1.4: Agentic Spec Generation & Factor Graph Resolution (GPU 0: RTX PRO 6000)
 - **Target Device:** `CUDA_VISIBLE_DEVICES=0` (RTX PRO 6000 Blackwell 96 GB)
-- **Primary Objective:** Pure Python cognitive prompt-to-factor-graph synthesis, active repair, and VLM inspection without simulation engine startup.
+- **Primary Objective:** Pure Python cognitive prompt-to-factor-graph synthesis, active constraint repair, and Tier 2 VLM visual critic inspection without simulation engine startup.
 - **Proposed Command:**
   ```bash
   docker run --rm --gpus '"device=0"' --network host \
@@ -436,73 +594,140 @@ This experiment evaluates **one scenario only** with a single dedicated dual-GPU
       --api_key "local-arena-token"
   ```
 - **Validation Test:** Inspect `generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml`, check SHACL conformance report and VLM feedback.
-- **Results & Metrics:** *(To be recorded upon execution)*
-- **Observations:** *(To be recorded)*
 
-##### 8.1.4.2 Step 1.4b: Simulation Stage Instantiation & Physics Settling (`--mode full` on GPU 1)
-- **Target Device:** `CUDA_VISIBLE_DEVICES=1` (RTX 5090 32 GB)
-- **Primary Objective:** Monolithic end-to-end stage verification: resolves spec, instantiates USD assets in Isaac Sim 6.0, audits policy transfer readiness, and steps physics stably for 20 frames under gravity.
-- **Proposed Command:**
-  ```bash
-  docker run --rm --gpus '"device=1"' --network host \
-    -e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
-    -v $(pwd):/workspaces/isaaclab_arena \
-    isaaclab_arena:latest \
-    /isaac-sim/python.sh isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-      --mode full \
-      --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
-      --env_name "droid_banana_to_red_bowl" \
-      --base_url "http://localhost:8000/v1" \
-      --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
-      --api_key "local-arena-token" \
-      --num_steps 20 \
-      --headless
-  ```
-- **Validation Test:** Verify clean console log `[runner] step 19: episode done ... [runner] done.` and confirm no PhysX contact solver explosion or asset load failures.
+##### Phase 1.4 Telemetry & Metrics Capture
+Hardware and inference telemetry are captured during this phase using the hooks specified in [Section 7](#7-multi-layer-telemetry--observability-infrastructure):
+
+| Metric Category | Target Indicator | Baseline (Pre) | Peak / Final (Post) | Delta / Total |
+| :--- | :--- | :--- | :--- | :--- |
+| **Cognitive Agent** | Repair Iterations | 0 | — | — |
+| **Cognitive Agent** | Free Energy ($\mathcal{F}$) | Initial | — | Final Conformance |
+| **vLLM Spec (8000)** | Prompt Tokens | — | — | — |
+| **vLLM Spec (8000)** | Generation Tokens | — | — | — |
+| **vLLM Spec (8000)** | KV Cache Saturation | 0.0 | — | Peak Gauge |
+| **vLLM Spec (8000)** | Preemptions Total | 0 | 0 | 0 (Must be 0) |
+| **vLLM Visual (8001)**| Critic Queries / Requests | — | — | — |
+| **Hardware (GPU 0)** | Peak VRAM Allocated | ~38 GB | — | GDDR7 Used |
+| **Hardware (GPU 0)** | Average Power Draw | ~49 W | — | Watts |
+
 - **Results & Metrics:** *(To be recorded upon execution)*
 - **Observations:** *(To be recorded)*
 
 ---
 
-#### 8.1.5 Phase 1.5: Closed-Loop Simulation Runtime & Policy Evaluation (GPU 1: RTX 5090)
+#### 9.1.5 Phase 1.5: Environment Physical Validation via Zero-Action Policy (GPU 1: RTX 5090)
 - **Target Device:** `CUDA_VISIBLE_DEVICES=1` (RTX 5090 32 GB)
-- **Primary Objective:** Multi-episode policy evaluation driven by live GR00T policy server over ZeroMQ, recording multi-camera H.264 MP4 videos and step telemetry.
-- **Command:**
-  ```bash
-  docker run --rm --gpus '"device=1"' --network host \
-    -v $(pwd):/workspaces/isaaclab_arena \
-    isaaclab_arena:latest \
-    /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
-      --env_graph_spec_yaml generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
-      --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
-      --remote_host 127.0.0.1 \
-      --remote_port 5556 \
-      --output_base_dir eval_output/droid_banana_to_red_bowl \
-      --num_episodes 5 \
-      --enable_cameras \
-      --headless
-  ```
-- **Validation Test:** Verify output directory `eval_output/droid_banana_to_red_bowl/<timestamp>/` contains MP4s and `summary_metrics.json`.
+- **Primary Objective:** **Pre-flight physics and scene verification.** Before executing neural policies, verify that the synthesized scene loads stably on the USD stage, all meshes and collision envelopes resolve, objects settle stably onto the table deck under gravity ($9.81\text{ m/s}^2$), and camera viewpoints are unobstructed.
+
+##### Option A: Interactive Visual Inspection (`--viz kit` via Omniverse Kit GUI)
+Allows the human researcher to inspect the 3D scene directly in the Omniverse Kit viewport with free orbital camera controls:
+```bash
+# Allow local X11 display access on host (run once):
+xhost +local:docker > /dev/null 2>&1 || xhost +local:root > /dev/null 2>&1
+
+docker run --rm --gpus '"device=1"' --network host \
+  -e DISPLAY="$DISPLAY" \
+  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  -v $(pwd):/workspaces/isaaclab_arena \
+  isaaclab_arena:latest \
+  /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+    --env_graph_spec_yaml generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
+    --policy_type isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy \
+    --viz kit \
+    --num_steps 300 \
+    --num_envs 1 \
+    --enable_cameras \
+    --output_base_dir eval_output/droid_banana_to_red_bowl/zero_action
+```
+
+##### Option B: Automated Headless Physics Validation (`--headless`)
+Executes headlessly in terminal, recording multi-camera MP4s and verifying contact settling:
+```bash
+docker run --rm --gpus '"device=1"' --network host \
+  -v $(pwd):/workspaces/isaaclab_arena \
+  isaaclab_arena:latest \
+  /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+    --env_graph_spec_yaml generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
+    --policy_type isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy \
+    --headless \
+    --num_steps 300 \
+    --num_envs 1 \
+    --enable_cameras \
+    --output_base_dir eval_output/droid_banana_to_red_bowl/zero_action
+```
+- **Validation Test:** Verify that `banana_ycb_robolab` rests stably in `front_right`, `bowl_ycb_robolab` rests in `front_left`, no explosive contact penetration occurs, and wrist/exterior cameras capture clean visual frames.
 - **Results & Metrics:** *(To be recorded upon execution)*
 - **Observations:** *(To be recorded)*
 
 ---
 
-### 8.2 (Future) Experiment 2: Dual-Blackwell Single-Scenario Evaluation (Scenario B1: Tomato Soup to Blue Bin)
+#### 9.1.6 Phase 1.6: Closed-Loop Neural Policy Evaluation (GPU 1: RTX 5090)
+- **Target Device:** `CUDA_VISIBLE_DEVICES=1` (RTX 5090 32 GB)
+- **Primary Objective:** Multi-episode policy evaluation driven by live `nvidia/GR00T-N1.6-DROID` policy server over ZeroMQ on port 5556, evaluating real task manipulation success rates.
+
+##### Option A: Interactive Viewport Rollout (`--viz kit`)
+Allows researchers to watch the Franka Panda arm execute pick-and-place trajectories in real time:
+```bash
+# Allow local X11 display access on host (run once):
+xhost +local:docker > /dev/null 2>&1 || xhost +local:root > /dev/null 2>&1
+
+docker run --rm --gpus '"device=1"' --network host \
+  -e DISPLAY="$DISPLAY" \
+  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  -v $(pwd):/workspaces/isaaclab_arena \
+  isaaclab_arena:latest \
+  /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+    --env_graph_spec_yaml generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
+    --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
+    --remote_host 127.0.0.1 \
+    --remote_port 5556 \
+    --viz kit \
+    --num_episodes 1 \
+    --num_steps 2000 \
+    --enable_cameras \
+    --output_base_dir eval_output/droid_banana_to_red_bowl
+```
+
+##### Option B: Scaled Headless Benchmark Rollout (`--headless`)
+High-throughput evaluation producing multi-camera H.264 MP4 videos, high-frequency joint telemetry, and task summary metrics:
+```bash
+docker run --rm --gpus '"device=1"' --network host \
+  -v $(pwd):/workspaces/isaaclab_arena \
+  isaaclab_arena:latest \
+  /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+    --env_graph_spec_yaml generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
+    --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
+    --remote_host 127.0.0.1 \
+    --remote_port 5556 \
+    --headless \
+    --num_episodes 5 \
+    --num_steps 2000 \
+    --enable_cameras \
+    --output_base_dir eval_output/droid_banana_to_red_bowl
+```
+- **Validation Test:** Verify output directory `eval_output/droid_banana_to_red_bowl/<timestamp>/` contains MP4 videos for wrist and exterior cameras, `episode_results_rank0.jsonl`, and `summary_metrics.json`.
+- **Results & Metrics:** *(To be recorded upon execution)*
+- **Observations:** *(To be recorded)*
+
+---
+
+### 9.2 (Future) Experiment 2: Dual-Blackwell Single-Scenario Evaluation (Scenario B1: Tomato Soup to Blue Bin)
 *(To be specified following successful completion and benchmarking of Experiment 1)*
 
 ---
 
-### 8.3 (Future) Experiment 3: High-Parameter & Context Stress Testing (Qwen-72B / LLaMA-70B)
+### 9.3 (Future) Experiment 3: High-Parameter & Context Stress Testing (Qwen-72B / LLaMA-70B)
 *(To be specified following successful completion of Experiment 1 & 2)*
 
 ---
 
-## 9. Human Research Notes & Decision Log
+## 10. Human Research Notes & Decision Log
 
 | Date | Researcher | Topic | Decision / Observation | Action Item |
 | :--- | :--- | :--- | :--- | :--- |
 | 2026-09-29 | Renan & Antigravity | Hardware Audit | Confirmed dual-Blackwell initialization: RTX PRO 6000 (96 GB) on `0000:01:00.0` and RTX 5090 (32 GB) on `0000:06:00.0`. Persistence mode enabled on both. | Proceed with functional separation (GPU 0 for LLM, GPU 1 for Sim/Policy). |
 | 2026-09-29 | Renan & Antigravity | LLM Model Selection | Selected `Qwen2.5-Coder-32B-Instruct-AWQ` as primary spec generator for Experiment 1 Phase 1.1 due to existing local cache and optimal ~22 GB memory footprint on GPU 0. | Test vLLM serving container with outlines backend on Port 8000. |
 | 2026-09-29 | Renan & Antigravity | VLM Critic Selection | Designated `Qwen/Qwen2.5-VL-7B-Instruct` as the single primary VLM on GPU 0 (Port 8001, ~16 GB) for Experiment 1. Integrated with `VisualSceneCritic` via `LOCAL_VLM_BASE_URL` to inspect rendered multi-camera snapshots during active inference repair. | Configure dual-server deployment on GPU 0; combined VRAM (~38 GB) leaves ~58 GB free. |
-| 2026-09-30 | Renan & Antigravity | Dual-Mode Runner Protocol | Mandated execution of both `--mode resolve` (Step 1.4a on GPU 0) and `--mode full` (Step 1.4b on GPU 1) for every scenario to independently isolate cognitive spec validity from 3D USD physics settling. | Added Section 6 to document mode differences and updated Phase 1.4 execution plans. |
+| 2026-09-30 | Renan & Antigravity | Dual-Mode Runner Protocol | Mandated execution of both `--mode resolve` (Step 1.4 on GPU 0) and `--mode full` for scene verification to independently isolate cognitive spec validity from 3D USD physics settling. | Added Section 6 to document mode differences. |
+| 2026-09-30 | Renan & Antigravity | Zero-Action Gating & Kit Viz | Introduced Phase 1.5 Zero-Action policy validation gating prior to closed-loop neural policy execution, and added `--viz kit` display forwarding alongside `--headless` for interactive researcher inspection. | Updated Section 8 pipeline architecture and Section 9 execution logs. |
+| 2026-09-30 | Renan & Antigravity | Multi-Layer Telemetry Infrastructure | Decoupled 3-layer telemetry capture (client-side reasoning, vLLM Prometheus metrics, and Blackwell hardware dynamics) into dedicated Section 7 to eliminate duplication and keep experiment logs concise and readable. | Established Section 7 telemetry infrastructure, added baseline readiness probes to Phase 1.1, and renumbered experimental architecture. |

@@ -23,6 +23,7 @@ hermes -p local-vllm config set model.base_url "http://localhost:8000/v1"
 hermes -p local-vllm config set model.default "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ"
 hermes -p local-vllm config set model.context_length 65536
 hermes -p local-vllm config set model.streaming false
+hermes -p local-vllm config set tools.tool_search.enabled false
 hermes -p local-vllm config set terminal.cwd "/workspaces/IsaacLab-Arena"
 
 # Step 3: Launch Hermes Agent in interactive Terminal UI (TUI)
@@ -130,7 +131,33 @@ docker run -d --name arena-vllm-spec \
   --enable-request-id-headers
 ```
 
-#### 4.2.1 Launch the Visual Model on GPU 1
+#### 4.2.1 Remove the vLLM spec if we have issues
+
+We might face some issues
+
+```bash
+docker rm -f arena-vllm-spec 2>/dev/null || true
+
+docker run -d --name arena-vllm-spec \
+  --restart unless-stopped \
+  --gpus '"device=0"' \
+  --network host \
+  --ipc host \
+  -e VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  -v "$(pwd)/.agents/references/plans/local-inference/vllm_patches/hermes_tool_parser.py:/usr/local/lib/python3.12/dist-packages/vllm/tool_parsers/hermes_tool_parser.py" \
+  vllm/vllm-openai:latest \
+  --model Qwen/Qwen2.5-Coder-32B-Instruct-AWQ \
+  --port 8000 \
+  --hf-overrides '{"max_position_embeddings": 131072, "rope_scaling": {"rope_type": "yarn", "factor": 4.0, "original_max_position_embeddings": 32768}}' \
+  --max-model-len 131072 \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes \
+  --gpu-memory-utilization 0.85 \
+  --enable-request-id-headers
+```
+
+#### 4.2.2 Launch the Visual Model on GPU 1
 
 The visual perception VLM shares GPU 1 with `gr00t-server`. Use `--gpu-memory-utilization 0.68` to leave headroom for the GR00T policy model (~7.4 GiB):
 
@@ -216,6 +243,7 @@ hermes -p local-vllm config set model.base_url "http://localhost:8000/v1"
 hermes -p local-vllm config set model.default "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ"
 hermes -p local-vllm config set model.context_length 65536
 hermes -p local-vllm config set model.streaming false
+hermes -p local-vllm config set tools.tool_search.enabled false
 hermes -p local-vllm config set terminal.cwd "/workspaces/IsaacLab-Arena"
 ```
 
@@ -267,6 +295,67 @@ Verifies SQLite integrity, config versioning, environment variables, and tool av
 
 ---
 
+### 5.4 Global `~/.hermes/config.yaml` and Two-Level Config Resolution
+
+Hermes uses a **two-level configuration cascade** that the profile-based commands above don't fully surface:
+
+1. **Global config** — `~/.hermes/config.yaml` — sets defaults for *every* profile.
+2. **Profile config** — `~/.hermes/profiles/<name>/config.yaml` — overrides specific keys per profile.
+
+When Hermes loads configuration for a profile, it reads the global config first, then merges the profile-level config on top. Keys present in the profile win; **keys absent from the profile silently inherit from the global file**.
+
+> [!IMPORTANT]
+> The `hermes -p local-vllm config set ...` commands shown in this guide **only write to the profile-level config**. If the global `~/.hermes/config.yaml` has conflicting or stale settings for keys the profile doesn't override, those global values will silently take effect and can cause confusing failures.
+
+#### Critical global settings that affect local vLLM operation
+
+The global `~/.hermes/config.yaml` controls several settings that directly impact whether Hermes works correctly with local vLLM:
+
+| Global Key | Why It Matters for Local vLLM | Recommended Value |
+| :--- | :--- | :--- |
+| `model.provider` | If set to a cloud provider globally, and the profile doesn't override it, requests go to the cloud instead of local vLLM. | `custom` |
+| `model.base_url` | Must point to `http://127.0.0.1:8000/v1` for local inference. | `http://127.0.0.1:8000/v1` |
+| `model.streaming` | Streaming can cause XML tool-call leakage with vLLM (see Case 6). | `false` |
+| `tools.tool_search.enabled` | **Critical.** Defaults to `auto`, which injects `<tool_search>` XML instructions into the system prompt. Local models (Qwen 2.5 Coder) emit these tags as plain text instead of using actual tools — completely breaking agentic operation. The legacy flat key `tools.tool_search: false` does **not** control this; you must use the nested path. | `false` |
+| `terminal.cwd` | If set to `"."` globally (the default), Hermes resolves to its sandbox home — not the repo root (see Case 9). | `/workspaces/IsaacLab-Arena` |
+| `compression.threshold_tokens` | Must be within the vLLM-served context window. | ≤ `model.context_length` |
+| `agent.reasoning_effort` | Local models like Qwen 2.5 Coder don't support reasoning tokens. | `"none"` |
+
+#### Inspecting and editing the global config
+
+```bash
+# View the full global config
+cat ~/.hermes/config.yaml
+
+# Or query a specific key
+hermes config get model           # reads from the ACTIVE profile (merged view)
+hermes config get --global model  # reads from the global layer only
+
+# Set a global default (affects all profiles that don't override it)
+hermes config set --global tools.tool_search.enabled false
+hermes config set --global terminal.cwd "/workspaces/IsaacLab-Arena"
+```
+
+#### Verifying which layer a setting comes from
+
+When debugging, compare global vs. profile to see what's actually in effect:
+
+```bash
+# Profile-level overrides only
+cat ~/.hermes/profiles/local-vllm/config.yaml | grep -A2 "model:"
+
+# Global defaults
+cat ~/.hermes/config.yaml | grep -A5 "model:"
+
+# Merged effective config (what Hermes actually uses)
+hermes -p local-vllm config get model
+```
+
+> [!TIP]
+> After making changes to `~/.hermes/config.yaml`, restart any running Hermes session (`/exit` then relaunch) — global config is read at process startup, not hot-reloaded.
+
+---
+
 ## 6. Devcontainer Lifecycle: Reusing & Persisting Profiles
 
 Because devcontainers manage their own container filesystem, `/root/.hermes/` is **container-local** by default. When you spin up a brand-new container or rebuild from scratch, only the `default` profile exists initially.
@@ -296,6 +385,7 @@ local-vllm config set model.base_url "http://localhost:8000/v1" && \
 local-vllm config set model.default "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" && \
 local-vllm config set model.context_length 65536 && \
 local-vllm config set model.streaming false && \
+local-vllm config set tools.tool_search.enabled false && \
 local-vllm config set terminal.cwd "/workspaces/IsaacLab-Arena"
 ```
 
@@ -312,6 +402,7 @@ if command -v hermes >/dev/null 2>&1 && [ ! -d "/root/.hermes/profiles/local-vll
   local-vllm config set model.default "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ"
   local-vllm config set model.context_length 65536
   local-vllm config set model.streaming false
+  local-vllm config set tools.tool_search.enabled false
   local-vllm config set terminal.cwd "/workspaces/IsaacLab-Arena"
   echo "  ✓ Pre-configured Hermes local-vllm profile"
 fi
@@ -610,6 +701,34 @@ local-vllm config get model
 
 ---
 
+#### Case 11: `<tool_search>` XML Emitted as Plain Text (No Tools Executed)
+* **Symptom in Hermes TUI / CLI:**
+  You ask the agent to perform any task (read files, list directories, run commands), and instead of executing tools, it prints raw XML:
+  ```text
+  <tool_search>
+  - queries: ["top 3 files in .agents/references/plans/local-inference/"]
+  - limit: 3
+  </tool_search>
+  ```
+* **Root Cause:**
+  1. Hermes has a `tool_search` feature that dynamically defers low-priority tools to save token budget, injecting `<tool_search>` XML instructions into the system prompt.
+  2. The `tools.tool_search.enabled` config key defaults to `auto`, which activates this feature when the model's context budget is tight relative to the number of tool schemas.
+  3. Local models (Qwen 2.5 Coder) treat the `<tool_search>` instruction as their primary action and emit the XML tags as plain text instead of using the actual tools they already have.
+  4. The legacy flat key `tools.tool_search: false` in `~/.hermes/config.yaml` does **not** control this behavior — it's superseded by the nested `tools.tool_search.enabled` key.
+* **Diagnosis:** Check the agent log for the telltale activation message:
+  ```bash
+  grep "tool_search activated" ~/.hermes/profiles/local-vllm/logs/agent.log
+  # If you see: "tool_search activated (tier 1): 13 core/visible tools kept, 4 deferred"
+  # then tool_search is active and injecting XML into the system prompt.
+  ```
+* **Resolution:**
+  ```bash
+  hermes -p local-vllm config set tools.tool_search.enabled false
+  ```
+  Then restart the session (`/exit` and relaunch, or `/new` for a fresh turn).
+
+---
+
 ### 9.3 Quick Diagnostic Summary Table
 
 | Symptom / Error | Root Cause | Immediate Fix |
@@ -625,10 +744,303 @@ local-vllm config get model
 | `Connection error` / vLLM Exited (139) Segfault | `CUDA error: device-side assert` caused by unscaled RoPE table (>32k). | Add `--hf-overrides` with `rope_scaling` (YaRN) and `max_position_embeddings`. |
 | `provider 'vllm' has no endpoint configured` | `model.base_url` is unset or empty in profile. | Run `local-vllm config set model.base_url "http://localhost:8000/v1"`. |
 | Streaming tool tags printed as text in chat | Streaming parser race in vLLM. | Run `local-vllm config set model.streaming false`. |
+| `<tool_search>` XML printed instead of tool execution | `tools.tool_search.enabled` defaults to `auto`; local models emit the tags as text. | Run `local-vllm config set tools.tool_search.enabled false`. |
 
 ---
 
-## 10. Related Plans & Artifacts
+## 10. Tool Schema Budget: Why Local Models Refuse to Call Tools
+
+This section documents the single most impactful failure mode when running local models as agentic coding assistants. **If you skip everything else in this guide, read this.**
+
+### 10.1 The Problem: Prompt Bloat Kills Tool-Calling Reliability
+
+Frontier API models (GPT-4o, Claude 4, Gemini 2.5 Pro) can reliably select from 30+ tool schemas in a single prompt. Local models **cannot**. Even a strong 32B-parameter model like Qwen 2.5 Coder degrades rapidly as tool schema payload grows:
+
+| Tool Schema Tokens | Tools Available | Observed Behavior |
+| :--- | :--- | :--- |
+| ~280 | 2 (`terminal`, `read_file`) | ✅ Model calls tools correctly on every turn |
+| ~3,000 | 6 (core coding subset) | ✅ Reliable tool calling with occasional text fallback |
+| ~8,000 | 13 (Hermes default tier-1) | ⚠️ Model sometimes emits text instead of calling tools |
+| ~13,200 | 22+ (all Hermes toolsets) | ❌ Model almost never calls tools — generates text answers, guesses, or emits raw XML/JSON |
+
+When 22 tool schemas consume ~13,200 of the ~17,400 baseline prompt tokens, the model's attention is overwhelmed by schema definitions. It "sees" the tools but doesn't reliably _use_ them — instead generating conversational text responses that hallucinate answers.
+
+> [!CAUTION]
+> **This failure is silent.** The model doesn't error — it confidently returns a text answer that _looks_ plausible but was never verified by executing any tool. You only notice when the answer is factually wrong (e.g., "No files were found" in a directory with 6 files).
+
+### 10.2 The Fix: Strip to Essential Tools
+
+For reliable agentic coding with local models, enable **only** the toolsets the agent actually needs:
+
+```bash
+# Nuclear option: disable everything, then enable only what's needed
+hermes -p local-vllm tools disable web vision skills todo memory session_search connections cronjob code_execution
+# Result: only terminal + file remain enabled
+```
+
+Verify the lean toolset:
+```bash
+hermes -p local-vllm tools list | grep "✓ enabled"
+# Expected:
+#   ✓ enabled  terminal  💻 Terminal & Processes
+#   ✓ enabled  file      📁 File Operations
+```
+
+> [!TIP]
+> **The `terminal` + `file` combo is sufficient for 90% of coding tasks.** The `terminal` tool runs any shell command (including `grep`, `find`, `git`, `python`, `curl`), and the `file` tool reads, writes, searches, and edits files. You don't need a separate `web` tool when `terminal` can run `curl`.
+
+### 10.3 Recommended Tool Profiles by Task
+
+| Task | Toolsets to Enable | Estimated Schema Tokens |
+| :--- | :--- | :--- |
+| **Code reading & editing** | `terminal`, `file` | ~2,500 |
+| **Code + web research** | `terminal`, `file`, `web` | ~3,800 |
+| **Code + delegation** | `terminal`, `file`, `delegation` | ~3,500 |
+| **Full orchestrator** | `terminal`, `file`, `delegation`, `web` | ~4,800 |
+
+To switch profiles dynamically:
+```bash
+# Before a research session:
+hermes -p local-vllm tools enable web
+
+# Before a multi-agent session:
+hermes -p local-vllm tools enable delegation
+
+# Reset to minimal:
+hermes -p local-vllm tools disable web delegation
+```
+
+### 10.4 Platform Toolsets Override (Permanent Configuration)
+
+If you want to lock the profile's toolsets without per-session toggling, set `platform_toolsets` in the profile config directly:
+
+```yaml
+# In ~/.hermes/profiles/local-vllm/config.yaml
+platform_toolsets:
+  cli: [terminal, file]     # Minimal: only terminal + file
+  # cli: [terminal, file, delegation]  # With subagent orchestration
+  # cli: [terminal, file, delegation, web]  # Full orchestrator
+```
+
+---
+
+## 11. Multi-Agent Orchestration: Scaling Beyond a Single Agent
+
+A single local agent with minimal tools can read and edit code reliably. But real-world engineering tasks — debugging a simulation, evaluating a policy, refactoring across packages — require capabilities that span multiple tool domains. The solution isn't to overload one agent with 22 tools (which breaks tool calling). Instead, **orchestrate multiple specialized agents that delegate to each other**.
+
+### 11.1 The Architecture: Orchestrator + Specialist Workers
+
+```mermaid
+flowchart TD
+    User["User / CLI"]
+    
+    subgraph GPU0["GPU 0: RTX PRO 6000 — vLLM (Port 8000)"]
+        LLM["Qwen/Qwen2.5-Coder-32B-Instruct-AWQ"]
+    end
+
+    subgraph Orchestrator["Orchestrator Agent (terminal + file + delegation)"]
+        ORC["Reads task → decomposes → delegates"]
+    end
+    
+    subgraph Workers["Specialist Worker Agents (spawned by delegate_task)"]
+        W1["Code Worker<br/>(terminal + file)<br/>Read, edit, grep, test"]
+        W2["Research Worker<br/>(terminal + file + web)<br/>Search docs, read URLs"]
+        W3["Review Worker<br/>(terminal + file)<br/>Diff, lint, review changes"]
+    end
+    
+    User --> Orchestrator
+    Orchestrator -->|"delegate_task<br/>role='code_worker'<br/>toolsets=[terminal,file]"| W1
+    Orchestrator -->|"delegate_task<br/>role='research'<br/>toolsets=[terminal,file,web]"| W2
+    Orchestrator -->|"delegate_task<br/>role='reviewer'<br/>toolsets=[terminal,file]"| W3
+    W1 & W2 & W3 -->|"Results returned<br/>to parent context"| Orchestrator
+    Orchestrator & Workers --> LLM
+```
+
+All agents share the same local vLLM instance on GPU 0. Each spawned worker gets **its own isolated context window** with only 2–3 tool schemas, keeping prompt tokens low and tool-calling reliable.
+
+### 11.2 Configuring the Orchestrator Profile
+
+The orchestrator agent needs exactly 3 toolsets — `terminal`, `file`, and `delegation`:
+
+```bash
+# Enable delegation for the orchestrator
+hermes -p local-vllm tools enable delegation
+hermes -p local-vllm tools disable web vision skills todo memory session_search connections cronjob code_execution
+
+# Verify
+hermes -p local-vllm tools list | grep "✓ enabled"
+# ✓ enabled  terminal    💻 Terminal & Processes
+# ✓ enabled  file        📁 File Operations
+# ✓ enabled  delegation  👥 Task Delegation
+```
+
+Configure delegation behavior:
+
+```bash
+# Workers inherit the same local vLLM model
+hermes -p local-vllm config set delegation.max_concurrent_children 3
+hermes -p local-vllm config set delegation.max_iterations 50
+hermes -p local-vllm config set delegation.max_spawn_depth 1
+hermes -p local-vllm config set delegation.orchestrator_enabled true
+```
+
+Or edit the config file directly:
+
+```yaml
+# In ~/.hermes/profiles/local-vllm/config.yaml
+delegation:
+  max_iterations: 50          # Cap per worker (50 is plenty for focused tasks)
+  max_concurrent_children: 3  # 3 parallel workers on a 32B model is reasonable
+  max_spawn_depth: 1          # Flat: orchestrator → workers (no worker-to-worker delegation)
+  orchestrator_enabled: true
+```
+
+### 11.3 How Delegation Works in Practice
+
+When the orchestrator agent calls `delegate_task`, Hermes spawns a child agent in an **isolated conversation context**. The child:
+
+- Gets its own system prompt (inherits SOUL.md and AGENTS.md from the parent profile)
+- Receives only the toolsets specified (or inherits the parent's if not explicitly narrowed)
+- Runs against the **same local vLLM endpoint** — no additional GPU cost
+- Returns its result summary to the parent's context when finished
+
+Example orchestrator session:
+
+```text
+You: Refactor isaaclab_arena/evaluation/ to use dataclasses instead of dicts, 
+     then run the tests to verify nothing broke.
+
+Orchestrator thinking:
+  This requires 3 steps:
+  1. Read the current evaluation code to understand the dict patterns
+  2. Apply the refactor
+  3. Run the test suite
+
+Orchestrator actions:
+  ▸ delegate_task(
+      task="Read all Python files in isaaclab_arena/evaluation/ and list every 
+            function that returns a plain dict. Report the file, function name, 
+            and the dict keys.",
+      role="code_analyst",
+      toolsets=["terminal", "file"]
+    )
+  ▸ [waits for analyst result]
+  ▸ delegate_task(
+      task="Refactor the following functions to use @dataclass instead of dict: 
+            [list from analyst]. Preserve all existing behavior.",
+      role="code_worker",
+      toolsets=["terminal", "file"]
+    )
+  ▸ delegate_task(
+      task="Run: python -m pytest isaaclab_arena/tests/ -x -q. Report pass/fail 
+            and any tracebacks.",
+      role="test_runner",
+      toolsets=["terminal"]
+    )
+```
+
+Each worker operates with 2–3 tool schemas (~2,500 tokens), well within the reliable range for Qwen 2.5 Coder.
+
+### 11.4 Parallel Agents via Git Worktrees
+
+For tasks requiring truly parallel, non-conflicting file edits (e.g., refactoring two independent packages simultaneously), use Hermes's `--worktree` flag:
+
+```bash
+# Agent 1: refactor evaluation/ in its own git worktree
+hermes -p local-vllm -w -z "Refactor isaaclab_arena/evaluation/ to use dataclasses"
+
+# Agent 2: refactor scene/ in a separate worktree (runs concurrently)
+hermes -p local-vllm -w -z "Refactor isaaclab_arena/scene/ to use dataclasses"
+```
+
+Each `-w` invocation creates an isolated git worktree, so agents can't step on each other's file edits. Both share the same vLLM instance.
+
+Clean up worktrees afterward:
+```bash
+hermes worktree audit   # List accumulated worktrees
+hermes worktree clean   # Remove merged/stale worktrees
+```
+
+### 11.5 Creating Dedicated Specialist Profiles
+
+For recurring workflows, create purpose-built profiles instead of toggling tools on the shared `local-vllm` profile:
+
+```bash
+# Profile: Lean code worker (terminal + file only)
+hermes profile create local-coder --clone
+hermes -p local-coder config set model.provider custom
+hermes -p local-coder config set model.base_url "http://localhost:8000/v1"
+hermes -p local-coder config set model.default "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ"
+hermes -p local-coder config set model.context_length 65536
+hermes -p local-coder config set model.streaming false
+hermes -p local-coder config set tools.tool_search.enabled false
+hermes -p local-coder config set terminal.cwd "/workspaces/IsaacLab-Arena"
+hermes -p local-coder tools disable web vision skills todo memory session_search connections cronjob code_execution delegation
+
+# Profile: Orchestrator (terminal + file + delegation)
+hermes profile create local-orchestrator --clone
+hermes -p local-orchestrator config set model.provider custom
+hermes -p local-orchestrator config set model.base_url "http://localhost:8000/v1"
+hermes -p local-orchestrator config set model.default "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ"
+hermes -p local-orchestrator config set model.context_length 65536
+hermes -p local-orchestrator config set model.streaming false
+hermes -p local-orchestrator config set tools.tool_search.enabled false
+hermes -p local-orchestrator config set terminal.cwd "/workspaces/IsaacLab-Arena"
+hermes -p local-orchestrator config set delegation.max_concurrent_children 3
+hermes -p local-orchestrator config set delegation.max_iterations 50
+hermes -p local-orchestrator tools disable web vision skills todo memory session_search connections cronjob code_execution
+hermes -p local-orchestrator tools enable delegation
+
+# Profile: Research agent (terminal + file + web)
+hermes profile create local-researcher --clone
+hermes -p local-researcher config set model.provider custom
+hermes -p local-researcher config set model.base_url "http://localhost:8000/v1"
+hermes -p local-researcher config set model.default "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ"
+hermes -p local-researcher config set model.context_length 65536
+hermes -p local-researcher config set model.streaming false
+hermes -p local-researcher config set tools.tool_search.enabled false
+hermes -p local-researcher config set terminal.cwd "/workspaces/IsaacLab-Arena"
+hermes -p local-researcher tools disable vision skills todo memory session_search connections cronjob code_execution delegation
+hermes -p local-researcher tools enable web
+```
+
+Then invoke each by alias:
+
+```bash
+local-coder -z "Read isaaclab_arena/tasks/__init__.py and explain each registered task"
+local-orchestrator --tui    # Interactive orchestrator with delegation
+local-researcher -z "Find how Isaac Lab 3.0 handles action spaces for humanoid robots"
+```
+
+### 11.6 vLLM Capacity Planning for Multi-Agent Workloads
+
+All agents hit the same vLLM instance. With `--max-model-len 131072` and `--gpu-memory-utilization 0.85`, vLLM manages a KV-cache pool that is shared across concurrent requests:
+
+| Concurrent Agents | Effective Context per Agent | Feasibility |
+| :--- | :--- | :--- |
+| 1 | 131,072 tokens | ✅ Full capacity — single-agent deep work |
+| 2 | ~65,536 each | ✅ Comfortable — orchestrator + 1 worker |
+| 3 | ~43,000 each | ✅ Fine — orchestrator + 2 parallel workers |
+| 5 | ~26,000 each | ⚠️ Tight — workers must be short-lived and focused |
+| 10+ | ~13,000 each | ❌ KV-cache contention — workers will queue or OOM |
+
+> [!IMPORTANT]
+> **Keep workers short-lived.** The orchestrator stays running across the session, but each delegated worker should complete its task in 10–50 turns and return results. Long-running workers consume KV-cache slots and starve the orchestrator of context.
+
+### 11.7 When to Use Multi-Agent vs. Single Agent
+
+| Scenario | Recommended Approach |
+| :--- | :--- |
+| Quick file read / edit / grep | **Single agent** (`local-coder`) — lowest latency |
+| Multi-step coding task with tests | **Single agent** with `terminal` + `file` — one conversation, one context |
+| Cross-package refactor touching many files | **Orchestrator** delegates to 2–3 focused workers |
+| Research + code integration (read docs, then implement) | **Orchestrator** delegates research, then implements |
+| Parallel independent tasks (CI-like) | **Worktree agents** (`hermes -w`) — git isolation |
+| Complex debugging requiring domain knowledge | **Single agent** with skills loaded — keep context focused |
+
+---
+
+## 12. Related Plans & Artifacts
 
 - [Local Inference Plans Index](README.md)
 - [Local LLM & VLM Execution Plan](local_llm_vlm_agentic_env_gen_plan.md)

@@ -578,22 +578,79 @@ curl -s http://127.0.0.1:8001/metrics | grep "vllm:gpu_cache_usage_factor"
 
 #### 9.1.4 Phase 1.4: Agentic Spec Generation & Factor Graph Resolution (GPU 0: RTX PRO 6000)
 - **Target Device:** `CUDA_VISIBLE_DEVICES=0` (RTX PRO 6000 Blackwell 96 GB)
-- **Primary Objective:** Pure Python cognitive prompt-to-factor-graph synthesis, active constraint repair, and Tier 2 VLM visual critic inspection without simulation engine startup.
-- **Proposed Command:**
-  ```bash
-  docker run --rm --gpus '"device=0"' --network host \
-    -e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
-    -v $(pwd):/workspaces/isaaclab_arena \
-    isaaclab_arena:latest \
-    /isaac-sim/python.sh isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-      --mode resolve \
-      --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
-      --env_name "droid_banana_to_red_bowl" \
-      --base_url "http://localhost:8000/v1" \
-      --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
-      --api_key "local-arena-token"
-  ```
-- **Validation Test:** Inspect `generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml`, check SHACL conformance report and VLM feedback.
+- **Primary Objective:** Agentic prompt-to-factor-graph synthesis, active constraint repair, and Tier 2 VLM visual critic inspection. Can be evaluated in two distinct execution modes:
+  - **Option A (`--mode resolve`)**: Pure Python factor graph synthesis, spatial constraint solving, and lineage registration without simulation engine startup.
+  - **Option B (`--mode full`)**: Monolithic end-to-end execution that synthesizes the factor graph, loads the Isaac Sim simulation runtime, settles the scene, and runs verification rollouts in a single invocation.
+
+##### Option A: Spec Resolution (`--mode resolve`, Pure Python)
+```bash
+docker run --rm --gpus '"device=0"' --network host \
+  -e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
+  -v $(pwd):/workspaces/isaaclab_arena \
+  isaaclab_arena:latest \
+  /isaac-sim/python.sh isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+    --mode resolve \
+    --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
+    --env_name "droid_banana_to_red_bowl" \
+    --base_url "http://localhost:8000/v1" \
+    --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
+    --api_key "local-arena-token"
+```
+
+##### Option B: Monolithic End-to-End Simulation (`--mode full`)
+```bash
+# Automated Headless Execution:
+docker run --rm --gpus '"device=0"' --network host \
+  -e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
+  -v $(pwd):/workspaces/isaaclab_arena \
+  isaaclab_arena:latest \
+  /isaac-sim/python.sh isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+    --mode full \
+    --headless \
+    --num_envs 1 \
+    --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
+    --env_name "droid_banana_to_red_bowl" \
+    --base_url "http://localhost:8000/v1" \
+    --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
+    --api_key "local-arena-token"
+
+# Interactive Viewport GUI (--viz kit):
+xhost +local:docker > /dev/null 2>&1 || xhost +local:root > /dev/null 2>&1
+
+docker run --rm --gpus '"device=0"' --network host \
+  -e DISPLAY="$DISPLAY" \
+  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  -e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
+  -v $(pwd):/workspaces/isaaclab_arena \
+  isaaclab_arena:latest \
+  /isaac-sim/python.sh isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+    --mode full \
+    --viz kit \
+    --num_envs 1 \
+    --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
+    --env_name "droid_banana_to_red_bowl" \
+    --base_url "http://localhost:8000/v1" \
+    --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
+    --api_key "local-arena-token"
+
+# new experiment no --viz kit
+docker run --rm --gpus '"device=0"' --network host \
+-e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
+-v $(pwd):/workspaces/isaaclab_arena \
+isaaclab_arena:latest \
+/isaac-sim/python.sh isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+  --mode full \
+  --headless \
+  --num_envs 1 \
+  --temperature 0.0 \
+  --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
+  --env_name "droid_banana_to_red_bowl" \
+  --base_url "http://localhost:8000/v1" \
+  --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
+  --api_key "local-arena-token"
+```
+
+- **Validation Test:** Inspect `generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml`, check SHACL conformance report, VLM feedback, and physical rollout logs.
 
 ##### Phase 1.4 Telemetry & Metrics Capture
 Hardware and inference telemetry are captured during this phase using the hooks specified in [Section 7](#7-multi-layer-telemetry--observability-infrastructure):

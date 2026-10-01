@@ -4,7 +4,16 @@
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 :droid_banana_to_red_bowl a arena:EnvironmentFamily ;
-    arena:currentVersion 1 .
+    arena:currentVersion 2 .
+
+:droid_banana_to_red_bowl_v2 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-30T18:04:25.287583+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_banana_to_red_bowl_v1 ;
+    arena:evalDir "eval_output/droid_banana_to_red_bowl/2026-09-30_20-23-03"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 2 .
 
 :droid_banana_to_red_bowl_v1 a prov:Entity,
         arena:EnvironmentVersion ;

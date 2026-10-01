@@ -314,6 +314,14 @@ class CliOverrideSpec(BaseModel):
     arg: str = Field(min_length=1)  # flag name without leading dashes; "object" -> --object
     target_node_id: str = Field(min_length=1)  # graph asset id whose registry_name the flag swaps
 
+    @field_validator("arg", mode="before")
+    @classmethod
+    def _strip_leading_dashes(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            stripped = value.lstrip("-")
+            return stripped if stripped else value
+        return value
+
     @property
     def dest(self) -> str:
         """The argparse attribute name for this flag (dashes become underscores)."""

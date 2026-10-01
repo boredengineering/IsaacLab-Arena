@@ -25,8 +25,32 @@
           "object_moved_rate": 0.0
         }
       }
+    },
+    {
+      "version": 2,
+      "created_at": "2026-09-30T18:04:25.287583+00:00",
+      "trigger": "initial_generation",
+      "prompt": "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left.",
+      "parent_version": 1,
+      "remediations": [],
+      "diagnostics": [],
+      "spec_file": "droid_banana_to_red_bowl/v2/droid_banana_to_red_bowl.yaml",
+      "policy_file": "droid_banana_to_red_bowl/v2/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-09-30T20:27:00.750578+00:00",
+        "eval_dir": "eval_output/droid_banana_to_red_bowl/2026-09-30_20-23-03",
+        "success_rate": 0.0,
+        "object_moved_rate": 1.0,
+        "num_episodes": 1,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 1,
+          "success_rate": 0.0,
+          "object_moved_rate": 1.0
+        }
+      }
     }
   ],
-  "current_version": 1,
-  "updated_at": "2026-09-30T14:37:22.201096+00:00"
+  "current_version": 2,
+  "updated_at": "2026-09-30T18:04:25.287583+00:00"
 }

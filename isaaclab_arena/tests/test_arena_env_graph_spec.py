@@ -293,3 +293,12 @@ def test_graph_spec_omits_empty_optional_fields_from_dict():
     assert "object_references" not in dumped
     assert "cli_override_specs" not in dumped
     assert spec.cli_override_specs is None
+
+
+def test_cli_override_spec_strips_leading_dashes():
+    data = _minimal_env_graph_data()
+    data["cli_override_specs"] = [{"arg": "--object", "target_node_id": "cube"}]
+    spec = ArenaEnvGraphSpec.from_dict(data)
+    assert spec.cli_override_specs is not None
+    assert spec.cli_override_specs[0].arg == "object"
+

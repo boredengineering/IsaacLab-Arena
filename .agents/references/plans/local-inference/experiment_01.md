@@ -215,7 +215,7 @@ flowchart TD
     --format=csv -l 1 > eval_output/droid_banana_to_red_bowl/gpu0_hardware_telemetry.csv &
   GPU0_LOGGER_PID=$!
   ```
-- **Spec Resolution Command:**
+- **Option A: Pure Spec Resolution (`--mode resolve`, No Sim Startup):**
   ```bash
   docker run --rm --gpus '"device=0"' --network host \
     -e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
@@ -229,9 +229,45 @@ flowchart TD
       --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
       --api_key "local-arena-token"
   ```
+- **Option B: Monolithic End-to-End Simulation (`--mode full`):**
+  ```bash
+  # Headless Mode:
+  docker run --rm --gpus '"device=0"' --network host \
+    -e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
+    -v $(pwd):/workspaces/isaaclab_arena \
+    isaaclab_arena:latest \
+    /isaac-sim/python.sh isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+      --mode full \
+      --headless \
+      --num_envs 1 \
+      --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
+      --env_name "droid_banana_to_red_bowl" \
+      --base_url "http://localhost:8000/v1" \
+      --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
+      --api_key "local-arena-token"
+
+  # Interactive Viewport GUI (--viz kit):
+  xhost +local:docker > /dev/null 2>&1 || xhost +local:root > /dev/null 2>&1
+
+  docker run --rm --gpus '"device=0"' --network host \
+    -e DISPLAY="$DISPLAY" \
+    -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+    -e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
+    -v $(pwd):/workspaces/isaaclab_arena \
+    isaaclab_arena:latest \
+    /isaac-sim/python.sh isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+      --mode full \
+      --viz kit \
+      --num_envs 1 \
+      --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
+      --env_name "droid_banana_to_red_bowl" \
+      --base_url "http://localhost:8000/v1" \
+      --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
+      --api_key "local-arena-token"
+  ```
 - **Expected Results (Mental Model):**
-  - Spec resolution executes without launching NVIDIA Omniverse or Isaac Sim.
-  - LLM completes prompt synthesis in $\le 5\text{ seconds}$ with schema-guided tokens.
+  - In `--mode resolve`: spec resolution executes without launching NVIDIA Omniverse or Isaac Sim; completed in $\le 5\text{ seconds}$.
+  - In `--mode full`: resolves the graph spec, boots Isaac Sim in the same process, settles objects on the table, and steps the zero-action policy.
   - Active Inference Self-Healing loop:
     - Pass 1: SHACL graph validation passes.
     - Pass 2: Spatial clearance oracle confirms banana is in `front_right` and bowl is in `front_left` with non-overlapping AABBs.
@@ -242,13 +278,33 @@ flowchart TD
 - **Actual Observed Results (Tracking Ledger):**
   | Parameter | Expected | Actual / Getting | Status | Notes |
   | :--- | :--- | :--- | :--- | :--- |
-  | **Resolution Mode** | `--mode resolve` | `--mode resolve` |  PASSED | Pure factor graph synthesis, zero simulator overhead |
-  | **Graph-RAG Retrieval** | Query Neo4j | `bolt://localhost:7688` |  PASSED | Retrieved from `neo4j-arena` |
-  | **LLM Token Metrics** | Synthesis | `6,830 tokens` (5,695 prompt, 1,135 completion) |  PASSED | ~62 tok/s throughput on RTX PRO 6000 |
-  | **Spatial Placement** | Non-overlapping | Banana Right (`-0.1568y`), Bowl Left (`+0.1568y`) |  PASSED | Stable tabletop positions on `maple_table` |
-  | **Neo4j LPG Sync** | Sync to Neo4j | `8 nodes, 11 relations` |  PASSED | Verified via Cypher API commit |
-  | **Artifacts Created** | Spec YAML & Lineage | `v1/` YAML, `lineage.json`, `lineage.ttl` (PROV-O) |  PASSED | Symlink `latest -> v1` verified |
-  | **Exit Code** | 0 | `0` |  PASSED | Exited cleanly with code 0 |
+  | **Resolution Mode** | `--mode resolve` | `--mode resolve` | ✅ PASSED | Pure factor graph synthesis, zero simulator overhead |
+  | **Monolithic Mode** | `--mode full` | `--mode full --headless --temperature 0.0` | ✅ PASSED | Resolves spec, boots Isaac Sim, settles USD scene, steps 20 frames (Exit 0) |
+  | **Graph-RAG Retrieval** | Query Neo4j | `bolt://localhost:7688` | ✅ PASSED | Injected 2 prior subgraphs from `neo4j-arena` |
+  | **LLM Token Metrics** | Synthesis | `3,043 tokens` | ✅ PASSED | ~62 tok/s throughput on RTX PRO 6000 |
+  | **Spatial Placement** | Non-overlapping | Banana Right (`-0.1568y`), Bowl Left (`+0.1568y`) | ✅ PASSED | Stable tabletop positions on `maple_table` |
+  | **Neo4j LPG Sync** | Sync to Neo4j | `8 nodes, 11 relations` | ✅ PASSED | Verified via Cypher API commit |
+  | **Artifacts Created** | Spec YAML & Lineage | `v1/` and `v2/` YAML, `lineage.json`, `lineage.ttl` (PROV-O) | ✅ PASSED | Symlink `latest -> v2` verified |
+  | **Exit Code** | 0 | `0` | ✅ PASSED | Exited cleanly with code 0 |
+
+#### Incident & Root Cause Analysis: `--mode full` Spec Synthesis Edge Cases
+
+During initial `--mode full` evaluation, three interrelated prompt-to-schema failure modes were diagnosed and hardened:
+
+1. **Hallucinated `cli_override_specs` Sections**:
+   - *Failure*: `AssertionError: Agent returned an invalid spec. Validation traces: ('CLI override \'----task\' targets unknown or non-swappable asset \'task\'')`.
+   - *Root Cause*: The Pydantic description for `cli_override_specs` was interpreted by the LLM as general command-line parameters for YAML sections (`--task`, `--embodiment`, etc.) with leading dashes. In Arena's domain model, CLI overrides can *only* target swappable scene assets (`self.embodiment.id`, `self.background.id`, or scene objects).
+   - *Fix*: Added automatic pruning in `_sanitize_spec_candidate` to filter out non-asset targets, stripped leading dashes in `CliOverrideSpec`, and instructed the prompt to omit `cli_override_specs` for standard tasks.
+
+2. **Unterminated String at Char 612 / Degenerate `prim_path` Repetition**:
+   - *Failure*: `JSONDecodeError: Unterminated string starting at: line 18 column 68 (char 612)` after exhausting `max_tokens=4096`.
+   - *Root Cause*: The system prompt's few-shot schema example showed `"destination_location": "destination_id"`. This misled the LLM into believing it had to generate an `object_reference` with `id: destination_id`. When generating `prim_path`, the model entered an infinite token repetition loop (`/World/bowl_ycb_robolab_01/bowl_ycb_robolab_01_mesh_01/...`) until hitting the token ceiling, leaving the JSON string unclosed.
+   - *Fix*: Updated the few-shot template to use `"destination_location": "destination_object_id"`, added prompt guidance specifying that receptacle tasks directly use the target object ID without generating `object_references`, and added automatic redirection in `_sanitize_spec_candidate`.
+
+3. **`placement_validators` Subset Invariant Violation**:
+   - *Failure*: `required_checks must be a subset of enabled_checks; unexpected: ['friction', 'headroom']`.
+   - *Root Cause*: The LLM added `friction` and `headroom` to `required_checks` without mirroring them in `enabled_checks`.
+   - *Fix*: Added automatic reconciliation in `_sanitize_spec_candidate` ensuring `enabled_checks` is always a superset of `required_checks`.
 
 ---
 

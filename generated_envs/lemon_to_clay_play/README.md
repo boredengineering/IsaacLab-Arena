@@ -1,16 +1,16 @@
-# Environment: `droid_banana_to_red_bowl` (Latest: `v2`)
+# Environment: `lemon_to_clay_play` (Latest: `v2`)
 
 > **Prompt / Task Description**:
-> "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left."
+> "Pick up the fresh lemon from the front right and carefully place it on the clay plate at the front left."
 
 ---
 
 ## 1. Quick Info & Artifact Paths
-- **Canonical Environment Name**: `droid_banana_to_red_bowl`
-- **Active Version Directory**: `generated_envs/droid_banana_to_red_bowl/latest/` (symlinked to `v2`)
-- **Environment Graph Spec**: `/workspaces/isaaclab_arena/generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml`
-- **Policy Configuration**: `/workspaces/isaaclab_arena/generated_envs/droid_banana_to_red_bowl/latest/policy_config.yaml`
-- **Evaluation Output Directory**: `/workspaces/isaaclab_arena/eval_output/droid_banana_to_red_bowl`
+- **Canonical Environment Name**: `lemon_to_clay_play`
+- **Active Version Directory**: `generated_envs/lemon_to_clay_play/latest/` (symlinked to `v2`)
+- **Environment Graph Spec**: `/workspaces/isaaclab_arena/generated_envs/lemon_to_clay_play/latest/lemon_to_clay_play.yaml`
+- **Policy Configuration**: `/workspaces/isaaclab_arena/generated_envs/lemon_to_clay_play/latest/policy_config.yaml`
+- **Evaluation Output Directory**: `/workspaces/isaaclab_arena/eval_output/lemon_to_clay_play`
 - **Lineage Ledgers**: [`lineage.json`](./lineage.json) | [`lineage.ttl`](./lineage.ttl) (W3C PROV-O)
 
 ---
@@ -47,7 +47,7 @@ docker exec -it \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
   --mode build \
-  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
+  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/lemon_to_clay_play/latest/lemon_to_clay_play.yaml \
   --num_steps 200 \
   --viz kit
 ```
@@ -63,13 +63,13 @@ docker exec -it \
   isaaclab_arena/evaluation/policy_runner.py \
   --viz kit \
   --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
-  --policy_config_yaml_path /workspaces/isaaclab_arena/generated_envs/droid_banana_to_red_bowl/latest/policy_config.yaml \
+  --policy_config_yaml_path /workspaces/isaaclab_arena/generated_envs/lemon_to_clay_play/latest/policy_config.yaml \
   --remote_host 127.0.0.1 \
   --remote_port 5557 \
   --num_steps 2000 \
   --enable_cameras \
-  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
-  --output_base_dir /workspaces/isaaclab_arena/eval_output/droid_banana_to_red_bowl
+  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/lemon_to_clay_play/latest/lemon_to_clay_play.yaml \
+  --output_base_dir /workspaces/isaaclab_arena/eval_output/lemon_to_clay_play
 ```
 
 ### C. Scaled Headless Benchmark (High-Throughput Parallel Flywheel)
@@ -80,15 +80,15 @@ docker exec -it \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena/evaluation/policy_runner.py \
   --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \
-  --policy_config_yaml_path /workspaces/isaaclab_arena/generated_envs/droid_banana_to_red_bowl/latest/policy_config.yaml \
+  --policy_config_yaml_path /workspaces/isaaclab_arena/generated_envs/lemon_to_clay_play/latest/policy_config.yaml \
   --remote_host 127.0.0.1 \
   --remote_port 5557 \
   --num_envs 32 \
   --num_episodes 32 \
   --num_steps 2000 \
   --enable_cameras \
-  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
-  --output_base_dir /workspaces/isaaclab_arena/eval_output/droid_banana_to_red_bowl
+  --env_graph_spec_yaml /workspaces/isaaclab_arena/generated_envs/lemon_to_clay_play/latest/lemon_to_clay_play.yaml \
+  --output_base_dir /workspaces/isaaclab_arena/eval_output/lemon_to_clay_play
 ```
 
 ### D. Active Inference Auto-Healing
@@ -99,7 +99,7 @@ docker exec -it \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
   --mode auto_heal \
-  --env_name droid_banana_to_red_bowl
+  --env_name lemon_to_clay_play
 ```
 
 ### E. Conversational Refinement & Prompt Synthesis
@@ -112,7 +112,7 @@ docker exec -it \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
   --mode resolve \
-  --base_spec /workspaces/isaaclab_arena/generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
+  --base_spec /workspaces/isaaclab_arena/generated_envs/lemon_to_clay_play/latest/lemon_to_clay_play.yaml \
   --feedback "Move the destination receptacle 5cm to the left and change the table surface material."
 
 # Re-generate from initial prompt:
@@ -121,8 +121,8 @@ docker exec -it \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
   --mode resolve \
-  --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
-  --env_name droid_banana_to_red_bowl
+  --prompt "Pick up the fresh lemon from the front right and carefully place it on the clay plate at the front left." \
+  --env_name lemon_to_clay_play
 ```
 
 ---
@@ -130,5 +130,5 @@ docker exec -it \
 ## 4. Version History & Remediation Lineage
 | Version | Created Date | Trigger | Remediation / Patch Notes | Benchmark Outcome |
 | :--- | :--- | :--- | :--- | :--- |
-| `v1` | 2026-09-30 | `initial_generation` | Initial synthesis | 0.0% (1 eps) |
-| `v2` | 2026-09-30 | `initial_generation` | Initial synthesis | 0.0% (1 eps) |
+| `v1` | 2026-09-30 | `initial_generation` | Initial synthesis | *Pending evaluation* |
+| `v2` | 2026-09-30 | `initial_generation` | Initial synthesis | 100.0% (1 eps) |

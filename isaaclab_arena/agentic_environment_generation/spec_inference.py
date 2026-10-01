@@ -25,6 +25,66 @@ from isaaclab_arena.agentic_environment_generation.spec_wire_adapter import Spec
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
 
+def _sanitize_spec_candidate(data: dict[str, Any]) -> dict[str, Any]:
+    """Sanitize LLM-generated spec dict before Pydantic domain validation."""
+    if not isinstance(data, dict):
+        return data
+
+    if "cli_override_specs" in data and isinstance(data["cli_override_specs"], list):
+        swappable_ids: set[str] = set()
+        emb = data.get("embodiment")
+        if isinstance(emb, dict) and isinstance(emb.get("id"), str):
+            swappable_ids.add(emb["id"])
+        bg = data.get("background")
+        if isinstance(bg, dict) and isinstance(bg.get("id"), str):
+            swappable_ids.add(bg["id"])
+        objs = data.get("objects")
+        if isinstance(objs, list):
+            for obj in objs:
+                if isinstance(obj, dict) and isinstance(obj.get("id"), str):
+                    swappable_ids.add(obj["id"])
+
+        valid_overrides = []
+        seen_args: set[str] = set()
+        for item in data["cli_override_specs"]:
+            if isinstance(item, dict):
+                arg = str(item.get("arg", "")).lstrip("-")
+                target = item.get("target_node_id")
+                if target in swappable_ids and arg and arg not in seen_args:
+                    seen_args.add(arg)
+                    valid_overrides.append({"arg": arg, "target_node_id": target})
+        data["cli_override_specs"] = valid_overrides
+
+    if "object_references" in data and isinstance(data["object_references"], list):
+        obj_ids = {obj.get("id") for obj in data.get("objects", []) if isinstance(obj, dict)}
+        bg_id = data.get("background", {}).get("id") if isinstance(data.get("background"), dict) else None
+        valid_refs = []
+        for ref in data["object_references"]:
+            if isinstance(ref, dict):
+                parent_id = ref.get("parent_id")
+                if parent_id in obj_ids:
+                    ref_id = ref.get("id")
+                    tasks = data.get("task", {}).get("subtasks", [])
+                    if isinstance(tasks, list):
+                        for subtask in tasks:
+                            if isinstance(subtask, dict) and isinstance(subtask.get("params"), dict):
+                                if subtask["params"].get("destination_location") == ref_id:
+                                    subtask["params"]["destination_location"] = parent_id
+                    continue
+                if parent_id == bg_id:
+                    valid_refs.append(ref)
+        data["object_references"] = valid_refs
+
+    if "placement_validators" in data and isinstance(data["placement_validators"], dict):
+        pv = data["placement_validators"]
+        req = pv.get("required_checks")
+        enb = pv.get("enabled_checks")
+        if isinstance(req, list) and isinstance(enb, list):
+            pv["enabled_checks"] = list(dict.fromkeys(enb + req))
+
+    return data
+
+
 class SpecInference:
     """Infers ArenaEnvGraphSpec from a natural-language prompt."""
 
@@ -79,6 +139,7 @@ class SpecInference:
             data = self._wire_adapter.decode(data)
         elif self._strict_domain_adapter:
             data = self._strict_domain_adapter.decode(self._strict_domain_adapter.encode(data))
+        data = _sanitize_spec_candidate(data)
         try:
             spec = ArenaEnvGraphSpec.model_validate(data)
         except ValidationError as exc:
@@ -143,6 +204,7 @@ class SpecInference:
             data = self._wire_adapter.decode(data)
         elif self._strict_domain_adapter:
             data = self._strict_domain_adapter.decode(self._strict_domain_adapter.encode(data))
+        data = _sanitize_spec_candidate(data)
         try:
             spec = ArenaEnvGraphSpec.model_validate(data)
         except ValidationError as exc:
@@ -270,7 +332,7 @@ OUTPUT SCHEMA STRUCTURE:
         "kind": "PickAndPlaceTask",
         "params": {
           "pick_up_object": "object_id",
-          "destination_location": "destination_id",
+          "destination_location": "destination_object_id",
           "background_scene": "background_id"
         }
       }
@@ -286,6 +348,9 @@ GUIDANCE:
 - For embodiment, if the prompt only mentions the robot family (droid/franka/g1) and there are multiple
   variations of that family in EMBODIMENTS, pick the one with the default tag.
 - For multiple instances of the same registry asset, use semantic (left/right) or numerical (1/2/3) suffixes in ``id``.
+- For pick-and-place into a receptacle object (e.g. bowl, bin, box, plate), ``destination_location`` is the ID of that object (e.g. 'red_bowl'). Keep ``object_references`` as an empty list [].
+- Do NOT generate ``object_references`` unless interacting with an articulated fixture part (e.g. a specific drawer or door in a cabinet).
+- Do NOT generate ``cli_override_specs``; keep it as an empty list [] or omit it.
 
 TELESCOPIC DOLLHOUSE SPATIAL PLACEMENT:
 - Robot Stance: Grounded in front of the table/workspace (e.g. [-0.55, 0.0, 0.0] facing +X, or [0.0, 0.35, floor_z] facing +Y), NOT inside the table volume.

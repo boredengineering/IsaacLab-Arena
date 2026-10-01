@@ -1,0 +1,23 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:lemon_to_clay_play a arena:EnvironmentFamily ;
+    arena:currentVersion 2 .
+
+:lemon_to_clay_play_v2 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-30T20:45:33.162549+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :lemon_to_clay_play_v1 ;
+    arena:evalDir "eval_output/lemon_to_clay_play/2026-09-30_21-04-17"^^xsd:string ;
+    arena:successRate "1.0"^^xsd:float ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 2 .
+
+:lemon_to_clay_play_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-30T20:44:25.506071+00:00"^^xsd:dateTime ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 1 .
+

@@ -22,6 +22,8 @@ hermes -p local-vllm config set model.provider custom
 hermes -p local-vllm config set model.base_url "http://localhost:8000/v1"
 hermes -p local-vllm config set model.default "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ"
 hermes -p local-vllm config set model.context_length 65536
+hermes -p local-vllm config set model.streaming false
+hermes -p local-vllm config set terminal.cwd "/workspaces/IsaacLab-Arena"
 
 # Step 3: Launch Hermes Agent in interactive Terminal UI (TUI)
 hermes -p local-vllm --tui
@@ -68,11 +70,16 @@ flowchart TD
 
 Hermes is an **autonomous coding agent**: unlike standard chatbots, it actively reads code, applies git diffs, executes tests, and iterates on errors. This introduces two critical configuration requirements:
 
-### 3.1 Hermes Context Window Override (`model.context_length: 65536`)
+### 3.1 Context Window Sizing: Why `--max-model-len 65536` is the Operational Standard
 
-* **Why it is needed:** Hermes Agent requires a minimum working memory of $\ge 64,000$ tokens to accommodate system prompts, tool schemas, and multi-turn execution history.
-* **The Situation:** To maximize concurrent VRAM headroom on GPU 0, `arena-vllm-spec` serves a 16k KV-cache window (`--max-model-len 16384`).
-* **The Fix:** Setting `model.context_length: 65536` in the Hermes profile instructs Hermes to allow local execution while managing context compression smoothly:
+* **The Problem:** Hermes Agent loads system prompts, repository rules (`AGENTS.md`), personas (`SOUL.md`), long-term memories, and full schemas for 22+ active tools. On turn 1, this baseline prompt alone consumes **~17,412 tokens**!
+* **The 32k Failure Mode:** If `arena-vllm-spec` is started with only `--max-model-len 32768`, the usable working memory is only ~15,356 tokens (over 53% of the window is consumed by fixed overhead). When an agent inspects large directories (e.g. `ls -l .agents/skills/` with 352 items) or reads several files across multiple turns, prompt size exceeds 32,768 tokens, triggering `HTTP 400: prompt contains at least 32769 tokens` and halting the conversation.
+* **The Solution:** Run `arena-vllm-spec` with `-e VLLM_ALLOW_LONG_MAX_MODEL_LEN=1`, `--max-model-len 65536`, and `--gpu-memory-utilization 0.45`. On the RTX PRO 6000 96GB, vLLM allocates 87,440 tokens of KV-cache memory (~21.3 GiB). This provides **over 55,000 tokens of clean working workspace**, giving nearly 4x more headroom for multi-turn agentic coding without GPU contention.
+* **Tool Schema Pruning (Reclaiming ~7,000 Tokens):** By disabling unused non-coding tools (browser, delegation, tts, image_gen, computer_use), baseline tool schema size is cut by 34%:
+  ```bash
+  local-vllm tools disable browser delegation tts image_gen computer_use
+  ```
+* **Hermes Profile Pin:** Keep `model.context_length: 65536` pinned in Hermes:
   ```bash
   hermes -p local-vllm config set model.context_length 65536
   ```
@@ -98,77 +105,231 @@ docker ps --filter "name=arena-vllm-spec"
 
 ### 4.2 Start or Restart vLLM with Tool-Calling Support
 
-If you need full autonomous tool execution (file editing, terminal commands, running pytest), launch or update the container with `--enable-auto-tool-choice` and `--tool-call-parser hermes`:
+With the visual model (`arena-vllm-visual`) moved to **GPU 1 (RTX 5090)**, GPU 0 (RTX PRO 6000, 96 GB) is now fully dedicated to the coding model. This enables the maximum **128k context window** with YaRN RoPE factor 4.0:
 
 ```bash
-docker run -d --name arena-vllm-coder \
+# Step 1: Stop and remove the old container instance to prevent name conflicts
+docker stop arena-vllm-spec && docker rm arena-vllm-spec
+
+# Step 2: Launch the spec container with 128k context on GPU 0
+docker run -d --name arena-vllm-spec \
+  --restart unless-stopped \
   --gpus '"device=0"' \
   --network host \
   --ipc host \
   -v ~/.cache/huggingface:/root/.cache/huggingface \
+  -v "$(pwd)/.agents/references/plans/local-inference/vllm_patches/hermes_tool_parser.py:/usr/local/lib/python3.12/dist-packages/vllm/tool_parsers/hermes_tool_parser.py" \
   vllm/vllm-openai:latest \
-  serve Qwen/Qwen2.5-Coder-32B-Instruct-AWQ \
+  --model Qwen/Qwen2.5-Coder-32B-Instruct-AWQ \
   --port 8000 \
-  --max-model-len 32768 \
+  --hf-overrides '{"max_position_embeddings": 131072, "rope_scaling": {"rope_type": "yarn", "factor": 4.0, "original_max_position_embeddings": 32768}}' \
+  --max-model-len 131072 \
   --enable-auto-tool-choice \
   --tool-call-parser hermes \
-  --gpu-memory-utilization 0.45 \
+  --gpu-memory-utilization 0.65 \
   --enable-request-id-headers
 ```
 
+#### 4.2.1 Launch the Visual Model on GPU 1
+
+The visual perception VLM shares GPU 1 with `gr00t-server`. Use `--gpu-memory-utilization 0.68` to leave headroom for the GR00T policy model (~7.4 GiB):
+
+```bash
+docker stop arena-vllm-visual && docker rm arena-vllm-visual
+
+docker run -d --name arena-vllm-visual \
+  --restart unless-stopped \
+  --gpus '"device=1"' \
+  --network host \
+  --ipc host \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  vllm/vllm-openai:latest \
+  --model Qwen/Qwen2.5-VL-7B-Instruct \
+  --port 8001 \
+  --max-model-len 8192 \
+  --gpu-memory-utilization 0.68 \
+  --enable-request-id-headers
+```
+
+> [!IMPORTANT]
+> **Why `--hf-overrides` is mandatory for context > 32k:**  
+> Qwen 2.5 Coder's default `max_position_embeddings` is 32,768. If you extend `--max-model-len` beyond that without injecting `rope_scaling` via `--hf-overrides`, the underlying CUDA attention kernels do not scale their rotary embedding tables. When a prompt's position IDs exceed 32,768, the kernel hits an out-of-bounds index and crashes vLLM with `CUDA error: device-side assert triggered` (Exit 139 / Segfault). Passing `--hf-overrides` with YaRN factor 4.0 properly initializes RoPE scaling to 131,072 positions.
+
 > [!NOTE]
-> If `arena-vllm-spec` is already running on port 8000, you can either stop it (`docker stop arena-vllm-spec`) before starting `arena-vllm-coder`, or expose the coder container on an alternative port (e.g., `--port 8002`) and set `model.base_url: "http://localhost:8002/v1"`.
+> **GPU architecture (current operational state):**  
+> - **GPU 0 (RTX PRO 6000, 96 GB):** `arena-vllm-spec` only — 128k context, ~65 GiB used, ~33 GiB free headroom.  
+> - **GPU 1 (RTX 5090, 32 GB):** `arena-vllm-visual` (~20 GiB) + `gr00t-server` (~7.4 GiB) — ~28 GiB used, ~5 GiB free.  
+> Previously both models shared GPU 0, limiting context to 64k. Moving the visual model to GPU 1 doubled the available context window.
+
+> [!IMPORTANT]
+> If you omit `docker stop` and `docker rm`, Docker will reject the command with:  
+> `docker: Error response from daemon: Conflict. The container name "/arena-vllm-spec" is already in use by container "...".`  
+> You must remove or rename the existing container first.
 
 ---
 
-## 5. Hermes Agent Setup Options
+## 5. Hermes Profile Anatomy & Configuration
 
-You have three ways to configure Hermes to talk to the local vLLM:
+Hermes isolates each runtime configuration into a **named profile**. This guarantees that local experiments never pollute your default profile, cloud API keys, or conversation histories.
 
-### Method A: Isolated Profile (Recommended)
-Preserves your existing cloud API keys and defaults intact.
+### 5.1 What is Saved Inside a Profile?
+
+Every profile lives in its own dedicated directory under `~/.hermes/profiles/<profile-name>/`:
+
+```text
+~/.hermes/profiles/local-vllm/
+├── config.yaml          # Model & operational configuration (base_url, context_length)
+├── .env                 # Profile-specific credentials & private API keys
+├── SOUL.md              # Agent persona, coding tone & system prompt
+├── state.db             # Isolated SQLite database (messages, turns, FTS search)
+├── sessions/            # Transcripts of past interactive & one-shot runs
+├── memories/            # Long-term agent memory
+│   ├── MEMORY.md        # Technical facts & codebase architecture learned over time
+│   └── USER.md          # Personal user preferences & workflow instructions
+├── skills/              # Installed & agent-generated workflow skills
+├── logs/                # agent.log, errors.log, and execution telemetry
+├── cron/                # Scheduled background tasks for this profile
+├── hooks/               # Pre/post command execution security hooks
+└── cache/               # Tool-call spillover payloads & scratch directory
+```
+
+#### Key Components:
+1. **`config.yaml`**: Configures the local model mapping (`provider: custom`, `base_url: http://localhost:8000/v1`, `context_length: 65536`).
+2. **`SOUL.md`**: Persists the agent's core behavioral instructions. Hermes is instructed to be direct, concise, and focused on tangible verification over fluff.
+3. **`state.db`**: Stores all turns, token counts, and full-text search indexes without colliding with other parallel agents.
+4. **`memories/`**: Stores lessons the agent learns while working on your codebase across sessions.
+5. **`skills/`**: Houses procedural routines (e.g. running pytest suites, checking PhysX settling) that the agent can invoke and refine.
+
+---
+
+### 5.2 Creating the Isolated Profile
+
+To create `local-vllm`:
 
 ```bash
-# 1. Clone active configuration into a new profile
+# 1. Clone settings from your active environment
 hermes profile create local-vllm --clone
 
-# 2. Bind to local vLLM
+# 2. Point to local vLLM
 hermes -p local-vllm config set model.provider custom
 hermes -p local-vllm config set model.base_url "http://localhost:8000/v1"
 hermes -p local-vllm config set model.default "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ"
 hermes -p local-vllm config set model.context_length 65536
-
-# 3. Launch
-hermes -p local-vllm --tui
-```
-
-### Method B: Configure Active Default Profile
-If you want local vLLM to be your primary daily driver across all terminal sessions:
-
-```bash
-hermes config set model.provider custom
-hermes config set model.base_url "http://localhost:8000/v1"
-hermes config set model.default "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ"
-hermes config set model.context_length 65536
-
-# Launch directly
-hermes --tui
-```
-
-### Method C: One-Shot / Ad-Hoc Invocation
-Run an individual task without changing saved configuration:
-
-```bash
-hermes --provider custom \
-  --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
-  -z "Summarize the status of tests in isaaclab_arena/tests/"
+hermes -p local-vllm config set model.streaming false
+hermes -p local-vllm config set terminal.cwd "/workspaces/IsaacLab-Arena"
 ```
 
 ---
 
-## 6. Verification & Telemetry Validation
+### 5.3 How to Verify the Profile is Configured Correctly
 
-### 6.1 Smoke Test Endpoint Connectivity
+Researchers can run four quick checks to verify that the profile is correctly wired to the local vLLM:
+
+#### Check 1: 1-Line Model Settings Query
+```bash
+local-vllm config get model
+```
+*Expected Output:*
+```yaml
+base_url: http://localhost:8000/v1
+context_length: 65536
+default: Qwen/Qwen2.5-Coder-32B-Instruct-AWQ
+provider: custom
+streaming: false
+```
+
+#### Check 2: Confirm Context Length & Working Directory Overrides
+```bash
+local-vllm config get model.context_length
+# Output: 65536
+
+local-vllm config get terminal.cwd
+# Output: /workspaces/IsaacLab-Arena
+```
+
+#### Check 3: High-Level Profile Summary
+```bash
+hermes profile show local-vllm
+```
+*Expected Output:*
+```text
+Profile: local-vllm
+Path:    /root/.hermes/profiles/local-vllm
+Model:   Qwen/Qwen2.5-Coder-32B-Instruct-AWQ (custom)
+Alias:   local-vllm → hermes -p local-vllm  (/root/.local/bin/local-vllm)
+```
+
+#### Check 4: Built-in Doctor Diagnostics
+```bash
+local-vllm doctor
+```
+Verifies SQLite integrity, config versioning, environment variables, and tool availability.
+
+---
+
+## 6. Devcontainer Lifecycle: Reusing & Persisting Profiles
+
+Because devcontainers manage their own container filesystem, `/root/.hermes/` is **container-local** by default. When you spin up a brand-new container or rebuild from scratch, only the `default` profile exists initially.
+
+Here are the supported strategies to persist and reuse your profile across devcontainers:
+
+### Strategy A: Hermes Native Export & Import (Simplest Portability)
+
+Hermes includes native archive management for sharing profiles between developers or containers:
+
+```bash
+# In the existing container: Export profile to an archive
+hermes profile export local-vllm -o ./local-vllm-profile.tar.gz
+
+# In any new devcontainer: Import the archive
+hermes profile import ./local-vllm-profile.tar.gz
+```
+*All settings, memories, skills, and configuration are restored in a single command.*
+
+### Strategy B: 10-Second Command (Zero Setup Prerequisite)
+
+Run this chained command in any newly initialized devcontainer:
+```bash
+hermes profile create local-vllm --clone && \
+local-vllm config set model.provider custom && \
+local-vllm config set model.base_url "http://localhost:8000/v1" && \
+local-vllm config set model.default "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" && \
+local-vllm config set model.context_length 65536 && \
+local-vllm config set model.streaming false && \
+local-vllm config set terminal.cwd "/workspaces/IsaacLab-Arena"
+```
+
+### Strategy C: Automated Provisioning in `init_agent_workspace.sh`
+
+To make every newly built devcontainer automatically have `local-vllm` pre-configured without typing any commands, add this snippet to [`.devcontainer/init_agent_workspace.sh`](../../../../.devcontainer/init_agent_workspace.sh):
+
+```bash
+# Auto-configure Hermes local-vllm profile if missing
+if command -v hermes >/dev/null 2>&1 && [ ! -d "/root/.hermes/profiles/local-vllm" ]; then
+  hermes profile create local-vllm --clone || true
+  local-vllm config set model.provider custom
+  local-vllm config set model.base_url "http://localhost:8000/v1"
+  local-vllm config set model.default "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ"
+  local-vllm config set model.context_length 65536
+  local-vllm config set model.streaming false
+  local-vllm config set terminal.cwd "/workspaces/IsaacLab-Arena"
+  echo "  ✓ Pre-configured Hermes local-vllm profile"
+fi
+```
+
+### Strategy D: Host Volume Mount in `devcontainer.json`
+
+If you want all devcontainers on your physical workstation to share identical session history, profiles, and memories, mount `~/.hermes` in the `runArgs` array of [`.devcontainer/devcontainer.json`](../../../../.devcontainer/devcontainer.json):
+
+```json
+"-v", "${localEnv:HOME}/.hermes:/root/.hermes:rw"
+```
+
+---
+
+## 7. Verification & Telemetry Validation
+
+### 7.1 Smoke Test Endpoint Connectivity
 
 Test direct inference from the devcontainer shell:
 
@@ -182,7 +343,7 @@ curl -s http://localhost:8000/v1/chat/completions \
 ```
 * **Expected Output:** `LOCAL_VLLM_ONLINE`
 
-### 6.2 Smoke Test Agentic Execution
+### 7.2 Smoke Test Agentic Execution
 
 Run a one-shot query testing tool access:
 
@@ -190,7 +351,7 @@ Run a one-shot query testing tool access:
 hermes -p local-vllm -z "List the top 3 files in .agents/references/plans/local-inference/ and explain their purpose."
 ```
 
-### 6.3 Monitor vLLM Memory & KV Cache
+### 7.3 Monitor vLLM Memory & KV Cache
 
 Check vLLM live telemetry while Hermes is running:
 
@@ -200,7 +361,7 @@ curl -s http://127.0.0.1:8000/metrics | grep -E "vllm:(kv_cache_usage_perc|num_r
 
 ---
 
-## 7. Alternative: Serving a Native Hermes 3 Model in vLLM
+## 8. Alternative: Serving a Native Hermes 3 Model in vLLM
 
 If you prefer to serve Nous Research's native **Hermes 3** model instead of Qwen:
 
@@ -211,7 +372,7 @@ docker run -d --name arena-vllm-hermes3 \
   --ipc host \
   -v ~/.cache/huggingface:/root/.cache/huggingface \
   vllm/vllm-openai:latest \
-  serve NousResearch/Hermes-3-Llama-3.1-8B \
+  --model NousResearch/Hermes-3-Llama-3.1-8B \
   --port 8000 \
   --max-model-len 65536 \
   --enable-auto-tool-choice \
@@ -227,19 +388,247 @@ hermes -p local-vllm config set model.default "NousResearch/Hermes-3-Llama-3.1-8
 
 ---
 
-## 8. Troubleshooting & FAQ
+## 9. Debugging & Diagnostic Runbook
 
-| Symptom / Error | Root Cause | Resolution |
-| :--- | :--- | :--- |
-| `HTTP 400: "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set` | The vLLM container was launched without tool parser arguments. | Start or restart vLLM including `--enable-auto-tool-choice --tool-call-parser hermes`. |
-| `Model ... has a context window of ... below the minimum 64,000 required` | Hermes Agent detected `< 64,000` tokens reported by `/v1/models`. | Run `hermes -p local-vllm config set model.context_length 65536`. |
-| `provider 'vllm' has no endpoint configured` | Provider is set to `vllm` but `model.base_url` is missing or unset. | Run `hermes -p local-vllm config set model.base_url "http://localhost:8000/v1"` (or use `custom` as the provider name). |
-| Streaming responses leak raw XML tags like `<tool_call>` into chat | Known streaming tool-parser interaction in some vLLM builds. | Disable streaming in Hermes: `hermes -p local-vllm config set model.streaming false`. |
-| `Connection refused on localhost:8000` | vLLM container is stopped or using a bridge network instead of host network. | Ensure the container is started with `--network host` and verify with `docker ps`. |
+When setting up or running Hermes Agent against local vLLM instances, issues typically fall into one of three layers: **Docker Container Execution**, **vLLM Inference Server**, or **Hermes Agent Wire Configuration**. Use the following structured runbook to triage and fix issues.
+
+### 9.1 The 4-Step Diagnostic Triage
+
+When something fails, execute these 4 commands in order:
+
+```bash
+# Step 1: Check container lifecycle status
+docker ps -a --filter "name=arena-vllm"
+# -> Look for "Up X minutes" vs "Exited (code)"
+
+# Step 2: Tail container logs for errors or warmup progress
+docker logs --tail 30 arena-vllm-spec
+# -> Check if weights are loading, CUDA graphs are compiling, or an argument failed
+
+# Step 3: Test endpoint reachability with verbose HTTP output
+curl -v http://localhost:8000/v1/models
+# -> Confirms HTTP 200 vs Connection Refused
+
+# Step 4: Verify active Hermes profile settings
+local-vllm config get model
+# -> Checks base_url, provider, model name, and context length
+```
 
 ---
 
-## 9. Related Plans & Artifacts
+### 9.2 Common Failure Modes & Root-Cause Analysis
+
+#### Case 1: Docker Container Name Conflict
+* **Error Message:**
+  ```text
+  docker: Error response from daemon: Conflict. The container name "/arena-vllm-spec" is already in use by container "38f67e8f91e6...". You have to remove (or rename) that container to be able to reuse that name.
+  ```
+* **Root Cause:** A container with the specified name is already registered (either running or stopped). Docker strictly enforces unique container names.
+* **Resolution:** Stop and remove the old container before starting a new one:
+  ```bash
+  docker stop arena-vllm-spec && docker rm arena-vllm-spec
+  ```
+
+---
+
+#### Case 2: Duplicate Entrypoint Argument (`vllm serve serve ...`)
+* **Error Message:**
+  The container exits immediately with `Exited (2)`. Checking `docker logs arena-vllm-spec` shows:
+  ```text
+  usage: vllm [-h] [-v] {chat,complete,serve,launch,bench,collect-env,run-batch} ...
+  vllm: error: unrecognized arguments: Qwen/Qwen2.5-Coder-32B-Instruct-AWQ --guided-decoding-backend outlines
+  ```
+* **Root Cause:** The Docker image `vllm/vllm-openai:latest` has `ENTRYPOINT ["vllm", "serve"]` baked into its image metadata. Passing `serve <model>` in your `docker run` command results in Docker executing:
+  ```bash
+  vllm serve serve Qwen/Qwen2.5-Coder-32B-Instruct-AWQ ...
+  ```
+  vLLM treats the first `serve` as the sub-command, and the second `serve` as the model name. All subsequent flags are then rejected as unrecognized positional arguments.
+* **Resolution:** Pass the model using `--model <model-id>` or directly as `<model-id>` **without** the leading `serve`:
+  ```bash
+  # CORRECT:
+  docker run -d --name arena-vllm-spec ... vllm/vllm-openai:latest --model Qwen/Qwen2.5-Coder-32B-Instruct-AWQ ...
+
+  # INCORRECT (Do NOT include 'serve'):
+  docker run -d --name arena-vllm-spec ... vllm/vllm-openai:latest serve Qwen/Qwen2.5-Coder-32B-Instruct-AWQ ...
+  ```
+
+---
+
+#### Case 3: Empty `curl` Output / Connection Refused
+* **Symptom:**
+  Running `curl -s http://localhost:8000/v1/models | jq .data[0].id` returns nothing (silent empty line).
+* **Root Cause:** There are two distinct possibilities:
+  1. **Container has crashed / exited:** Check `docker ps -a`. If status is `Exited`, inspect logs with `docker logs arena-vllm-spec`.
+  2. **Container is still warming up:** vLLM has a 30–45 second cold-start sequence during which it loads weights into VRAM, runs FlashInfer JIT autotuning, and compiles 51 CUDA graphs. Port 8000 is not opened until `Application startup complete` is logged.
+* **Resolution:** Run a non-silent curl to see the raw network status:
+  ```bash
+  curl -v http://localhost:8000/v1/models
+  ```
+  And follow the startup logs until Uvicorn begins serving:
+  ```bash
+  docker logs -f arena-vllm-spec
+  ```
+
+---
+
+#### Case 4: Tool-Calling Rejection (`HTTP 400`)
+* **Error Message:**
+  ```text
+  Custom endpoint rejected this request as malformed.
+  Provider said: HTTP 400: "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set
+  ```
+* **Root Cause:** Hermes Agent is an autonomous coding agent; it sends `tool_choice="auto"` so the model can invoke filesystem and bash tools. Without these flags, vLLM rejects any request containing tools.
+* **Resolution:** Restart vLLM with tool calling enabled:
+  ```bash
+  --enable-auto-tool-choice --tool-call-parser hermes
+  ```
+
+---
+
+#### Case 5: Minimum Context Length Error (`64,000` Tokens)
+* **Error Message:**
+  ```text
+  hermes -z: agent failed: Model Qwen/Qwen2.5-Coder-32B-Instruct-AWQ has a context window of 16,384 tokens, which is below the minimum 64,000 required by Hermes Agent.
+  ```
+* **Root Cause:** Hermes Agent requires $\ge 64,000$ tokens of working memory to accommodate system prompts, tool schemas, and conversation histories. When vLLM serves a smaller KV-cache (e.g. 16k to conserve VRAM for Isaac Sim & GR00T), Hermes aborts at startup by default.
+* **Resolution:** Apply the context length override to the Hermes profile:
+  ```bash
+  local-vllm config set model.context_length 65536
+  ```
+
+---
+
+#### Case 6: Streaming Tool-Call XML Leakage
+* **Symptom:**
+  Instead of executing a tool, Hermes outputs raw `<tool_call>` XML or JSON text directly to the console.
+* **Root Cause:** In certain vLLM versions, streaming token generation with XML-based tool parsers can stream the tool tag tokens into the content buffer before the parser catches them.
+* **Resolution:** Disable streaming in your Hermes profile to force clean, complete message parsing:
+  ```bash
+  local-vllm config set model.streaming false
+  ```
+
+---
+
+#### Case 7: Context Compression Paused / Turn-1 Prompt Exceeds Context Length
+* **Error Message in Hermes CLI / TUI:**
+  ```text
+  🗜️ Compacting context — summarizing earlier conversation so I can continue...
+
+  The model provider returned an error (custom). Your message was not answered.
+  Details: Context compression is temporarily paused after a recent failed attempt. Please retry in a moment — compression will resume automatically (or run /compress to force a retry now).
+  ```
+* **Log Signature (`~/.hermes/profiles/local-vllm/logs/errors.log`):**
+  ```text
+  openai.BadRequestError: Error code: 400 - {'error': {'message': "This model's maximum context length is 16384 tokens. However, you requested 0 output tokens and your prompt contains at least 16385 input tokens... (parameter=input_tokens, value=17412)"}}
+  ...
+  agent.conversation_compression: Compression made no progress — skipping boundary rewrite.
+  agent.conversation_compression: Skipping automatic compression re-entry: transient guard active (structural_backoff:300)
+  ```
+* **Root Cause:**
+  1. Hermes Agent's initial prompt (system prompt + 22 tool schemas + workspace context) is **~17,412 tokens**.
+  2. If vLLM was launched with `--max-model-len 16384`, the very first turn exceeds the server's context ceiling (`17,412 > 16,384`), triggering `HTTP 400`.
+  3. Hermes catches the 400 error and attempts automatic context compression (`🗜️ Compacting context...`).
+  4. But because this is turn 1, there is zero historical conversation to compress (`messages=1`). Compression makes zero progress.
+  5. Hermes activates its transient circuit breaker (`structural_backoff: 300`), pausing further compression attempts for 5 minutes.
+* **Resolution:**
+  1. **Enlarge vLLM context to 32k:** Restart `arena-vllm-spec` with `--max-model-len 32768` (see [Section 4.2](#42-start-or-restart-vllm-with-tool-calling-support)).
+  2. **Reset the Hermes session backoff:** In the active Hermes TUI or CLI, type `/new` to initiate a clean session unblocked by the 300-second compression backoff.
+
+---
+
+#### Case 8: Tool Calls Printed as Text / Multi-Line Raw JSON Leaked to Console
+* **Symptom in Hermes TUI / CLI:**
+  You ask the agent to inspect the repository, and instead of executing the tools, the agent prints its conversational preamble followed by raw JSON lines directly to the chat:
+  ```text
+  Certainly. Let's gather some context by reading key files and understanding the project structure.
+
+  {"name": "read_file", "arguments": {"path": "README.md", "limit": 100}}
+  {"name": "read_file", "arguments": {"path": "AGENTS.md", "limit": 100}}
+  {"name": "read_file", "arguments": {"path": "pyproject.toml", "limit": 100}}
+  {"name": "search_files", "arguments": {"pattern": ".", "target": "files", "path": ".", "file_glob": ".py", "limit": 5}}
+  ```
+* **Root Cause:**
+  1. The model (Qwen 2.5 Coder) emitted multiple parallel tool calls formatted as consecutive JSON objects (JSON Lines / newline-delimited JSON), preceded by conversational reasoning text.
+  2. Stock vLLM's tool parser only searches for `<tool_call> ... </tool_call>` XML tags. Even when direct JSON parsing is attempted, naive `json.loads(text[first_brace:last_brace])` crashes with `JSONDecodeError: Extra data` when multiple JSON objects appear consecutively.
+  3. When JSON parsing fails, vLLM falls back to treating the entire response as plain assistant conversation text, dumping the raw tool calls into the message `content`.
+  4. Hermes displays the message as chat text rather than dispatching the tools to the filesystem/terminal.
+* **Resolution:**
+  Mount the Isaac Lab-Arena enhanced multi-format tool parser (`vllm_patches/hermes_tool_parser.py`) into the vLLM container:
+  ```bash
+  -v "$(pwd)/.agents/references/plans/local-inference/vllm_patches/hermes_tool_parser.py:/usr/local/lib/python3.12/dist-packages/vllm/tool_parsers/hermes_tool_parser.py"
+  ```
+  This patch uses streaming JSON decoding (`json.JSONDecoder().raw_decode()`) to sequentially extract all parallel tool calls from the output, separates the conversational prefix into message `content`, and routes the tool invocations into the structured `tool_calls` array.
+
+---
+
+#### Case 9: Path Not Found / Tool Commands Running in Hermes Home Sandbox
+* **Symptom in Hermes TUI / CLI:**
+  A tool call is successfully recognized and executed by Hermes, but reports that repository paths do not exist:
+  ```text
+  List files in .agents/references/plans/local-inference/
+
+  ▾ Tool calls (1)
+  ● Terminal("ls -la .agents/references/plans/local-inference/") (0.1s)
+
+  The directory .agents/references/plans/local-inference/ does not exist. Please verify the path or create the directory if necessary.
+  ```
+* **Root Cause:**
+  1. In `config.yaml`, `terminal.cwd` defaults to `"."`.
+  2. When Hermes initializes a session inside a container with `terminal.home_mode: auto`, it resolves the `"."` placeholder to the profile's isolated sandbox home directory (`/root/.hermes/profiles/<profile-name>/home`).
+  3. Consequently, relative paths intended for the workspace (such as `.agents/...` or `isaaclab_arena/...`) execute inside the empty sandbox home instead of the repository root (`/workspaces/IsaacLab-Arena`).
+  4. Furthermore, interactive TUI sessions lock their `cwd` into the profile's SQLite session database (`state.db`) upon session creation.
+* **Resolution:**
+  1. Configure the persistent working directory for the profile:
+     ```bash
+     hermes -p local-vllm config set terminal.cwd "/workspaces/IsaacLab-Arena"
+     ```
+  2. Refresh the active TUI session: In your interactive TUI, type `/new` to spawn a fresh session that adopts the newly configured repository root directory (or exit with `/exit` and relaunch with `hermes -p local-vllm --tui`).
+
+---
+
+#### Case 10: vLLM Crash / Connection Error: CUDA Device-Side Assert Triggered
+* **Symptom in Hermes TUI / CLI:**
+  You execute a command and Hermes reports:
+  ```text
+  Custom endpoint didn't respond in time on any of 3 attempts — it looks temporarily unavailable.
+  Provider said: Connection error.
+  ```
+  Checking `docker ps -a` shows `arena-vllm-spec` has `Exited (139)` (Segfault). Checking `docker logs arena-vllm-spec` shows:
+  ```text
+  torch.AcceleratorError: CUDA error: device-side assert triggered
+  Fatal Python error: ... Segfault encountered
+  ```
+* **Root Cause:**
+  1. `arena-vllm-spec` was configured with an extended context window (`--max-model-len 65536` or `131072`) without properly scaling the rotary position embedding tables via `--hf-overrides`.
+  2. Because Qwen 2.5 Coder's base `max_position_embeddings` is 32,768, when a prompt's position IDs or token count exceed 32,768, the underlying CUDA kernel performs an out-of-bounds array access against the unscaled RoPE table.
+  3. This triggers a hardware-level `cudaErrorAssert`, causing PyTorch to abort and terminating the vLLM container process.
+* **Resolution:**
+  Launch vLLM with official YaRN RoPE scaling and position overrides:
+  ```bash
+  --hf-overrides '{"max_position_embeddings": 65536, "rope_scaling": {"rope_type": "yarn", "factor": 2.0, "original_max_position_embeddings": 32768}}' --max-model-len 65536
+  ```
+
+---
+
+### 9.3 Quick Diagnostic Summary Table
+
+| Symptom / Error | Root Cause | Immediate Fix |
+| :--- | :--- | :--- |
+| `docker: Error ... Conflict ... already in use` | Old container with same name still exists. | `docker stop arena-vllm-spec && docker rm arena-vllm-spec` |
+| `vllm: error: unrecognized arguments ...` (Exited 2) | Image entrypoint already has `serve`; passing `serve` duplicates it. | Remove `serve`; use `--model <model-id>`. |
+| Empty `curl` / Connection Refused | Container either crashed or still compiling CUDA graphs (30–45s). | Check `docker ps -a` and follow `docker logs -f arena-vllm-spec`. |
+| `HTTP 400: "auto" tool choice requires ...` | vLLM launched without tool-parser flags. | Add `--enable-auto-tool-choice --tool-call-parser hermes`. |
+| `Model ... below minimum 64,000 required` | vLLM reports 16k context window to Hermes. | Run `local-vllm config set model.context_length 65536`. |
+| `Context compression is temporarily paused ...` | vLLM `--max-model-len 16384` < ~17.4k baseline tool schemas. | Relaunch vLLM with `--max-model-len 65536` and enter `/new` in Hermes. |
+| Tool call printed as text: `{"name": "terminal", ...}` | Qwen emitted raw JSON or `<tools>`; stock vLLM missed it. | Mount `vllm_patches/hermes_tool_parser.py` into container. |
+| `The directory <path> does not exist` in Terminal tool | Hermes defaulted working directory to sandbox (`/root/.hermes/profiles/.../home`). | Run `local-vllm config set terminal.cwd "/workspaces/IsaacLab-Arena"` and type `/new` in TUI. |
+| `Connection error` / vLLM Exited (139) Segfault | `CUDA error: device-side assert` caused by unscaled RoPE table (>32k). | Add `--hf-overrides` with `rope_scaling` (YaRN) and `max_position_embeddings`. |
+| `provider 'vllm' has no endpoint configured` | `model.base_url` is unset or empty in profile. | Run `local-vllm config set model.base_url "http://localhost:8000/v1"`. |
+| Streaming tool tags printed as text in chat | Streaming parser race in vLLM. | Run `local-vllm config set model.streaming false`. |
+
+---
+
+## 10. Related Plans & Artifacts
 
 - [Local Inference Plans Index](README.md)
 - [Local LLM & VLM Execution Plan](local_llm_vlm_agentic_env_gen_plan.md)

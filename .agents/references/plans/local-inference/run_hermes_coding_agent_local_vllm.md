@@ -745,6 +745,7 @@ local-vllm config get model
 | `provider 'vllm' has no endpoint configured` | `model.base_url` is unset or empty in profile. | Run `local-vllm config set model.base_url "http://localhost:8000/v1"`. |
 | Streaming tool tags printed as text in chat | Streaming parser race in vLLM. | Run `local-vllm config set model.streaming false`. |
 | `<tool_search>` XML printed instead of tool execution | `tools.tool_search.enabled` defaults to `auto`; local models emit the tags as text. | Run `local-vllm config set tools.tool_search.enabled false`. |
+| Model answers file/code questions without calling any tool (silent hallucination) | Local models treat ambiguous requests as knowledge questions; SOUL.md lacks tool-forcing instruction. | Add "CRITICAL RULE — ALWAYS USE TOOLS" paragraph to SOUL.md (§10.2.1). |
 
 ---
 
@@ -785,6 +786,33 @@ hermes -p local-vllm tools list | grep "✓ enabled"
 #   ✓ enabled  terminal  💻 Terminal & Processes
 #   ✓ enabled  file      📁 File Operations
 ```
+
+#### 10.2.1 Force Tool Usage via SOUL.md (Critical for Local Models)
+
+Reducing tool schemas is necessary but **not sufficient**. Even with only `terminal` + `file`, local models will still hallucinate answers to questions like "list the files in X" instead of actually running `ls`. Frontier models infer that filesystem questions require tools; local 32B models need to be told explicitly.
+
+Add this paragraph to `~/.hermes/profiles/local-vllm/SOUL.md`:
+
+```text
+CRITICAL RULE — ALWAYS USE TOOLS: You MUST use your tools (terminal, read_file, 
+write_file, etc.) to answer ANY question about files, directories, code, or the 
+repository. NEVER guess or answer from memory. If the user asks about files, run 
+`ls`. If they ask about code, use `read_file`. If they ask to run something, use 
+`terminal`. You have NO prior knowledge of the filesystem — your ONLY source of 
+truth is tool output. When in doubt, use a tool.
+```
+
+Or apply it with a single command:
+
+```bash
+cat >> ~/.hermes/profiles/local-vllm/SOUL.md << 'EOF'
+
+CRITICAL RULE — ALWAYS USE TOOLS: You MUST use your tools (terminal, read_file, write_file, etc.) to answer ANY question about files, directories, code, or the repository. NEVER guess or answer from memory. If the user asks about files, run `ls`. If they ask about code, use `read_file`. If they ask to run something, use `terminal`. You have NO prior knowledge of the filesystem — your ONLY source of truth is tool output. When in doubt, use a tool.
+EOF
+```
+
+> [!CAUTION]
+> **Without this instruction, the model will silently hallucinate.** It will confidently list files that don't exist, describe code it never read, and report results from commands it never ran. There is no error — the output _looks_ correct but is fabricated. This was verified empirically: the same query "List the top 3 files in X" returned fabricated filenames without the SOUL.md instruction, and correct real filenames with it.
 
 > [!TIP]
 > **The `terminal` + `file` combo is sufficient for 90% of coding tasks.** The `terminal` tool runs any shell command (including `grep`, `find`, `git`, `python`, `curl`), and the `file` tool reads, writes, searches, and edits files. You don't need a separate `web` tool when `terminal` can run `curl`.

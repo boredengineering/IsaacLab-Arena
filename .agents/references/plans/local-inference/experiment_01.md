@@ -265,15 +265,32 @@ flowchart TD
       --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
       --api_key "local-arena-token"
   ```
+- **Option C: Recursive Prompt Update & Spec Refinement (`--mode resolve`):**
+  ```bash
+  docker run --rm --gpus '"device=0"' --network host \
+    -e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
+    -v $(pwd):/workspaces/isaaclab_arena \
+    isaaclab_arena:latest \
+    /isaac-sim/python.sh isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+      --mode resolve \
+      --base_spec generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
+      --feedback "Move the red bowl 10 cm further to the left to ensure greater clearance from the tabletop center." \
+      --env_name "droid_banana_to_red_bowl" \
+      --temperature 0.0 \
+      --base_url "http://localhost:8000/v1" \
+      --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
+      --api_key "local-arena-token"
+  ```
 - **Expected Results (Mental Model):**
-  - In `--mode resolve`: spec resolution executes without launching NVIDIA Omniverse or Isaac Sim; completed in $\le 5\text{ seconds}$.
+  - In `--mode resolve` (initial prompt): spec resolution executes without launching NVIDIA Omniverse or Isaac Sim; completed in $\le 5\text{ seconds}$.
+  - In `--mode resolve` with `--base_spec` (Option C): refines existing graph spec with feedback via `agent.refine_spec()`; increments version (`v1` $\to$ `v2`) without overwriting historical files; updates symlink `latest -> v2/`.
   - In `--mode full`: resolves the graph spec, boots Isaac Sim in the same process, settles objects on the table, and steps the zero-action policy.
   - Active Inference Self-Healing loop:
     - Pass 1: SHACL graph validation passes.
     - Pass 2: Spatial clearance oracle confirms banana is in `front_right` and bowl is in `front_left` with non-overlapping AABBs.
     - Pass 3: VLM critic verifies line-of-sight and camera views.
-  - Artifact created: `generated_envs/droid_banana_to_red_bowl/v1/droid_banana_to_red_bowl.yaml`.
-  - Symlink updated: `generated_envs/droid_banana_to_red_bowl/latest -> v1/`.
+  - Artifact created: `generated_envs/droid_banana_to_red_bowl/v1/droid_banana_to_red_bowl.yaml` (or `v2/` for refinement).
+  - Symlink updated: `generated_envs/droid_banana_to_red_bowl/latest -> vN/`.
   - Process exits with return code `0`.
 - **Actual Observed Results (Tracking Ledger):**
   | Parameter | Expected | Actual / Getting | Status | Notes |

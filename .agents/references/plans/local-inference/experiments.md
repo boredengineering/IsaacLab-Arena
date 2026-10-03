@@ -578,9 +578,10 @@ curl -s http://127.0.0.1:8001/metrics | grep "vllm:gpu_cache_usage_factor"
 
 #### 9.1.4 Phase 1.4: Agentic Spec Generation & Factor Graph Resolution (GPU 0: RTX PRO 6000)
 - **Target Device:** `CUDA_VISIBLE_DEVICES=0` (RTX PRO 6000 Blackwell 96 GB)
-- **Primary Objective:** Agentic prompt-to-factor-graph synthesis, active constraint repair, and Tier 2 VLM visual critic inspection. Can be evaluated in two distinct execution modes:
+- **Primary Objective:** Agentic prompt-to-factor-graph synthesis, active constraint repair, and Tier 2 VLM visual critic inspection. Can be evaluated in three distinct execution modes:
   - **Option A (`--mode resolve`)**: Pure Python factor graph synthesis, spatial constraint solving, and lineage registration without simulation engine startup.
   - **Option B (`--mode full`)**: Monolithic end-to-end execution that synthesizes the factor graph, loads the Isaac Sim simulation runtime, settles the scene, and runs verification rollouts in a single invocation.
+  - **Option C (`--mode resolve` with Prompt Update)**: Iterative refinement of an existing specification (`--base_spec`) using natural-language feedback (`--feedback`), executing the Recursive Self-Improvement (RSI) loop and incrementing version lineage (`v1` $\to$ `v2`) without simulation overhead.
 
 ##### Option A: Spec Resolution (`--mode resolve`, Pure Python)
 ```bash
@@ -598,8 +599,9 @@ docker run --rm --gpus '"device=0"' --network host \
 ```
 
 ##### Option B: Monolithic End-to-End Simulation (`--mode full`)
+Synthesizes the factor graph, loads the Isaac Sim simulation runtime on GPU 0/1, settles the USD scene under PhysX gravity, and steps 20 zero-action verification frames in a single execution:
+
 ```bash
-# Automated Headless Execution:
 docker run --rm --gpus '"device=0"' --network host \
   -e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
   -v $(pwd):/workspaces/isaaclab_arena \
@@ -608,47 +610,52 @@ docker run --rm --gpus '"device=0"' --network host \
     --mode full \
     --headless \
     --num_envs 1 \
+    --temperature 0.0 \
     --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
     --env_name "droid_banana_to_red_bowl" \
     --base_url "http://localhost:8000/v1" \
     --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
     --api_key "local-arena-token"
+```
 
-# Interactive Viewport GUI (--viz kit):
-xhost +local:docker > /dev/null 2>&1 || xhost +local:root > /dev/null 2>&1
+###### Architectural Note: Why `--temperature 0.0` Is Mandatory for Local Models
+1. **Original State:** Option B originally defined two commands:
+   - **Headless:** For automated terminal/CI execution.
+   - **Interactive (`--viz kit`):** For opening the Omniverse window on the workstation display.
+2. **The Local Model Sampling Problem:**
+   - In `environment_generation_runner.py`, the default sampling temperature is `--temperature 0.2`.
+   - With frontier cloud models (GPT-4 / Gemini Pro), `0.2` is fine. But with local models (`Qwen/Qwen2.5-Coder-32B-Instruct-AWQ`), non-zero temperature caused occasional schema hallucinations (such as generating hallucinated `cli_override_specs` with `--task` or unclosed JSON strings).
+3. **The Quick-Fix Addition & Consolidation:**
+   - During the September 30 session (commit `5e968522`), a temporary command was added with `--temperature 0.0` to test greedy, deterministic token decoding.
+   - Greedy decoding proved 100% reliable at eliminating schema edge cases. The previous duplicate snippets have now been consolidated into the authoritative command above.
+4. **Relocation of `--viz kit`:**
+   - The interactive GUI (`--viz kit`) encountered stability issues during the monolithic resolve-and-build loop and has been moved to [Section 9.4 (Future Track)](#94-future-track-interactive-omniverse-kit-gui-for-agentic-spec-generation---viz-kit).
 
+##### Option C: Recursive Prompt Update & Spec Refinement (`--mode resolve`)
+Executes the closed-loop Recursive Self-Improvement (RSI) cycle driven by an external orchestrator (e.g., Hermes, Claude Code, or an automated test harness). This path ingests an existing environment specification (`--base_spec`) and applies targeted spatial or semantic critique (`--feedback`) without simulation engine overhead:
+
+```bash
 docker run --rm --gpus '"device=0"' --network host \
-  -e DISPLAY="$DISPLAY" \
-  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
   -e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
   -v $(pwd):/workspaces/isaaclab_arena \
   isaaclab_arena:latest \
   /isaac-sim/python.sh isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-    --mode full \
-    --viz kit \
-    --num_envs 1 \
-    --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
+    --mode resolve \
+    --base_spec generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml \
+    --feedback "Move the red bowl 10 cm further to the left to ensure greater clearance from the tabletop center." \
     --env_name "droid_banana_to_red_bowl" \
+    --temperature 0.0 \
     --base_url "http://localhost:8000/v1" \
     --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
     --api_key "local-arena-token"
-
-# new experiment no --viz kit
-docker run --rm --gpus '"device=0"' --network host \
--e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
--v $(pwd):/workspaces/isaaclab_arena \
-isaaclab_arena:latest \
-/isaac-sim/python.sh isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
-  --mode full \
-  --headless \
-  --num_envs 1 \
-  --temperature 0.0 \
-  --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
-  --env_name "droid_banana_to_red_bowl" \
-  --base_url "http://localhost:8000/v1" \
-  --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
-  --api_key "local-arena-token"
 ```
+
+- **Execution Mechanics & Architectural Invariants:**
+  1. **Base Specification Ingestion:** Loads `ArenaEnvGraphSpec` from `generated_envs/droid_banana_to_red_bowl/latest/` while leaving prior version directories (`v1/`) strictly immutable and read-only.
+  2. **Active Inference Refinement (`agent.refine_spec`):** Dispatches feedback to `spec_inference.repair_with_feedback()`. Preserves existing embodiment bindings (`droid_abs_joint_pos`), background workspace (`maple_table_robolab`), and valid task constraints while adjusting spatial coordinates, sector bounds, and relational factors.
+  3. **Analytical System 2 Verification:** Passes the candidate through W3C SHACL semantic constraints, the Geometric Clearance Oracle (non-overlapping AABB check), and Tier 2 VLM critic perception before acceptance.
+  4. **Append-Only Versioning & Lineage:** `EnvironmentVersionManager` writes the refined specification to `v2/droid_banana_to_red_bowl.yaml` (or `v3/`), updates `latest -> vN`, and records derivation metadata (`trigger: active_inference_refinement`, `parent: v(N-1)`) in `lineage.json` and `lineage.ttl` (W3C PROV-O).
+  5. **Neo4j Experience Sync:** Synchronizes the refined subgraph, updated property triples, and `:WAS_DERIVED_FROM` lineage relationship to the Neo4j knowledge store on port 7688.
 
 - **Validation Test:** Inspect `generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml`, check SHACL conformance report, VLM feedback, and physical rollout logs.
 
@@ -774,6 +781,34 @@ docker run --rm --gpus '"device=1"' --network host \
 
 ### 9.3 (Future) Experiment 3: High-Parameter & Context Stress Testing (Qwen-72B / LLaMA-70B)
 *(To be specified following successful completion of Experiment 1 & 2)*
+
+---
+
+### 9.4 (Future Track) Interactive Omniverse Kit GUI for Agentic Spec Generation (`--viz kit`)
+
+It is currently unclear if we can reliably use the Omniverse GUI to visualize the agent working in real time with the graph spec during active factor graph synthesis and Active Inference repair. In earlier tests, `--viz kit` encountered stability, display lifecycle, and process synchronization issues during the monolithic resolve-and-build loop. Interactive Kit GUI visualization during live agent reasoning remains an open research and engineering track:
+
+```bash
+# Allow local X11 display access on host (run once):
+xhost +local:docker > /dev/null 2>&1 || xhost +local:root > /dev/null 2>&1
+
+docker run --rm --gpus '"device=0"' --network host \
+  -e DISPLAY="$DISPLAY" \
+  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  -e LOCAL_VLM_BASE_URL="http://localhost:8001/v1" \
+  -v $(pwd):/workspaces/isaaclab_arena \
+  isaaclab_arena:latest \
+  /isaac-sim/python.sh isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+    --mode full \
+    --viz kit \
+    --num_envs 1 \
+    --temperature 0.0 \
+    --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
+    --env_name "droid_banana_to_red_bowl" \
+    --base_url "http://localhost:8000/v1" \
+    --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
+    --api_key "local-arena-token"
+```
 
 ---
 

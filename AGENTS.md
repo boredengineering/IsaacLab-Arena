@@ -92,6 +92,7 @@ def test_foo():  # pytest-visible outer function
 
 ## Boundaries
 
+- **Always ask for explicit permission before committing changes** (`git commit`). Never commit automatically without user approval.
 - **Never** force-push to `main` or `release/*`. **Instead**, push to a `<username>/<type>/<short-description>` branch (`<type>` ∈ `feature`, `fix`, `docs`, `refactor`, `chore`, `ci`) and open a PR against `main`.
 - **Never** add AI-attribution lines to commits (no `Co-Authored-By: Claude…`, no `Generated with…`). **Instead**, sign off with `git commit -s` — DCO is the only required trailer.
 - **Never** commit models, datasets, or secrets. **Instead**, keep them on the host and mount them via `./docker/run_docker.sh -d <datasets> -m <models> -e <eval>`.

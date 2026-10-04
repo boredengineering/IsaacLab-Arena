@@ -281,6 +281,16 @@ flowchart TD
       --model "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ" \
       --api_key "local-arena-token"
   ```
+  - **Three Test Feedback Prompts for Table Swapping & Fixture Adaptation:**
+    1. **Prompt 1: Direct Swap to Robolab Oak Table (Minimal Semantic Delta)**
+       `--feedback "Change the background table from maple_table_robolab to table_oak_robolab, keeping the yellow banana on the right and the red bowl on the left."`
+       *Tests swapping the underlying table model to its closest sibling (`table_oak_robolab`) while ensuring the agent preserves existing sector layout, object transforms, and pick-and-place task logic.*
+    2. **Prompt 2: Swap to Standard Isaac Lab Table (Geometry & Height Adaptation)**
+       `--feedback "Replace the background table with the standard Seattle lab table (registry_name: 'table'), adjusting the banana and red bowl heights so they sit stably on the new table surface."`
+       *Tests whether the model and Spatial Geometric Oracle adapt object placements from the Robolab coordinate frame to the standard Seattle table's $Z = 0.75\text{ m}$ deck height.*
+    3. **Prompt 3: Domain Shift to Industrial Packing Workstation**
+       `--feedback "Switch the scene background from the maple table to the packing_table workstation, ensuring the red bowl and yellow banana remain in reachable front sectors for the Franka DROID arm."`
+       *Tests a larger domain transition (kitchen tabletop $\to$ warehouse packing station `packing_table`), validating whether the agent adapts spatial clearance and reachability checks for the DROID arm on a new fixture.*
 - **Expected Results (Mental Model):**
   - In `--mode resolve` (initial prompt): spec resolution executes without launching NVIDIA Omniverse or Isaac Sim; completed in $\le 5\text{ seconds}$.
   - In `--mode resolve` with `--base_spec` (Option C): refines existing graph spec with feedback via `agent.refine_spec()`; increments version (`v1` $\to$ `v2`) without overwriting historical files; updates symlink `latest -> v2/`.

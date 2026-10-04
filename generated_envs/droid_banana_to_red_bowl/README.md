@@ -1,13 +1,13 @@
-# Environment: `droid_banana_to_red_bowl` (Latest: `v2`)
+# Environment: `droid_banana_to_red_bowl` (Latest: `v5`)
 
 > **Prompt / Task Description**:
-> "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left."
+> "Switch the scene background from the maple table to the packing_table workstation, ensuring the red bowl and yellow banana remain in reachable front sectors for the Franka DROID arm."
 
 ---
 
 ## 1. Quick Info & Artifact Paths
 - **Canonical Environment Name**: `droid_banana_to_red_bowl`
-- **Active Version Directory**: `generated_envs/droid_banana_to_red_bowl/latest/` (symlinked to `v2`)
+- **Active Version Directory**: `generated_envs/droid_banana_to_red_bowl/latest/` (symlinked to `v5`)
 - **Environment Graph Spec**: `/workspaces/isaaclab_arena/generated_envs/droid_banana_to_red_bowl/latest/droid_banana_to_red_bowl.yaml`
 - **Policy Configuration**: `/workspaces/isaaclab_arena/generated_envs/droid_banana_to_red_bowl/latest/policy_config.yaml`
 - **Evaluation Output Directory**: `/workspaces/isaaclab_arena/eval_output/droid_banana_to_red_bowl`
@@ -121,7 +121,7 @@ docker exec -it \
   isaaclab_arena-latest /isaac-sim/python.sh \
   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
   --mode resolve \
-  --prompt "Grasp the yellow banana from the right side of the table and place it into the red bowl on the left." \
+  --prompt "Switch the scene background from the maple table to the packing_table workstation, ensuring the red bowl and yellow banana remain in reachable front sectors for the Franka DROID arm." \
   --env_name droid_banana_to_red_bowl
 ```
 
@@ -132,3 +132,6 @@ docker exec -it \
 | :--- | :--- | :--- | :--- | :--- |
 | `v1` | 2026-09-30 | `initial_generation` | Initial synthesis | 0.0% (1 eps) |
 | `v2` | 2026-09-30 | `initial_generation` | Initial synthesis | 0.0% (1 eps) |
+| `v3` | 2026-10-04 | `active_inference_refinement` | Initial synthesis | *Pending evaluation* |
+| `v4` | 2026-10-04 | `active_inference_refinement` | Initial synthesis | 0.0% (0 eps) |
+| `v5` | 2026-10-04 | `active_inference_refinement` | Initial synthesis | 0.0% (0 eps) |

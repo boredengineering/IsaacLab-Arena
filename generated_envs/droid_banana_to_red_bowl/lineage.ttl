@@ -4,7 +4,24 @@
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 :droid_banana_to_red_bowl a arena:EnvironmentFamily ;
-    arena:currentVersion 2 .
+    arena:currentVersion 5 .
+
+:droid_banana_to_red_bowl_v5 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-04T21:21:26.578482+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_banana_to_red_bowl_v4 ;
+    arena:evalDir "eval_output/droid_banana_to_red_bowl/zero_action/2026-10-04_21-26-26"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "active_inference_refinement"^^xsd:string ;
+    arena:versionNumber 5 .
+
+:droid_banana_to_red_bowl_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-09-30T14:37:22.201096+00:00"^^xsd:dateTime ;
+    arena:evalDir "eval_output/droid_banana_to_red_bowl/2026-09-30_15-55-28"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 1 .
 
 :droid_banana_to_red_bowl_v2 a prov:Entity,
         arena:EnvironmentVersion ;
@@ -15,11 +32,19 @@
     arena:trigger "initial_generation"^^xsd:string ;
     arena:versionNumber 2 .
 
-:droid_banana_to_red_bowl_v1 a prov:Entity,
+:droid_banana_to_red_bowl_v3 a prov:Entity,
         arena:EnvironmentVersion ;
-    prov:generatedAtTime "2026-09-30T14:37:22.201096+00:00"^^xsd:dateTime ;
-    arena:evalDir "eval_output/droid_banana_to_red_bowl/2026-09-30_15-55-28"^^xsd:string ;
+    prov:generatedAtTime "2026-10-04T21:17:04.453772+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_banana_to_red_bowl_v2 ;
+    arena:trigger "active_inference_refinement"^^xsd:string ;
+    arena:versionNumber 3 .
+
+:droid_banana_to_red_bowl_v4 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-04T21:20:18.962903+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_banana_to_red_bowl_v3 ;
+    arena:evalDir "eval_output/droid_banana_to_red_bowl/zero_action/2026-10-04_22-55-32"^^xsd:string ;
     arena:successRate "0.0"^^xsd:float ;
-    arena:trigger "initial_generation"^^xsd:string ;
-    arena:versionNumber 1 .
+    arena:trigger "active_inference_refinement"^^xsd:string ;
+    arena:versionNumber 4 .
 

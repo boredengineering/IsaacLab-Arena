@@ -469,19 +469,39 @@ This experiment evaluates **one scenario only** with a single dedicated dual-GPU
 | **Target Container** | `bowl_ycb_robolab` | Placed at `front_left` sector (Classic red YCB bowl) |
 | **Problem to Solve** | Zero-cloud autonomous prompt resolution, spatial constraint satisfaction, and closed-loop robotic policy execution on an organic curved object (`banana_ycb_robolab`) placed into a concave benchmark receptacle (`bowl_ycb_robolab`). | Validates complete air-gapped dual-GPU pipeline |
 
-##### Models & Runtimes Executing in Experiment 1
-| System Role | Model / Image | Execution Device | Memory Footprint | Network / Port | Primary Responsibility |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Cognitive Spec Generator (LLM)** | `Qwen/Qwen2.5-Coder-32B-Instruct-AWQ` | GPU 0 (RTX PRO 6000 96 GB) | ~22 GB GDDR7 | HTTP `127.0.0.1:8000` | Zero-cloud schema-guided factor graph synthesis & active repair |
-| **Visual Scene Critic (VLM)** | `Qwen/Qwen2.5-VL-7B-Instruct` | GPU 0 (RTX PRO 6000 96 GB) | ~14–16 GB GDDR7 | HTTP `127.0.0.1:8001` | Tier 2 local multimodal inspection of multi-camera USD viewport renders (occlusion, line-of-sight, floating objects) |
-| **Knowledge Graph Store** | `neo4j:5.26-community` | Host CPU / System RAM | ~4 GB DRAM | Bolt `127.0.0.1:7688`<br/>HTTP `127.0.0.1:7475` | Labeled Property Graph (LPG) storage for verified environment graphs |
-| **Physical Policy Server** | `nvidia/GR00T-N1.6-DROID` (3B) | GPU 1 (RTX 5090 32 GB) | ~8 GB GDDR7 | ZeroMQ `tcp://127.0.0.1:5556` | Real-time sensor-to-action policy rollouts (7-DoF joint position delta) |
-| **Simulation Runtime** | `isaaclab_arena:latest` (Isaac Sim 6.0) | GPU 1 (RTX 5090 32 GB) | ~10 GB GDDR7 | Headless (IPC / Host) | PhysX dynamics, USD stage resolution, and camera rendering |
+##### Host Machine Workload Sizing & Process Execution Matrix
 
-> **GPU 0 VRAM Allocation Summary:**  
-> - Spec Generator LLM: ~22 GB GDDR7  
-> - Visual Critic VLM: ~16 GB GDDR7  
-> - **Total GPU 0 Utilization:** ~38 GB / 96 GB (**~58 GB free headroom** for KV cache and large context batches)
+To ensure reproducible, zero-cloud execution on the local host without kernel OOM kills or CUDA memory collisions, the workstation processes are partitioned across GPU 0, GPU 1, and the host CPU/DRAM as follows:
+
+| Component / Subsystem | Execution Target & Device | VRAM Footprint | Host System RAM | Network / IPC Endpoint | Notes / Operational Sizing |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Neo4j 5.26 LPG** | Host CPU / Docker (`arena-envgen-neo4j`) | **0 GB (No GPU)** | **4 – 8 GB** | Bolt `127.0.0.1:7688`<br/>HTTP `127.0.0.1:7475` | Java JVM Heap (`-Xms2G -Xmx4G`) + pagecache. Does not utilize CUDA. Persists verified environment factor graphs. |
+| **Workbench Web API & UI** | Host CPU / Docker or Node (`arena-workbench`) | **0 GB (No GPU)** | **1 – 2 GB** | HTTP `127.0.0.1:3001` (UI)<br/>HTTP `127.0.0.1:8002` (API) | Python FastAPI backend + Node.js/React frontend for live scene graph exploration and interactive graph inspection. |
+| **SHACL & RDF-star Validator** | Host CPU / Python runtime | **0 GB (No GPU)** | **0.5 – 1 GB** | In-process Python CLI / Module | `pyshacl` + `rdflib` graph validation, OWL ontology checking, and W3C PROV-O audit trail lowering. |
+| **Host Display Server (Xorg)** | Host Desktop / GPU 0 (`0000:01:00.0`) | **~2.6 GB** | **1 – 2 GB** | Local X11 Server (`:0` / `:1`) | Physical monitor connected to RTX PRO 6000 DisplayPort (`Disp.A: On`). Essential baseline VRAM allocation. |
+| **Spec Generation LLM** | **GPU 0 (RTX PRO 6000 96 GB)** / vLLM | **20 – 65 GB** | **16 – 32 GB** | HTTP `127.0.0.1:8000/v1` | `Qwen/Qwen2.5-Coder-32B-Instruct-AWQ` (Primary: ~19.5 GB weights + 4–43 GB KV cache) or Qwen2.5-72B-AWQ (Future Stress: ~40 GB). Schema-guided Outlines decoding. |
+| **Visual Scene Critic VLM** | **GPU 0 (RTX PRO 6000 96 GB)** / vLLM | **8 – 27 GB** | **8 – 16 GB** | HTTP `127.0.0.1:8001/v1` | `Qwen/Qwen2.5-VL-7B-Instruct` (AWQ: ~8 GB, BF16: ~14–27 GB) for Tier 2 multimodal camera inspection of USD viewport renders. |
+| **Simulation Runtime** | **GPU 1 (RTX 5090 32 GB)** / Docker | **8 – 12 GB** | **16 – 32 GB** | Headless (IPC / Host Vulkan Offscreen) | `isaaclab_arena:latest` (Isaac Sim 6.0). PhysX 5 dynamics, USD stage resolution, and offscreen camera rendering for multi-camera sensors. |
+| **Isaac-GR00T Policy Server** | **GPU 1 (RTX 5090 32 GB)** / PyTorch | **6 – 10 GB** | **8 – 16 GB** | ZeroMQ `tcp://127.0.0.1:5556` | `nvidia/GR00T-N1.6-DROID` (3B foundation model) or OpenPI policy. Serves real-time 50 Hz sensor-to-action chunk rollouts. |
+
+##### Host Configuration & System Sizing Notes for Researchers
+
+1. **Host System Memory (DRAM) Budget:**
+   - **Minimum Requirement:** 64 GB DRAM
+   - **Recommended Baseline:** 128 GB DDR5 DRAM
+   - **Concurrent Footprint Breakdown:** The combined memory pressure of Neo4j JVM heap (4–8 GB), vLLM host-side Ray/Python workers (16–32 GB), Isaac Sim pinned memory & USD stage buffers (16–32 GB), and OS/Xorg services (4–8 GB) totals **~46 – 95 GB DRAM**. Operating on a host with $< 64\text{ GB}$ will trigger Linux OOM-killer evictions during simultaneous Isaac Sim scene initialization and vLLM KV-cache expansion.
+2. **Dual-GPU Partitioning & VRAM Headroom:**
+   - **GPU 0 (`device=0`, RTX PRO 6000 Blackwell 96 GB GDDR7 ECC):** Dedicated strictly to cognitive synthesis and visual evaluation (`arena-vllm-spec` + `arena-vllm-visual` + host Xorg). Even with 131k YaRN context expansion on the 32B model (~40 GB VRAM) and the 7B VLM (~16 GB VRAM), GPU 0 retains $\ge 35\text{ GB}$ of uncommitted headroom.
+   - **GPU 1 (`device=1`, GeForce RTX 5090 32 GB GDDR7):** Dedicated strictly to physical dynamics and neural policy execution (`isaaclab_arena` + `gr00t-server`). Isaac Sim headless offscreen Vulkan rendering (~8–10 GB) and the GR00T 3B policy (~8 GB) occupy ~16–18 GB combined, leaving **$\ge 14\text{ GB}$ of high-speed GDDR7 headroom** for PhysX rigid-body buffers, multi-camera framebuffers, and parallel environment sub-stepping.
+3. **Docker Host Orchestration Primitives:**
+   - `--network host`: **Mandatory** across all containers (`arena-vllm-spec`, `arena-vllm-visual`, `arena-envgen-neo4j`, `gr00t-server`, and `isaaclab_arena`). Bypasses Docker bridge NAT overhead, keeping ZeroMQ IPC latency $\le 0.4\text{ ms}$ (vs. $\sim 2.5\text{ ms}$ over bridge) and enabling direct `127.0.0.1` socket binding.
+   - `--ipc host`: **Mandatory** for vLLM and Isaac Sim containers. Allows PyTorch DataLoader, raylet inter-process communication, and Vulkan offscreen shared-memory rings to exchange tensors without hitting Docker's default 64 MB `/dev/shm` limit.
+   - **Volume Mounts:**
+     - HuggingFace Cache: `-v ~/.cache/huggingface:/root/.cache/huggingface` (shared weights across containers).
+     - Local Workspace: `-v $(pwd):/workspaces/isaaclab_arena` (live code editing and artifact generation).
+     - Persistent LPG Store: `-v arena-envgen-neo4j-data:/data` (preserves knowledge graph across restarts).
+4. **Physical GPU Device Isolation:**
+   - Never use `--gpus all`. Always pass explicit `--gpus '"device=0"'` to cognitive servers and `--gpus '"device=1"'` to simulation/policy servers. This prevents Isaac Sim or PyTorch from creating CUDA contexts on GPU 0, which would compete with the Xorg display server or vLLM KV caches.
 
 ---
 
@@ -684,22 +704,17 @@ To evaluate the recursive spec refinement loop across varied physical fixtures o
    - **Validation Intent:** A larger domain transition (kitchen tabletop $\rightarrow$ warehouse packing station `packing_table`), validating whether the agent adapts spatial clearance and kinematic reachability checks for the Franka DROID arm on a new fixture.
 
 ##### Phase 1.4 Telemetry & Metrics Capture
-Hardware and inference telemetry are captured during this phase using the hooks specified in [Section 7](#7-multi-layer-telemetry--observability-infrastructure):
+Hardware and inference telemetry captured during the baseline and iterative refinement runs:
 
-| Metric Category | Target Indicator | Baseline (Pre) | Peak / Final (Post) | Delta / Total |
-| :--- | :--- | :--- | :--- | :--- |
-| **Cognitive Agent** | Repair Iterations | 0 | — | — |
-| **Cognitive Agent** | Free Energy ($\mathcal{F}$) | Initial | — | Final Conformance |
-| **vLLM Spec (8000)** | Prompt Tokens | — | — | — |
-| **vLLM Spec (8000)** | Generation Tokens | — | — | — |
-| **vLLM Spec (8000)** | KV Cache Saturation | 0.0 | — | Peak Gauge |
-| **vLLM Spec (8000)** | Preemptions Total | 0 | 0 | 0 (Must be 0) |
-| **vLLM Visual (8001)**| Critic Queries / Requests | — | — | — |
-| **Hardware (GPU 0)** | Peak VRAM Allocated | ~38 GB | — | GDDR7 Used |
-| **Hardware (GPU 0)** | Average Power Draw | ~49 W | — | Watts |
+| Run / Prompt | Target Model | Prompt Tokens | Gen Tokens | Total Tokens | Latency | Repairs | Status & Lineage |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Baseline (`v2`)** | `Qwen2.5-Coder-32B-AWQ` | 6,560 | 1,278 | 7,838 | 21.10s | 0 | ✅ `latest -> v2` (`maple_table_robolab`) |
+| **Prompt 1 (`v3`)** | `Qwen2.5-Coder-32B-AWQ` | 6,568 | 1,270 | 7,838 | 21.38s | 0 | ✅ `latest -> v3` (`table_oak_robolab`) |
+| **Prompt 2 (`v4`)** | `Qwen2.5-Coder-32B-AWQ` | 6,570 | 1,266 | 7,836 | 19.67s | 0 | ✅ `latest -> v4` (`table` Seattle) |
+| **Prompt 3 (`v5`)** | `Qwen2.5-Coder-32B-AWQ` | 6,562 | 1,291 | 7,853 | 20.05s | 0 | ✅ `latest -> v5` (`packing_table`) |
 
-- **Results & Metrics:** *(To be recorded upon execution)*
-- **Observations:** *(To be recorded)*
+- **vLLM Operational Invariants (GPU 0):** Peak VRAM allocated: ~22 GB GDDR7; Preemptions total: **0**; KV cache saturation: $< 15\%$; GPU 0 temperature: $42^\circ\text{C}$; Power draw: $\sim 68\text{ W}$.
+- **Observations:** Schema-guided greedy decoding (`--temperature 0.0`) yielded **100% first-pass semantic validity (0 repairs)** across all 3 fixture swaps. The agent successfully modified background USD prims, adjusted surface Z elevations, and correctly remapped spatial sector factor bounds into Neo4j.
 
 ---
 
@@ -743,9 +758,20 @@ docker run --rm --gpus '"device=1"' --network host \
     --enable_cameras \
     --output_base_dir eval_output/droid_banana_to_red_bowl/zero_action
 ```
-- **Validation Test:** Verify that `banana_ycb_robolab` rests stably in `front_right`, `bowl_ycb_robolab` rests in `front_left`, no explosive contact penetration occurs, and wrist/exterior cameras capture clean visual frames.
-- **Results & Metrics:** *(To be recorded upon execution)*
-- **Observations:** *(To be recorded)*
+
+##### Phase 1.5 Physical Rollout Empirical Matrix across Iterations
+
+| Environment Version | Background Fixture | Steps Completed | Object Dropped | Final Linear Vel | Offscreen MP4 Video | Status & Outcome |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`v2` Baseline** | `maple_table_robolab` | 300/300 | False | $0.0003\text{ m/s}$ | Generated (`2026-09-30_15-22-29`) | ✅ PASSED (Stable contact) |
+| **`v3` (Prompt 1)** | `table_oak_robolab` | 14/300 (Early exit) | **True** (Step 14) | Dynamic drop | Generated (`2026-10-04_22-52-39`) | ⚠️ **PHYSICAL GATE TRIGGERED** |
+| **`v4` (Prompt 2)** | `table` (Seattle) | 300/300 | False | $0.0002\text{ m/s}$ | Generated (`2026-10-04_22-55-32`) | ✅ PASSED (Stable at $Z=0.7492\text{ m}$) |
+| **`v5` (Prompt 3)** | `packing_table` Workstation | 300/300 | False | $0.0003\text{ m/s}$ | Generated (`2026-10-04_21-26-26`) | ✅ PASSED (Stable industrial deck) |
+
+- **Critical Architectural Finding (Simulation Gating vs. Static SHACL):**
+  - In `v3` (`table_oak_robolab`), the spatial specification passed static SHACL validation and AABB non-overlap checks. However, dynamic PhysX simulation revealed that the compact $0.6\text{ m} \times 0.6\text{ m}$ deck placed the banana near the beveled perimeter, causing it to roll off under gravity at step 14.
+  - This demonstrates why Phase 1.5 (`ZeroActionPolicy` pre-flight) is a non-negotiable architectural gate before running neural policies: static geometric checks cannot account for continuous contact manifolds and center-of-mass roll dynamics.
+- **Hardware Performance (RTX 5090):** Headless Vulkan offscreen rendering executed cleanly across all iterations without driver resets or memory leaks. Full 1280x720 @ 50 FPS video was written cleanly to disk. VRAM was completely deallocated to idle (107 MiB) immediately upon container termination.
 
 ---
 

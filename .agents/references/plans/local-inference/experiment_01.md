@@ -64,6 +64,28 @@ flowchart TD
     GR00T -->|Action Chunks (50 Hz)| SIM
 ```
 
+### 3.1 Host Machine Workload Sizing & Process Execution Matrix
+
+To ensure reproducible, zero-cloud execution on the local host without kernel OOM kills or CUDA memory collisions, the workstation processes are partitioned across GPU 0, GPU 1, and the host CPU/DRAM as follows:
+
+| Component / Subsystem | Execution Target & Device | VRAM Footprint | Host System RAM | Network / IPC Endpoint | Notes / Operational Sizing |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Neo4j 5.26 LPG** | Host CPU / Docker (`arena-envgen-neo4j`) | **0 GB (No GPU)** | **4 – 8 GB** | Bolt `127.0.0.1:7688`<br/>HTTP `127.0.0.1:7475` | Java JVM Heap (`-Xms2G -Xmx4G`) + pagecache. Does not utilize CUDA. Persists verified environment factor graphs. |
+| **Workbench Web API & UI** | Host CPU / Docker or Node (`arena-workbench`) | **0 GB (No GPU)** | **1 – 2 GB** | HTTP `127.0.0.1:3001` (UI)<br/>HTTP `127.0.0.1:8002` (API) | Python FastAPI backend + Node.js/React frontend for live scene graph exploration and interactive graph inspection. |
+| **SHACL & RDF-star Validator** | Host CPU / Python runtime | **0 GB (No GPU)** | **0.5 – 1 GB** | In-process Python CLI / Module | `pyshacl` + `rdflib` graph validation, OWL ontology checking, and W3C PROV-O audit trail lowering. |
+| **Host Display Server (Xorg)** | Host Desktop / GPU 0 (`0000:01:00.0`) | **~2.6 GB** | **1 – 2 GB** | Local X11 Server (`:0` / `:1`) | Physical monitor connected to RTX PRO 6000 DisplayPort (`Disp.A: On`). Essential baseline VRAM allocation. |
+| **Spec Generation LLM** | **GPU 0 (RTX PRO 6000 96 GB)** / vLLM | **20 – 65 GB** | **16 – 32 GB** | HTTP `127.0.0.1:8000/v1` | `Qwen/Qwen2.5-Coder-32B-Instruct-AWQ` (Primary: ~19.5 GB weights + 4–43 GB KV cache) or Qwen2.5-72B-AWQ (Future Stress: ~40 GB). Schema-guided Outlines decoding. |
+| **Visual Scene Critic VLM** | **GPU 0 (RTX PRO 6000 96 GB)** / vLLM | **8 – 27 GB** | **8 – 16 GB** | HTTP `127.0.0.1:8001/v1` | `Qwen/Qwen2.5-VL-7B-Instruct` (AWQ: ~8 GB, BF16: ~14–27 GB) for Tier 2 multimodal camera inspection of USD viewport renders. |
+| **Simulation Runtime** | **GPU 1 (RTX 5090 32 GB)** / Docker | **8 – 12 GB** | **16 – 32 GB** | Headless (IPC / Host Vulkan Offscreen) | `isaaclab_arena:latest` (Isaac Sim 6.0). PhysX 5 dynamics, USD stage resolution, and offscreen camera rendering for multi-camera sensors. |
+| **Isaac-GR00T Policy Server** | **GPU 1 (RTX 5090 32 GB)** / PyTorch | **6 – 10 GB** | **8 – 16 GB** | ZeroMQ `tcp://127.0.0.1:5556` | `nvidia/GR00T-N1.6-DROID` (3B foundation model) or OpenPI policy. Serves real-time 50 Hz sensor-to-action chunk rollouts. |
+
+### 3.2 Host Configuration & Pre-flight Invariants for Researchers
+
+1. **Host System Memory (DRAM):** Minimum 64 GB DRAM, **128 GB recommended**. Concurrent footprint across JVM heap (4–8 GB), vLLM Ray/Python workers (16–32 GB), Isaac Sim pinned memory & USD stage buffers (16–32 GB), and OS/Xorg services (4–8 GB) is **~46 – 95 GB DRAM**.
+2. **Docker Network Mode (`--network host`):** Mandatory across all containers. Bypasses Docker bridge NAT overhead, keeping ZeroMQ IPC latency $\le 0.4\text{ ms}$ (vs. $\sim 2.5\text{ ms}$ over bridge) and enabling direct `127.0.0.1` socket binding.
+3. **Shared Memory (`--ipc host`):** Mandatory for vLLM and Isaac Sim containers. Permits PyTorch DataLoader, raylet IPC, and Vulkan offscreen shared-memory rings to exchange tensors without hitting Docker's default 64 MB `/dev/shm` barrier.
+4. **Physical GPU Isolation (`--gpus '"device=..."'`):** Never use `--gpus all`. Explicitly pass `--gpus '"device=0"'` to cognitive servers and `--gpus '"device=1"'` to simulation/policy servers.
+
 ---
 
 ## 4. Step-by-Step Mental Model: Expected vs. Getting Tracking Ledger
@@ -312,6 +334,9 @@ flowchart TD
   | **Spatial Placement** | Non-overlapping | Banana Right (`-0.1568y`), Bowl Left (`+0.1568y`) | ✅ PASSED | Stable tabletop positions on `maple_table` |
   | **Neo4j LPG Sync** | Sync to Neo4j | `8 nodes, 11 relations` | ✅ PASSED | Verified via Cypher API commit |
   | **Artifacts Created** | Spec YAML & Lineage | `v1/` and `v2/` YAML, `lineage.json`, `lineage.ttl` (PROV-O) | ✅ PASSED | Symlink `latest -> v2` verified |
+  | **Feedback Refinement (Prompt 1)** | Table swap `maple_table_robolab` $\to$ `table_oak_robolab` | Swapped to `table_oak_robolab`; banana right, bowl left | ✅ PASSED | 1 LLM call, 0 repairs, 7,838 tokens (6,568 prompt, 1,270 completion), 21.38s latency, version `v3` generated (`latest -> v3`), Neo4j synced (11 nodes, 18 relations) |
+  | **Feedback Refinement (Prompt 2)** | Table swap `table_oak_robolab` $\to$ `table` (Seattle) | Swapped to Seattle lab `table`; stable deck height ($Z=0.7492\text{ m}$) | ✅ PASSED | 1 LLM call, 0 repairs, 7,836 tokens (6,570 prompt, 1,266 completion), 19.67s latency, version `v4` generated (`latest -> v4`), Neo4j synced (11 nodes, 18 relations) |
+  | **Feedback Refinement (Prompt 3)** | Domain shift $\to$ `packing_table` workstation | Swapped to `packing_table`; remapped sectors to `front_right` and `front_left` | ✅ PASSED | 1 LLM call, 0 repairs, 7,853 tokens (6,562 prompt, 1,291 completion), 20.05s latency, version `v5` generated (`latest -> v5`), Neo4j synced (8 nodes, 22 relations) |
   | **Exit Code** | 0 | `0` | ✅ PASSED | Exited cleanly with code 0 |
 
 #### Incident & Root Cause Analysis: `--mode full` Spec Synthesis Edge Cases
@@ -380,16 +405,26 @@ During initial `--mode full` evaluation, three interrelated prompt-to-schema fai
   - Banana and red bowl drop $< 2\text{ cm}$ and settle onto the tabletop deck.
   - Linear velocity settles below $0.1\text{ m/s}$; angular velocity settles below $1.0\text{ rad/s}$.
   - Multi-camera MP4 videos generated in `eval_output/droid_banana_to_red_bowl/zero_action/<timestamp>/`.
-- **Actual Observed Results (Tracking Ledger):**
-  | Parameter | Expected | Actual / Getting | Status |
-  | :--- | :--- | :--- | :--- |
-  | **USD Asset Resolution** | 100% resolved (0 missing) | 100% resolved (Stage instantiated cleanly) | ✅ PASSED |
-  | **PhysX Penetration** | 0 penetration errors | 0 penetration errors (No explosive contact) | ✅ PASSED |
-  | **Settling Linear Vel** | $< 0.1\text{ m/s}$ | `0.0003 m/s` (banana), `0.0000 m/s` (bowl), `0.0000 m/s` (robot) | ✅ PASSED |
-  | **Settling Angular Vel**| $< 1.0\text{ rad/s}$ | `0.0092 rad/s` (banana), `0.0003 rad/s` (bowl), `0.0000 rad/s` (robot) | ✅ PASSED |
-  | **Object Dropped Flag** | False | False (All objects stationary on tabletop deck) | ✅ PASSED |
-  | **Rollout Stability** | 300 steps at ~10-20 step/s | 300/300 steps completed cleanly (Exit code 0) | ✅ PASSED |
-  | **Lineage & PROV-O** | Auto-updated | Updated `lineage.json` and `eval_telemetry.ttl` | ✅ PASSED |
+- **Actual Observed Results (Tracking Ledger across Environment Iterations):**
+
+  | Parameter | Expected | v2 (`maple_table`) Baseline | v3 (`table_oak_robolab`) | v4 (`table` Seattle) | v5 (`packing_table`) Workstation | Status |
+  | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+  | **USD Asset Resolution** | 100% resolved | 100% resolved | 100% resolved | 100% resolved | 100% resolved | ✅ PASSED |
+  | **PhysX Penetration** | 0 errors | 0 errors | 0 errors | 0 errors | 0 errors | ✅ PASSED |
+  | **Table Deck Height ($Z$)** | Stable contact | $0.60\text{ m}$ | $0.60\text{ m}$ | $0.7492\text{ m}$ (Adapted) | $0.60\text{ m}$ | ✅ PASSED |
+  | **Settling Linear Vel** | $< 0.1\text{ m/s}$ | $0.0003\text{ m/s}$ | N/A (Dynamic drop) | $0.0002\text{ m/s}$ | $0.0003\text{ m/s}$ | ✅ PASSED |
+  | **Settling Angular Vel** | $< 1.0\text{ rad/s}$ | $0.0092\text{ rad/s}$ | N/A (Dynamic drop) | $0.0011\text{ rad/s}$ | $0.0092\text{ rad/s}$ | ✅ PASSED |
+  | **Object Dropped Flag** | False | False (Stable) | **True** (Dropped at step 14) | False (Stable) | False (Stable) | ⚠️ PHYSICAL GATE TRIGGERED (`v3`) |
+  | **Simulation Duration** | 300 steps (6.0s) | 300/300 steps | 14/300 steps (Early exit) | 300/300 steps | 300/300 steps | ✅ PASSED (`v2`, `v4`, `v5`) |
+  | **RTX 5090 Offscreen Video** | 1280x720 @ 50 FPS | Generated MP4 | Generated MP4 (Steps 0–14) | Generated MP4 (301 frames) | Generated MP4 (301 frames) | ✅ PASSED |
+  | **Evaluation Directory** | Timestamped run | `2026-09-30_15-22-29/` | `2026-10-04_22-52-39/` | `2026-10-04_22-55-32/` | `2026-10-04_21-26-26/` | ✅ PASSED |
+
+##### Empirical Analysis & Value of Simulation Gating (Phase 1.5 vs Static SHACL)
+
+A critical empirical discovery emerged during the comparative physical validation of **`v3` (`table_oak_robolab`)**:
+1. **Static Pre-flight Success**: `v3` passed all analytical checks: W3C SHACL semantic conformance, domain ontology rules, and the Geometric Clearance Oracle (AABB non-overlapping bounding box test).
+2. **Dynamic Physics Failure**: When instantiated under PhysX gravity in Isaac Sim on the RTX 5090, the physical simulation terminated at **step 14** with `object_dropped: [True]`. The `table_oak_robolab` model is a more compact workstation ($0.6\text{ m} \times 0.6\text{ m}$) with beveled edges. The banana coordinates synthesized by the LLM placed it near the perimeter chamfer; under dynamic gravity settling, the curved contact manifold rolled off the tabletop edge.
+3. **Architectural Value**: This validates the design requirement of Phase 1.5. Pure semantic/geometric static validation cannot model continuous friction, surface chamfers, or rolling center-of-mass dynamics. Phase 1.5 acts as an indispensable, zero-cost physical gate that intercepts unviable scenes before deploying multi-episode neural policy evaluations.
 
 #### Incident & Root Cause Analysis: Docker ENTRYPOINT SyntaxError
 

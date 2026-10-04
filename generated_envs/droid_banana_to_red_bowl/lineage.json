@@ -49,8 +49,68 @@
           "object_moved_rate": 1.0
         }
       }
+    },
+    {
+      "version": 3,
+      "created_at": "2026-10-04T21:17:04.453772+00:00",
+      "trigger": "active_inference_refinement",
+      "prompt": "Change the background table from maple_table_robolab to table_oak_robolab, keeping the yellow banana on the right and the red bowl on the left.",
+      "parent_version": 2,
+      "remediations": [],
+      "diagnostics": [],
+      "spec_file": "droid_banana_to_red_bowl/v3/droid_banana_to_red_bowl.yaml",
+      "policy_file": "droid_banana_to_red_bowl/v3/policy_config.yaml",
+      "evaluation": null
+    },
+    {
+      "version": 4,
+      "created_at": "2026-10-04T21:20:18.962903+00:00",
+      "trigger": "active_inference_refinement",
+      "prompt": "Replace the background table with the standard Seattle lab table (registry_name: 'table'), adjusting the banana and red bowl heights so they sit stably on the new table surface.",
+      "parent_version": 3,
+      "remediations": [],
+      "diagnostics": [],
+      "spec_file": "droid_banana_to_red_bowl/v4/droid_banana_to_red_bowl.yaml",
+      "policy_file": "droid_banana_to_red_bowl/v4/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-10-04T22:56:32.885120+00:00",
+        "eval_dir": "eval_output/droid_banana_to_red_bowl/zero_action/2026-10-04_22-55-32",
+        "success_rate": 0.0,
+        "object_moved_rate": NaN,
+        "num_episodes": 0,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 0,
+          "success_rate": 0.0,
+          "object_moved_rate": NaN
+        }
+      }
+    },
+    {
+      "version": 5,
+      "created_at": "2026-10-04T21:21:26.578482+00:00",
+      "trigger": "active_inference_refinement",
+      "prompt": "Switch the scene background from the maple table to the packing_table workstation, ensuring the red bowl and yellow banana remain in reachable front sectors for the Franka DROID arm.",
+      "parent_version": 4,
+      "remediations": [],
+      "diagnostics": [],
+      "spec_file": "droid_banana_to_red_bowl/v5/droid_banana_to_red_bowl.yaml",
+      "policy_file": "droid_banana_to_red_bowl/v5/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-10-04T21:27:49.196953+00:00",
+        "eval_dir": "eval_output/droid_banana_to_red_bowl/zero_action/2026-10-04_21-26-26",
+        "success_rate": 0.0,
+        "object_moved_rate": NaN,
+        "num_episodes": 0,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 0,
+          "success_rate": 0.0,
+          "object_moved_rate": NaN
+        }
+      }
     }
   ],
-  "current_version": 2,
-  "updated_at": "2026-09-30T18:04:25.287583+00:00"
+  "current_version": 5,
+  "updated_at": "2026-10-04T21:21:26.578482+00:00"
 }

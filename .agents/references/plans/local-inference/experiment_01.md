@@ -416,6 +416,22 @@ During initial `--mode full` evaluation, three interrelated prompt-to-schema fai
   ```
 - **Failure Mode**: This creates a dangerous illusion of verification. The summary card fails to disclose that the visual critic was completely bypassed, the physics pre-flight was never executed, and the factor graph relaxation was swallowed.
 
+##### Weakness 8: Silent Visual Frame Omission (Bypassed VLM Multimodal Inference)
+- **Code Anchors**:
+  - [`EnvironmentGenerationAgent._active_inference_loop`](../../../../isaaclab_arena/agentic_environment_generation/environment_generation_agent.py#L294-L295)
+  - [`environment_generation_runner.py:preflight_check`](../../../../isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py#L688-L689)
+  - [`VisualSceneCritic.evaluate_scene_spec`](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L85-L129)
+- **Vulnerability**: Across all standard generation scripts, `critic.evaluate_scene_spec(spec)` is called without providing the `rendered_images` parameter (it defaults to `None`). Inside `VisualSceneCritic`, the conditional checks `if rendered_images:` at Tier 1 (Cloud VLM) and Tier 2 (Local VLM) evaluate to `False`.
+- **Failure Mode**: The pipeline silently skips both multimodal vision tiers and falls back to Tier 3 mathematical bounding box checks. Even when a local VLM is running on Port 8001 or Omniverse Kit is active, zero visual tokens are ever computed.
+
+##### Weakness 9: Preflight VLM Prompt Conflation & Missing Robot Kinematic Exclusion Volume
+- **Code Anchors**:
+  - [`VisualSceneCritic._call_local_vlm_critic`](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L154-L163)
+  - [`SpatialGeometricOracle`](../../../../isaaclab_arena/agentic_environment_generation/spatial_geometric_oracle.py#L18-L94)
+  - [`DroidSceneCfg.init_state`](../../../../isaaclab_arena/embodiments/droid/droid.py#L218-L234)
+- **Vulnerability**: The stock local VLM prompt injects the high-level task goal (*"Grasp banana and place in bowl"*) and asks generic questions about "floating at the ceiling". Under this prompt, the VLM conflates preflight initial scene setup with policy execution progress, hallucinating that "banana is not in bowl" is the failure. Simultaneously, `SpatialGeometricOracle` treats the table as an empty 2D plane and only checks inter-object bounding boxes, possessing zero representation of the robot's resting forward reach volume $[x \approx -0.09, y \approx -0.10, z \approx 0.76]$.
+- **Failure Mode**: When the VLM advises moving an object inward away from table edge chamfers, the LLM places the object directly into the robot's resting gripper volume. The geometric oracle gives it a green pass, leading to explosive PhysX depenetration impulses and catastrophic scene drops at step 0.
+
 ---
 
 #### 2. Systemic Hardening Roadmap: Corrective Engineering Tasks
@@ -433,6 +449,8 @@ To permanently resolve these gaps, the following engineering tasks are formally 
 | **HR-04** | Fail-Loud Factor Graph Optimization | Remove `except Exception: pass` from `_ensure_reified_relations_and_grounding`. Surface solver convergence status, residual energy, and conflicting factors in `agent.traces`. | `environment_generation_agent.py`<br/>`spatial_geometric_oracle.py` |
 | **HR-05** | Integrated Grounded Mode (`--mode grounded-resolve`) | Implement a closed-loop generation mode: Synthesize draft spec $\to$ launch headless Isaac Sim on GPU 1 for a 30-step settle $\to$ capture camera frame $\to$ query VLM on port 8001 $\to$ if dropped or occluded, auto-feed physical telemetry into LLM repair loop until converged. | `environment_generation_runner.py` |
 | **HR-06** | Transparent Subsystem Telemetry | Update `ActiveInferenceTelemetry` summary card to list the exact status of every tier: `Visual Critic: [Bypassed: No Frames]`, `Physics Critic: [Bypassed: Pure Python]`, `Tier Used: [tier_3_geometric_oracle]`. | `telemetry.py`<br/>`environment_generation_agent.py` |
+| **HR-07** | Robot End-Effector Exclusion Zone | Integrate a 3D volumetric clearance cylinder around the embodiment's default resting gripper pose $[x_{eef}, y_{eef}, z_{eef}]$ (radius $0.12\text{ m}$) into `SpatialGeometricOracle` to reject specs spawning objects inside the robot's hands. | `spatial_geometric_oracle.py`<br/>`environment_generation_agent.py` |
+| **HR-08** | Preflight Kinematic Collision Prompting | Refactor `_call_local_vlm_critic` and `_call_cloud_vlm_critic` prompts to specifically query for robot arm / gripper interpenetration, table chamfer proximity, and initial physical contact instead of generic task completion goals. | `visual_critic.py` |
 
 ---
 
@@ -645,6 +663,77 @@ To empirically validate the repaired specifications against the physical simulat
    - High-speed frame extraction (`frame_001.png`) revealed that the default resting joint posture of the DROID Franka Panda arm places the parallel gripper precisely at $[x \approx -0.09, y \approx -0.10, z \approx 0.76]$.
    - At simulation step 0, the gripper fingers directly intersected with the banana. PhysX contact resolution applied strong depenetration velocity impulses ($5.0\text{ m/s}$ cap), catapulting the banana into the air (`frame_004.png`) and causing `object_dropped: [True]` during settling at step 37–42.
    - **Architectural Lesson for Spatial Solvers**: Geometric clearance validation must enforce a **Robot End-Effector Exclusion Cylinder** around the resting gripper pose $[x_{eef}, y_{eef}, z_{eef}]$ in addition to table bounding boxes. Spatial planners cannot treat the tabletop as an empty 2D plane; the robot's own resting embodiment creates an occupied volumetric exclusion zone.
+
+#### 6. In-Depth Root-Cause Audit: Did the Built-in VLM Workflow Capture the `v3-1` Issue?
+
+A central question arising from the `v3-1` failure is whether the repository's built-in VLM perception pipeline was capable of intercepting the gripper collision before physical execution. 
+
+> [!CAUTION]
+> **Audit Finding**: **No, the built-in VLM workflow as implemented was not capable of preventing or capturing the issue.** Although the vision foundation model itself (`Qwen2.5-VL-7B-Instruct`) has sufficient visual resolution, structural defects in the codebase's calling pipeline, prompt engineering, and spatial reasoning completely blinded the system.
+
+##### Empirical Verification: Testing the Live VLM on the Collision Frame (`frame_001.png`)
+
+To separate model capability from pipeline implementation, we probed the active local VLM container (`arena-vllm-visual` on Port 8001 / GPU 1) directly using `frame_001.png`, which depicts the black parallel gripper resting directly on the banana at step 0:
+
+1. **Probe A: The Stock Built-In Local VLM Prompt**:
+   - **Code Location**: [`visual_critic.py` lines 154–163](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L154-L163)
+   - **Prompt Used**:
+     ```python
+     "Robotic scene perception check for task: Grasp the yellow banana and place it into the red bowl."
+     "Evaluate visibility, occlusion, and whether objects are grounded on the table vs. floating at ceiling."
+     'Respond with strict JSON matching: {"conforms": bool, "visibility_score": float,'
+     '"occluded_objects": [], "floating_objects": [], "anomalies": [], "actionable_feedback": "", "actionable_corrections": {}}'
+     ```
+   - **Live Model Response**:
+     ```json
+     {
+       "conforms": false,
+       "visibility_score": 0.8,
+       "occluded_objects": ["banana"],
+       "floating_objects": [],
+       "anomalies": ["banana is not fully inside the bowl"],
+       "actionable_feedback": "Ensure the banana is fully placed inside the bowl to complete the task.",
+       "actionable_corrections": {
+         "banana_position": "Adjust the position of the banana so that it is completely inside the bowl."
+       }
+     }
+     ```
+   - **Why It Failed**: The VLM flagged `conforms: false` and noted the banana was occluded by the gripper. However, because the prompt supplied the downstream task objective (*"Grasp banana and place in bowl"*), the model conflated preflight physical setup with policy rollout progress. It interpreted the scene as an unfinished task execution (*"banana is not in bowl"*) rather than a preflight physical collision!
+
+2. **Probe B: Explicit Kinematic Collision Prompt**:
+   - **Prompt Used**:
+     ```text
+     "You are a robotic physics and collision critic inspecting an initial scene setup at step 0.
+     Inspect the robot arm and black gripper. Is the gripper or robot arm colliding with,
+     intersecting, or resting directly on top of the yellow banana or red bowl?
+     Return JSON with: {\"gripper_collision\": bool, \"colliding_objects\": [], \"explanation\": \"\"}"
+     ```
+   - **Live Model Response**:
+     ```json
+     {
+       "gripper_collision": true,
+       "colliding_objects": ["banana"],
+       "explanation": "The black gripper is in contact with the yellow banana, indicating a collision."
+     }
+     ```
+   - **Verdict**: The vision model possesses 100% perceptual accuracy to detect gripper interpenetration. The failure was entirely caused by the codebase's flawed prompt design.
+
+---
+
+##### Catalog of Problematic Code Locations for Manual Inspection
+
+The table below catalogs every specific file, line range, and architectural defect responsible for this breakdown so researchers can inspect the code directly:
+
+| Subsystem / Component | Exact Code Anchor & Location | Defect Description & Problematic Implementation |
+| :--- | :--- | :--- |
+| **Pipeline Calling Layer (Agent Loop)** | [`environment_generation_agent.py` L294–L295](../../../../isaaclab_arena/agentic_environment_generation/environment_generation_agent.py#L294-L295) | **Bypassed Image Arguments**: `visual_critic.evaluate_scene_spec(spec)` is invoked without `rendered_images`. `rendered_images` defaults to `None`, so the VLM is never executed during generation or refinement. |
+| **Pipeline Calling Layer (Runner Script)** | [`environment_generation_runner.py` L688–L689](../../../../isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py#L688-L689) | **Bypassed Image Arguments in Runner**: `critic.evaluate_scene_spec(loaded_env_graph_spec)` is called without passing rendered frames, even though `arena_env` was just constructed in Omniverse Kit on the line immediately above. |
+| **Cascading Perception Tier Gating** | [`visual_critic.py` L98–L109](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L98-L109) | **Silent Degradation to Tier 3**: Because `rendered_images` is `None`, `if rendered_images:` evaluates to `False` for both Tier 1 (Cloud) and Tier 2 (Local). The engine silently drops to Tier 3 (purely mathematical AABB checks). |
+| **Local VLM Prompt Construction** | [`visual_critic.py` L154–L163](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L154-L163) | **Preflight Prompt Conflation**: Prompts the VLM with high-level task goals and asks about "floating at the ceiling" instead of querying for robot-object contact, resting gripper interpenetration, or edge chamfer proximity. |
+| **Local VLM Request Model ID** | [`visual_critic.py` L174](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L174) | **Hardcoded Model Identifier Trap**: Hardcodes `"model": "default"`. Throws `404 Not Found` against standard vLLM instances unless aliased with `--served-model-name default <model_id>`. |
+| **Default VLM Port Configuration** | [`visual_critic.py` L79](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L79) | **Port Collision with Text LLM**: Defaults `self.local_vlm_url` to `http://localhost:8000/v1` (the text-only spec generation LLM), causing multimodal requests to fail unless overridden via `LOCAL_VLM_BASE_URL`. |
+| **Spatial Geometric Oracle** | [`spatial_geometric_oracle.py` L18–L94](../../../../isaaclab_arena/agentic_environment_generation/spatial_geometric_oracle.py#L18-L94) | **Absence of Robot Rest Envelope**: Validates only inter-object bounding boxes and table extents. Has zero knowledge of the robot's resting forward reach volume $[x \approx -0.09, y \approx -0.10, z \approx 0.76]$, treating the table deck as an empty 2D plane. |
+| **Robot Embodiment Default State** | [`droid.py` L218–L234](../../../../isaaclab_arena/embodiments/droid/droid.py#L218-L234) | **Implicit Forward Resting Pose**: Defines the initial Franka Panda joint positions (`panda_joint2: -36°`, `panda_joint4: -144°`, `panda_joint6: +108°`), which place the gripper low and forward over the tabletop, directly occupying the $[X \in [-0.15, -0.05], Y \in [-0.15, -0.05]]$ volume. |
 
 ---
 

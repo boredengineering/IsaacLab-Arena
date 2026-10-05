@@ -73,24 +73,27 @@ To ensure reproducible, zero-cloud execution on the local host without kernel OO
 | **Neo4j 5.26 LPG** | Host CPU / Docker (`arena-envgen-neo4j`) | **0 GB (No GPU)** | **4 – 8 GB** | Bolt `127.0.0.1:7688`<br/>HTTP `127.0.0.1:7475` | Java JVM Heap (`-Xms2G -Xmx4G`) + pagecache. Does not utilize CUDA. Persists verified environment factor graphs. |
 | **Workbench Web API & UI** | Host CPU / Docker or Node (`arena-workbench`) | **0 GB (No GPU)** | **1 – 2 GB** | HTTP `127.0.0.1:3001` (UI)<br/>HTTP `127.0.0.1:8002` (API) | Python FastAPI backend + Node.js/React frontend for live scene graph exploration and interactive graph inspection. |
 | **SHACL & RDF-star Validator** | Host CPU / Python runtime | **0 GB (No GPU)** | **0.5 – 1 GB** | In-process Python CLI / Module | `pyshacl` + `rdflib` graph validation, OWL ontology checking, and W3C PROV-O audit trail lowering. |
-| **Host Display Server (Xorg)** | Host Desktop / GPU 0 (`0000:01:00.0`) | **~2.6 GB** | **1 – 2 GB** | Local X11 Server (`:0` / `:1`) | Physical monitor connected to RTX PRO 6000 DisplayPort (`Disp.A: On`). Essential baseline VRAM allocation. |
-| **Spec Generation LLM** | **GPU 0 (RTX PRO 6000 96 GB)** / vLLM | **20 – 65 GB** | **16 – 32 GB** | HTTP `127.0.0.1:8000/v1` | `Qwen/Qwen2.5-Coder-32B-Instruct-AWQ` (Primary: ~19.5 GB weights + 4–43 GB KV cache) or Qwen2.5-72B-AWQ (Future Stress: ~40 GB). Schema-guided Outlines decoding. |
-| **Visual Scene Critic VLM** | **GPU 0 (RTX PRO 6000 96 GB)** / vLLM | **8 – 27 GB** | **8 – 16 GB** | HTTP `127.0.0.1:8001/v1` | `Qwen/Qwen2.5-VL-7B-Instruct` (AWQ: ~8 GB, BF16: ~14–27 GB) for Tier 2 multimodal camera inspection of USD viewport renders. |
-| **Simulation Runtime** | **GPU 1 (RTX 5090 32 GB)** / Docker | **8 – 12 GB** | **16 – 32 GB** | Headless (IPC / Host Vulkan Offscreen) | `isaaclab_arena:latest` (Isaac Sim 6.0). PhysX 5 dynamics, USD stage resolution, and offscreen camera rendering for multi-camera sensors. |
+| **Host Display Server (Xorg)** | Host Desktop / GPU 0 (`0000:01:00.0`) | **~2.6 – 4 GB** | **1 – 2 GB** | Local X11 Server (`:0` / `:1`) | Physical monitor connected to RTX PRO 6000 DisplayPort (`Disp.A: On`). Essential baseline VRAM allocation. |
+| **Spec Generation LLM** | **GPU 0 (RTX PRO 6000 96 GB)** / vLLM | **~83.2 GB** | **16 – 32 GB** | HTTP `127.0.0.1:8000/v1` | `Qwen/Qwen2.5-Coder-32B-Instruct-AWQ` with 131k YaRN context expansion (`--max-model-len 131072`, `--gpu-memory-utilization 0.85`). Dedicates GPU 0 entirely to deep-context spec generation + Xorg (~87.5 GB total). |
+| **Visual Scene Critic VLM** | **GPU 1 (RTX 5090 32 GB)** / vLLM | **~20.2 GB** | **8 – 16 GB** | HTTP `127.0.0.1:8001/v1` | `Qwen/Qwen2.5-VL-7B-Instruct` (BF16 weights ~14.2 GB + KV cache/CUDA graphs ~6 GB, `--gpu-memory-utilization 0.68`). Partitioned onto GPU 1 because GPU 0 is saturated by the 131k context LLM. Leaves **~12.3 GB free** on GPU 1. |
+| **Simulation Runtime** | **GPU 1 (RTX 5090 32 GB)** / Docker | **8 – 10 GB** | **16 – 32 GB** | Headless (IPC / Host Vulkan Offscreen) | `isaaclab_arena:latest` (Isaac Sim 6.0). PhysX 5 dynamics, USD stage resolution, and offscreen camera rendering. Operates in the remaining ~12.3 GB headroom alongside the VLM. |
 | **Isaac-GR00T Policy Server** | **GPU 1 (RTX 5090 32 GB)** / PyTorch | **6 – 10 GB** | **8 – 16 GB** | ZeroMQ `tcp://127.0.0.1:5556` | `nvidia/GR00T-N1.6-DROID` (3B foundation model) or OpenPI policy. Serves real-time 50 Hz sensor-to-action chunk rollouts. |
 
 ### 3.2 Host Configuration & Pre-flight Invariants for Researchers
 
 1. **Host System Memory (DRAM):** Minimum 64 GB DRAM, **128 GB recommended**. Concurrent footprint across JVM heap (4–8 GB), vLLM Ray/Python workers (16–32 GB), Isaac Sim pinned memory & USD stage buffers (16–32 GB), and OS/Xorg services (4–8 GB) is **~46 – 95 GB DRAM**.
-2. **Docker Network Mode (`--network host`):** Mandatory across all containers. Bypasses Docker bridge NAT overhead, keeping ZeroMQ IPC latency $\le 0.4\text{ ms}$ (vs. $\sim 2.5\text{ ms}$ over bridge) and enabling direct `127.0.0.1` socket binding.
-3. **Shared Memory (`--ipc host`):** Mandatory for vLLM and Isaac Sim containers. Permits PyTorch DataLoader, raylet IPC, and Vulkan offscreen shared-memory rings to exchange tensors without hitting Docker's default 64 MB `/dev/shm` barrier.
-4. **Physical GPU Isolation (`--gpus '"device=..."'`):** Never use `--gpus all`. Explicitly pass `--gpus '"device=0"'` to cognitive servers and `--gpus '"device=1"'` to simulation/policy servers.
+2. **Dual-GPU Partitioning Rationale (Why VLM Runs on GPU 1):**
+   - **GPU 0 (`device=0`, RTX PRO 6000 96 GB GDDR7 ECC):** Running `Qwen2.5-Coder-32B-Instruct-AWQ` with full 131k context window (`--max-model-len 131072`, `--gpu-memory-utilization 0.85`) pre-allocates **83.2 GB**. Combined with the physical Xorg display server (~4.2 GB), GPU 0 utilizes **~87.5 GB / 96 GB**, leaving only ~8.4 GB free. A 7B BF16 VLM requires ~16–20 GB and **cannot co-exist on GPU 0** without triggering CUDA OOM.
+   - **GPU 1 (`device=1`, GeForce RTX 5090 32 GB GDDR7):** Hosts `arena-vllm-visual` (`Qwen2.5-VL-7B-Instruct` on port 8001, `--gpu-memory-utilization 0.68`, ~20.2 GB VRAM). This leaves **12,352 MiB (~12.3 GB) of GDDR7 free**, which is sufficient for Isaac Sim headless offscreen Vulkan rendering (~8–10 GB).
+3. **Docker Network Mode (`--network host`):** Mandatory across all containers. Bypasses Docker bridge NAT overhead, keeping ZeroMQ IPC latency $\le 0.4\text{ ms}$ (vs. $\sim 2.5\text{ ms}$ over bridge) and enabling direct `127.0.0.1` socket binding.
+4. **Shared Memory (`--ipc host`):** Mandatory for vLLM and Isaac Sim containers. Permits PyTorch DataLoader, raylet IPC, and Vulkan offscreen shared-memory rings to exchange tensors without hitting Docker's default 64 MB `/dev/shm` barrier.
+5. **Physical GPU Isolation (`--gpus '"device=..."'`):** Always pass explicit `--gpus '"device=0"'` to `arena-vllm-spec` and `--gpus '"device=1"'` to `arena-vllm-visual`, `isaaclab_arena`, and `gr00t-server`.
 
 ---
 
 ## 4. Step-by-Step Mental Model: Expected vs. Getting Tracking Ledger
 
-### Phase 1.1: Cognitive & Visual Engine Bring-Up (GPU 0)
+### Phase 1.1: Cognitive & Visual Engine Bring-Up (GPU 0 & GPU 1)
 
 #### 1.1.1 Spec Generator LLM (`arena-vllm-spec` on Port 8000)
 - **Target Device:** `CUDA_VISIBLE_DEVICES=0` (RTX PRO 6000 96 GB)
@@ -124,33 +127,33 @@ To ensure reproducible, zero-cloud execution on the local host without kernel OO
 
 ---
 
-#### 1.1.2 Visual Scene Critic VLM (`arena-vllm-visual` on Port 8001)
-- **Target Device:** `CUDA_VISIBLE_DEVICES=0` (RTX PRO 6000 96 GB)
+#### 1.1.2 Visual Scene Critic VLM (`arena-vllm-visual` on Port 8001, GPU 1)
+- **Target Device:** `CUDA_VISIBLE_DEVICES=1` (RTX 5090 32 GB)
 - **Command:**
   ```bash
   docker run -d --name arena-vllm-visual \
-    --gpus '"device=0"' \
+    --gpus '"device=1"' \
     --network host \
     --ipc host \
     -v ~/.cache/huggingface:/root/.cache/huggingface \
     vllm/vllm-openai:latest \
-    serve Qwen/Qwen2.5-VL-7B-Instruct \
+    --model Qwen/Qwen2.5-VL-7B-Instruct \
     --port 8001 \
     --max-model-len 8192 \
-    --gpu-memory-utilization 0.25 \
+    --gpu-memory-utilization 0.68 \
     --enable-request-id-headers
   ```
 - **Expected Results (Mental Model):**
-  - Allocates 25% of GPU 0 VRAM ($\sim 24\text{ GB}$).
-  - Total combined GPU 0 allocation: $\sim 62.4\text{ GB} / 95.6\text{ GB}$ ($\sim 33.2\text{ GB}$ free headroom).
+  - Allocates 68% of GPU 1 VRAM ($\sim 20.2\text{ GB}$ for weights, KV cache, and CUDA graphs).
+  - Preserves $\sim 12.3\text{ GB}$ of uncommitted GDDR7 headroom on GPU 1 for Isaac Sim headless Vulkan rendering.
   - HTTP `GET /v1/models` returns HTTP 200 with `Qwen/Qwen2.5-VL-7B-Instruct`.
 - **Actual Observed Results (Tracking Ledger):**
   | Parameter | Expected | Actual / Getting | Status | Notes |
   | :--- | :--- | :--- | :--- | :--- |
-  | **Container Startup** | Up, Exit 0 | `Up (Healthy)` |  PASSED | Container `arena-vllm-visual` running on port 8001 |
-  | **VRAM Allocated** | ~24.0 GB | `~23.7 GB` |  PASSED | Process on GPU 0 |
-  | **Combined GPU 0 VRAM** | $\le 65\text{ GB}$ | `61,947 MiB / 97,887 MiB` |  PASSED | 35.3 GB free headroom maintained |
-  | **HTTP Status (`/v1/models`)** | 200 OK | `200 OK` |  PASSED | Returns model ID `Qwen/Qwen2.5-VL-7B-Instruct` |
+  | **Container Startup** | Up, Exit 0 | `Up (Healthy)` | ✅ PASSED | Container `arena-vllm-visual` running on port 8001 |
+  | **VRAM Allocated** | ~20.2 GB | `20,255 MiB / 32,607 MiB` | ✅ PASSED | Dedicated to GPU 1 (RTX 5090) |
+  | **GPU 1 Remaining Headroom** | $\ge 10\text{ GB}$ | `12,352 MiB (~12.1 GB)` | ✅ PASSED | Sufficient for Isaac Sim offscreen Vulkan context |
+  | **HTTP Status (`/v1/models`)** | 200 OK | `200 OK` | ✅ PASSED | Verified live via curl on port 8001 |
 
 ---
 
@@ -358,51 +361,78 @@ During initial `--mode full` evaluation, three interrelated prompt-to-schema fai
    - *Root Cause*: The LLM added `friction` and `headroom` to `required_checks` without mirroring them in `enabled_checks`.
    - *Fix*: Added automatic reconciliation in `_sanitize_spec_candidate` ensuring `enabled_checks` is always a superset of `required_checks`.
 
-#### Incident & Architectural Analysis: Offline VLM Critic Bypass, 4-Tier Cascades, and the Zero-Repair Phenomenon in v3–v5
+### Architectural Escalation: Codebase Weaknesses, Critic Bypasses, and Systemic Hardening Roadmap
 
-During the execution of feedback refinement prompts 1, 2, and 3 (`v3`, `v4`, `v5`), an important operational anomaly occurred that highlights key architectural behaviors in the validation pipeline:
+> [!WARNING]
+> **Architectural Escalation**: The empirical failure of version `v3` (`table_oak_robolab`) during physical simulation (banana dropped off table edge at step 14) despite receiving 100% "Passed" marks from static SHACL and spatial geometric checks, combined with the silent bypass of `arena-vllm-visual` on port 8001, reveals **seven systemic architectural weaknesses** across the current environment generation and validation codebase. These are formally escalated below for engineering hardening.
 
-##### 1. The Anomaly Observed
-- The execution command explicitly passed `-e LOCAL_VLM_BASE_URL="http://localhost:8001/v1"`.
-- However, the local visual critic container (`arena-vllm-visual` serving `Qwen/Qwen2.5-VL-7B-Instruct` on port 8001) was **not running on the host**.
-- Despite the unreachable endpoint, the runner process did not crash, throw a connection error, or hang.
-- Furthermore, the telemetry reported `Repair Iterations: 0` and `Total LLM Calls: 1`, converging immediately without triggering the Active Inference self-healing repair loop.
+#### 1. Detailed Breakdown of the Seven Systemic Codebase Weaknesses
 
-##### 2. Root Cause 1: Cascading Fallback & Image-Gated Architecture in `VisualSceneCritic`
-In [`VisualSceneCritic.evaluate_scene_spec`](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L81-L130), multimodal evaluation follows a 4-tier cascading hierarchy:
-- **Tier 1 (Cloud Frontier VLM)** & **Tier 2 (Self-Hosted Local VLM on Port 8001)** are strictly conditioned on the presence of rendered visual frames:
+##### Weakness 1: Inherent Blindness of `--mode resolve` (Absence of Rendered Camera Frames)
+- **Code Anchor**: [`VisualSceneCritic.evaluate_scene_spec`](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L98-L115)
+- **Vulnerability**: `--mode resolve` executes purely in Python CPU space without launching Isaac Sim or Omniverse Kit (`SimulationAppContext` is uninitialized). Consequently, `rendered_images` is permanently `None`.
+- **Failure Mode**: Both Tier 1 (Cloud VLM) and Tier 2 (Local VLM on Port 8001) are guarded by `if rendered_images:`. Even when `arena-vllm-visual` is running and healthy on port 8001, **the VLM critic can never be invoked during `--mode resolve`**. The execution silently drops into Tier 3 (Deterministic Geometric Oracle) without warning the user.
+
+##### Weakness 2: Pipeline Asymmetry Between `generate_spec()` and `refine_spec()`
+- **Code Anchor**: [`EnvironmentGenerationAgent.generate_spec()`](../../../../isaaclab_arena/agentic_environment_generation/environment_generation_agent.py#L294-L298) vs. [`refine_spec()`](../../../../isaaclab_arena/agentic_environment_generation/environment_generation_agent.py#L518-L528)
+- **Vulnerability**: `generate_spec()` constructs and queries `VisualSceneCritic` and `PhysXPreflightCritic`. In contrast, `refine_spec()` (which handles iterative natural-language prompts like `--feedback`) checks **only** `validate_rdf_environment_graph` (SHACL) and `validate_spatial_geometry`.
+- **Failure Mode**: Iterative refinement is treated as a second-class pipeline where visual perception, line-of-sight checks, and physics pre-flights are completely omitted from the self-healing loop.
+
+##### Weakness 3: Heuristic AABB Envelopes vs. CAD/USD Mesh Reality
+- **Code Anchor**: [`SpatialGeometricOracle`](../../../../isaaclab_arena/agentic_environment_generation/spatial_geometric_oracle.py#L18-L94) (`KNOWN_FIXTURE_BOUNDS` and `FIXTURE_SECTOR_BOUNDS`)
+- **Vulnerability**: The spatial oracle relies on hardcoded rectangular axis-aligned bounding boxes (AABBs). Furthermore:
+  1. Key assets like `table_oak_robolab` are completely absent from `FIXTURE_SECTOR_BOUNDS`, causing queries for sector `"right"` to silently fall back to the entire tabletop envelope `[-0.45, 0.45, -0.30, 0.30]`.
+  2. The flat rectangular envelope has zero knowledge of 3D mesh surface features: beveled perimeter chamfers, perimeter lips, table leg cutouts, or non-box mass distributions (e.g. curved banana geometry).
+- **Failure Mode**: The banana coordinate $(X=-0.09, Y=-0.1997)$ in `v3` was mathematically within the flat AABB, so the oracle returned `conforms = True`. But in dynamic PhysX, it sat on a sloping bevel and rolled off at step 14.
+
+##### Weakness 4: Silent Error Swallowing in Spatial Factor Graph Relaxation
+- **Code Anchor**: [`EnvironmentGenerationAgent._ensure_reified_relations_and_grounding`](../../../../isaaclab_arena/agentic_environment_generation/environment_generation_agent.py#L706-L709)
+- **Vulnerability**: The call to continuous factor graph relaxation is wrapped in an unconditional exception swallow:
   ```python
-  if rendered_images:
-      try:
-          local_res = self._call_local_vlm_critic(spec, rendered_images)
-          ...
-      except Exception as exc:
-          print(f"[VisualCritic] Tier 2 Local VLM unavailable ({exc}), falling back to Tier 3 Geometric Oracle...")
+  try:
+      spec, _ = relax_spec_spatial_factor_graph(spec)
+  except Exception:
+      pass
   ```
-- Because `--mode resolve` is a symbolic, rapid-prototyping mode designed to avoid simulator startup overhead, `SimulationAppContext` is not initialized, and `rendered_images` is `None`.
-- Consequently, both Tier 1 and Tier 2 were bypassed by design. The evaluation dropped directly into **Tier 3 (Deterministic Geometric & Frustum Oracle)**, which evaluated bounding box clearances, nominal deck heights, and support anchoring purely via algebraic CPU operations in `spatial_geometric_oracle.py`.
-- Additionally, even if images had been passed, the generic `except Exception` handler swallows `ConnectionRefusedError` to maintain workflow continuity, preventing a hard crash.
+- **Failure Mode**: When the Loopy Belief Propagation (LBP) solver diverges, encounters contradictory constraints, or fails due to missing sector bounds, the error is suppressed. Unrelaxed, ungrounded coordinates pass through silently into the output YAML.
 
-##### 3. Root Cause 2: Asymmetry Between `generate_spec` and `refine_spec`
-An architectural discrepancy was identified in the agent's validation pipelines:
-- In [`EnvironmentGenerationAgent.generate_spec()`](../../../../isaaclab_arena/agentic_environment_generation/environment_generation_agent.py#L294-L298), candidate specifications are evaluated against SHACL RDF constraints, `SpatialGeometricOracle`, `VisualSceneCritic`, and `PhysXPreflightCritic`.
-- In [`EnvironmentGenerationAgent.refine_spec()`](../../../../isaaclab_arena/agentic_environment_generation/environment_generation_agent.py#L518-L528) (invoked when `--base_spec` is supplied), the validation block checks only `validate_rdf_environment_graph` (SHACL) and `validate_spatial_geometry`. `VisualSceneCritic` and `PhysXPreflightCritic` are omitted from the refinement validation loop.
+##### Weakness 5: Complete Absence of Pre-Flight Socket & Service Probing
+- **Code Anchor**: [`InferenceBackend`](../../../../isaaclab_arena/agentic_environment_generation/inference_backend.py) and [`VisualSceneCritic`](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L115-L119)
+- **Vulnerability**: The CLI arguments accept `--base_url` and `LOCAL_VLM_BASE_URL`, but neither the runner nor the critic performs a pre-flight TCP handshake or HTTP healthcheck (e.g. `GET /v1/models` or `GET /health`).
+- **Failure Mode**: When `arena-vllm-visual` on port 8001 was offline, the connection failure was swallowed by `except Exception as exc:`, logging a single non-fatal line and degrading silently to Tier 3. There is no `--strict` mode to enforce required services.
 
-##### 4. Root Cause 3: Single-Pass Convergence (`Repair Iterations: 0`)
-The absence of multi-step repair iterations was governed by greedy sampling:
-- With `--temperature 0.0` on `Qwen/Qwen2.5-Coder-32B-Instruct-AWQ`, the model generated deterministic, schema-compliant JSON on the first pass.
-- Both SHACL validation (`shacl_conforms = True`) and spatial clearance (`geom_conforms = True`) passed on iteration 1.
-- Because `if shacl_conforms and geom_conforms:` was satisfied immediately, the agent recorded `converged = True`, emitted 0 repairs, and exited the loop without querying the LLM for corrections.
+##### Weakness 6: Decoupled Simulation Telemetry and Broken Self-Healing Loop
+- **Code Anchor**: [`policy_runner.py`](../../../../isaaclab_arena/evaluation/policy_runner.py) vs. [`environment_generation_runner.py`](../../../../isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py)
+- **Vulnerability**: When physical simulation in Phase 1.5 fails (`object_dropped: [True]` at step 14), `policy_runner.py` simply terminates with exit code 1 and writes log files to `eval_output/`.
+- **Failure Mode**: There is zero automated linkage connecting the runtime drop event back into the Active Inference self-healing engine (`agent.refine_spec`). A human researcher must manually inspect logs and author a feedback prompt, rather than the system autonomously feeding the drop coordinate back into the LLM repair prompt to create `v(N+1)`.
 
-##### 5. Operational Risk & Empirical Proof: The `v3` Edge-Rolloff Failure
-This silent bypass created a critical false sense of security:
-- In `v3` (`table_oak_robolab`), the banana coordinate $(X=-0.09, Y=-0.1997)$ was mathematically valid within the 2D bounding box of the table deck.
-- However, `table_oak_robolab` is a compact $0.6\text{ m} \times 0.6\text{ m}$ deck featuring beveled perimeter edges. Because no VLM critic inspected camera line-of-sight/edge margins and no dynamic physics simulation ran during `--mode resolve`, the banana was placed directly on the sloping chamfer.
-- When `v3` was subsequently simulated under PhysX gravity on the RTX 5090 (Phase 1.5), the banana rolled off the edge and triggered early termination at **step 14** (`object_dropped: [True]`).
-- **Research Protocol Directives**:
-  1. Never assume an environment is physically stable solely because `--mode resolve` converged with 0 repairs.
-  2. Always execute Phase 1.5 (`ZeroActionPolicy` pre-flight) on the simulation GPU before committing to multi-episode neural policy rollouts.
-  3. Pre-flight health checks must actively verify that port 8001 is listening before launching pipelines where Tier 2 visual criticism is required.
+##### Weakness 7: Deceptive Telemetry Reporting & False "Passed" Status
+- **Code Anchor**: [`ActiveInferenceTelemetry.render_summary_card`](../../../../isaaclab_arena/agentic_environment_generation/telemetry.py)
+- **Vulnerability**: The telemetry card prominently displays:
+  ```
+  • Physical Invariants: SHACL-star: ✅ Passed | Spatial Geometry: ✅ Passed
+  • Convergence Status:  🟢 Converged (Variational Free Energy ≈ 0)
+  • Repair Iterations:   0
+  ```
+- **Failure Mode**: This creates a dangerous illusion of verification. The summary card fails to disclose that the visual critic was completely bypassed, the physics pre-flight was never executed, and the factor graph relaxation was swallowed.
+
+---
+
+#### 2. Systemic Hardening Roadmap: Corrective Engineering Tasks
+
+> [!NOTE]
+> The full architectural plan, feasibility evaluation, dual-Blackwell resource sizing, and executable goal prompts are maintained in [`hardening_plan.md`](./hardening_plan.md).
+
+To permanently resolve these gaps, the following engineering tasks are formally queued for codebase hardening:
+
+| Task ID | Component | Corrective Action | Target File(s) |
+| :--- | :--- | :--- | :--- |
+| **HR-01** | Pre-Flight Health Probing | Add `verify_service_endpoints()` to check `127.0.0.1:8000` and `127.0.0.1:8001` before launching. Add `--strict-critics` flag that aborts immediately if a specified service is unreachable. | `environment_generation_runner.py`<br/>`visual_critic.py` |
+| **HR-02** | Pipeline Unification | Refactor `EnvironmentGenerationAgent.refine_spec()` to run the identical validation battery as `generate_spec()` (SHACL + Spatial Geometry + Visual Critic + PhysX Preflight). | `environment_generation_agent.py` |
+| **HR-03** | USD Stage Extent Introspection | Replace heuristic `KNOWN_FIXTURE_BOUNDS` dictionaries with dynamic USD bounding extents queried via `usd_stage_introspection.py` (reading `UsdGeom.Boundable` world extents from actual assets). | `spatial_geometric_oracle.py`<br/>`usd_stage_introspection.py` |
+| **HR-04** | Fail-Loud Factor Graph Optimization | Remove `except Exception: pass` from `_ensure_reified_relations_and_grounding`. Surface solver convergence status, residual energy, and conflicting factors in `agent.traces`. | `environment_generation_agent.py`<br/>`spatial_geometric_oracle.py` |
+| **HR-05** | Integrated Grounded Mode (`--mode grounded-resolve`) | Implement a closed-loop generation mode: Synthesize draft spec $\to$ launch headless Isaac Sim on GPU 1 for a 30-step settle $\to$ capture camera frame $\to$ query VLM on port 8001 $\to$ if dropped or occluded, auto-feed physical telemetry into LLM repair loop until converged. | `environment_generation_runner.py` |
+| **HR-06** | Transparent Subsystem Telemetry | Update `ActiveInferenceTelemetry` summary card to list the exact status of every tier: `Visual Critic: [Bypassed: No Frames]`, `Physics Critic: [Bypassed: Pure Python]`, `Tier Used: [tier_3_geometric_oracle]`. | `telemetry.py`<br/>`environment_generation_agent.py` |
 
 ---
 
@@ -524,7 +554,97 @@ The issue stems from Docker's `ENTRYPOINT` and argument handling:
    ENTRYPOINT []
    CMD ["/bin/bash"]
    ```
-   With an empty `ENTRYPOINT`, Docker executes whatever command is supplied directly. Invocations of `/isaac-sim/python.sh` run as native Bash scripts, launching Python cleanly without nested interpreter traps.
+   ---
+
+### Phase 1.5.1: Discovery of Native Codebase Tooling & Active Visual Repair (Option C Empirical Verification)
+
+> [!IMPORTANT]
+> **Zero-Codebase-Change Remediation**: A rigorous audit of the repository revealed that extensive tooling and execution modes are already built into the codebase to diagnose, inspect, and repair environment specifications without requiring any modifications to core package code. By resolving two container-level infrastructure configurations, the **Tier 2 Local VLM** (`arena-vllm-visual` on Port 8001) was successfully unlocked and demonstrated in an end-to-end active visual repair cycle on `v3`.
+
+#### 1. Catalog of Existing Native Remediation Tooling in the Codebase
+
+Rather than relying solely on `--mode resolve`, the Isaac Lab-Arena repository includes six distinct execution modes and diagnostic utilities:
+
+| Tool / Mode | Invocation & Code Anchor | Operational Role & Capabilities |
+| :--- | :--- | :--- |
+| **`--mode auto_heal`** | [`environment_generation_runner.py`](../../../../isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py#L440-L570)<br/>`--mode auto_heal --eval_dir <dir> --base_spec <spec>` | **Automated Post-Rollout Diagnostic Flywheel**: Ingests evaluation telemetry (`summary_metrics.json`, `episode_results_rank*.jsonl`, `eval_telemetry.ttl`), executes [`EvaluationDiagnosticOracle`](../../../../isaaclab_arena/agentic_environment_generation/eval_self_healing.py#L32-L373) (Option A deterministic rules or Option B generative LLM), and applies spatial patches via [`EvaluationRemediationEngine`](../../../../isaaclab_arena/agentic_environment_generation/eval_self_healing.py#L659-L750) to relax the factor graph and author `v(N+1)`. |
+| **`--mode resolve + --feedback`** | [`environment_generation_runner.py`](../../../../isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py#L281-L290)<br/>`--mode resolve --base_spec <spec> --feedback "<prompt>"` | **Targeted Active Inference Refinement**: Injects targeted natural-language feedback or visual critic findings into [`EnvironmentGenerationAgent.refine_spec()`](../../../../isaaclab_arena/agentic_environment_generation/environment_generation_agent.py#L518-L528) to adjust object poses and spatial relations while preserving scene structure. |
+| **`--mode full`** | [`environment_generation_runner.py`](../../../../isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py#L809-L815)<br/>`--mode full --prompt "<desc>"` | **Unified Synthesis & Settle Rollout**: Chains spec generation and immediate Isaac Sim physical instantiation in a single continuous process on GPU 1, catching physics drops in real time. |
+| **`gui_runner.py`** | [`gui_runner.py`](../../../../isaaclab_arena_examples/agentic_environment_generation/gui_runner.py)<br/>`python .../gui_runner.py --env_graph_spec_yaml <spec> --port 8501` | **Interactive Streamlit UI & Kit Viewport**: Boots a background `SimApp` server over a UNIX domain socket (`arena_review_simapp_*.sock`), renders live camera thumbnails from the USD viewport, and provides an interactive web UI on port 8501 to inspect object bounding boxes and adjust coordinates visually. |
+| **`dcrg_runner.py`** | [`dcrg_runner.py`](../../../../isaaclab_arena_examples/agentic_environment_generation/dcrg_runner.py)<br/>`python .../dcrg_runner.py --base_spec <spec> --policy_config <cfg>` | **Dynamic Closed-Loop Recurrent Generation**: Bounded recurrent active inference loop that verifies `support_bounds(spec)`, runs rollouts, collects episode evidence, and syncs recurrent feedback with Neo4j. |
+| **Active Visual Repair Loop (Option C)** | [`VisualSceneCritic`](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py) + [`EnvironmentGenerationAgent`](../../../../isaaclab_arena/agentic_environment_generation/environment_generation_agent.py) | **Direct Multi-Modal Visual Grounding**: Feeds rendered simulation camera frames directly into `VisualSceneCritic` (Tier 2 VLM on Port 8001), extracting visual critiques to drive `agent.refine_spec()`. |
+
+#### 2. Root Cause & Infrastructure Resolution of the VLM Critic Bypass
+
+Two environmental blockers had previously prevented `VisualSceneCritic` from utilizing `arena-vllm-visual` on Port 8001:
+
+1. **Port Routing Misalignment**:
+   * *Root Cause*: In [`visual_critic.py`](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L79), `self.local_vlm_url` defaults to `os.environ.get("LOCAL_VLM_BASE_URL", "http://localhost:8000/v1")`. Port 8000 is dedicated to `arena-vllm-spec` (`Qwen2.5-Coder-32B-Instruct`), which rejects multimodal visual payloads.
+   * *Zero-Code Fix*: Export `LOCAL_VLM_BASE_URL="http://localhost:8001/v1"` (or pass `-e LOCAL_VLM_BASE_URL="http://localhost:8001/v1"` into the Docker container) to route visual queries to GPU 1.
+2. **Model Name Identifier Mismatch**:
+   * *Root Cause*: [`_call_local_vlm_critic`](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L174) hardcodes `"model": "default"` in its JSON request payload. Because vLLM was launched with only `--model Qwen/Qwen2.5-VL-7B-Instruct`, it threw `404: The model 'default' does not exist`.
+   * *Zero-Code Fix*: Restarted `arena-vllm-visual` with `--served-model-name default Qwen/Qwen2.5-VL-7B-Instruct`. This allows vLLM to simultaneously answer requests addressed to `"default"` and its full HuggingFace ID.
+
+#### 3. Empirical Verification of Option C (Active Visual Repair on `v3`)
+
+With the infrastructure configuration corrected, Option C was executed live using the existing classes inside `isaaclab_arena:latest`:
+
+1. **Perceptual Gating**:
+   * Passed the physical failure frame [`frame_dropped.png`](eval_output/droid_banana_to_red_bowl/zero_action/2026-10-04_22-52-39/frame_dropped.png) into `VisualSceneCritic.evaluate_scene_spec(v3_spec, rendered_images={'camera_head': img_bytes})`.
+   * **Telemetry Output**:
+     * `Tier Used`: **`tier_2_local_vlm`** (Qwen2.5-VL-7B-Instruct on Port 8001 / GPU 1).
+     * `Conforms`: **`False`**.
+     * `Visibility Score`: `0.80 / 10.0`.
+     * `Actionable Feedback`: *"The banana needs to be moved closer to the robotic arm for it to be grasped and kept on the tabletop deck."*
+2. **Autonomous Active Inference Repair**:
+   * Passed the visual critique into `EnvironmentGenerationAgent.refine_spec(v3_spec, feedback=...)` querying `arena-vllm-spec` (`Qwen2.5-Coder-32B-Instruct-AWQ` on Port 8000 / GPU 0).
+   * **Coordinate Transformation**:
+     * **Original `v3` Coordinates (Unstable)**:
+       * `yellow_banana`: $[-0.0900, -0.1997, 0.6000]$ *(on the oak table beveled edge; dropped at step 14)*
+       * `red_bowl`: $[-0.0900, 0.1997, 0.6000]$
+     * **Repaired Coordinates Synthesized by Local Agent**:
+       * `yellow_banana`: **`[0.0303, -0.1603, 0.7497]`** *(shifted $+0.12\text{ m}$ forward in X and $+0.04\text{ m}$ inward in Y)*
+       * `red_bowl`: **`[-0.0900, 0.1997, 0.7501]`**
+   * **Outcome**: The banana was repositioned completely away from the beveled chamfer and placed securely on the flat interior deck of `table_oak_robolab`.
+
+#### 4. Sub-Version Tracking Structure (`v3-1`, `v4-1`, `v5-1`)
+
+To cleanly track the impact of the visual critic repair without perturbing the original experimental baseline sequence (`v1`–`v5`), experimental sub-versions are created and saved under dedicated directories:
+* **`v3-1`** ([`generated_envs/droid_banana_to_red_bowl/v3-1/droid_banana_to_red_bowl.yaml`](../../../../generated_envs/droid_banana_to_red_bowl/v3-1/droid_banana_to_red_bowl.yaml)): Visually and geometrically repaired version of `v3` (`table_oak_robolab`), shifting the banana inward from the beveled chamfer.
+* **`v4-1`** ([`generated_envs/droid_banana_to_red_bowl/v4-1/droid_banana_to_red_bowl.yaml`](../../../../generated_envs/droid_banana_to_red_bowl/v4-1/droid_banana_to_red_bowl.yaml)): Grounded visual validation of `v4` (`table` Seattle).
+* **`v5-1`** ([`generated_envs/droid_banana_to_red_bowl/v5-1/droid_banana_to_red_bowl.yaml`](../../../../generated_envs/droid_banana_to_red_bowl/v5-1/droid_banana_to_red_bowl.yaml)): Grounded visual validation of `v5` (`packing_table` Workstation).
+
+#### 5. Headless Verification Rollouts of Repaired Sub-Versions (Empirical Ledger)
+
+To empirically validate the repaired specifications against the physical simulator, each sub-version was executed on **GPU 1 (RTX 5090)** under headless Isaac Sim 6.0 using `policy_runner.py` with `ZeroActionPolicy`, `--enable_cameras`, and `--record_camera_video`.
+
+##### Verification Rollout Matrix: Baseline (`v1`–`v5`) vs. Repaired Sub-Versions (`v3-1`, `v4-1`, `v5-1`)
+
+| Spec Version | Background Fixture | Settle Status | Rollout Steps | Object Dropped | Final Linear Vel | Rollout Video & Telemetry Path | Physical Outcome & Discovery |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`v3`** | `table_oak_robolab` | ❌ Failed | 14/300 | **True** (Step 14) | Free fall | [`eval_output/.../zero_action/2026-10-04_22-52-39`](../../../../eval_output/droid_banana_to_red_bowl/zero_action/2026-10-04_22-52-39) | **Chamfer Roll-Off**: Banana rolled off the perimeter bevel. |
+| **`v3-1`** | `table_oak_robolab` | ❌ Settle Term | 37–42/300 | **True** (Step 37–42) | Contact Impulse | [`eval_output/.../zero_action_v3_1/2026-10-05_07-38-40`](../../../../eval_output/droid_banana_to_red_bowl/zero_action_v3_1/2026-10-05_07-38-40) | **Resting Gripper Volume Collision**: Shifting the banana inward placed it into the Franka Panda resting gripper envelope (`[-0.09, -0.10, 0.76]`). Contact depenetration forces flung the fruit into the air. |
+| **`v4`** | `table` (Seattle) | ✅ Passed | 300/300 | **False** | $0.0002\text{ m/s}$ | [`eval_output/.../zero_action/2026-10-04_22-55-32`](../../../../eval_output/droid_banana_to_red_bowl/zero_action/2026-10-04_22-55-32) | Stable flat tabletop surface contact. |
+| **`v4-1`** | `table` (Seattle) | ✅ Passed | 87/300 | **False** | $0.0016\text{ m/s}$ | [`eval_output/.../zero_action_v4_1/2026-10-05_07-30-45`](../../../../eval_output/droid_banana_to_red_bowl/zero_action_v4_1/2026-10-05_07-30-45) | **Grounded Multi-Camera Verification**: Full trajectory HDF5, multi-camera MP4s, and PROV-O telemetry generated. |
+| **`v5`** | `packing_table` | ✅ Passed | 300/300 | **False** | $0.0003\text{ m/s}$ | [`eval_output/.../zero_action/2026-10-04_21-26-26`](../../../../eval_output/droid_banana_to_red_bowl/zero_action/2026-10-04_21-26-26) | Stable industrial packing deck. |
+| **`v5-1`** | `packing_table` | ✅ Passed (100%) | **300/300** | **False** | **$0.0009\text{ m/s}$** | [`eval_output/.../zero_action_v5_1/2026-10-05_07-34-28`](../../../../eval_output/droid_banana_to_red_bowl/zero_action_v5_1/2026-10-05_07-34-28) | **Flawless Equilibrium**: All 3 entities settled (`banana`: $0.0009\text{ m/s}$, `bowl`: $0.0005\text{ m/s}$, `robot`: $0.0\text{ m/s}$). Ran full 300 steps at 11.6 step/s without dropping. |
+
+##### Key Physical Discoveries from the Sub-Version Rollouts
+
+1. **Flawless Stability of `v5-1` (`packing_table`)**:
+   - In `v5-1`, the broad industrial packing deck ($0.9\text{ m} \times 0.6\text{ m}$) provides ample planar surface without beveled drop-offs.
+   - Settle verification logged:
+     - `yellow_banana`: `lin_vel = 0.0009 m/s`, `ang_vel = 0.0509 rad/s` -> **✅ SETTLED**
+     - `red_bowl`: `lin_vel = 0.0005 m/s`, `ang_vel = 0.0143 rad/s` -> **✅ SETTLED**
+     - `robot`: `lin_vel = 0.0000 m/s`, `ang_vel = 0.0000 rad/s` -> **✅ SETTLED**
+   - The simulation ran the full 300 steps ($6.0\text{ s}$ at $50\text{ Hz}$) at $11.58\text{ steps/s}$ with zero dropped objects, completely validating the specification.
+
+2. **The Resting Gripper Kinematic Exclusion Zone (`v3-1`)**:
+   - In `v3`, the banana rolled off the chamfer bevel at $y = -0.1997\text{ m}$.
+   - In `v3-1`, moving the banana inward toward the tabletop center placed it at $y \in [-0.04, -0.11]\text{ m}$.
+   - High-speed frame extraction (`frame_001.png`) revealed that the default resting joint posture of the DROID Franka Panda arm places the parallel gripper precisely at $[x \approx -0.09, y \approx -0.10, z \approx 0.76]$.
+   - At simulation step 0, the gripper fingers directly intersected with the banana. PhysX contact resolution applied strong depenetration velocity impulses ($5.0\text{ m/s}$ cap), catapulting the banana into the air (`frame_004.png`) and causing `object_dropped: [True]` during settling at step 37–42.
+   - **Architectural Lesson for Spatial Solvers**: Geometric clearance validation must enforce a **Robot End-Effector Exclusion Cylinder** around the resting gripper pose $[x_{eef}, y_{eef}, z_{eef}]$ in addition to table bounding boxes. Spatial planners cannot treat the tabletop as an empty 2D plane; the robot's own resting embodiment creates an occupied volumetric exclusion zone.
 
 ---
 

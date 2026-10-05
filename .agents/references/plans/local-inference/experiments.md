@@ -716,6 +716,25 @@ Hardware and inference telemetry captured during the baseline and iterative refi
 - **vLLM Operational Invariants (GPU 0):** Peak VRAM allocated: ~22 GB GDDR7; Preemptions total: **0**; KV cache saturation: $< 15\%$; GPU 0 temperature: $42^\circ\text{C}$; Power draw: $\sim 68\text{ W}$.
 - **Observations:** Schema-guided greedy decoding (`--temperature 0.0`) yielded **100% first-pass semantic validity (0 repairs)** across all 3 fixture swaps. The agent successfully modified background USD prims, adjusted surface Z elevations, and correctly remapped spatial sector factor bounds into Neo4j.
 
+##### Critical Architectural Finding: Offline VLM Critic Bypass, Fallback Cascades, and the Zero-Repair Phenomenon
+
+During the feedback refinement runs (`v3`, `v4`, `v5`), an important operational anomaly was diagnosed and documented:
+
+1. **The Anomaly Observed**:
+   - The CLI runner command passed `-e LOCAL_VLM_BASE_URL="http://localhost:8001/v1"`, but the local visual critic container (`arena-vllm-visual` serving `Qwen/Qwen2.5-VL-7B-Instruct` on port 8001) was **offline / not running**.
+   - Despite the unreachable endpoint, the process completed cleanly (Exit 0), did not throw connection errors, and recorded `Repair Iterations: 0` without looping.
+2. **Cascading Fallback Mechanism**:
+   - In [`VisualSceneCritic.evaluate_scene_spec`](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L81-L130), multimodal evaluation follows a 4-tier cascading hierarchy where Tier 1 (Cloud VLM) and Tier 2 (Local VLM on Port 8001) are guarded by `if rendered_images:`.
+   - Because `--mode resolve` is a symbolic, rapid-prototyping mode designed to avoid simulator startup overhead, `SimulationAppContext` is not initialized, and `rendered_images` is `None`.
+   - Both Tier 1 and Tier 2 were bypassed by design, dropping directly into **Tier 3 (Deterministic Geometric & Frustum Oracle)**, which evaluated bounding box clearances algebraically in CPU memory.
+   - Furthermore, in [`EnvironmentGenerationAgent.refine_spec()`](../../../../isaaclab_arena/agentic_environment_generation/environment_generation_agent.py#L518-L528), only W3C SHACL and `validate_spatial_geometry` are invoked, omitting `VisualSceneCritic` during iterative refinement loops.
+3. **Single-Pass Convergence**:
+   - With `--temperature 0.0` (greedy decoding), `Qwen2.5-Coder-32B-Instruct-AWQ` generated 100% compliant schemas on the first attempt (`shacl_conforms=True`, `geom_conforms=True`), satisfying the exit criteria on loop iteration 1.
+4. **Physical Reality Gating (`v3` Edge-Rolloff)**:
+   - In `v3` (`table_oak_robolab`), static AABB geometry confirmed that $(X=-0.09, Y=-0.1997)$ was within the 2D bounding box of the table deck.
+   - Because no visual perception inspected the rendered margins and no dynamic physics simulation was run during `--mode resolve`, the banana was placed on the beveled perimeter of the compact $0.6\text{ m} \times 0.6\text{ m}$ table.
+   - In Phase 1.5, dynamic PhysX simulation caught this flaw at **step 14** (`object_dropped: [True]`), proving that symbolic/static geometric checks alone cannot replace physical simulation gating.
+
 ---
 
 #### 9.1.5 Phase 1.5: Environment Physical Validation via Zero-Action Policy (GPU 1: RTX 5090)

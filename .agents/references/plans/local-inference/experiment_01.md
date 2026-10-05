@@ -358,6 +358,52 @@ During initial `--mode full` evaluation, three interrelated prompt-to-schema fai
    - *Root Cause*: The LLM added `friction` and `headroom` to `required_checks` without mirroring them in `enabled_checks`.
    - *Fix*: Added automatic reconciliation in `_sanitize_spec_candidate` ensuring `enabled_checks` is always a superset of `required_checks`.
 
+#### Incident & Architectural Analysis: Offline VLM Critic Bypass, 4-Tier Cascades, and the Zero-Repair Phenomenon in v3–v5
+
+During the execution of feedback refinement prompts 1, 2, and 3 (`v3`, `v4`, `v5`), an important operational anomaly occurred that highlights key architectural behaviors in the validation pipeline:
+
+##### 1. The Anomaly Observed
+- The execution command explicitly passed `-e LOCAL_VLM_BASE_URL="http://localhost:8001/v1"`.
+- However, the local visual critic container (`arena-vllm-visual` serving `Qwen/Qwen2.5-VL-7B-Instruct` on port 8001) was **not running on the host**.
+- Despite the unreachable endpoint, the runner process did not crash, throw a connection error, or hang.
+- Furthermore, the telemetry reported `Repair Iterations: 0` and `Total LLM Calls: 1`, converging immediately without triggering the Active Inference self-healing repair loop.
+
+##### 2. Root Cause 1: Cascading Fallback & Image-Gated Architecture in `VisualSceneCritic`
+In [`VisualSceneCritic.evaluate_scene_spec`](../../../../isaaclab_arena/agentic_environment_generation/visual_critic.py#L81-L130), multimodal evaluation follows a 4-tier cascading hierarchy:
+- **Tier 1 (Cloud Frontier VLM)** & **Tier 2 (Self-Hosted Local VLM on Port 8001)** are strictly conditioned on the presence of rendered visual frames:
+  ```python
+  if rendered_images:
+      try:
+          local_res = self._call_local_vlm_critic(spec, rendered_images)
+          ...
+      except Exception as exc:
+          print(f"[VisualCritic] Tier 2 Local VLM unavailable ({exc}), falling back to Tier 3 Geometric Oracle...")
+  ```
+- Because `--mode resolve` is a symbolic, rapid-prototyping mode designed to avoid simulator startup overhead, `SimulationAppContext` is not initialized, and `rendered_images` is `None`.
+- Consequently, both Tier 1 and Tier 2 were bypassed by design. The evaluation dropped directly into **Tier 3 (Deterministic Geometric & Frustum Oracle)**, which evaluated bounding box clearances, nominal deck heights, and support anchoring purely via algebraic CPU operations in `spatial_geometric_oracle.py`.
+- Additionally, even if images had been passed, the generic `except Exception` handler swallows `ConnectionRefusedError` to maintain workflow continuity, preventing a hard crash.
+
+##### 3. Root Cause 2: Asymmetry Between `generate_spec` and `refine_spec`
+An architectural discrepancy was identified in the agent's validation pipelines:
+- In [`EnvironmentGenerationAgent.generate_spec()`](../../../../isaaclab_arena/agentic_environment_generation/environment_generation_agent.py#L294-L298), candidate specifications are evaluated against SHACL RDF constraints, `SpatialGeometricOracle`, `VisualSceneCritic`, and `PhysXPreflightCritic`.
+- In [`EnvironmentGenerationAgent.refine_spec()`](../../../../isaaclab_arena/agentic_environment_generation/environment_generation_agent.py#L518-L528) (invoked when `--base_spec` is supplied), the validation block checks only `validate_rdf_environment_graph` (SHACL) and `validate_spatial_geometry`. `VisualSceneCritic` and `PhysXPreflightCritic` are omitted from the refinement validation loop.
+
+##### 4. Root Cause 3: Single-Pass Convergence (`Repair Iterations: 0`)
+The absence of multi-step repair iterations was governed by greedy sampling:
+- With `--temperature 0.0` on `Qwen/Qwen2.5-Coder-32B-Instruct-AWQ`, the model generated deterministic, schema-compliant JSON on the first pass.
+- Both SHACL validation (`shacl_conforms = True`) and spatial clearance (`geom_conforms = True`) passed on iteration 1.
+- Because `if shacl_conforms and geom_conforms:` was satisfied immediately, the agent recorded `converged = True`, emitted 0 repairs, and exited the loop without querying the LLM for corrections.
+
+##### 5. Operational Risk & Empirical Proof: The `v3` Edge-Rolloff Failure
+This silent bypass created a critical false sense of security:
+- In `v3` (`table_oak_robolab`), the banana coordinate $(X=-0.09, Y=-0.1997)$ was mathematically valid within the 2D bounding box of the table deck.
+- However, `table_oak_robolab` is a compact $0.6\text{ m} \times 0.6\text{ m}$ deck featuring beveled perimeter edges. Because no VLM critic inspected camera line-of-sight/edge margins and no dynamic physics simulation ran during `--mode resolve`, the banana was placed directly on the sloping chamfer.
+- When `v3` was subsequently simulated under PhysX gravity on the RTX 5090 (Phase 1.5), the banana rolled off the edge and triggered early termination at **step 14** (`object_dropped: [True]`).
+- **Research Protocol Directives**:
+  1. Never assume an environment is physically stable solely because `--mode resolve` converged with 0 repairs.
+  2. Always execute Phase 1.5 (`ZeroActionPolicy` pre-flight) on the simulation GPU before committing to multi-episode neural policy rollouts.
+  3. Pre-flight health checks must actively verify that port 8001 is listening before launching pipelines where Tier 2 visual criticism is required.
+
 ---
 
 ### Phase 1.5: Environment Physical Validation via Zero-Action Policy (GPU 1)

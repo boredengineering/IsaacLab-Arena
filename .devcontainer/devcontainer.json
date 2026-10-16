@@ -29,7 +29,8 @@
     "-v", "${localEnv:HOME}/.aws:/root/.aws:rw",
     "-v", "${localEnv:HOME}/.config/gcloud:/root/.config/gcloud:rw",
     "-v", "${localEnv:HOME}/.azure:/root/.azure:rw",
-    "-v", "/var/run/docker.sock:/var/run/docker.sock"
+    "-v", "/var/run/docker.sock:/var/run/docker.sock",
+    "-v", "${localEnv:HOME}/Documents/GitHub/BoredEngineer/isaaclab-arena-private:/workspaces/isaaclab-arena-private:rw"
   ],
   "forwardPorts": [],
   "otherPortsAttributes": {

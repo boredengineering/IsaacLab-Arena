@@ -10,12 +10,12 @@ its placement pool holds and logs the validation results.
 
 Run inside the container (example with a registered example environment):
 
-    /isaac-sim/python.sh isaaclab_arena/scripts/run_placement_pool_validation.py \\
+    /isaac-sim/python.sh isaaclab_arena/scripts/run_placement_pool_validation.py --headless \\
         --num_envs 4 <example_environment_name>
 
 Or against a graph spec:
 
-    /isaac-sim/python.sh isaaclab_arena/scripts/run_placement_pool_validation.py \\
+    /isaac-sim/python.sh isaaclab_arena/scripts/run_placement_pool_validation.py --headless \\
         --num_envs 4 --env_spec path/to/spec.yaml
 """
 
@@ -56,7 +56,7 @@ def add_pool_validation_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help=(
             "Render each settle step so the sweep is visible in the GUI (pair with --viz kit). "
-            "Off by default; has no visible effect when no visualizer is selected."
+            "Off by default; has no visible effect under --headless."
         ),
     )
 
@@ -69,8 +69,8 @@ def main() -> None:
     args_cli, _ = args_parser.parse_known_args()
 
     with SimulationAppContext(args_cli):
-        from isaaclab_arena.offline_placement.pool_validation import print_validation_results, validate_pool_layouts
         from isaaclab_arena.relations.physics_settle_params import PhysicsSettleParams
+        from isaaclab_arena.relations.placement_pool_validation import print_validation_results, validate_pool_layouts
         from isaaclab_arena_environments.cli import (
             get_arena_builder_from_cli,
             get_isaaclab_arena_environments_cli_parser,
@@ -93,8 +93,7 @@ def main() -> None:
         validation_results = validate_pool_layouts(env, settle_params=settle_params, render=args_cli.render)
         assert validation_results is not None, (
             "The selected environment has no pooled placement, so there are no candidates to validate. "
-            "Cached replay bypasses the pool; remove --placement_layouts or in-memory layouts to validate "
-            "solver candidates. Pooled placement also requires placement relations and resolve_on_reset=True."
+            "Pooled placement is created when objects declare placement relations (e.g. On)."
         )
         print_validation_results(validation_results)
 

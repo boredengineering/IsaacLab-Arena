@@ -6,7 +6,6 @@
 import trimesh
 
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
-from isaaclab.managers import EventTermCfg, SceneEntityCfg
 from isaaclab.sensors.contact_sensor.contact_sensor_cfg import ContactSensorCfg
 from pxr import Usd
 
@@ -14,22 +13,21 @@ from isaaclab_arena.affordances.openable import Openable
 from isaaclab_arena.affordances.pressable import Pressable
 from isaaclab_arena.affordances.turnable import Turnable
 from isaaclab_arena.assets.object import Object
-from isaaclab_arena.assets.object_base import ObjectBase, RootedObjectBase
-from isaaclab_arena.assets.object_type import ObjectType
+from isaaclab_arena.assets.object_base import ObjectBase, ObjectType
 from isaaclab_arena.relations.relations import IsAnchor, RelationBase
-from isaaclab_arena.terms.events import reset_articulation_joints, reset_articulation_pose_and_joints
-from isaaclab_arena.utils.bounding_box import AxisAlignedBoundingBox
+from isaaclab_arena.terms.events import reset_articulation_pose_and_joints
+from isaaclab_arena.utils.bounding_box import AxisAlignedBoundingBox, quaternion_to_90_deg_z_quarters
 from isaaclab_arena.utils.pose import Pose
-from isaaclab_arena.utils.usd.helpers import (
+from isaaclab_arena.utils.usd_helpers import (
     NoCollisionMeshError,
     compute_world_aligned_bounding_box_relative_to_prim_origin,
     extract_trimesh_from_prim,
     open_stage,
 )
-from isaaclab_arena.utils.usd.pose import get_prim_pose_in_default_prim_frame
+from isaaclab_arena.utils.usd_pose_helpers import get_prim_pose_in_default_prim_frame
 
 
-class ObjectReference(RootedObjectBase):
+class ObjectReference(ObjectBase):
     """An object which *refers* to an existing element in the scene"""
 
     def __init__(self, parent_asset: Object, **kwargs):
@@ -55,29 +53,14 @@ class ObjectReference(RootedObjectBase):
             event_cfg.func = reset_articulation_pose_and_joints
         return event_cfg
 
-    def get_event_cfg(self) -> tuple[str, EventTermCfg | None]:
-        """Retain joint initialization when another event owns the articulation's root reset."""
-        name, event_cfg = super().get_event_cfg()
-        if event_cfg is None and self.object_type == ObjectType.ARTICULATION:
-            event_cfg = EventTermCfg(
-                func=reset_articulation_joints,
-                mode="reset",
-                params={"asset_cfg": SceneEntityCfg(name)},
-            )
-        return name, event_cfg
-
     def get_initial_pose(self) -> Pose:
-        """Return T_E_O for reference O, parent P and local environment frame E."""
-        T_P_O = self.initial_pose_relative_to_parent
-        T_E_P = self.get_parent_pose()
-        T_E_O = T_E_P.multiply(T_P_O)
-        return T_E_O
-
-    def get_parent_pose(self) -> Pose:
-        """Return the parent's fixed pose, using identity when no pose is configured."""
-        pose = self.parent_asset.initial_pose
-        assert pose is None or isinstance(pose, Pose), "ObjectReference requires a fixed parent pose"
-        return pose if pose is not None else Pose.identity()
+        if self.parent_asset.initial_pose is None:
+            T_W_O = self.initial_pose_relative_to_parent
+        else:
+            T_P_O = self.initial_pose_relative_to_parent
+            T_W_P = self.parent_asset.initial_pose
+            T_W_O = T_W_P.multiply(T_P_O)
+        return T_W_O
 
     @property
     def prim_path_in_parent_usd(self) -> str:
@@ -117,9 +100,19 @@ class ObjectReference(RootedObjectBase):
                 self._bounding_box = raw_bbox.scaled(self._parent_scale)
         return self._bounding_box
 
-    def get_bounding_box_rotation(self) -> tuple[float, float, float, float]:
-        """Return the parent rotation; the prim's authored rotation is already included in its bounds."""
-        return self.get_parent_pose().rotation_xyzw
+    def get_world_bounding_box(self) -> AxisAlignedBoundingBox:
+        """Bounding box in world coordinates.
+
+        get_bounding_box() is already axis-aligned in the parent's frame, so only the parent's
+        placement rotation (identity or a 90° Z multiple) and the prim's world position are applied.
+        """
+        box = self.get_bounding_box()
+        world_position = self.get_initial_pose().position_xyz
+        parent_pose = self.parent_asset.initial_pose
+        if parent_pose is None:
+            return box.translated(world_position)
+        quarters = quaternion_to_90_deg_z_quarters(parent_pose.rotation_xyzw)
+        return box.rotated_90_around_z(quarters).translated(world_position)
 
     def get_collision_mesh(self) -> trimesh.Trimesh | None:
         """Return the referenced prim's collision mesh in its local frame, or None if unavailable."""

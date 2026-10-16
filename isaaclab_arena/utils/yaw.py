@@ -41,9 +41,14 @@ def yaw_toward_positions(
 
 
 def yaw_from_quat_xyzw(quat_xyzw: tuple[float, float, float, float]) -> float:
-    """Return world-Z heading from a unit (x, y, z, w) quaternion, in radians."""
+    """Extract Z-axis yaw (radians) from an (x, y, z, w) quaternion.
+
+    Returns 0.0 if the quaternion has non-trivial roll or pitch (|qx| or |qy| > 1e-6).
+    """
     qx, qy, qz, qw = quat_xyzw
-    return math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
+    if abs(qx) > 1e-6 or abs(qy) > 1e-6:
+        return 0.0
+    return 2.0 * math.atan2(qz, qw)
 
 
 def rotate_quat_by_yaw(
@@ -56,8 +61,8 @@ def rotate_quat_by_yaw(
     bx, by, bz, bw = base_xyzw
     sz = math.sin(yaw_rad / 2.0)
     cz = math.cos(yaw_rad / 2.0)
-    # Left composition applies yaw in the world frame, including for tilted bases.
-    return (cz * bx - sz * by, cz * by + sz * bx, cz * bz + sz * bw, cz * bw - sz * bz)
+    # Hamilton product base ⊗ (0, 0, sz, cz). Both rotations are about Z, so they commute.
+    return (bx * cz + by * sz, -bx * sz + by * cz, bz * cz + bw * sz, -bz * sz + bw * cz)
 
 
 def rotate_points_by_yaw(points: torch.Tensor, yaw: float) -> torch.Tensor:

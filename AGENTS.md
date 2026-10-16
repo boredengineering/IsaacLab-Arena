@@ -44,10 +44,8 @@ Lint and format tooling (`pre-commit` and the hooks it runs — black, flake8, i
 
 ## Coding style
 
-- Keep comprehensions simple. When they contain nested loops, filtering, or multiple transformations that make them hard to read, use explicit loops and named intermediate variables instead.
-- Keep `__init__.py` files free of eager imports or re-exports
 - Prefer `assert condition, "message"` over `if not condition: raise ValueError("message")` for internal invariant checks. (Formatting, imports, and typing are enforced by `pre-commit` — see `.pre-commit-config.yaml`.)
-- Read `.github/pull_request_template.md` before writing a PR description and follow its guidance.
+- PR bodies follow `.github/pull_request_template.md` — a one-line Summary plus 2–5 detail bullets. Resist the agent default of long, multi-section descriptions.
 - Attribute docstrings should be included below the attribute, rather than in the class-level docstring.
 - Copyright headers: a newly created file uses the current year alone (e.g. `2026`); a file created earlier and edited this year uses a range (e.g. `2025-2026`). Don't copy a neighbouring file's year — the pre-commit hooks (`insert-license`, `fix-new-file-copyright-year`) set and enforce this, so you generally don't hand-edit it.
 
@@ -61,22 +59,6 @@ Lint and format tooling (`pre-commit` and the hooks it runs — black, flake8, i
 - Don't use Sphinx-style cross-references.
 
 ## Conventions
-
-### Coordinate-frame naming
-
-Use active target-source notation for Arena-owned poses and transforms:
-
-- `T_A_B` maps points from frame `B` into frame `A`.
-- `T_A_B = (t_A_B, q_A_B)` consists of translation `t_A_B` and rotation
-  `q_A_B`, with the rotation represented as a quaternion.
-- For example, `T_W_O` maps points from object frame `O` into world frame `W`.
-- Transform composition follows `T_C_A = T_C_B * T_B_A`.
-- Frame letters are contextual. Define each near its first use when its meaning is not obvious.
-- Preserve external API names such as Isaac Lab's `root_pose_w`. Its lowercase `_w`, `_e`, and `_b` suffixes
-  denote the simulation world, local environment, and robot base frames, respectively.
-- A lowercase API suffix names only the frame in which a quantity is expressed. When both source and target
-  frames matter in Arena calculations, bind the value to an explicit transform name, for example
-  `T_W_O = object.data.root_pose_w`.
 
 ### Wrapped Environment
 

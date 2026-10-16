@@ -4,7 +4,6 @@ DOCKER_IMAGE_NAME='isaaclab_arena'
 DOCKER_VERSION_TAG='latest'
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-source "$SCRIPT_DIR/setup/target_tag.sh"
 
 WORKDIR="/workspaces/isaaclab_arena"
 
@@ -14,9 +13,8 @@ DATASETS_HOST_MOUNT_DIRECTORY="$HOME/datasets"
 MODELS_HOST_MOUNT_DIRECTORY="$HOME/models"
 # Default mount directory on the host machine for the evaluation directory
 EVAL_HOST_MOUNT_DIRECTORY="$HOME/eval"
-# Named image target
-DOCKER_TARGET="dev"
-BUILD_OPTIONS=()
+# Default cuRobo installation settings (false means no cuRobo installation)
+INSTALL_CUROBO="false"
 # Whether to forcefully rebuild the docker image
 # (it takes a while to re-build, but for testing is not really necessary)
 FORCE_REBUILD=false
@@ -26,7 +24,7 @@ FORCE_REBUILD=false
 CONTAINER_SUFFIX=""
 CONTAINER_SUFFIX_EXPLICIT=false
 
-while getopts ":d:m:e:hn:rRvn:s:ct:" OPTION; do
+while getopts ":d:m:e:hn:rn:Rn:vn:s:c" OPTION; do
     case $OPTION in
 
         d)
@@ -47,16 +45,14 @@ while getopts ":d:m:e:hn:rRvn:s:ct:" OPTION; do
 
         R)
             FORCE_REBUILD=true
-            BUILD_OPTIONS+=(-R)
+            NO_CACHE="--no-cache"
             ;;
         v)
             set -x
             ;;
         c)
-            DOCKER_TARGET="dev-curobo"
-            ;;
-        t)
-            DOCKER_TARGET=$OPTARG
+            INSTALL_CUROBO="true"
+            DOCKER_VERSION_TAG='curobo'
             ;;
         s)
             CONTAINER_SUFFIX="-${OPTARG}"
@@ -77,8 +73,7 @@ while getopts ":d:m:e:hn:rRvn:s:ct:" OPTION; do
             echo "  -n <docker name> (Name of the docker image that will be built or used. Default is \"$DOCKER_IMAGE_NAME\".)"
             echo "  -r (Force rebuilding of the docker image.)"
             echo "  -R (Force rebuilding of the docker image, without cache.)"
-            echo "  -c (Select the dev-curobo target.)"
-            echo "  -t <target> (Select dev or dev-curobo; default: dev.)"
+            echo "  -c (Install cuRobo motion-planning library; compiles CUDA extensions, adds ~10 min to build.)"
             echo "  -s <suffix> (Suffix appended to the container name, allowing multiple containers to run simultaneously."
             echo "      Defaults to the repo directory name after 'IsaacLab-Arena', so each clone gets its own container.)"
             exit 0
@@ -107,20 +102,24 @@ if [ "$CONTAINER_SUFFIX_EXPLICIT" = false ]; then
     [ -n "$derived" ] && CONTAINER_SUFFIX="-${derived}"
 fi
 
-DOCKER_VERSION_TAG=$(default_tag_for_target "$DOCKER_TARGET")
-
 # Display the values being used
 echo "Using Docker image: $DOCKER_IMAGE_NAME:$DOCKER_VERSION_TAG"
 
-echo "Using Docker target: $DOCKER_TARGET"
+echo "Building Docker image with cuRobo installation: $INSTALL_CUROBO"
 
 if [ "$(docker images -q $DOCKER_IMAGE_NAME:$DOCKER_VERSION_TAG 2> /dev/null)" ] && \
     [ "$FORCE_REBUILD" = false ]; then
     echo "Docker image $DOCKER_IMAGE_NAME:$DOCKER_VERSION_TAG already exists. Not rebuilding."
     echo "Use -r option to force the rebuild."
 else
-    "$SCRIPT_DIR/build_docker.sh" -t "$DOCKER_TARGET" \
-        -n "${DOCKER_IMAGE_NAME}:${DOCKER_VERSION_TAG}" "${BUILD_OPTIONS[@]}"
+    docker build --pull \
+        $NO_CACHE \
+        --progress=plain \
+        --build-arg WORKDIR="${WORKDIR}" \
+        --build-arg INSTALL_CUROBO=$INSTALL_CUROBO \
+        -t ${DOCKER_IMAGE_NAME}:${DOCKER_VERSION_TAG} \
+        --file $SCRIPT_DIR/Dockerfile.isaaclab_arena \
+        $SCRIPT_DIR/..
 fi
 
 # Remove any exited containers
@@ -154,7 +153,7 @@ else
                     "--net=host"
                     "--runtime=nvidia"
                     "--gpus=all"
-                    "-v" "$(cd "$SCRIPT_DIR/.." && pwd):${WORKDIR}"
+                    "-v" ".:${WORKDIR}"
                     $(add_volume_if_it_exists $DATASETS_HOST_MOUNT_DIRECTORY /datasets)
                     $(add_volume_if_it_exists $MODELS_HOST_MOUNT_DIRECTORY /models)
                     $(add_volume_if_it_exists $EVAL_HOST_MOUNT_DIRECTORY /eval)
@@ -209,9 +208,7 @@ else
     done
 
     # Allow X11 connections
-    if [ -n "${DISPLAY:-}" ]; then
-        xhost +local:docker > /dev/null
-    fi
+    xhost +local:docker > /dev/null
 
     docker run "${DOCKER_RUN_ARGS[@]}" --interactive --rm --tty ${DOCKER_IMAGE_NAME}:${DOCKER_VERSION_TAG} "${@}"
 fi

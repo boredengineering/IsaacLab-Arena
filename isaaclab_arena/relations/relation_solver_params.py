@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from isaaclab_arena.relations.collision_mode import CollisionMode
 from isaaclab_arena.relations.relation_loss_strategies import (
     AtPositionLossStrategy,
-    ClutterOnLossStrategy,
     NextToLossStrategy,
     NotNextToLossStrategy,
     OnLossStrategy,
@@ -19,7 +18,6 @@ from isaaclab_arena.relations.relation_loss_strategies import (
 )
 from isaaclab_arena.relations.relations import (
     AtPosition,
-    ClutterOn,
     NextTo,
     NotNextTo,
     On,
@@ -34,7 +32,6 @@ def _default_strategies() -> dict[type[RelationBase], RelationLossStrategy | Una
     return {
         NextTo: NextToLossStrategy(slope=10.0),
         On: OnLossStrategy(slope=100.0),
-        ClutterOn: ClutterOnLossStrategy(slope=100.0),
         NotNextTo: NotNextToLossStrategy(slope=10.0, margin_m=0.1),
         AtPosition: AtPositionLossStrategy(slope=100.0),
         PositionLimitsBox: PositionLimitsBoxLossStrategy(slope=100.0),
@@ -77,14 +74,9 @@ class RelationSolverParams:
 
     # default_factory ensures each instance gets its own dict (mutable defaults are shared across instances)
     strategies: dict[type[RelationBase], RelationLossStrategy | UnaryRelationLossStrategy] = field(
-        default_factory=_default_strategies,
-        metadata={"allow_config_override": False},
+        default_factory=_default_strategies
     )
     """Loss strategies for each relation type. Override to customize loss computation."""
 
-    def __post_init__(self) -> None:
-        self.validate()
-
-    def validate(self) -> None:
-        """Validate relation-solver parameters."""
+    def __post_init__(self):
         assert self.clearance_m >= 0, f"clearance_m must be >= 0, got {self.clearance_m}"

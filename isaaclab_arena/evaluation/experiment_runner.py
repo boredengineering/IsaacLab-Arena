@@ -3,36 +3,33 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+from isaaclab_arena.evaluation.arena_experiment import ArenaExperimentCfg
 from isaaclab_arena.evaluation.arena_experiment_config_loader import (
     load_arena_experiment_from_config_file,
     validate_experiment_config_path,
 )
+from isaaclab_arena.evaluation.arena_experiment_result import ArenaExperimentResult, build_arena_run_result_metadata
+from isaaclab_arena.evaluation.arena_run import ArenaRunResult, build_runs_info_table
 from isaaclab_arena.evaluation.experiment_runner_cli import parse_experiment_runner_args
 from isaaclab_arena.evaluation.legacy_experiment_runner import (
     legacy_json_experiment_requires_cameras,
     load_legacy_json_experiment_config,
     run_legacy_json_in_chunks,
 )
+from isaaclab_arena.evaluation.run_execution import build_arena_builder_from_run_cfg, execute_experiment
 from isaaclab_arena.hydra.typed_experiment_yaml_search import typed_experiment_requires_cameras
+from isaaclab_arena.metrics.metrics_logger import MetricsLogger
 from isaaclab_arena.utils.isaaclab_utils.simulation_app import SimulationAppContext
 from isaaclab_arena.video.video_recording import timestamped_run_dir
-
-if TYPE_CHECKING:
-    from isaaclab_arena.evaluation.arena_experiment import ArenaExperimentCfg
-    from isaaclab_arena.evaluation.arena_run import ArenaRunResult
+from isaaclab_arena.visualization.report import build_report, serve_until_ctrl_c
 
 
 # TODO(cvolk): Move experiment-level variation inspection out of this CLI entry point.
 # Run orchestration belongs in evaluation; catalogue formatting belongs in variations.
 def list_variations(experiment_cfg: ArenaExperimentCfg) -> None:
     """Print the Hydra-configurable variations for each run's environment."""
-    from isaaclab_arena.evaluation.run_execution import build_arena_builder_from_run_cfg
-
     for run_cfg in experiment_cfg.runs.values():
         arena_builder = build_arena_builder_from_run_cfg(run_cfg)
         print(f"=== Variations for run '{run_cfg.name}' ===", flush=True)
@@ -78,8 +75,6 @@ def _write_arena_experiment_result(
     experiment_output_directory: Path,
 ) -> Path:
     """Combine every Run's metadata and episode results into one Experiment JSON file."""
-    from isaaclab_arena.evaluation.arena_experiment_result import ArenaExperimentResult, build_arena_run_result_metadata
-
     run_results_by_name = {run_result.run_name: run_result for run_result in run_results}
     assert len(run_results_by_name) == len(run_results), "Experiment results must contain each Run exactly once"
     assert set(run_results_by_name) == set(
@@ -104,8 +99,10 @@ def main():
     )
 
     # AppLauncher must enable camera support before SimulationApp starts. Check if this is required.
-    if args_cli.record_camera_video or _experiment_requires_cameras(
-        experiment_config_path, legacy_experiment_config, experiment_overrides
+    if (
+        args_cli.record_camera_video
+        or args_cli.record_viewport_video
+        or _experiment_requires_cameras(experiment_config_path, legacy_experiment_config, experiment_overrides)
     ):
         args_cli.enable_cameras = True
 
@@ -146,12 +143,6 @@ def main():
     experiment_output_directory.mkdir(parents=True, exist_ok=True)
 
     with SimulationAppContext(args_cli):
-        from isaaclab_arena.evaluation.arena_experiment_result import ArenaExperimentResult
-        from isaaclab_arena.evaluation.arena_run import RunStatus, build_runs_info_table
-        from isaaclab_arena.evaluation.run_execution import execute_experiment
-        from isaaclab_arena.metrics.metrics_logger import MetricsLogger
-        from isaaclab_arena.visualization.report import build_report, serve_until_ctrl_c
-
         experiment_cfg = load_arena_experiment_from_config_file(
             experiment_config_path,
             device=args_cli.device,
@@ -182,14 +173,6 @@ def main():
         metrics_logger.print_metrics()
 
         _write_arena_experiment_result(experiment_cfg, run_results, experiment_output_directory)
-
-        from isaaclab_arena.evaluation.experiment_timings import aggregate_experiment_timings
-
-        completed_run_names = [
-            run_result.run_name for run_result in run_results if run_result.status is RunStatus.COMPLETED
-        ]
-        timings_path = aggregate_experiment_timings(experiment_output_directory, completed_run_names)
-        print(f"Wrote Arena Experiment timings to: {timings_path}")
 
         # Write HTML report.
         report_path = build_report(experiment_output_directory)

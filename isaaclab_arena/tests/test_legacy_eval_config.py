@@ -25,13 +25,13 @@ def test_legacy_environment_arguments_keep_cli_order_and_boolean_flags():
         "environment": "test_env",
         "object": "box",
         "num_envs": 4,
-        "mimic": True,
+        "headless": True,
         "enable_cameras": False,
     })
 
     assert args[:3] == ["--num_envs", "4", "test_env"]
     assert args[args.index("--object") + 1] == "box"
-    assert "--mimic" in args
+    assert "--headless" in args
     assert "--enable_cameras" not in args
 
 

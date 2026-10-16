@@ -26,16 +26,14 @@ def run_rl_train(
 ) -> str:
     """Train an RSL-RL policy for a single iteration and return the checkpoint path.
 
-    Uses Arena's bridge to Isaac Lab's unified training entry point with the environment registration callback.
+    Uses IsaacLab's rsl_rl train.py with the Arena environment registration callback.
     The training script saves params/agent.yaml alongside the checkpoint, which is
     required by RslRlActionPolicy at inference time.
     """
-    train_script = f"{TestConstants.repo_root}/isaaclab_arena/scripts/train.py"
+    train_script = f"{TestConstants.submodules_dir}/IsaacLab/scripts/reinforcement_learning/rsl_rl/train.py"
     args = [
         TestConstants.python_path,
         train_script,
-        "--rl_library",
-        "rsl_rl",
         "--external_callback",
         "isaaclab_arena.environments.isaaclab_interop.environment_registration_callback",
         "--task",
@@ -44,6 +42,7 @@ def run_rl_train(
         str(num_envs),
         "--max_iterations",
         str(max_iterations),
+        "--headless",
     ]
     if embodiment is not None:
         args += ["--embodiment", embodiment]
@@ -71,6 +70,7 @@ def run_policy_runner(checkpoint_path: str, example_environment: str, embodiment
         checkpoint_path,
         "--num_steps",
         str(NUM_STEPS),
+        "--headless",
         example_environment,
         "--embodiment",
         embodiment,

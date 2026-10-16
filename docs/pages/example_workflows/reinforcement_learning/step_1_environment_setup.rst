@@ -159,8 +159,7 @@ To validate the environment loads correctly, run one training iteration and chec
 
 .. code-block:: bash
 
-   python isaaclab_arena/scripts/train.py \
-     --rl_library rsl_rl \
+   python submodules/IsaacLab/scripts/reinforcement_learning/rsl_rl/train.py \
      --external_callback isaaclab_arena.environments.isaaclab_interop.environment_registration_callback \
      --task lift_object \
      --rl_training_mode \

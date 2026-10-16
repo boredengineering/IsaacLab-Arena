@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import torch
 import tqdm
 from importlib import import_module
 from typing import TYPE_CHECKING
@@ -22,7 +23,6 @@ from isaaclab_arena.metrics.metrics_logger import metrics_to_plain_python_types
 from isaaclab_arena.utils.hydra_overrides import assert_hydra_overrides
 from isaaclab_arena.utils.isaaclab_utils.simulation_app import SimulationAppContext
 from isaaclab_arena.utils.multiprocess import get_local_rank, get_world_size
-from isaaclab_arena.utils.timer import Timer
 from isaaclab_arena.video.video_recording import VideoRecordingCfg, timestamped_run_dir, wrap_env_for_video
 from isaaclab_arena.visualization.report import build_report, serve_until_ctrl_c
 from isaaclab_arena_environments.cli import get_arena_builder_from_cli, get_isaaclab_arena_environments_cli_parser
@@ -69,8 +69,6 @@ def rollout_policy(
     num_steps: int | None,
     num_episodes: int | None,
 ) -> MetricsDataCollection | None:
-    import torch
-
     assert num_steps is not None or num_episodes is not None, "Either num_steps or num_episodes must be provided"
     assert num_steps is None or num_episodes is None, "Only one of num_steps or num_episodes must be provided"
 
@@ -90,11 +88,9 @@ def rollout_policy(
         num_steps_completed = 0
 
         while True:
-            with torch.inference_mode(), Timer("step"):
-                with Timer("policy_inference"):
-                    actions = policy.get_action(env, obs)
-                with Timer("env_step"):
-                    obs, _, terminated, truncated, _ = env.step(actions)
+            with torch.inference_mode():
+                actions = policy.get_action(env, obs)
+                obs, _, terminated, truncated, _ = env.step(actions)
 
                 if terminated.any() or truncated.any():
                     # Only reset policy for those envs that are terminated or truncated
@@ -164,8 +160,9 @@ def main():
         args_cli.device = f"cuda:{local_rank}"
         print(f"[Rank {local_rank}/{world_size}] One Isaac Lab instance per process on cuda:{local_rank}")
 
-    # --record_camera_video requires cameras to be enabled at sim startup, before SimulationAppContext.
-    if "--record_camera_video" in unknown:
+    # Both recorders require cameras to be enabled at sim startup, before SimulationAppContext.
+    # Matched against the raw argv because add_policy_runner_arguments has not declared them yet.
+    if {"--record_camera_video", "--record_viewport_video"} & set(unknown):
         args_cli.enable_cameras = True
 
     with SimulationAppContext(args_cli):
@@ -201,7 +198,7 @@ def main():
                 args_cli.seed += local_rank
 
         # Re-apply enable_cameras: the full parse resets it to default False.
-        if args_cli.record_camera_video:
+        if args_cli.record_camera_video or args_cli.record_viewport_video:
             args_cli.enable_cameras = True
 
         # Build scene. Use rgb_array render mode when recording so RecordVideo can grab frames.

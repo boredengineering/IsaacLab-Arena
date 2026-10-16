@@ -3,30 +3,25 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 import torch
-from typing import TYPE_CHECKING
 
+import warp as wp
+from isaaclab.assets import RigidObject
+from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.math import combine_frame_transforms
 
-if TYPE_CHECKING:
-    from isaaclab_arena.environments.isaaclab_arena_manager_based_env import IsaacLabArenaManagerBasedRLEnv
-
 
 def object_is_lifted(
-    env: IsaacLabArenaManagerBasedRLEnv,
-    minimal_height: float,
-    object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
+    env: ManagerBasedRLEnv, minimal_height: float, object_cfg: SceneEntityCfg = SceneEntityCfg("object")
 ) -> torch.Tensor:
     """Reward the agent for lifting the object above the minimal height."""
-    object_height_w = env.arena_world.get_position_w(object_cfg.name)[:, 2]
-    return torch.where(object_height_w > minimal_height, 1.0, 0.0)
+    object: RigidObject = env.scene[object_cfg.name]
+    return torch.where(wp.to_torch(object.data.root_pos_w)[:, 2] > minimal_height, 1.0, 0.0)
 
 
 def object_goal_distance(
-    env: IsaacLabArenaManagerBasedRLEnv,
+    env: ManagerBasedRLEnv,
     std: float,
     minimal_height: float,
     command_name: str,
@@ -34,17 +29,16 @@ def object_goal_distance(
     object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
 ) -> torch.Tensor:
     """Reward the agent for tracking the goal pose using tanh-kernel."""
-    arena_world = env.arena_world
-    T_W_B = arena_world.get_pose_w(robot_cfg.name)
-    object_position_w = arena_world.get_position_w(object_cfg.name)
-
+    # extract the used quantities (to enable type-hinting)
+    robot: RigidObject = env.scene[robot_cfg.name]
+    object: RigidObject = env.scene[object_cfg.name]
     command = env.command_manager.get_command(command_name)
-    desired_position_b = command[:, :3]
-    desired_position_w, _ = combine_frame_transforms(
-        T_W_B[:, :3],
-        T_W_B[:, 3:],
-        desired_position_b,
+    # compute the desired position in the world frame
+    des_pos_b = command[:, :3]
+    des_pos_w, _ = combine_frame_transforms(
+        wp.to_torch(robot.data.root_pos_w), wp.to_torch(robot.data.root_quat_w), des_pos_b
     )
-    distance_to_goal = torch.norm(desired_position_w - object_position_w, dim=1)
-    object_is_above_minimal_height = object_position_w[:, 2] > minimal_height
-    return object_is_above_minimal_height * (1 - torch.tanh(distance_to_goal / std))
+    # distance of the end-effector to the object: (num_envs,)
+    distance = torch.norm(des_pos_w - wp.to_torch(object.data.root_pos_w), dim=1)
+    # rewarded if the object is lifted above the threshold
+    return (wp.to_torch(object.data.root_pos_w)[:, 2] > minimal_height) * (1 - torch.tanh(distance / std))

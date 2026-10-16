@@ -8,10 +8,11 @@ import torch
 from collections.abc import Sequence
 from dataclasses import MISSING
 
+import isaaclab.controllers.utils as ControllerUtils
 import isaaclab.envs.mdp as base_mdp
 import isaaclab.sim as sim_utils  # noqa: F401
 import isaaclab.utils.math as PoseUtils
-import isaaclab_tasks.contrib.pick_place.mdp as mdp
+import isaaclab_tasks.manager_based.manipulation.pick_place.mdp as mdp
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets.articulation.articulation_cfg import ArticulationCfg
 from isaaclab.envs import ManagerBasedRLMimicEnv
@@ -23,7 +24,7 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import CameraCfg
 from isaaclab.utils.configclass import configclass
 from isaaclab_assets.robots.fourier import GR1T2_CFG
-from isaaclab_tasks.contrib.pick_place.pickplace_gr1t2_env_cfg import ActionsCfg as GR1T2ActionsCfg
+from isaaclab_tasks.manager_based.manipulation.pick_place.pickplace_gr1t2_env_cfg import ActionsCfg as GR1T2ActionsCfg
 from isaaclab_teleop import XrCfg
 from isaaclab_teleop.xr_cfg import XrAnchorRotationMode
 
@@ -95,7 +96,6 @@ class GR1T2EmbodimentBase(EmbodimentBase):
         arm_mode: ArmMode | None = None,
     ):
         super().__init__(enable_cameras, initial_pose, concatenate_observation_terms, arm_mode)
-        # TODO(xinjieyao, 2026.09.17): Add a gripper implementation for the GR1 embodiment.
         # Configuration structs
         self.scene_config = GR1T2SceneCfg()
         self.observation_config = GR1T2ObservationsCfg()
@@ -169,10 +169,16 @@ class GR1T2PinkEmbodiment(GR1T2EmbodimentBase):
             stiffness=1e9,
             damping=1e9,
         )
-        # Defer USD-to-URDF conversion until Pink initializes inside Isaac Sim.
+        # Link the controller to the robot
+        # Convert USD to URDF and change revolute joints to fixed
         self.temp_urdf_dir = tempfile.gettempdir()
-        self.action_config.upper_body_ik.controller.usd_path = self.scene_config.robot.spawn.usd_path
-        self.action_config.upper_body_ik.controller.urdf_output_dir = self.temp_urdf_dir
+        temp_urdf_output_path, temp_urdf_meshes_output_path = ControllerUtils.convert_usd_to_urdf(
+            self.scene_config.robot.spawn.usd_path, self.temp_urdf_dir, force_conversion=True
+        )
+
+        # Set the URDF and mesh paths for the IK controller
+        self.action_config.upper_body_ik.controller.urdf_path = temp_urdf_output_path
+        self.action_config.upper_body_ik.controller.mesh_path = temp_urdf_meshes_output_path
 
 
 @configclass

@@ -62,7 +62,7 @@ def _test_object_pose_randomization(simulation_app):
                     actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
                     env.step(actions)
 
-            pose = env.unwrapped.arena_world.get_pose_e(cracker_box.name)
+            pose = cracker_box.get_object_pose(env)
             print(f"pose: {pose}")
             pose_per_reset.append(pose)
 

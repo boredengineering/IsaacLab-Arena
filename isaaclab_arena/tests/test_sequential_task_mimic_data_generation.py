@@ -15,10 +15,6 @@ HEADLESS = True
 ENABLE_CAMERAS = False
 GENERATION_NUM_TRIALS = 1
 
-# TODO(cvolk, 2026-09-06): Delete these tests when Mimic support is removed. Mimic environments
-# do not initialize ArenaWorld, which the pick-and-place success predicate requires.
-pytestmark = pytest.mark.skip(reason="Mimic environments do not initialize ArenaWorld and are scheduled for removal.")
-
 
 @pytest.mark.with_subprocess
 def test_franka_put_and_close_door_mimic_data_generation_single_env():
@@ -40,8 +36,8 @@ def test_franka_put_and_close_door_mimic_data_generation_single_env():
         args.append(TestConstants.test_data_dir + "/test_sequential_task_mimic_data_generation.hdf5")
         args.append("--output_file")
         args.append(output_file)
-        if not HEADLESS:
-            args.extend(["--viz", "kit"])
+        if HEADLESS:
+            args.append("--headless")
         if ENABLE_CAMERAS:
             args.append("--enable_cameras")
         args.append("--external_callback")
@@ -75,8 +71,8 @@ def test_franka_put_and_close_door_mimic_data_generation_multi_env():
         args.append(TestConstants.test_data_dir + "/test_sequential_task_mimic_data_generation.hdf5")
         args.append("--output_file")
         args.append(output_file)
-        if not HEADLESS:
-            args.extend(["--viz", "kit"])
+        if HEADLESS:
+            args.append("--headless")
         if ENABLE_CAMERAS:
             args.append("--enable_cameras")
         args.append("--external_callback")

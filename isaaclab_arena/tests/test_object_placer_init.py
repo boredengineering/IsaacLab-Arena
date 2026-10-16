@@ -5,8 +5,6 @@
 
 """Tests for On-relation-guided initialization in ObjectPlacer."""
 
-from unittest.mock import patch
-
 from isaaclab_arena.relations.object_placer import ObjectPlacer
 from isaaclab_arena.relations.object_placer_params import ObjectPlacerParams
 from isaaclab_arena.relations.relation_solver_params import RelationSolverParams
@@ -41,7 +39,7 @@ def test_on_init_x_y_within_parent_footprint():
 
     placer = ObjectPlacer(params=ObjectPlacerParams())
     objects = [desk, box]
-    positions = placer._candidate_generator.generate_positions(objects, {desk}, _env_bboxes(objects))
+    positions = placer._generate_initial_positions(objects, {desk}, _env_bboxes(objects))
 
     x, y, _ = positions[box]
     child_bbox = box.get_bounding_box()
@@ -51,28 +49,6 @@ def test_on_init_x_y_within_parent_footprint():
     assert x + child_bbox.max_point[0, 0] <= desk_world.max_point[0, 0] + 1e-6
     assert y + child_bbox.min_point[0, 1] >= desk_world.min_point[0, 1] - 1e-6
     assert y + child_bbox.max_point[0, 1] <= desk_world.max_point[0, 1] + 1e-6
-
-
-def test_on_init_overlap_uses_original_support_on_both_axes():
-    """Overlap initialization samples both axes against the original support despite a large margin."""
-    desk = _make_desk()
-    box = DummyObject(
-        name="box",
-        bounding_box=AxisAlignedBoundingBox(min_point=(0.0, 0.0, 0.0), max_point=(0.2, 0.2, 0.2)),
-    )
-    relation = On(desk, overlap=True, edge_margin_m=0.6)
-    box.add_relation(relation)
-    placer = ObjectPlacer(params=ObjectPlacerParams())
-
-    with patch.object(placer._candidate_generator, "_sample_axis_position", return_value=0.0) as sample_axis:
-        placer._candidate_generator.generate_positions([desk, box], {desk}, _env_bboxes([desk, box]))
-
-    assert relation.overlap is True
-    x_call, y_call = sample_axis.call_args_list
-    for actual, expected in zip(x_call.args[:4], (0.0, 1.0, 0.2, 0.0)):
-        assert abs(float(actual) - expected) < 1e-6
-    for actual, expected in zip(y_call.args[:4], (0.0, 1.0, 0.2, 0.0)):
-        assert abs(float(actual) - expected) < 1e-6
 
 
 def test_on_init_z_places_bottom_at_parent_top():
@@ -87,7 +63,7 @@ def test_on_init_z_places_bottom_at_parent_top():
 
     placer = ObjectPlacer(params=ObjectPlacerParams())
     objects = [desk, box]
-    positions = placer._candidate_generator.generate_positions(objects, {desk}, _env_bboxes(objects))
+    positions = placer._generate_initial_positions(objects, {desk}, _env_bboxes(objects))
 
     _, _, z = positions[box]
     child_bbox = box.get_bounding_box()
@@ -113,7 +89,7 @@ def test_on_init_uses_env_specific_parent_bbox():
     box.add_relation(On(table_set, clearance_m=0.02))
 
     placer = ObjectPlacer(params=ObjectPlacerParams())
-    positions = placer._candidate_generator.generate_positions(
+    positions = placer._generate_initial_positions(
         [table_set, box],
         {table_set},
         {table_set: small_table_bbox, box: box_bbox},
@@ -142,7 +118,7 @@ def test_on_init_clamps_to_center_when_child_wider_than_parent():
 
     placer = ObjectPlacer(params=ObjectPlacerParams())
     objects = [desk, big_box]
-    positions = placer._candidate_generator.generate_positions(objects, {desk}, _env_bboxes(objects))
+    positions = placer._generate_initial_positions(objects, {desk}, _env_bboxes(objects))
 
     x, y, _ = positions[big_box]
     desk_world = desk.get_world_bounding_box()
@@ -164,7 +140,7 @@ def test_no_on_relation_initializes_at_anchor_center():
 
     placer = ObjectPlacer(params=ObjectPlacerParams())
     objects = [desk, box]
-    positions = placer._candidate_generator.generate_positions(objects, {desk}, _env_bboxes(objects))
+    positions = placer._generate_initial_positions(objects, {desk}, _env_bboxes(objects))
 
     x, y, z = positions[box]
     desk_world = desk.get_world_bounding_box()
@@ -192,7 +168,7 @@ def test_on_non_anchor_parent_with_anchor_grandparent_uses_proxy():
 
     placer = ObjectPlacer(params=ObjectPlacerParams())
     objects = [desk, plate, mug]
-    positions = placer._candidate_generator.generate_positions(objects, {desk}, _env_bboxes(objects))
+    positions = placer._generate_initial_positions(objects, {desk}, _env_bboxes(objects))
 
     x, y, z = positions[mug]
     desk_world = desk.get_world_bounding_box()
@@ -222,7 +198,7 @@ def test_on_non_anchor_parent_without_on_uses_fallback_bbox():
 
     placer = ObjectPlacer(params=ObjectPlacerParams())
     objects = [desk, stand, mug]
-    positions = placer._candidate_generator.generate_positions(objects, {desk}, _env_bboxes(objects))
+    positions = placer._generate_initial_positions(objects, {desk}, _env_bboxes(objects))
 
     x, y, z = positions[mug]
     desk_world = desk.get_world_bounding_box()

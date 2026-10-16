@@ -8,9 +8,6 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import os
-from gymnasium.wrappers import RecordVideo
-
-from isaaclab_arena.video.camera_observation_video_recorder import CameraObsVideoRecorder
 
 
 @dataclasses.dataclass
@@ -21,16 +18,13 @@ class VideoRecordingCfg:
     """Record the kit viewport (third-person scene view) via ``env.render()``."""
 
     record_camera_video: bool = False
-    """Record the embodiment-mounted cameras from ``obs['camera_obs']``."""
+    """Record RGB embodiment-mounted cameras from ``obs['camera_obs']``."""
 
     video_base_dir: str = "videos"
     """Base directory the mp4s are written to (a reverse-dated run subdirectory is added per run)."""
 
     camera_name_prefix: str = "robot-cam"
     """Filename prefix for the per-camera mp4s written by ``CameraObsVideoRecorder``."""
-
-    viewport_name_prefix: str = "viewport-env0-viewport"
-    """Filename prefix for the viewport mp4 written by Gymnasium's ``RecordVideo``."""
 
     @property
     def enabled(self) -> bool:
@@ -86,15 +80,22 @@ def wrap_env_for_video(
 
     os.makedirs(video_cfg.video_base_dir, exist_ok=True)
 
+    # Wrap the env in a step timer before adding the camera recording to get a without-recording
+    # step measurement.
+    from isaaclab_arena.utils.env_step_timer import EnvStepTimerWrapper
+
+    env = EnvStepTimerWrapper(env, timer_name="sim_step")
+
     # Record the kit viewport (via env.render()).
     if video_cfg.record_viewport_video:
+        from gymnasium.wrappers import RecordVideo
+
         video_length = _resolve_video_length(env, num_steps, num_episodes)
         env = RecordVideo(
             env,
             video_folder=video_cfg.video_base_dir,
-            episode_trigger=lambda episode: episode == 0,
+            step_trigger=lambda step: step == 0,
             video_length=video_length,
-            name_prefix=video_cfg.viewport_name_prefix,
             disable_logger=True,
         )
         print(f"Recording {video_length}-step viewport video to: {video_cfg.video_base_dir}")
@@ -102,6 +103,8 @@ def wrap_env_for_video(
     # Record the embodiment-mounted cameras (from obs["camera_obs"]),
     # flushed at each episode reset rather than after a fixed number of steps.
     if video_cfg.record_camera_video:
+        from isaaclab_arena.video.camera_observation_video_recorder import CameraObsVideoRecorder
+
         env = CameraObsVideoRecorder(
             env,
             video_folder=video_cfg.video_base_dir,

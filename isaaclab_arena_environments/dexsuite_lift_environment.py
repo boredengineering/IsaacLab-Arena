@@ -6,39 +6,46 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import math
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 from isaaclab_arena.assets.register import register_environment
 from isaaclab_arena.environments.arena_environment_factory import ArenaEnvironmentCfg, ArenaEnvironmentFactory
+from isaaclab_arena.utils.physics_backend import PhysicsBackend
 
 if TYPE_CHECKING:
     from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
 
 
-@dataclass
-class DexsuiteLiftEnvironmentCfg(ArenaEnvironmentCfg):
-    """Configure the Dexsuite lift environment."""
+def _match_isaac_lab_lift_cfg(env_cfg):
+    """Match Isaac Lab's Kuka-Allegro control rate and Newton configuration."""
+    from isaaclab_newton.physics import NewtonCfg
+    from isaaclab_tasks.core.lift import lift_env_cfg as lift
+
+    env_cfg.sim.dt = 1 / 120
+    env_cfg.sim.render_interval = 4
+    env_cfg.decimation = 4
+    if isinstance(env_cfg.sim.physics, NewtonCfg):
+        env_cfg.sim.physics = deepcopy(lift.PhysicsCfg().newton_mjwarp)
+    return env_cfg
 
 
 @register_environment
-class DexsuiteLiftEnvironment(ArenaEnvironmentFactory[DexsuiteLiftEnvironmentCfg]):
+class DexsuiteLiftEnvironment(ArenaEnvironmentFactory[ArenaEnvironmentCfg]):
     """
-    Dexsuite Kuka Allegro lift task; RSL-RL config ``DexsuiteKukaAllegroPPORunnerCfg``.
+    Dexsuite Kuka Allegro lift task; RSL-RL config ``KukaAllegroPPORunnerCfg``.
     The robot picks up a cube and lifts it to a target position.
     """
 
     name: str = "dexsuite_lift"
-    _legacy_argparse_cfg_type = DexsuiteLiftEnvironmentCfg
+    _legacy_argparse_cfg_type = ArenaEnvironmentCfg
 
-    def build(self, cfg: DexsuiteLiftEnvironmentCfg) -> IsaacLabArenaEnvironment:
+    def build(self, cfg: ArenaEnvironmentCfg) -> IsaacLabArenaEnvironment:
         """Build the environment from its typed configuration."""
-        import math
-
-        import isaaclab_tasks.manager_based.manipulation.dexsuite  # noqa: F401
+        import isaaclab_tasks.core.lift  # noqa: F401
 
         from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
-        from isaaclab_arena.environments.isaaclab_arena_manager_based_env_cfg import set_control_rate_50hz
         from isaaclab_arena.scene.scene import Scene
         from isaaclab_arena.tasks.lift_object_task import DexsuiteLiftTask
         from isaaclab_arena.utils.pose import Pose, PoseRange
@@ -65,8 +72,7 @@ class DexsuiteLiftEnvironment(ArenaEnvironmentFactory[DexsuiteLiftEnvironmentCfg
         task = DexsuiteLiftTask(lift_object=manip_object, background_scene=dexsuite_table)
 
         dexsuite_rl_cfg_entry = (
-            "isaaclab_tasks.manager_based.manipulation.dexsuite.config.kuka_allegro.agents."
-            "rsl_rl_ppo_cfg:DexsuiteKukaAllegroPPORunnerCfg"
+            "isaaclab_tasks.core.lift.config.kuka_allegro.agents.rsl_rl_ppo_cfg:KukaAllegroPPORunnerCfg"
         )
 
         return IsaacLabArenaEnvironment(
@@ -77,6 +83,6 @@ class DexsuiteLiftEnvironment(ArenaEnvironmentFactory[DexsuiteLiftEnvironmentCfg
             teleop_device=None,
             rl_framework_entry_point="rsl_rl_cfg_entry_point",
             rl_policy_cfg=dexsuite_rl_cfg_entry,
-            # 50 Hz control, the rate the RL policies for this task were trained at.
-            env_cfg_callback=set_control_rate_50hz,
+            default_physics_backend=PhysicsBackend.NEWTON,
+            env_cfg_callback=_match_isaac_lab_lift_cfg,
         )

@@ -15,11 +15,11 @@ modelling during dexterous manipulation.
 
    **Newton Physics — Experimental**
 
-   All Arena environments can switch to Newton physics by passing
-   ``--presets newton`` on the command line (mirrors Isaac Lab's
-   ``presets=newton`` Hydra override).  However, **Newton support is
-   experimental** — only the ``dexsuite_lift`` example has been verified to
-   work with Newton under the current simulation settings.  Other
+   The ``dexsuite_lift`` environment defaults to Newton physics. Newton can
+   also be selected explicitly for other Arena environments by passing
+   ``--presets newton``. However, **Newton support is experimental** — only
+   this example has been verified to work with Newton under the current
+   simulation settings. Other
    environments may require additional tuning of solver parameters and physics parameters
    to run correctly using Newton physics.
 
@@ -51,28 +51,27 @@ body states, object point cloud, and 5-step observation history.
    * - **Scene**
      - Procedural table (static background) with ground plane and lighting
    * - **Objects**
-     - Procedural lift cuboid (``procedural_cube``)
+     - Arena procedural cuboid with a ``PoseRange`` reset
    * - **Policy**
-     - RSL-RL PPO (``DexsuiteKukaAllegroPPORunnerCfg``)
+     - RSL-RL PPO (``KukaAllegroPPORunnerCfg``)
    * - **Training Method**
      - Reinforcement Learning (on-policy PPO) — trained in **Isaac Lab**
    * - **Physics Backend**
-     - PhysX (default) or Newton (``--presets newton``)
+     - Newton (default) or PhysX (``--presets physx``)
    * - **Simulation Rate**
-     - 200 Hz physics, 50 Hz control (decimation = 4)
+     - 120 Hz physics, 30 Hz control (decimation = 4)
    * - **Episode Length**
-     - 6 seconds
+     - 12 seconds
    * - **Closed-loop**
-     - Yes (50 Hz control)
+     - Yes (30 Hz control)
    * - **Command Space**
-     - Target position [x, y, z], position-only, resampled every 2–3 s
+     - Target position [x, y, z], position-only, resampled every 4–6 s
 
 .. note::
 
-   The physics backend defaults to **PhysX**. Pass ``--presets newton`` to
-   ``policy_runner.py`` (Arena) or ``presets=newton`` to ``train.py`` (Isaac Lab)
-   to switch to **Newton** (MuJoCo-Warp solver), which provides more physically
-   accurate contacts for dexterous manipulation at the cost of slower simulation.
+   Arena evaluation defaults to **Newton** for this environment. Pass
+   ``--presets physx`` to ``policy_runner.py`` to use PhysX instead. Isaac Lab
+   training selects Newton separately with ``physics=newton_mjwarp``.
 
 
 Workflow

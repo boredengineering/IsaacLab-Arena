@@ -3,62 +3,56 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for Dexsuite Kuka Allegro lift Arena example (no simulation)."""
+"""End-to-end test for the Dexsuite Kuka Allegro lift Arena example."""
+
+import ast
+import re
+import shutil
+from pathlib import Path
 
 import pytest
 
+from isaaclab_arena.tests.utils.constants import TestConstants
+from isaaclab_arena.tests.utils.subprocess import run_subprocess
 
-@pytest.mark.with_newton
-def test_dexsuite_lift_example_in_cli_registry() -> None:
-    pytest.importorskip(
-        "isaaclab_tasks.manager_based.manipulation.dexsuite.config.kuka_allegro.dexsuite_kuka_allegro_env_cfg"
+
+@pytest.mark.with_subprocess
+def test_dexsuite_lift_published_checkpoint(tmp_path: Path) -> None:
+    from isaaclab_rl.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
+
+    published_checkpoint = get_published_pretrained_checkpoint(
+        "rsl_rl", "Isaac-Lift-KukaAllegro", "newtonmjwarp", "none"
     )
-    from isaaclab_arena.assets.registries import EnvironmentRegistry
-    from isaaclab_arena_environments.cli import ensure_environments_registered
+    assert published_checkpoint is not None, "Isaac Lab's published Dexsuite lift checkpoint is unavailable"
 
-    ensure_environments_registered()
-    env_registry = EnvironmentRegistry()
-    assert env_registry.is_registered("dexsuite_lift")
-    assert env_registry.get_component_by_name("dexsuite_lift").name == "dexsuite_lift"
-
-
-@pytest.mark.with_newton
-def test_procedural_assets_registered() -> None:
-    pytest.importorskip(
-        "isaaclab_tasks.manager_based.manipulation.dexsuite.config.kuka_allegro.dexsuite_kuka_allegro_env_cfg"
-    )
-    from isaaclab_arena.assets.registries import AssetRegistry
-
-    reg = AssetRegistry()
-    assert reg.is_registered("procedural_table")
-    assert reg.is_registered("procedural_cube")
-
-
-@pytest.mark.with_newton
-def test_dexsuite_kuka_lift_task_matches_lift_mdp_flags() -> None:
-    pytest.importorskip(
-        "isaaclab_tasks.manager_based.manipulation.dexsuite.config.kuka_allegro.dexsuite_kuka_allegro_env_cfg"
+    checkpoint_path = tmp_path / "Isaac-Lift-KukaAllegro.pt"
+    shutil.copy2(published_checkpoint, checkpoint_path)
+    params_dir = tmp_path / "params"
+    params_dir.mkdir()
+    shutil.copy2(
+        Path(TestConstants.repo_root) / "isaaclab_arena_examples/policy/dexsuite_lift_agent.yaml",
+        params_dir / "agent.yaml",
     )
 
-    from isaaclab_arena.assets.registries import AssetRegistry
-    from isaaclab_arena.metrics.success_rate import SuccessRateMetric
-    from isaaclab_arena.tasks.lift_object_task import DexsuiteLiftTask, DexsuiteLiftTerminationsCfg, LiftObjectTask
-    from isaaclab_arena.utils.pose import Pose, PoseRange
-
-    reg = AssetRegistry()
-    lift = reg.get_asset_by_name("procedural_cube")()
-    lift.set_initial_pose(PoseRange(position_xyz_min=(-0.75, -0.1, 0.35), position_xyz_max=(-0.35, 0.3, 0.75)))
-    table = reg.get_asset_by_name("procedural_table")()
-    table.set_initial_pose(Pose(position_xyz=(-0.55, 0.0, 0.235)))
-    task = DexsuiteLiftTask(lift_object=lift, background_scene=table)
-    assert isinstance(task, LiftObjectTask)
-    assert task.lift_object is lift
-    assert task.get_scene_cfg() is None
-    assert task.get_rewards_cfg() is None
-    assert task.commands_cfg.object_pose.position_only is True
-    metrics = task.get_metrics()
-    assert len(metrics) == 1
-    assert isinstance(metrics[0], SuccessRateMetric)
-    assert metrics[0].recorder_term_name == "success"
-    assert isinstance(task.termination_cfg, DexsuiteLiftTerminationsCfg)
-    assert hasattr(task.termination_cfg, "success")
+    result = run_subprocess(
+        [
+            TestConstants.python_path,
+            f"{TestConstants.evaluation_dir}/policy_runner.py",
+            "--policy_type",
+            "rsl_rl",
+            "--num_episodes",
+            "1",
+            "--num_envs",
+            "1",
+            "--checkpoint_path",
+            str(checkpoint_path),
+            "dexsuite_lift",
+        ],
+        capture_output=True,
+    )
+    assert result is not None
+    output = result.stdout + result.stderr
+    metrics_matches = re.findall(r"Metrics: (\{[^\n]+\})", output)
+    assert metrics_matches, f"Evaluation did not report metrics:\n{output}"
+    metrics = ast.literal_eval(metrics_matches[-1])
+    assert metrics["num_episodes"] == 1

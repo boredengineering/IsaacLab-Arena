@@ -24,7 +24,7 @@ from isaaclab_arena.affordances.turnable import Turnable
 from isaaclab_arena.assets.lightwheel_lazy import LightwheelLazyPath
 from isaaclab_arena.assets.nucleus import ARENA_NUCLEUS_DIR
 from isaaclab_arena.assets.object import Object
-from isaaclab_arena.assets.object_base import ObjectType
+from isaaclab_arena.assets.object_type import ObjectType
 from isaaclab_arena.assets.object_utils import (
     EMPTY_ARTICULATION_INIT_STATE_CFG,
     RIGID_BODY_PROPS_HIGH_PRECISION,
@@ -1548,6 +1548,16 @@ class BowlYcbRobolab(LibraryObject):
     name = "bowl_ycb_robolab"
     tags = ["object", "graspable", "robolab"]
     usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/objects/ycb/bowl.usd"
+
+
+# TODO(qianl, 2026-10-01): This is a temporary asset for offline clutter settling. Delete once we support spawn_cfg_addon
+# though env yaml or clutter on supports dynamic supports.
+@register_asset
+class KinematicBowlYcbRobolab(BowlYcbRobolab):
+    """YCB bowl fixed in place for offline clutter settling."""
+
+    name = "kinematic_bowl_ycb_robolab"
+    spawn_cfg_addon = {"rigid_props": sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True)}
 
 
 @register_asset

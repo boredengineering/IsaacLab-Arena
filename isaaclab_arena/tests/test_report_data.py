@@ -7,6 +7,8 @@
 
 import json
 
+import pytest
+
 from isaaclab_arena.visualization.episode_results_files import format_episode_video_filename
 from isaaclab_arena.visualization.report_data import (
     EpisodeIdentity,
@@ -28,17 +30,17 @@ def _episode(record: dict | None = None, env: int = 0, episode: int = 0) -> Epis
     return EpisodeSummary(_identity(env, episode), episode, {}, record or {})
 
 
-def _progress(objectives: dict[str, int], events: list[tuple[str, int, str]], score: float) -> dict:
-    """Build a ``progress`` block from objective totals and (objective, index, name) events."""
+def _progress(criteria_by_name: dict[str, int], events: list[tuple[str, int, str]], score: float) -> dict:
+    """Build a ``progress`` block from criteria totals and (criteria_name, index, name) events."""
     return {
         "overall_score": score,
-        "objectives": {
-            name: {"score": score, "is_complete": score >= total, "total_groups": total}
-            for name, total in objectives.items()
+        "criteria_by_name": {
+            name: {"score": score, "is_complete": score >= total, "total_sequences": total}
+            for name, total in criteria_by_name.items()
         },
         "events": [
-            {"objective": objective, "predicate_index": index, "predicate_name": name}
-            for objective, index, name in events
+            {"criteria_name": criteria_name, "predicate_index": index, "predicate_name": name}
+            for criteria_name, index, name in events
         ],
     }
 
@@ -78,7 +80,7 @@ def test_progress_fraction_is_none_without_recorded_progress():
     assert episode.progress_fraction is None
 
 
-def test_funnel_counts_objective_instances_rather_than_events():
+def test_funnel_counts_criteria_instances_rather_than_events():
     episode = _episode({
         "success": False,
         "progress": _progress(
@@ -102,7 +104,7 @@ def test_funnel_counts_objective_instances_rather_than_events():
     ]
 
 
-def test_objectives_list_predicates_the_episode_never_reached():
+def test_criteria_list_predicates_the_episode_never_reached():
     complete = _episode({
         "success": True,
         "progress": _progress(
@@ -120,16 +122,16 @@ def test_objectives_list_predicates_the_episode_never_reached():
             "success": False,
             "progress": {
                 "overall_score": 0.33,
-                "objectives": {
+                "criteria_by_name": {
                     "pick_and_place": {
                         "score": 0.33,
                         "is_complete": False,
-                        "total_groups": 1,
-                        "active_predicates": {"default_group": "object_is_above_height(object_name='banana')"},
+                        "total_sequences": 1,
+                        "active_predicates": {"default_sequence": "object_is_above_height(object_name='banana')"},
                     }
                 },
                 "events": [{
-                    "objective": "pick_and_place",
+                    "criteria_name": "pick_and_place",
                     "predicate_index": 0,
                     "predicate_name": "objects_settled",
                     "step": 7,
@@ -140,28 +142,65 @@ def test_objectives_list_predicates_the_episode_never_reached():
     )
     job = JobSummary(name="run", task="t", policy="p", cameras=[], episodes=[complete, stalled])
 
-    objective = job.objectives_for(stalled)[0]
-    assert objective.num_triggered == 1
-    assert [(signal.name, signal.triggered, signal.blocked) for signal in objective.signals] == [
+    criteria = job.criteria_for(stalled)[0]
+    assert criteria.num_triggered == 1
+    assert [(signal.name, signal.triggered, signal.blocked) for signal in criteria.signals] == [
         ("objects_settled", True, False),
         ("object_is_above_height", False, True),
         ("object_on_destination", False, False),
     ]
-    assert objective.signals[0].step == 7
+    assert criteria.signals[0].step == 7
 
 
-def test_compatible_subtask_objectives_are_coalesced_into_one_family():
+def test_temporal_predicates_keep_distinct_report_labels_and_recorded_details():
+    resting_requirement = "TrueForConsecutiveStepsCfg(objects_below_velocity_thresholds, required_steps=10)"
+    placement_requirement = "TrueForConsecutiveStepsCfg(object_on_destination(force_threshold=0.1), required_steps=5)"
+    completed_progress = _progress(
+        {"pick_and_place": 1},
+        [
+            ("pick_and_place", 0, resting_requirement),
+            ("pick_and_place", 1, placement_requirement),
+        ],
+        score=1.0,
+    )
+    stalled_progress = _progress({"pick_and_place": 1}, [], score=0.0)
+    stalled_progress["criteria_by_name"]["pick_and_place"]["active_predicates"] = {
+        "default_sequence": resting_requirement,
+    }
+    complete = _episode({"success": True, "progress": completed_progress})
+    stalled = _episode({"success": False, "progress": stalled_progress}, episode=1)
+    job = JobSummary(name="run", task="t", policy="p", cameras=[], episodes=[complete, stalled])
+
+    assert [(stage.name, stage.num_reached) for stage in job.funnels[0].stages] == [
+        ("objects_below_velocity_thresholds", 1),
+        ("object_on_destination", 1),
+    ]
+    assert [(signal.name, signal.blocked) for signal in job.criteria_for(stalled)[0].signals] == [
+        ("objects_below_velocity_thresholds", True),
+        ("object_on_destination", False),
+    ]
+    assert [signal.detail for signal in job.criteria_for(complete)[0].signals] == [
+        resting_requirement,
+        placement_requirement,
+    ]
+
+
+def test_compatible_subtask_criteria_are_coalesced_into_one_family():
     episode = _episode({
         "progress": {
             "overall_score": 1.0,
-            "objectives": {
-                "subtask_0/pick_and_place": {"score": 1.0, "is_complete": True, "total_groups": 1},
-                "subtask_1/pick_and_place": {"score": 0.33, "is_complete": False, "total_groups": 1},
+            "criteria_by_name": {
+                "subtask_0/pick_and_place": {"score": 1.0, "is_complete": True, "total_sequences": 1},
+                "subtask_1/pick_and_place": {"score": 0.33, "is_complete": False, "total_sequences": 1},
             },
             "events": [
-                {"objective": "subtask_0/pick_and_place", "predicate_index": 0, "predicate_name": "objects_settled"},
                 {
-                    "objective": "subtask_1/pick_and_place",
+                    "criteria_name": "subtask_0/pick_and_place",
+                    "predicate_index": 0,
+                    "predicate_name": "objects_settled",
+                },
+                {
+                    "criteria_name": "subtask_1/pick_and_place",
                     "predicate_index": 0,
                     "predicate_name": "objects_settled",
                 },
@@ -170,39 +209,39 @@ def test_compatible_subtask_objectives_are_coalesced_into_one_family():
     })
     job = JobSummary(name="run", task="t", policy="p", cameras=[], episodes=[episode])
 
-    objectives = job.objectives_for(episode)
-    assert [objective.family for objective in objectives] == ["pick_and_place", "pick_and_place"]
+    criteria_sets = job.criteria_for(episode)
+    assert [criteria.family for criteria in criteria_sets] == ["pick_and_place", "pick_and_place"]
     assert [funnel.name for funnel in job.funnels] == ["pick_and_place"]
 
 
 def test_conflicting_subtask_sequences_stay_split_and_report_an_issue():
     episode = _episode({
         "progress": {
-            "objectives": {
-                "subtask_0/pick": {"score": 0.0, "is_complete": False, "total_groups": 1},
-                "subtask_1/pick": {"score": 0.0, "is_complete": False, "total_groups": 1},
+            "criteria_by_name": {
+                "subtask_0/pick": {"score": 0.0, "is_complete": False, "total_sequences": 1},
+                "subtask_1/pick": {"score": 0.0, "is_complete": False, "total_sequences": 1},
             },
             "events": [
-                {"objective": "subtask_0/pick", "predicate_index": 0, "predicate_name": "first_predicate"},
-                {"objective": "subtask_1/pick", "predicate_index": 0, "predicate_name": "other_predicate"},
+                {"criteria_name": "subtask_0/pick", "predicate_index": 0, "predicate_name": "first_predicate"},
+                {"criteria_name": "subtask_1/pick", "predicate_index": 0, "predicate_name": "other_predicate"},
             ],
         }
     })
     job = JobSummary(name="run", task="t", policy="p", cameras=[], episodes=[episode])
 
     assert any("conflicting predicate sequences" in issue.message for issue in job.issues)
-    objectives = job.objectives_for(episode)
-    assert [objective.family for objective in objectives] == ["subtask_0/pick", "subtask_1/pick"]
+    criteria_sets = job.criteria_for(episode)
+    assert [criteria.family for criteria in criteria_sets] == ["subtask_0/pick", "subtask_1/pick"]
 
 
 def test_unknown_active_predicates_are_renderable_without_inventing_sequence_indices():
     episode = _episode({
         "progress": {
-            "objectives": {
+            "criteria_by_name": {
                 "pick": {
                     "score": 0.0,
                     "is_complete": False,
-                    "total_groups": 1,
+                    "total_sequences": 1,
                     "active_predicates": {"default": "never_seen_predicate(arg=1)"},
                 }
             },
@@ -211,9 +250,9 @@ def test_unknown_active_predicates_are_renderable_without_inventing_sequence_ind
     })
     job = JobSummary(name="run", task="t", policy="p", cameras=[], episodes=[episode])
 
-    objective = job.objectives_for(episode)[0]
-    assert objective.signals == []
-    assert objective.blocked_predicates == ["never_seen_predicate"]
+    criteria = job.criteria_for(episode)[0]
+    assert criteria.signals == []
+    assert criteria.blocked_predicates == ["never_seen_predicate"]
 
 
 def test_outcome_disagreeing_with_progress_is_detected():
@@ -225,7 +264,7 @@ def test_outcome_disagreeing_with_progress_is_detected():
     assert complete_but_failed.outcome_disagrees_with_progress
     assert incomplete_but_passed.outcome_disagrees_with_progress
     assert not agreeing.outcome_disagrees_with_progress
-    assert no_progress_block.all_objectives_complete is None
+    assert no_progress_block.all_criteria_complete is None
     assert not no_progress_block.outcome_disagrees_with_progress
 
 
@@ -458,3 +497,63 @@ def test_run_status_normalizes_enum_like_values():
         value = "FAILED"
 
     assert normalize_run_status(Status()) == "failed"
+
+
+def test_temporal_episode_summary_handles_missing_and_malformed_records():
+    assert _episode().consecutive_step_summaries == []
+    assert _episode({"progress": {"criteria_by_name": {"task": {"score": 0.5}}}}).consecutive_step_summaries == []
+    valid = {
+        "predicate_index": 0,
+        "predicate_name": "TrueForConsecutiveStepsCfg(settled, required_steps=10)",
+        "consecutive_steps": 6,
+        "required_steps": 10,
+        "status": "active",
+    }
+    assert _episode({"progress": {"consecutive_step_summary": None}}).consecutive_step_summaries == []
+    valid.update(criteria_name="task", sequence_name="left")
+    episode = _episode({
+        "progress": {
+            "consecutive_step_summary": [
+                None,
+                {},
+                {**valid, "required_steps": 0},
+                {**valid, "consecutive_steps": 11},
+                valid,
+                {
+                    **valid,
+                    "sequence_name": "right",
+                    "consecutive_steps": 10,
+                    "status": "completed",
+                    "first_satisfied_step": 12,
+                },
+            ]
+        }
+    })
+    summaries = episode.consecutive_step_summaries
+    assert [(item.criteria_name, item.sequence_name, item.predicate_index) for item in summaries] == [
+        ("task", "left", 0),
+        ("task", "right", 0),
+    ]
+    assert summaries[0].predicate_name == "settled"
+    assert summaries[0].consecutive_steps == 6
+    assert summaries[0].first_satisfied_step is None
+    assert summaries[1].first_satisfied_step == 12
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+@pytest.mark.parametrize("field", ["consecutive_steps", "required_steps", "predicate_index", "first_satisfied_step"])
+def test_consecutive_step_summary_handles_nonfinite_numbers(field, value):
+    valid = {
+        "predicate_index": 0,
+        "predicate_name": "settled",
+        "consecutive_steps": 6,
+        "required_steps": 10,
+        "status": "active",
+        "first_satisfied_step": None,
+    }
+    episode = _episode({"progress": {"consecutive_step_summary": [{**valid, field: value}, valid]}})
+    summaries = episode.consecutive_step_summaries
+    # An invalid optional completion step is unknown; invalid required fields discard the entry.
+    assert len(summaries) == (2 if field == "first_satisfied_step" else 1)
+    assert all(summary.first_satisfied_step is None for summary in summaries)
+    assert all(summary.consecutive_steps == 6 for summary in summaries)

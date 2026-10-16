@@ -14,12 +14,12 @@ from isaaclab_arena.tasks import (  # noqa: F401
     goal_pose_task,
     lift_object_task,
     no_task,
+    object_in_task,
     open_door_task,
     pick_and_place_task,
     place_upright_task,
     press_button_task,
     rotate_revolute_joint_task,
-    sequential_task_base,
     sorting_task,
     turn_knob_task,
 )

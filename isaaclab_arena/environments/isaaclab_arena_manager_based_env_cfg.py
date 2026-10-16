@@ -8,16 +8,34 @@ from __future__ import annotations
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.envs.mimic_env_cfg import MimicEnvCfg
 from isaaclab.managers import RecorderManagerBaseCfg
-from isaaclab.sim import RenderCfg, SimulationCfg
+from isaaclab.sim import SimulationCfg
 from isaaclab.utils.configclass import configclass
 
 # Import from the package root so this resolves whether MJWarpSolverCfg lives in
 # newton_manager_cfg (older isaaclab_newton) or mjwarp_manager_cfg (Isaac Lab Beta 2).
-from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg
+from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg, NewtonMJWarpManager
 from isaaclab_physx.physics import PhysxCfg
+from isaaclab_physx.renderers import IsaacRtxRendererGlobalSettingsCfg
+from isaaclab_physx.renderers.isaac_rtx_renderer_utils import apply_isaac_rtx_global_settings
 from isaaclab_tasks.utils import PresetCfg
 
-from isaaclab_arena.video.viewport_video_recorder import ArenaViewportVideoRecorderCfg
+from isaaclab_arena.progress_tracking.task_progress_cfg import TaskProgressCfg
+
+
+class NewtonArenaMJWarpManager(NewtonMJWarpManager):
+    """Handle fixed-tendon models that use no MuJoCo actuators.
+
+    Newton-native actuators and passive tendons do not create ``model.mujoco.actuator_world``.
+    Isaac Lab's Newton 1.5 tendon adapter assumes that optional array exists.
+    """
+
+    @classmethod
+    def create_fixed_tendon_control(cls, articulation):
+        """Skip tendon control when the finalized model has no MuJoCo actuators."""
+        model = cls.get_model()
+        if not hasattr(model.mujoco, "actuator_world"):
+            return None
+        return super().create_fixed_tendon_control(articulation)
 
 
 @configclass
@@ -32,6 +50,7 @@ class ArenaPhysicsCfg(PresetCfg):
     physx = PhysxCfg()
     newton = NewtonCfg(
         solver_cfg=MJWarpSolverCfg(
+            class_type=NewtonArenaMJWarpManager,
             solver="newton",
             integrator="implicitfast",
             njmax=300,
@@ -68,9 +87,6 @@ class IsaacLabArenaManagerBasedRLEnvCfg(ManagerBasedRLEnvCfg):
     rewards = None
     curriculum = None
 
-    video_recorder: ArenaViewportVideoRecorderCfg = ArenaViewportVideoRecorderCfg()
-    """Report video recorder that reads its viewpoint in the task's configured viewer frame."""
-
     metrics: object | None = None
 
     episode_recorders: object | None = None
@@ -78,28 +94,34 @@ class IsaacLabArenaManagerBasedRLEnvCfg(ManagerBasedRLEnvCfg):
     demo_recorder_config: RecorderManagerBaseCfg | None = None
     """Recorder configuration used by demonstration collection scripts."""
 
+    task_progress: TaskProgressCfg | None = None
+    """Task progress settings, independent of the termination and trajectory recorder configs."""
+
     # Task language description
     task_description: str | None = None
 
-    # Override the RTX renderer's built-in scene ambient (carb /rtx/sceneDb/ambientLightIntensity, default 1.0 with
-    # color [0.1, 0.1, 0.1]) so that USD light prims fully control scene illumination.
     # Control rate: sim.dt (1/120 s) x decimation (8) = 15 Hz
     sim: SimulationCfg = SimulationCfg(
         dt=1 / 120,
         render_interval=2,
-        render=RenderCfg(
-            carb_settings={
-                "/rtx/sceneDb/ambientLightIntensity": 0.0,
-                # Workaround for IsaacLab #6424: stop the physx-tensors filter matcher from
-                # recursing into leaf collision shapes so a contact filter pointing at a rigid
-                # body with multiple collision shapes resolves to a single entry (otherwise the
-                # view fails with "expected 1, found N").
-                "/physics/tensors/recursiveLeafPatternMatch": False,
-            },
-        ),
     )
     decimation: int = 8
     wait_for_textures: bool = False
+
+
+def apply_arena_global_settings() -> None:
+    """Apply Arena's process-global RTX and physics settings before environment construction."""
+    apply_isaac_rtx_global_settings(
+        IsaacRtxRendererGlobalSettingsCfg(
+            # Disable RTX's built-in scene ambient so USD light prims fully control illumination.
+            ambient_light_intensity=0.0,
+            carb_settings={
+                # Work around IsaacLab #6424: do not recurse into leaf collision shapes when
+                # resolving a contact filter that targets a multi-shape rigid body.
+                "/physics/tensors/recursiveLeafPatternMatch": False,
+            },
+        )
+    )
 
 
 def set_control_rate_50hz(env_cfg: IsaacLabArenaManagerBasedRLEnvCfg) -> IsaacLabArenaManagerBasedRLEnvCfg:

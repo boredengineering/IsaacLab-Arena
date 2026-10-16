@@ -26,12 +26,14 @@ def test_experiment_runner_parses_native_hydra_overrides():
         "experiment.yaml",
         "runs.baseline.rollout_limit.num_steps=2",
         "runs.baseline.environment.enable_cameras=true",
+        "runs.baseline.environment_builder.record_trajectories=true",
     ])
 
     assert args_cli.experiment_config == "experiment.yaml"
     assert experiment_overrides == [
         "runs.baseline.rollout_limit.num_steps=2",
         "runs.baseline.environment.enable_cameras=true",
+        "runs.baseline.environment_builder.record_trajectories=true",
     ]
 
 
@@ -114,6 +116,7 @@ def run_experiment_runner(
     config_option: str = "--eval_jobs_config",
     extra_args: list[str] | None = None,
     capture_output: bool = False,
+    timeout_sec: int | None = None,
 ) -> subprocess.CompletedProcess[str] | None:
     """Run the Experiment Runner as a subprocess with timeout.
 
@@ -127,6 +130,7 @@ def run_experiment_runner(
         config_option: CLI option used to pass the Experiment path.
         extra_args: Additional Experiment Runner arguments.
         capture_output: Whether to capture and return the subprocess output.
+        timeout_sec: Override the default subprocess timeout in seconds.
 
     Returns:
         The completed subprocess when output is captured, otherwise None.
@@ -135,13 +139,11 @@ def run_experiment_runner(
     args.append(config_option)
     args.append(experiment_config_path)
     args.extend(extra_args or [])
-    if headless:
-        args.append("--headless")
-    else:
+    if not headless:
         args.append("--viz")
         args.append(DEFAULT_VISUALIZER)
 
-    return run_subprocess(args, capture_output=capture_output)
+    return run_subprocess(args, capture_output=capture_output, timeout_sec=timeout_sec)
 
 
 @pytest.mark.with_subprocess
@@ -189,6 +191,62 @@ runs:
     assert run_result["policy_variant"] == "zero_action"
     assert run_result["status"] == "completed"
     assert set(run_result) == {"environment", "policy_variant", "status", "rebuilds"}
+
+
+@pytest.mark.with_subprocess
+def test_experiment_runner_finishes_episode_budget_across_rebuilds(tmp_path):
+    """Finish each rebuild's exact episode allocation and match its results to trajectories."""
+    import h5py
+
+    experiment_config_path = tmp_path / "finite_episodes.yaml"
+    experiment_config_path.write_text(
+        """
+runs:
+  finite_episodes:
+    environment:
+      type: pick_and_place_maple_table
+      episode_length_s: 0.2
+    environment_builder:
+      num_envs: 2
+      record_trajectories: true
+    policy:
+      type: zero_action
+    rollout_limit:
+      num_episodes: 7
+    num_rebuilds: 2
+""",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "output"
+    run_experiment_runner(
+        str(experiment_config_path),
+        config_option="--experiment_config",
+        extra_args=["--experiment_output_directory", str(output_dir)],
+    )
+
+    experiment_result = json.loads((output_dir / ARENA_EXPERIMENT_RESULT_FILENAME).read_text(encoding="utf-8"))
+    run_result = experiment_result["runs"]["finite_episodes"]
+    assert run_result["status"] == "completed"
+    assert [len(rebuild["episodes"]) for rebuild in run_result["rebuilds"]] == [4, 3]
+    run_dir = output_dir / "finite_episodes"
+    for rebuild_index, expected_count in enumerate((4, 3)):
+        records_path = run_dir / f"episode_results_rebuild{rebuild_index}.jsonl"
+        records = [json.loads(line) for line in records_path.read_text(encoding="utf-8").splitlines()]
+        assert len(records) == expected_count
+        records_by_identity = {(record["env_id"], record["episode_in_env"]): record for record in records}
+        assert len(records_by_identity) == expected_count
+        dataset_path = run_dir / f"dataset_finite_episodes_rebuild{rebuild_index}.hdf5"
+        with h5py.File(dataset_path, "r") as dataset:
+            assert len(dataset["data"]) == expected_count
+            exported_identities = set()
+            for demo in dataset["data"].values():
+                identity = (int(demo["episode_id/env_id"][0]), int(demo["episode_id/episode_in_env"][0]))
+                assert identity not in exported_identities
+                exported_identities.add(identity)
+                record = records_by_identity[identity]
+                assert demo["actions"].shape[0] == record["episode_length"] > 0
+                assert bool(demo["success"][0]) is record["success"]
+            assert exported_identities == set(records_by_identity)
 
 
 @pytest.mark.with_subprocess

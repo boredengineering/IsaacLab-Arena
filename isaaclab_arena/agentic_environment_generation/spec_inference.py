@@ -44,6 +44,10 @@ class SpecInference:
     ) -> tuple[ArenaEnvGraphSpec | None, dict[str, Any]]:
         """Generate an ArenaEnvGraphSpec from a natural-language prompt.
 
+        Validation checks graph structure and catalogue entries, not whether subtasks cover
+        the full request. Prompt guidance encourages coverage, but a valid partial task can
+        still be accepted without a retry.
+
         Args:
             prompt: End-user environment description.
             traces: Accumulator for validation error lines, extended in place on failure.
@@ -143,7 +147,7 @@ Convert a natural-language prompt into an ArenaEnvGraphSpec.
 
 GUIDANCE:
 - Follow the per-field ``description`` strings in the schema.
-- REQUIRED: leave ``placement_validators`` and ``cli_override_specs`` null.
+- REQUIRED: leave ``placer_params`` and ``cli_override_specs`` null.
 - Use only exact names from the catalog for ``registry_name``:
   EMBODIMENTS for ``embodiment``, BACKGROUNDS for ``background``, and OBJECTS for ``objects``.
 - Do NOT hallucinate asset names — every ``registry_name`` must appear verbatim in the catalog.
@@ -166,9 +170,10 @@ GUIDANCE:
 - REQUIRED: a task or relation param naming part of the background must use that
   ``object_reference`` id, never the background id.
 - For each ``object_reference``, leave ``prim_path`` empty.
-- REQUIRED: pick ``task.composition`` from the number of subtasks you emit. One subtask is
-  ``atomic``. Two or more is ``parallel`` when the prompt says the order does not matter, and
-  ``sequential`` when the prompt fixes an order. ``atomic`` never has more than one subtask.
+- REQUIRED: include every requested action in ``task.subtasks``; "all" or "each" requires a separate
+  subtask per object instance acted on, not one representative subtask. Exclude scenery-only objects.
+- REQUIRED: use ``atomic`` for one subtask; for multiple subtasks, use ``parallel`` unless the prompt
+  or action dependencies require an order, then use ``sequential``. One robot does not imply an order.
 - Task parameters referring to an asest (object, background or object reference) must use the ID (NOT registry_name).
 - Relation subject and references must use the asset ID (NOT registry_name).
 - REQUIRED: include an ``is_anchor`` relation on the resting surface. That is the

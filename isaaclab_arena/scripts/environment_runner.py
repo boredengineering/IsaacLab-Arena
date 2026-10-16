@@ -24,12 +24,14 @@ Run an environment graph spec:
 from __future__ import annotations
 
 import argparse
+import sys
 import torch
 from typing import TYPE_CHECKING
 
 from isaaclab_arena.cli.isaaclab_arena_cli import get_isaaclab_arena_cli_parser
 from isaaclab_arena.utils.hydra_overrides import assert_hydra_overrides
 from isaaclab_arena.utils.isaaclab_utils.simulation_app import SimulationAppContext
+from isaaclab_arena.utils.physics_backend import PhysicsBackend
 from isaaclab_arena.utils.rate_limiter import RateLimiter
 from isaaclab_arena_environments.cli import get_arena_builder_from_cli, get_isaaclab_arena_environments_cli_parser
 
@@ -39,25 +41,22 @@ if TYPE_CHECKING:
 
 def _assert_interactive_runner_args(args_cli: argparse.Namespace) -> None:
     """Check that command-line arguments describe one interactive Kit environment."""
-    assert not args_cli.headless, "environment_runner requires the Kit GUI; remove --headless"
     assert (
         args_cli.visualizer is not None and "kit" in args_cli.visualizer
     ), "environment_runner requires the Kit GUI; use --viz kit"
     assert args_cli.num_envs == 1, "environment_runner supports exactly one environment"
     assert not args_cli.distributed, "environment_runner does not support distributed execution"
-    assert args_cli.presets != "newton", "environment_runner mouse interaction currently requires PhysX"
     assert not args_cli.list_variations, "environment_runner does not support --list_variations"
     assert args_cli.device == "cpu", "environment_runner mouse interaction requires CPU PhysX; use --device cpu"
 
 
-def _parse_interactive_runner_args() -> tuple[argparse.Namespace, list[str]]:
-    """Parse and validate arguments for interactive environment inspection."""
-    args_parser = get_isaaclab_arena_cli_parser()
-    args_parser.set_defaults(device="cpu", visualizer=["kit"], disable_fabric=True)
-    args_parser.allow_abbrev = False
+def _parse_interactive_runner_args(
+    args_parser: argparse.ArgumentParser, cli_args: list[str]
+) -> tuple[argparse.Namespace, list[str]]:
+    """Parse and validate environment arguments after Kit startup."""
     args_parser = get_isaaclab_arena_environments_cli_parser(args_parser)
 
-    args_cli, hydra_overrides = args_parser.parse_known_args()
+    args_cli, hydra_overrides = args_parser.parse_known_args(cli_args)
     assert_hydra_overrides(hydra_overrides, args_parser)
     _assert_interactive_runner_args(args_cli)
     return args_cli, hydra_overrides
@@ -98,6 +97,9 @@ def _create_interactive_environment(
 ) -> gym.Env:
     """Create an Arena environment configured for interactive manipulation."""
     arena_builder = get_arena_builder_from_cli(args_cli, hydra_overrides=hydra_overrides)
+    assert (
+        arena_builder.resolved_physics_backend is not PhysicsBackend.NEWTON
+    ), "environment_runner mouse interaction currently requires PhysX"
     env_cfg, env_kwargs = arena_builder.compose_manager_cfg()
     # Enable mouse picking without recording the interactive session.
     env_cfg.sim.enable_scene_query_support = True
@@ -132,10 +134,18 @@ def run_environment(
 
 def main() -> None:
     """Launch and continuously run one interactive Arena environment."""
-    args_cli, hydra_overrides = _parse_interactive_runner_args()
+    args_parser = get_isaaclab_arena_cli_parser()
+    args_parser.set_defaults(device="cpu", visualizer=["kit"], disable_fabric=True)
+    args_parser.allow_abbrev = False
+    # AppLauncher may append Kit flags to sys.argv.
+    original_cli_args = sys.argv[1:]
+    args_cli, _ = args_parser.parse_known_args(original_cli_args)
+    _assert_interactive_runner_args(args_cli)
     print("[environment_runner] Using CPU physics for interactive viewport manipulation.", flush=True)
 
+    # Start Kit before environment registration can import standalone USD.
     with SimulationAppContext(args_cli) as simulation_app:
+        args_cli, hydra_overrides = _parse_interactive_runner_args(args_parser, original_cli_args)
         env = _create_interactive_environment(args_cli, hydra_overrides)
         try:
             _enable_mouse_interaction()

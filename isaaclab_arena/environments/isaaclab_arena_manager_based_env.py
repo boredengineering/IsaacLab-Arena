@@ -5,32 +5,29 @@
 
 from __future__ import annotations
 
+import torch
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
-from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.envs import ManagerBasedRLEnv, ManagerBasedRLMimicEnv
+from isaaclab.managers.recorder_manager import DatasetExportMode, RecorderManagerBaseCfg
 
-from isaaclab_arena.environments.isaaclab_arena_manager_based_env_cfg import IsaacLabArenaManagerBasedRLEnvCfg
+from isaaclab_arena.environments.arena_world import ArenaWorld
 from isaaclab_arena.metrics.metric_data import MetricsDataCollection
 from isaaclab_arena.metrics.metrics_manager import MetricsManager
+from isaaclab_arena.progress_tracking.progress_tracker import ProgressTracker, ProgressTrackingRecorderCfg
+from isaaclab_arena.recording.arena_recorder_manager import ArenaRecorderManager
 from isaaclab_arena.recording.episode_recorder_manager import EpisodeRecorderManager
 from isaaclab_arena.tasks.predicates.object_settling import ObjectInitialRestPoseRecorder
 from isaaclab_arena.variations.variation_recorder import VariationRecorder
-from isaaclab_arena.video.viewport_video_recorder import ArenaViewportVideoRecorderCfg
 
+if TYPE_CHECKING:
+    from isaaclab.envs.common import VecEnvObs, VecEnvStepReturn
 
-def forward_viewer_frame_to_video_recorder(cfg: IsaacLabArenaManagerBasedRLEnvCfg) -> None:
-    """Pass the task's viewer frame to the report video recorder.
-
-    Isaac Lab forwards only the viewer eye and target, so the frame they are measured in has to be
-    supplied separately. Call before the recorder is built in ``ManagerBasedEnv.__init__``.
-
-    Args:
-        cfg: Environment configuration whose video recorder is updated in place.
-    """
-    if not isinstance(cfg.video_recorder, ArenaViewportVideoRecorderCfg):
-        return
-    cfg.video_recorder.viewer_origin_type = cfg.viewer.origin_type
-    cfg.video_recorder.viewer_env_index = cfg.viewer.env_index
+    from isaaclab_arena.environments.isaaclab_arena_manager_based_env_cfg import (
+        IsaacArenaManagerBasedMimicEnvCfg,
+        IsaacLabArenaManagerBasedRLEnvCfg,
+    )
 
 
 class IsaacLabArenaManagerBasedRLEnv(ManagerBasedRLEnv):
@@ -45,7 +42,12 @@ class IsaacLabArenaManagerBasedRLEnv(ManagerBasedRLEnv):
         variation_recorder: VariationRecorder | None = None,
         **kwargs,
     ):
-        forward_viewer_frame_to_video_recorder(cfg)
+        from isaaclab_arena.environments.isaaclab_arena_manager_based_env_cfg import apply_arena_global_settings
+
+        apply_arena_global_settings()
+        self._arena_world: ArenaWorld | None = None
+        self._progress_tracker: ProgressTracker | None = None
+        self._task_progress_step = -1
         self._object_initial_rest_pose_recorder = ObjectInitialRestPoseRecorder(
             num_envs=cfg.scene.num_envs, device=cfg.sim.device
         )
@@ -53,11 +55,24 @@ class IsaacLabArenaManagerBasedRLEnv(ManagerBasedRLEnv):
         if variation_recorder is not None:
             # Bind so run-time variation draws can be attributed to the current episode index.
             variation_recorder.bind_env(self)
-        # Per-env count of completed episodes; advanced in ``_reset_idx``.
-        self._episode_counts: dict[int, int] = {}
-        # The initial reset touches every env before any episode has run; skip it.
-        self._first_reset = True
+        self._episode_indices: dict[int, int] = {}
+        self._episode_limit: int | None = None
+        self._started_episode_count = 0
+        self._completed_episode_count = 0
+        self._active_episode_mask = torch.zeros(cfg.scene.num_envs, dtype=torch.bool, device=cfg.sim.device)
+        self._reset_env_ids = torch.empty(0, dtype=torch.long, device=cfg.sim.device)
         super().__init__(cfg=cfg, render_mode=render_mode, **kwargs)
+
+    @property
+    def arena_world(self) -> ArenaWorld:
+        """The environment's live Arena scene queries and cached geometry."""
+        assert self._arena_world is not None, "ArenaWorld is unavailable before managers are loaded."
+        return self._arena_world
+
+    @property
+    def progress_tracker(self) -> ProgressTracker | None:
+        """The environment's task progress tracker, or None when no task progress is configured."""
+        return self._progress_tracker
 
     @property
     def variation_recorder(self) -> VariationRecorder | None:
@@ -74,36 +89,128 @@ class IsaacLabArenaManagerBasedRLEnv(ManagerBasedRLEnv):
         """The per-episode recorder."""
         return self.episode_recorder_manager
 
+    @property
+    def active_episode_mask(self) -> torch.Tensor:
+        """Environments currently assigned an episode, including any replacement started this step."""
+        return self._active_episode_mask
+
+    @property
+    def completed_episode_count(self) -> int:
+        """Number of episodes finalized by this environment."""
+        return self._completed_episode_count
+
+    @property
+    def reset_env_ids(self) -> torch.Tensor:
+        """Environments that started an episode during the latest step or explicit reset."""
+        return self._reset_env_ids
+
     def load_managers(self) -> None:
-        super().load_managers()
+        assert self._arena_world is None, "ArenaWorld is already initialized."
+        self._arena_world = ArenaWorld(self.scene)
+        # Isaac Lab hardcodes RecorderManager. Defer its configuration so only the Arena
+        # recorder opens a dataset. Remove this workaround when upstream provides a factory.
+        recorder_cfg = self.cfg.recorders
+        self.cfg.recorders = None
+        try:
+            super().load_managers()
+        finally:
+            self.cfg.recorders = recorder_cfg
+        if self.cfg.task_progress is not None:
+            progress_cfg = self.cfg.task_progress
+            self._progress_tracker = ProgressTracker(
+                progress_cfg.success_criteria,
+                num_envs=self.num_envs,
+                device=self.device,
+                env=self,
+                subtasks_are_sequential=progress_cfg.subtasks_are_sequential,
+                desired_subtask_success_state=progress_cfg.desired_subtask_success_state,
+            )
+            self._task_progress_step = self.common_step_counter
+            if not recorder_cfg or isinstance(recorder_cfg, dict):
+                recorder_terms = recorder_cfg or {}
+                recorder_cfg = RecorderManagerBaseCfg(dataset_export_mode=DatasetExportMode.EXPORT_NONE)
+                # Lab requires RecorderManagerBaseCfg whenever any recorder term is active.
+                for term_name, term_cfg in recorder_terms.items():
+                    setattr(recorder_cfg, term_name, term_cfg)
+            recorder_cfg.progress_tracking = ProgressTrackingRecorderCfg()
+            self.cfg.recorders = recorder_cfg
+        self.recorder_manager = ArenaRecorderManager(recorder_cfg, self)
         self.metrics_manager = MetricsManager(self.cfg.metrics, self)
         self.episode_recorder_manager = EpisodeRecorderManager(self.cfg.episode_recorders, self)
+
+    def update_task_progress(self) -> None:
+        """Advance configured task progress at most once per control step."""
+        if self._progress_tracker is not None and self._task_progress_step != self.common_step_counter:
+            self._progress_tracker.step(self, step_index=self.episode_length_buf)
+            self._task_progress_step = self.common_step_counter
 
     def get_language_instruction(self) -> str | None:
         """Return the language instruction that is passed to the policy."""
         return self.cfg.task_description
 
     def get_episode_index(self, env_id: int) -> int:
-        """Return the index of the current episode in ``env_id``."""
-        return self._episode_counts.get(env_id, 0)
+        """Return the current episode index, retaining the last index when an environment becomes inactive."""
+        return self._episode_indices.get(env_id, 0)
 
-    def _advance_episode_indices(self, env_ids: Sequence[int]) -> None:
-        """Advance the per-env episode counter for each episode in ``env_ids``."""
-        for env_id in env_ids:
-            env_id = int(env_id)
-            self._episode_counts[env_id] = self._episode_counts.get(env_id, 0) + 1
+    def configure_episode_limit(self, num_episodes: int) -> None:
+        """Set the total number of episodes to start and finish, before the initial reset.
+
+        Args:
+            num_episodes: Positive episode budget shared by all environments.
+        """
+        assert self._started_episode_count == 0, "Configure the episode limit before the initial reset."
+        assert num_episodes > 0, "The episode limit must be positive."
+        self._episode_limit = num_episodes
+
+    def reset(
+        self, seed: int | None = None, env_ids: Sequence[int] | None = None, options: dict | None = None
+    ) -> tuple[VecEnvObs, dict]:
+        """Initialize episodes, allowing subsequent explicit resets only without an episode limit."""
+        assert (
+            self._episode_limit is None or self._started_episode_count == 0
+        ), "Episode-limited rollouts use one initial reset and automatic replacements during step()."
+        self._reset_env_ids = self._reset_env_ids[:0]
+        return super().reset(seed=seed, env_ids=env_ids, options=options)
+
+    def step(self, action: torch.Tensor) -> VecEnvStepReturn:
+        """Step all environments and report completions only for assigned episodes."""
+        active_before_step = self._active_episode_mask.clone()
+        self._reset_env_ids = self._reset_env_ids[:0]
+        observations, rewards, terminated, truncated, extras = super().step(action)
+        # Report an episode's completion even if its environment became inactive during this step.
+        return observations, rewards, terminated & active_before_step, truncated & active_before_step, extras
 
     def _reset_idx(self, env_ids: Sequence[int]) -> None:
-        # The initial reset touches every env before any episode has run; nothing to record or count.
-        if self._first_reset:
-            self._first_reset = False
-            super()._reset_idx(env_ids)
+        requested_env_ids = torch.as_tensor(env_ids, dtype=torch.long, device=self.device).sort().values
+        finishing_env_ids = requested_env_ids[self._active_episode_mask[requested_env_ids]]
+        if len(finishing_env_ids) > 0:
+            # Record the JSONL result with the finishing episode's index
+            # before starting any replacements.
+            self.episode_recorder_manager.record_pre_reset(finishing_env_ids)
+            self._completed_episode_count += len(finishing_env_ids)
+            self._active_episode_mask[finishing_env_ids] = False
+
+        episode_start_env_ids = requested_env_ids
+        if self._episode_limit is not None:
+            if self._started_episode_count > 0:
+                episode_start_env_ids = finishing_env_ids
+            remaining_episode_starts = self._episode_limit - self._started_episode_count
+            episode_start_env_ids = episode_start_env_ids[:remaining_episode_starts]
+        if len(episode_start_env_ids) == 0:
             return
-        # Runs recorder before super() so the just-finished episode is still intact.
-        self.episode_recorder_manager.record_pre_reset(env_ids)
-        # Advance before super() so reset-mode variation draws are tagged with the episode they begin.
-        self._advance_episode_indices(env_ids)
-        super()._reset_idx(env_ids)
+
+        # Reset-mode variation draws must refer to the episode being started.
+        for env_id in episode_start_env_ids.tolist():
+            self._episode_indices[env_id] = self._episode_indices.get(env_id, -1) + 1
+        self._started_episode_count += len(episode_start_env_ids)
+        self._active_episode_mask[episode_start_env_ids] = True
+        self._reset_env_ids = torch.cat((self._reset_env_ids, episode_start_env_ids))
+        super()._reset_idx(episode_start_env_ids)
+        # Keep the global step marker: queries after a partial reset must not advance
+        # the surviving episodes a second time during the same control step.
+        if self._progress_tracker is not None:
+            self._progress_tracker.reset(episode_start_env_ids)
+        self._object_initial_rest_pose_recorder.reset(episode_start_env_ids)
 
     def compute_metrics(self) -> MetricsDataCollection:
         """Compute all registered metrics.
@@ -112,3 +219,9 @@ class IsaacLabArenaManagerBasedRLEnv(ManagerBasedRLEnv):
             A MetricsDataCollection instance.
         """
         return self.metrics_manager.compute()
+
+
+class IsaacLabArenaManagerBasedRLMimicEnv(IsaacLabArenaManagerBasedRLEnv, ManagerBasedRLMimicEnv):
+    """Arena environment with the Isaac Lab Mimic interface."""
+
+    cfg: IsaacArenaManagerBasedMimicEnvCfg

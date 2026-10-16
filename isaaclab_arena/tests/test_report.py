@@ -278,18 +278,23 @@ def test_run_page_names_its_policy_throughout(tmp_path):
 def test_run_page_shows_which_success_signals_fired_and_which_did_not(tmp_path):
     def record(index: int, reached: int) -> dict:
         names = ["objects_settled", "object_is_above_height(object_name='banana')", "object_on_destination()"]
-        objective = {"score": reached / 3, "is_complete": reached == 3, "total_groups": 1}
+        criteria = {"score": reached / 3, "is_complete": reached == 3, "total_sequences": 1}
         if reached < 3:
-            objective["active_predicates"] = {"default_group": names[reached]}
+            criteria["active_predicates"] = {"default_sequence": names[reached]}
         return {
             "env_id": 0,
             "episode_in_env": index,
             "success": reached == 3,
             "progress": {
                 "overall_score": reached / 3,
-                "objectives": {"pick_and_place": objective},
+                "criteria_by_name": {"pick_and_place": criteria},
                 "events": [
-                    {"objective": "pick_and_place", "predicate_index": i, "predicate_name": names[i], "step": 10 * i}
+                    {
+                        "criteria_name": "pick_and_place",
+                        "predicate_index": i,
+                        "predicate_name": names[i],
+                        "step": 10 * i,
+                    }
                     for i in range(reached)
                 ],
             },
@@ -321,11 +326,11 @@ def test_unknown_blocked_predicate_is_shown_without_known_sequence(tmp_path):
             "episode_in_env": 0,
             "success": False,
             "progress": {
-                "objectives": {
+                "criteria_by_name": {
                     "pick": {
                         "score": 0.0,
                         "is_complete": False,
-                        "total_groups": 1,
+                        "total_sequences": 1,
                         "active_predicates": {"default": "never_seen(arg=1)"},
                     }
                 },
@@ -343,7 +348,7 @@ def test_unknown_blocked_predicate_is_shown_without_known_sequence(tmp_path):
     assert "never_seen" in run_page
 
 
-def test_run_page_reports_conflicting_objective_family_sequences(tmp_path):
+def test_run_page_reports_conflicting_criteria_family_sequences(tmp_path):
     run_dir = tmp_path / "banana_in_bowl_pi0"
     run_dir.mkdir()
     (run_dir / "episode_results_rebuild0.jsonl").write_text(
@@ -352,13 +357,13 @@ def test_run_page_reports_conflicting_objective_family_sequences(tmp_path):
             "episode_in_env": 0,
             "success": False,
             "progress": {
-                "objectives": {
-                    "subtask_0/pick": {"score": 0.0, "is_complete": False, "total_groups": 1},
-                    "subtask_1/pick": {"score": 0.0, "is_complete": False, "total_groups": 1},
+                "criteria_by_name": {
+                    "subtask_0/pick": {"score": 0.0, "is_complete": False, "total_sequences": 1},
+                    "subtask_1/pick": {"score": 0.0, "is_complete": False, "total_sequences": 1},
                 },
                 "events": [
-                    {"objective": "subtask_0/pick", "predicate_index": 0, "predicate_name": "first_predicate"},
-                    {"objective": "subtask_1/pick", "predicate_index": 0, "predicate_name": "other_predicate"},
+                    {"criteria_name": "subtask_0/pick", "predicate_index": 0, "predicate_name": "first_predicate"},
+                    {"criteria_name": "subtask_1/pick", "predicate_index": 0, "predicate_name": "other_predicate"},
                 ],
             },
         })
@@ -539,3 +544,48 @@ def test_media_paths_are_url_quoted_and_text_is_escaped(tmp_path):
     assert "wrist%20cam%3Frgb" in run_page
     assert "<script>alert(1)</script>" not in run_page
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in run_page
+
+
+def test_consecutive_step_summary_shows_streaks_and_satisfaction_steps(tmp_path):
+    requirements = [
+        ("settled", 10, "completed", 120),
+        ("released<script>", 6, "active", None),
+        ("next", 0, "waiting", None),
+        ("rechecked", 0, "completed", 90),
+    ]
+    record = {
+        "env_id": 0,
+        "episode_in_env": 0,
+        "success": False,
+        "progress": {
+            "overall_score": 0.5,
+            "consecutive_step_summary": [
+                {
+                    "criteria_name": "place",
+                    "sequence_name": "sequence<a>",
+                    "predicate_index": index,
+                    "predicate_name": f"TrueForConsecutiveStepsCfg({name}, required_steps=10)",
+                    "consecutive_steps": count,
+                    "required_steps": 10,
+                    "status": status,
+                    "first_satisfied_step": step,
+                }
+                for index, (name, count, status, step) in enumerate(requirements)
+            ],
+        },
+    }
+    run_dir = tmp_path / "settling"
+    run_dir.mkdir()
+    (run_dir / "episode_results_rebuild0.jsonl").write_text(json.dumps(record) + "\n")
+
+    build_report(tmp_path)
+    page = (tmp_path / "report" / "job_settling.html").read_text()
+
+    assert "Task completion summary" in page
+    assert "<td>10/10</td><td>step 120</td><td>&mdash;</td><td>Completed</td>" in page
+    assert "<td>6/10</td><td>&mdash;</td><td>4</td><td>Incomplete</td>" in page
+    assert "<td>0/10</td><td>&mdash;</td><td>10</td><td>Not reached</td>" in page
+    assert "<td>0/10</td><td>step 90</td><td>&mdash;</td><td>Completed</td>" in page
+    assert "sequence&lt;a&gt; / 2" in page
+    assert "released&lt;script&gt;" in page
+    assert "released<script>" not in page

@@ -67,4 +67,9 @@ Architectural plans, operational runbooks, serving benchmarks, and integration g
 - [`install-multi-gpu.md`](local-inference/install-multi-gpu.md) — Hardware installation and electrical integration guide for adding the RTX 5090 to the RTX PRO 6000 Blackwell workstation (PSU, 12V-2x6, PCIe bifurcation, and display routing).
 - [`local_llm_vlm_agentic_env_gen_plan.md`](local-inference/local_llm_vlm_agentic_env_gen_plan.md) — End-to-end plan for running local LLMs (spec synthesis and Active Inference repair) and local VLMs (Tier 2 visual scene perception critic) for `agentic_environment_generation`.
 
+### 10. [`isaaclab-arena-private/`](isaaclab-arena-private/README.md)
+Architectural mental models, remote topologies, and user-agent division of labor for migrating proprietary agentic environment generation to a private repository while pulling from NVIDIA and boredengineering upstreams.
+- [`README.md`](isaaclab-arena-private/README.md) — Comprehensive migration playbook, remote configuration, periodic sync protocols, and public contribution workflows.
+
+
 

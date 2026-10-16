@@ -1,0 +1,243 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+"""Tests for CAP gear-mesh gripper behavior."""
+
+import pytest
+
+from isaaclab_arena.tests.utils.persistent_simulation_app import run_function_with_persistent_simulation_app
+
+pytestmark = pytest.mark.isaac_cap
+
+
+def _make_world():
+    import math
+    import torch
+    from types import SimpleNamespace
+
+    from isaaclab_arena.environments.arena_world import ArenaWorld
+
+    half_sqrt_two = math.sqrt(0.5)
+    articulation_data = SimpleNamespace(
+        joint_names=["panda_finger_joint1", "panda_finger_joint2", "left_driver_joint"],
+        joint_pos=SimpleNamespace(torch=torch.tensor([[0.01, 0.02, 0.0], [0.04, 0.04, 0.8]])),
+        body_names=["robotiq_base"],
+        body_link_pose_w=SimpleNamespace(
+            torch=torch.tensor([
+                [[0.2, 0.1, 0.3, 0.0, 0.0, half_sqrt_two, half_sqrt_two]],
+                [[0.4, 0.2, 0.5, 0.0, 0.0, half_sqrt_two, half_sqrt_two]],
+            ])
+        ),
+    )
+    sensor_data = SimpleNamespace(
+        target_frame_names=["end_effector", "tool_leftfinger", "tool_rightfinger"],
+        target_pos_w=SimpleNamespace(
+            torch=torch.tensor([
+                [[0.1, 0.0, 0.0], [0.1, 0.02, 0.0], [0.1, -0.02, 0.0]],
+                [[0.3, 0.0, 0.0], [0.3, 0.05, 0.0], [0.3, -0.05, 0.0]],
+            ])
+        ),
+    )
+    object_poses = torch.tensor([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]])
+    scene = SimpleNamespace(
+        num_envs=2,
+        articulations={"robot": SimpleNamespace(data=articulation_data)},
+        rigid_objects={
+            "object": SimpleNamespace(data=SimpleNamespace(root_pose_w=SimpleNamespace(torch=object_poses)))
+        },
+        sensors={"ee_frame": SimpleNamespace(data=sensor_data)},
+        extras={},
+    )
+    return ArenaWorld(scene)
+
+
+def _test_gear_success_requires_withdrawal_and_samples_position_once(_simulation_app) -> bool:
+    import torch
+    from types import SimpleNamespace
+
+    from isaaclab_arena_environments.isaac_cap.gear_insertion_v2.task.terminations import gear_mesh_success
+
+    class TestGripper:
+        def __init__(self):
+            self.position_w = torch.tensor([[0.01, 0.0, 0.0]])
+            self.position_calls = 0
+
+        def get_position_w(self, _world):
+            self.position_calls += 1
+            return self.position_w
+
+    class TestWorld:
+        def get_joint_position(self, scene_key, joint_name):
+            assert (scene_key, joint_name) == ("board", "button_joint")
+            return torch.tensor([-0.01])
+
+        def get_pose_w(self, scene_key):
+            assert scene_key in ("board", "gear_a", "gear_b")
+            return torch.tensor([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]])
+
+        def get_root_angular_velocity_w(self, scene_key):
+            assert scene_key in ("gear_a", "gear_b")
+            return torch.tensor([[0.0, 0.0, 1.0]])
+
+    board = SimpleNamespace(set_joint_velocity_target=lambda _target, joint_ids: None)
+    success = object.__new__(gear_mesh_success)
+    success.board_name = "board"
+    success.gear_names = ("gear_a", "gear_b")
+    success.board = board
+    success.gears = (SimpleNamespace(), SimpleNamespace())
+    success.pinion_joint = 0
+    success.button_joint = 1
+    success.latched = torch.tensor([False])
+    success.seated_seen = torch.tensor([False])
+    success.started_after_seating = torch.tensor([False])
+    success.success_steps = torch.zeros(1, dtype=torch.int32)
+    success.required_steps = 1
+    success.spin_window_steps = 1
+    success.spin_history = torch.zeros((1, 1, 2))
+    success.spin_samples_seen = torch.zeros(1, dtype=torch.int32)
+    success.spin_history_index = 0
+    env = SimpleNamespace(num_envs=1, device="cpu", arena_world=TestWorld())
+    gripper = TestGripper()
+    params = {
+        "board_asset_cfg": SimpleNamespace(),
+        "gear_asset_cfgs": (SimpleNamespace(), SimpleNamespace()),
+        "gripper": gripper,
+        "target_offsets_xyz": ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
+        "gear_teeth": (20, 20),
+    }
+
+    assert not success(env, **params).item()
+    assert gripper.position_calls == 1
+
+    gripper.position_w[:, 0] = 0.1
+    assert success(env, **params).item()
+    assert gripper.position_calls == 2
+    return True
+
+
+def test_gear_success_requires_withdrawal_and_samples_position_once() -> None:
+    assert run_function_with_persistent_simulation_app(_test_gear_success_requires_withdrawal_and_samples_position_once)
+
+
+def _test_gear_mesh_reset_event_clears_legacy_state(_simulation_app) -> bool:
+    import torch
+    from types import SimpleNamespace
+
+    from isaaclab.managers import SceneEntityCfg, TerminationTermCfg
+
+    from isaaclab_arena.progress_tracking.completion_criteria import CompletionCriteria
+    from isaaclab_arena.progress_tracking.progress_tracker import ProgressTracker
+    from isaaclab_arena_environments.isaac_cap.gear_insertion_v2.task.terminations import (
+        gear_mesh_success,
+        reset_gear_mesh_state,
+    )
+
+    for criteria_name in ("gear_mesh", "subtask_0/gear_mesh"):
+        env = SimpleNamespace(
+            num_envs=2,
+            device="cpu",
+            step_dt=0.1,
+            scene={
+                "board": SimpleNamespace(data=SimpleNamespace(joint_names=["pinion_joint", "button_joint"])),
+                "gear": SimpleNamespace(),
+            },
+        )
+        success_cfg = TerminationTermCfg(
+            func=gear_mesh_success,
+            params={
+                "board_asset_cfg": SceneEntityCfg("board"),
+                "gear_asset_cfgs": [SceneEntityCfg("gear")],
+                "gripper": object(),
+                "hold_time_s": 1.0,
+                "spin_window_s": 0.5,
+            },
+        )
+        criteria = CompletionCriteria(name=criteria_name, predicate_sequence=[success_cfg])
+        tracker = ProgressTracker([criteria], num_envs=env.num_envs, device=env.device, env=env)
+        env.progress_tracker = tracker
+        success = tracker.get_predicate(criteria_name)
+        success.latched[:] = True
+        success.seated_seen[:] = True
+        success.started_after_seating[:] = True
+        success.success_steps[:] = 3
+        success.spin_history[:] = 4.0
+        success.spin_samples_seen[:] = success.spin_window_steps
+        success.spin_history_index = 2
+
+        # The task-local event clears legacy state; tracker.reset() only clears progress.
+        reset_gear_mesh_state(env, env_ids=torch.tensor([0]))
+        tracker.reset([0])
+        assert success.latched.tolist() == [False, True]
+        assert success.seated_seen.tolist() == [False, True]
+        assert success.started_after_seating.tolist() == [False, True]
+        assert success.success_steps.tolist() == [0, 3]
+        assert not success.spin_history[:, 0].any()
+        assert (success.spin_history[:, 1] == 4.0).all()
+        assert success.spin_samples_seen.tolist() == [0, success.spin_window_steps]
+        assert success.spin_history_index == 2
+
+        reset_gear_mesh_state(env)
+        assert not success.latched.any()
+        assert not success.seated_seen.any()
+        assert not success.started_after_seating.any()
+        assert not success.success_steps.any()
+        assert not success.spin_history.any()
+        assert not success.spin_samples_seen.any()
+        assert success.spin_history_index == 0
+    return True
+
+
+def test_gear_mesh_reset_event_clears_legacy_state() -> None:
+    assert run_function_with_persistent_simulation_app(_test_gear_mesh_reset_event_clears_legacy_state)
+
+
+def _test_gear_task_configures_withdrawal_check_for_the_embodiment_gripper(_simulation_app) -> bool:
+    from types import SimpleNamespace
+
+    from isaaclab_arena_environments.isaac_cap.gear_insertion_v2.embodiment import IndustrialFr3Robotiq2f85Embodiment
+    from isaaclab_arena_environments.isaac_cap.gear_insertion_v2.task.task import GearMeshTaskV2
+    from isaaclab_arena_environments.isaac_cap.gear_insertion_v2.task.terminations import reset_gear_mesh_state
+
+    task = GearMeshTaskV2(
+        board=SimpleNamespace(name="board"),
+        gear=SimpleNamespace(name="gear"),
+    )
+    params = task.get_termination_cfg().success[0].predicate_sequence[0].params
+    assert "gripper" not in params
+    reset_event = task.get_events_cfg().reset_gear_mesh_state
+    assert reset_event.mode == "reset"
+    assert reset_event.func is reset_gear_mesh_state
+
+    embodiment = IndustrialFr3Robotiq2f85Embodiment()
+    task.configure_for_embodiment(embodiment)
+
+    assert params["gripper"] is embodiment.gripper
+    assert "robot_asset_cfg" not in params
+    assert "tcp_body_name" not in params
+    assert "tcp_offset_xyz" not in params
+    assert params["gripper"].get_position_w(_make_world()).shape == (2, 3)
+    return True
+
+
+def test_gear_task_configures_withdrawal_check_for_the_embodiment_gripper() -> None:
+    assert run_function_with_persistent_simulation_app(
+        _test_gear_task_configures_withdrawal_check_for_the_embodiment_gripper
+    )
+
+
+def _test_gear_task_uses_cap_finished_failure(_simulation_app) -> bool:
+    from types import SimpleNamespace
+
+    from isaaclab_arena_environments.isaac_cap.cap_policy import cap_episode_finished
+    from isaaclab_arena_environments.isaac_cap.gear_insertion_v2.task.task import GearMeshTaskV2
+
+    task = GearMeshTaskV2(board=SimpleNamespace(name="board"), gear=SimpleNamespace(name="gear"), gear_teeth=20)
+    termination_cfg = task.get_termination_cfg()
+    assert termination_cfg.failures["cap_finished"].func is cap_episode_finished
+    return True
+
+
+def test_gear_task_uses_cap_finished_failure() -> None:
+    assert run_function_with_persistent_simulation_app(_test_gear_task_uses_cap_finished_failure)

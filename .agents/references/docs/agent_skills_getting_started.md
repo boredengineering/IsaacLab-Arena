@@ -35,10 +35,12 @@ flowchart TD
 ```
 
 ### Agent Integration Contracts
-* **Direct Scanner**: Codex, Antigravity, and other agents scan [`.agents/skills/`](../../skills) directly.
-* **Compatibility Symlinks**:
-  * `.claude/skills` points to `.agents/skills` for Claude Code compatibility.
-  * `.agent` symlinks to `.agents` for cross-tool resolution.
+* **Canonical Sources**: Grouped by audience under `skills/developer/` and `skills/user/`.
+* **Flat Discovery Index**: Maintained under `.agents/skills/` (flat directory of skills required by agent discovery engines).
+* **Multi-Platform Compatibility Symlinks**:
+  * `.claude/skills` points to `../.agents/skills` for Claude Code compatibility.
+  * `.agent` symlinks to `.agents` for Google Antigravity and Gemini CLI compatibility (which looks for `.agent/skills/`).
+  * `.agents/skills` is scanned directly by OpenAI Codex and Cursor.
 * **Gitignore Whitelist**: External skills fetched dynamically from NVIDIA (340+ skills) are automatically git-ignored by `.gitignore`, while in-tree custom Arena skills are tracked in source control.
 
 ---

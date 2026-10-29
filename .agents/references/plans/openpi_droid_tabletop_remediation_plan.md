@@ -80,17 +80,31 @@ Furthermore, because `DroidCameraCfg` ([`droid.py`](../../../isaaclab_arena/embo
 
 ---
 
-### 3.2 Add Robolab HDR Environment Lighting to Graph Spec Conversion
+### 3.2 Add Robolab HDR Environment Lighting, PBR Reflections & Directional Shadows
 
-#### Why the Current Lighting Is Visually OOD
-In [`pick_and_place_maple_table_environment.py`](../../../isaaclab_arena_environments/pick_and_place_maple_table_environment.py#L46-L78) and [`droid_pnp_srl_openpi_experiment.yaml`](../../../isaaclab_arena_environments/experiment_configs/droid_pnp_srl_openpi_experiment.yaml#L21-L22), SRL Robolab scenes use an HDR dome texture (`home_office_robolab`, `billiard_hall_robolab`, or `wooden_lounge_robolab`) at `light_intensity: 500.0`.
-In contrast, [`_ensure_scene_lighting()`](../../../isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py#L317-L327) always creates an untextured `DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=1500.0)`, which washes out the white robot links and removes background visual texture.
+#### Why 3DGS / HDR Context, PBR Materials, and Directional Lighting Are Essential for OpenPI ($\pi_{0.5}$)
+The visual transition from a flat, over-exposed grey void to the **SRL Robolab / PolaRiS photorealistic lighting and background setup** ([`home_office_robolab`](../../../isaaclab_arena/assets/hdr_image_library.py#L30-L36) + PBR table/object textures + overhead directional shadow light) directly addresses three fundamental properties of the `pi05_droid_jointpos_polaris` vision-language-action backbone:
 
-#### Required Code Changes
-1. **[`isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py`](../../../isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py#L317-L327)**:
-   - Update `_ensure_scene_lighting(scene_entities, background=None, asset_registry=None)` so that if the background `params` specifies `hdr` (e.g. `hdr: home_office_robolab`) and/or `light_intensity` (e.g. `500.0`)—or if the background asset is `maple_table_robolab`—it resolves the HDR asset from `asset_registry` and configures `DomeLightCfg(intensity=500.0, texture_file=hdr_asset.get_object_usd_path())` (with graceful fallback if the HDR asset is not present).
+1. **Why There Is a Realistic Room Around the Table (HDR / 3DGS Context vs. Flat Void):**
+   - **How `pi05_droid_jointpos_polaris` was trained:** The checkpoint inside `openpi-server` was co-trained on **90% real-world DROID trajectories** (recorded in real offices, kitchens, and labs) + **10% PolaRiS simulation co-training** (`polaris_droid_cotrain_dataset`, which bridges the sim-to-real gap using 3D Gaussian Splatting (3DGS) scans and SRL Robolab indoor HDR domes such as [`home_office_robolab`](../../../isaaclab_arena/assets/hdr_image_library.py#L30-L36), [`billiard_hall_robolab`](../../../isaaclab_arena/assets/hdr_image_library.py#L55-L61), and [`wooden_lounge_robolab`](../../../isaaclab_arena/assets/hdr_image_library.py#L100-L106)).
+   - **Why the Vision Transformer (SigLIP) needs background texture:** $\pi_{0.5}$ encodes `external_camera_rgb` and `wrist_camera_rgb` through a **SigLIP Vision Transformer (ViT)**, which splits each $224 \times 224$ frame into $16 \times 16$ patches and computes global self-attention across all patches. When half of the frame is an untextured solid-grey void (`color=(0.75, 0.75, 0.75)`), dozens of ViT patch tokens have **zero spatial variance**—a synthetic artifact that never occurs in real DROID cameras or PolaRiS scenes, shifting the ViT's layer-norm statistics and self-attention maps.
+   - Adding `hdr: home_office_robolab` (`visible_in_primary_ray = True`) surrounds the table with a 360° real-world indoor environment map (`home_office.exr`—desks, chairs, tiled floor) so background patch statistics match the DROID/PolaRiS training distribution.
+
+2. **Why We Changed the Lights (`intensity: 1500 -> 500` + `directional_light_on: true`):**
+   - In the failed baseline run, [`_ensure_scene_lighting()`](../../../isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py#L112-L145) injected an untextured `DomeLight` at **`intensity = 1500.0`** and turned the **`DirectionalLight` OFF (`intensity = 0.0`)**, causing two severe visual problems:
+     - **White Robot Arm Blow-Out (Contrast Loss):** At `intensity = 1500.0` from all directions, the white PBR links of the Franka Panda arm were over-exposed and blended almost invisibly into the `(0.75, 0.75, 0.75)` grey background. Lowering `light_intensity` to **`500.0`** (matching [`PickAndPlaceMapleTableEnvironmentCfg`](../../../isaaclab_arena_environments/pick_and_place_maple_table_environment.py#L25)) restores proper dynamic range on the white robot links, the yellow banana, and the beige plate.
+     - **Missing Contact Shadows (Loss of Depth Perception in Monocular 2D RGB):** Because OpenPI only receives **monocular 2D RGB images** (no depth channel or point cloud), it relies heavily on **cast shadows** on the tabletop to judge the vertical height ($\Delta Z$) between the Robotiq gripper fingers and the banana. When `DirectionalLight` was `off()`, the scene had purely ambient omnidirectional lighting—neither the gripper nor the banana cast a shadow on the table. Setting `directional_light_on: true` activates the overhead `DirectionalLight` (`intensity = 1000.0`), casting a crisp shadow of the Robotiq gripper onto the wood grain and banana as the hand descends (clearly visible in the wrist camera stream right before grasp closure at Step 211).
+
+3. **Why PBR Materials & Image-Based Lighting (IBL) Matter:**
+   - The SRL Robolab assets (`maple_table_robolab`, `banana_ycb_robolab`, `plate_large_vomp_robolab`) and the Robotiq 2F-85 gripper use **Physically Based Rendering (PBR)** shaders (roughness, metallic, specular, normal maps).
+   - Under a flat grey dome, metallic and glossy PBR surfaces reflect flat grey, making black anodized metal (the Robotiq fingers) and ceramic/plastic surfaces look like flat unshaded polygons.
+   - With the HDR dome (`home_office_robolab`) + directional light, the PBR shaders compute realistic specular highlights and surface gradients across the wood grain, plate rim, and banana curvature, matching the visual appearance of objects in the PolaRiS training dataset.
+
+#### Required Code & Spec Changes
+1. **[`isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py`](../../../isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py#L122-L140)**:
+   - Update `_ensure_scene_lighting(graph_spec, assets_by_node_id)` and `instantiate_assets_from_spec` so that if `background.params` specifies `hdr` (e.g. `hdr: home_office_robolab`), `light_intensity` (e.g. `500.0`), and/or `directional_light_on` (e.g. `true`), it resolves the HDR image from [`HDRImageRegistry`](../../../isaaclab_arena/assets/registries.py#L225-L265), attaches it via `dome_light.add_hdr(...)`, sets `dome_light.set_intensity(500.0)`, and keeps `directional_light` active.
 2. **[`generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml)**:
-   - Add `hdr: home_office_robolab` and `light_intensity: 500.0` under `fixtures.table.params` (or top-level scene lighting params).
+   - Add `hdr: home_office_robolab`, `light_intensity: 500.0`, and `directional_light_on: true` under `background.params`.
 
 ---
 
@@ -239,24 +253,24 @@ After implementing Steps 1–5 (along with the settle-loop posture-hold fix in [
 
 ### 6.4 Interactive `--viz kit` Reproduction Command
 
-Evalaute if this is necesary
+To inspect the rollout live in the Omniverse Kit GUI on the host desktop:
+
+1. **Grant X11 display access on the host:**
+   ```bash
+   xhost +local:docker > /dev/null 2>&1
+   ```
+2. **Launch `policy_runner.py` with `-e DISPLAY=$DISPLAY` and `--user $(id -u):$(id -g)`:**
+   - Pass `-e DISPLAY=$DISPLAY` to `docker exec` so Omniverse Kit's GLFW windowing plugin (`carb.windowing-glfw.plugin`) connects to the host X11 server (the container shares the host network namespace `--net=host`, reaching the abstract X11 socket `@/tmp/.X11-unix/X*`).
+   - Use `--user $(id -u):$(id -g)` instead of `su $(id -un) -c` when invoking from the host shell: `$(id -un)` expands on the host to the host username (`tarfy`, UID `1000`), whereas UID `1000` inside the container is `ubuntu`. Passing `--user $(id -u):$(id -g)` maps directly by numeric UID/GID (`1000:1000`), matching host X11 `SI:localuser` authorization and preserving `-e DISPLAY=$DISPLAY`.
 
 ```bash
-# Discover active container name (following repo conventions)
-ARENA_CONTAINER=$(docker ps --filter "name=isaaclab_arena" --format "{{.Names}}" | head -n 1)
-```
-
-Command to display on X11 display
-
-```bash
-# Ensure local X11 display permissions are granted (if using local desktop)
 xhost +local:docker > /dev/null 2>&1
-```
 
-
-```bash
-docker exec -it isaaclab_arena-latest-isaaclab-arena-private su $(id -un) -c \
-  "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+docker exec -it \
+  -e DISPLAY=$DISPLAY \
+  --user $(id -u):$(id -g) \
+  isaaclab_arena-latest-isaaclab-arena-private \
+  bash -c "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
     --policy_type isaaclab_arena_openpi.policy.pi0_remote_policy.Pi0RemotePolicy \
     --policy_variant pi05 \
     --openpi_embodiment_adapter droid \

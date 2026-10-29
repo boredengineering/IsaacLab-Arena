@@ -263,7 +263,47 @@ The integration has been executed and verified live:
        initial_pose = Pose.identity()
        object_min_z = -0.5
    ```
-4. **Live Container Verification**: Tested via `AssetRegistry().get_asset_by_name("marble_kitchen")` inside the simulation container; resolved properly with tags `['background', '3dgs', 'nurec', 'kitchen']` and verified USD stage parsing.
+4. **Live Container Verification & Simulation Stepping**:
+   Created [`artifacts/assets/marble/verify_marble_kitchen.py`](../../../artifacts/assets/marble/verify_marble_kitchen.py) and executed inside the `isaaclab_arena-latest-isaaclab-arena-private` container.
+   * **Verification Command**:
+     ```bash
+     docker exec isaaclab_arena-latest-isaaclab-arena-private \
+       /isaac-sim/python.sh /workspaces/isaaclab_arena/artifacts/assets/marble/verify_marble_kitchen.py
+     ```
+   * **Results**:
+     - `omni.rtx.spg-0.2.1` initialized cleanly.
+     - `AssetRegistry` resolved `MarbleKitchenBackground` with tags `['background', '3dgs', 'nurec', 'kitchen']`.
+     - `SimulationContext` created the PhysX physics scene and spawned the USD stage at `/World/MarbleKitchen`.
+     - Validated collision mesh with applied schemas: `['PhysicsCollisionAPI', 'PhysxCollisionAPI', 'PhysxTriangleMeshCollisionAPI', 'PhysicsMeshCollisionAPI']`.
+     - Validated NuRec volume prim and density field `@MarbleKitchen.usdz[MarbleKitchen.nurec]@`.
+     - Successfully completed 20 simulation steps with PhysX dynamic updates. Zero crashes or divergence.
+
+5. **Interactive GUI Inspection & Closed-Loop Policy Rollout (`pick_banana_to_plate_marble`)**:
+   Created the environment specification [`generated_envs/pick_banana_to_plate_marble/v1/pick_banana_to_plate_marble.yaml`](../../../generated_envs/pick_banana_to_plate_marble/v1/pick_banana_to_plate_marble.yaml) to ground the Franka DROID arm, YCB banana, and plate directly on the 3DGS marble kitchen.
+   
+   To visually inspect and execute the task live in the Kit GUI window with OpenPI $\pi_{0.5}$:
+   ```bash
+   xhost +local:docker > /dev/null 2>&1
+
+   docker exec -it \
+     -e DISPLAY=$DISPLAY \
+     --user $(id -u):$(id -g) \
+     isaaclab_arena-latest-isaaclab-arena-private \
+     bash -c "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+       --policy_type isaaclab_arena_openpi.policy.pi0_remote_policy.Pi0RemotePolicy \
+       --policy_variant pi05 \
+       --openpi_embodiment_adapter droid \
+       --remote_host 127.0.0.1 \
+       --remote_port 8008 \
+       --open_loop_horizon 8 \
+       --num_episodes 1 \
+       --enable_cameras \
+       --viz kit \
+       --kit_args '--enable omni.rtx.spg --/renderer/multiGpu/enabled=false' \
+       --env_spec generated_envs/pick_banana_to_plate_marble/v1/pick_banana_to_plate_marble.yaml"
+   ```
+
+   *(Note: For passive visual inspection without a running policy server, substitute `--policy_type isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy`.)*
 
 ---
 
@@ -302,7 +342,108 @@ To eliminate manual library editing, Arena should implement a pluggable, automat
 
 ---
 
-## 7. Cross-References
+## 7. Interactive Omniverse Kit Visualization (`--viz kit`) & Available Environments
+
+### 7.1 Host Command to Launch Interactive Omniverse Kit GUI (`--viz kit`)
+
+When launching `policy_runner.py` inside the simulation container from the host terminal with `--viz kit`, two flags are required on `docker exec` for Omniverse Kit's GLFW windowing plugin (`carb.windowing-glfw.plugin`) to spawn the GUI on the host desktop:
+
+1. **`-e DISPLAY=$DISPLAY`**: Forwards the active host X11 display identifier (e.g., `:1`) into the container. Because the container shares the host network namespace (`--net=host`), `libX11` and GLFW connect directly to the host's abstract X11 Unix socket (`@/tmp/.X11-unix/X*`).
+2. **`--user $(id -u):$(id -g)`**: Maps directly by numeric UID/GID (`1000:1000`) rather than `su $(id -un) -c` (which expands `$(id -un)` on the host shell to the host username, e.g., `tarfy`, whereas UID `1000` inside the container is `ubuntu`). Matching numeric UID `1000` satisfies host `xhost` / `SI:localuser` authorization and preserves `-e DISPLAY=$DISPLAY`.
+
+```bash
+# 1. Grant local X11 display access on the host
+xhost +local:docker > /dev/null 2>&1
+
+# 2. Launch interactive closed-loop evaluation with the Omniverse Kit UI (--viz kit)
+docker exec -it \
+  -e DISPLAY=$DISPLAY \
+  --user $(id -u):$(id -g) \
+  isaaclab_arena-latest-isaaclab-arena-private \
+  bash -c "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+    --policy_type isaaclab_arena_openpi.policy.pi0_remote_policy.Pi0RemotePolicy \
+    --policy_variant pi05 \
+    --openpi_embodiment_adapter droid \
+    --remote_host 127.0.0.1 \
+    --remote_port 8008 \
+    --open_loop_horizon 8 \
+    --num_episodes 1 \
+    --enable_cameras \
+    --viz kit \
+    --env_spec generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml"
+```
+
+> [!TIP]
+> **Enabling 3DGS / NuRec Rendering in `--viz kit` (`ZeroActionPolicy` Scene Inspection)**:
+> When loading a 3D Gaussian Splatting (3DGS / NuRec) environment such as `generated_envs/pick_banana_to_plate_marble/v1/pick_banana_to_plate_marble.yaml` or [`generated_envs/marble_kitchen_inspection.yaml`](../../../generated_envs/marble_kitchen_inspection.yaml), pass `--kit_args '--enable omni.rtx.spg --/renderer/multiGpu/enabled=false'` so Omniverse Kit loads the Spatial Particle Grids (`omni.rtx.spg`) extension on startup *(note: `pick_banana_to_plate_marble.yaml` is queued for review and alignment)*:
+>
+> ```bash
+> xhost +local:docker > /dev/null 2>&1
+>
+> docker exec -it \
+>   -e DISPLAY=$DISPLAY \
+>   --user $(id -u):$(id -g) \
+>   isaaclab_arena-latest-isaaclab-arena-private \
+>   bash -c "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+>     --policy_type isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy \
+>     --num_episodes 1 \
+>     --enable_cameras \
+>     --viz kit \
+>     --kit_args '--enable omni.rtx.spg --/renderer/multiGpu/enabled=false' \
+>     --env_spec generated_envs/pick_banana_to_plate_marble/v1/pick_banana_to_plate_marble.yaml"
+> ```
+
+---
+
+### 7.2 Catalog of Environments, Background Scenes, and HDR Domes
+
+You can swap `--env_spec <path/to/spec.yaml>` in the command above to inspect or evaluate any of the following environment families across the repository:
+
+#### A. Generated & Custom Environment Specs ([`generated_envs/`](../../../generated_envs/))
+| Environment YAML Path | Background / Fixture | Description & Notes |
+| :--- | :--- | :--- |
+| [`generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml) | `maple_table_robolab` + `home_office_robolab` HDR | Calibrated DROID tabletop banana-to-plate task (`robot_droid` at `[0, 0, 0]`, `light_intensity: 500.0`, `directional_light_on: true`). Verified 100% closed-loop success (`267` steps). |
+| `generated_envs/pick_banana_to_plate_marble/v1/pick_banana_to_plate_marble.yaml` | `marble_kitchen` (3DGS / NuRec) | 3DGS Marble Kitchen banana-to-plate variant (pending review & alignment). Requires `--kit_args '--enable omni.rtx.spg --/renderer/multiGpu/enabled=false'`. |
+| [`generated_envs/marble_kitchen_inspection.yaml`](../../../generated_envs/marble_kitchen_inspection.yaml) | `marble_kitchen` (3DGS / NuRec) | Hybrid 3D Gaussian Splatting kitchen (`MarbleKitchen.usdz`) with co-registered invisible PhysX collision proxy mesh. Pass `--kit_args '--enable omni.rtx.spg --/renderer/multiGpu/enabled=false'`. |
+
+#### B. SRL RoboLab Tabletop & Clutter Benchmarks ([`isaaclab_arena_environments/robolab/`](../../../isaaclab_arena_environments/robolab/) & [`maple_table_top/`](../../../isaaclab_arena_environments/maple_table_top/))
+- **Standalone Maple Tabletop Specs ([`isaaclab_arena_environments/maple_table_top/`](../../../isaaclab_arena_environments/maple_table_top/))**:
+  - [`droid_banana_on_plate_maple_table.yaml`](../../../isaaclab_arena_environments/maple_table_top/droid_banana_on_plate_maple_table.yaml): Banana, plate, two bagels, and bowl on `maple_table_robolab`.
+  - [`droid_pick_fruit_into_bowl_maple_table.yaml`](../../../isaaclab_arena_environments/maple_table_top/droid_pick_fruit_into_bowl_maple_table.yaml): Multi-fruit tabletop sorting into a bowl.
+  - [`droid_pick_fruit_and_bottle_into_bin_maple_table.yaml`](../../../isaaclab_arena_environments/maple_table_top/droid_pick_fruit_and_bottle_into_bin_maple_table.yaml): Cluttered tabletop fruit and bottle bin-packing.
+  - [`simready_droid_pick_place_cans_hammer_maple_table.yaml`](../../../isaaclab_arena_environments/maple_table_top/simready_droid_pick_place_cans_hammer_maple_table.yaml): SimReady industrial tools and cans on `maple_table_robolab`.
+- **RoboLab Tasks ([`isaaclab_arena_environments/robolab/tasks/`](../../../isaaclab_arena_environments/robolab/tasks/)) — 38 Task Overlays**:
+  - **Tableware & Fruit**: [`banana_on_plate.yaml`](../../../isaaclab_arena_environments/robolab/tasks/banana_on_plate.yaml), [`banana_in_bowl.yaml`](../../../isaaclab_arena_environments/robolab/tasks/banana_in_bowl.yaml), [`bagels_on_plate.yaml`](../../../isaaclab_arena_environments/robolab/tasks/bagels_on_plate.yaml), [`apple_and_yogurt_in_bowl.yaml`](../../../isaaclab_arena_environments/robolab/tasks/apple_and_yogurt_in_bowl.yaml), [`clear_organic_objects.yaml`](../../../isaaclab_arena_environments/robolab/tasks/clear_organic_objects.yaml).
+  - **Multi-Step & Precision**: [`rubiks_cube.yaml`](../../../isaaclab_arena_environments/robolab/tasks/rubiks_cube.yaml), [`rubiks_cube_and_banana.yaml`](../../../isaaclab_arena_environments/robolab/tasks/rubiks_cube_and_banana.yaml), [`rubiks_cube_then_banana.yaml`](../../../isaaclab_arena_environments/robolab/tasks/rubiks_cube_then_banana.yaml), [`banana_then_rubiks_cube.yaml`](../../../isaaclab_arena_environments/robolab/tasks/banana_then_rubiks_cube.yaml), [`marker_in_mug.yaml`](../../../isaaclab_arena_environments/robolab/tasks/marker_in_mug.yaml), [`mouse_on_keyboard.yaml`](../../../isaaclab_arena_environments/robolab/tasks/mouse_on_keyboard.yaml).
+  - **Spatial / Semantic Bin Sorting**: [`canned_food_in_bin.yaml`](../../../isaaclab_arena_environments/robolab/tasks/canned_food_in_bin.yaml), [`condiments_in_bin.yaml`](../../../isaaclab_arena_environments/robolab/tasks/condiments_in_bin.yaml), [`mustard_in_left_bin.yaml`](../../../isaaclab_arena_environments/robolab/tasks/mustard_in_left_bin.yaml), [`mustard_in_right_bin.yaml`](../../../isaaclab_arena_environments/robolab/tasks/mustard_in_right_bin.yaml), [`hammers_in_left_bin.yaml`](../../../isaaclab_arena_environments/robolab/tasks/hammers_in_left_bin.yaml), [`clamp_in_right_bin.yaml`](../../../isaaclab_arena_environments/robolab/tasks/clamp_in_right_bin.yaml), [`non_hammer_tools_in_right_bin.yaml`](../../../isaaclab_arena_environments/robolab/tasks/non_hammer_tools_in_right_bin.yaml), [`electronics_in_bin.yaml`](../../../isaaclab_arena_environments/robolab/tasks/electronics_in_bin.yaml), [`food_packing_1_boxes.yaml`](../../../isaaclab_arena_environments/robolab/tasks/food_packing_1_boxes.yaml), [`food_packing_1_cans.yaml`](../../../isaaclab_arena_environments/robolab/tasks/food_packing_1_cans.yaml).
+- **RoboLab Base Scenes ([`isaaclab_arena_environments/robolab/scenes/`](../../../isaaclab_arena_environments/robolab/scenes/)) — 17 Composable Scene Graphs**:
+  - Includes `bagel_plate_banana_bowl.yaml`, `banana_bowl.yaml`, `bin_condiments.yaml`, `bin_mug_mustard_marker_bowl.yaml`, `bottles_crate.yaml`, `butter_raisin_box.yaml`, `clutter_fruit_bottle_bluebin.yaml`, `foodpacking_1bin_1box_1can.yaml`, `mustard_raisin_box.yaml`, `rubiks_cube_banana_bowl.yaml`, `tools_container.yaml`, `two_bin.yaml`, `workdesk.yaml`, `workdesk_bin.yaml`, and `workdesk_snacks.yaml`.
+
+#### C. Full-Scale Kitchen Benchmarks ([`isaaclab_arena_environments/kitchen_bench/`](../../../isaaclab_arena_environments/kitchen_bench/))
+- **Lightwheel RoboCasa Kitchens (`kitchen_bench_lightwheel_*.yaml` — 17 Specs)**:
+  - Full-room articulated kitchens across `g_shaped_large`, `u_shaped_with_island`, and `l_shaped` floorplans in `scandinavian` and `farmhouse2` styles.
+  - Covers articulated appliance manipulation ([`kitchen_bench_lightwheel_open_fridge.yaml`](../../../isaaclab_arena_environments/kitchen_bench/kitchen_bench_lightwheel_open_fridge.yaml), [`kitchen_bench_lightwheel_open_microwave.yaml`](../../../isaaclab_arena_environments/kitchen_bench/kitchen_bench_lightwheel_open_microwave.yaml), [`kitchen_bench_lightwheel_open_oven_g_shaped_large_scandinavian.yaml`](../../../isaaclab_arena_environments/kitchen_bench/kitchen_bench_lightwheel_open_oven_g_shaped_large_scandinavian.yaml), [`kitchen_bench_lightwheel_open_cabinet_u_shaped_with_island_farmhouse2.yaml`](../../../isaaclab_arena_environments/kitchen_bench/kitchen_bench_lightwheel_open_cabinet_u_shaped_with_island_farmhouse2.yaml), toaster buttons, oven knobs) and counter pick-and-place ([`kitchen_bench_lightwheel_place_bananas_in_wooden_bowl_u_shaped_with_island_farmhouse2.yaml`](../../../isaaclab_arena_environments/kitchen_bench/kitchen_bench_lightwheel_place_bananas_in_wooden_bowl_u_shaped_with_island_farmhouse2.yaml)).
+- **Omniverse Replicator Kitchens (`kitchen_bench_replicator_*.yaml` — 14 Specs)**:
+  - PBR architectural kitchens in five layouts (`g_shape`, `l_island`, `l_shape`, `peninsula`, `u_shape`) with `banana_bowl`, `bowl_sink`, and `mustard_bowl` manipulation tasks (e.g., [`kitchen_bench_replicator_g_shape_banana_bowl.yaml`](../../../isaaclab_arena_environments/kitchen_bench/kitchen_bench_replicator_g_shape_banana_bowl.yaml)).
+
+#### D. Registered Background Assets ([`background_library.py`](../../../isaaclab_arena/assets/background_library.py)) & HDR Lighting Domes ([`hdr_image_library.py`](../../../isaaclab_arena/assets/hdr_image_library.py))
+When authoring or modifying an environment YAML spec under `background:`, you can combine any registered `registry_name` with any registered `hdr` dome:
+
+- **Background `registry_name` Options**:
+  - **3DGS / NuRec**: `marble_kitchen`
+  - **SRL RoboLab Tables**: `maple_table_robolab`, `table_oak_robolab`
+  - **SimReady Articulated Fixtures**: `kitchen_base_cabinet`, `fixture_counter_a01` (`sm_fixture_counter_a01_01`), `cart_medical_utility` (`sm_cart_medical_utility_a03_01`), `beverage_fridge` (`facilityEquipment_beverageFridge_display_a01`)
+  - **Replicator Kitchens**: `replicator_kitchen_g_shape`, `replicator_kitchen_l_island`, `replicator_kitchen_l_shape`, `replicator_kitchen_peninsula`, `replicator_kitchen_u_shape`
+  - **Full Rooms & Workcells**: `kitchen`, `kitchen_with_open_drawer`, `packing_table`, `galileo`, `galileo_locomanip`, `table`, `office_table_background`, `lightwheel_robocasa_kitchen`
+- **HDR / EXR Dome Options (`background.params.hdr`)**:
+  - **Default / Indoor**: `home_office_robolab` (32-bit `.exr` used in RoboLab DROID training), `billiard_hall_robolab`, `garage_robolab`, `wooden_lounge_robolab`
+  - **Kitchen / Residential**: `blinds_robolab`, `kiara_interior_robolab`
+  - **Studio**: `brown_photostudio_robolab`, `photo_studio_robolab`
+  - **Industrial / Workshop**: `empty_warehouse_robolab`, `aerodynamics_workshop_robolab`, `carpentry_shop_robolab`
+
+---
+
+## 8. Cross-References
 
 - **RoboLab Backgrounds**: Refer to backgrounds catalog in [`../../../RoboLab/docs/background.md`](../../../RoboLab/docs/background.md).
 - **RoboLab Marble Kitchen Scene**: See [`../../../RoboLab/assets/scenes/marble/marblekitchen.usda`](../../../RoboLab/assets/scenes/marble/marblekitchen.usda) and task definition [`../../../RoboLab/robolab/tasks/test_tasks/marble.py`](../../../RoboLab/robolab/tasks/test_tasks/marble.py).

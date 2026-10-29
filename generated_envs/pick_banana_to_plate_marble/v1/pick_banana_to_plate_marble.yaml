@@ -1,0 +1,65 @@
+env_name: pick_banana_to_plate_marble
+embodiment:
+  id: robot_droid
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.0
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: marble_kitchen
+  registry_name: marble_kitchen
+objects:
+- id: banana
+  registry_name: banana_ycb_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.45
+      - -0.13
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: plate
+  registry_name: plate_large_vomp_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.45
+      - 0.14
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: marble_kitchen
+  params: {}
+- kind: 'on'
+  subject: banana
+  reference: marble_kitchen
+- kind: 'on'
+  subject: plate
+  reference: marble_kitchen
+task:
+  composition: atomic
+  description: Pick up the banana and place it on the plate.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: banana
+      destination_location: plate
+      background_scene: marble_kitchen
+      episode_length_s: 40.0

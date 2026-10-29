@@ -15,8 +15,12 @@ from isaaclab.utils.configclass import configclass
 # newton_manager_cfg (older isaaclab_newton) or mjwarp_manager_cfg (Isaac Lab Beta 2).
 from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg, NewtonMJWarpManager
 from isaaclab_physx.physics import PhysxCfg
-from isaaclab_physx.renderers import IsaacRtxRendererGlobalSettingsCfg
-from isaaclab_physx.renderers.isaac_rtx_renderer_utils import apply_isaac_rtx_global_settings
+try:
+    from isaaclab_physx.renderers import IsaacRtxRendererGlobalSettingsCfg
+    from isaaclab_physx.renderers.isaac_rtx_renderer_utils import apply_isaac_rtx_global_settings
+except ImportError:
+    IsaacRtxRendererGlobalSettingsCfg = None
+    apply_isaac_rtx_global_settings = None
 from isaaclab_tasks.utils import PresetCfg
 
 from isaaclab_arena.progress_tracking.task_progress_cfg import TaskProgressCfg
@@ -111,17 +115,28 @@ class IsaacLabArenaManagerBasedRLEnvCfg(ManagerBasedRLEnvCfg):
 
 def apply_arena_global_settings() -> None:
     """Apply Arena's process-global RTX and physics settings before environment construction."""
-    apply_isaac_rtx_global_settings(
-        IsaacRtxRendererGlobalSettingsCfg(
-            # Disable RTX's built-in scene ambient so USD light prims fully control illumination.
-            ambient_light_intensity=0.0,
-            carb_settings={
-                # Work around IsaacLab #6424: do not recurse into leaf collision shapes when
-                # resolving a contact filter that targets a multi-shape rigid body.
-                "/physics/tensors/recursiveLeafPatternMatch": False,
-            },
+    if apply_isaac_rtx_global_settings is not None and IsaacRtxRendererGlobalSettingsCfg is not None:
+        apply_isaac_rtx_global_settings(
+            IsaacRtxRendererGlobalSettingsCfg(
+                # Disable RTX's built-in scene ambient so USD light prims fully control illumination.
+                ambient_light_intensity=0.0,
+                carb_settings={
+                    # Work around IsaacLab #6424: do not recurse into leaf collision shapes when
+                    # resolving a contact filter that targets a multi-shape rigid body.
+                    "/physics/tensors/recursiveLeafPatternMatch": False,
+                },
+            )
         )
-    )
+    else:
+        try:
+            import carb
+
+            carb_settings = carb.settings.get_settings()
+            if carb_settings:
+                carb_settings.set_bool("/physics/tensors/recursiveLeafPatternMatch", False)
+                carb_settings.set_float("/rtx/sceneDb/ambientLightIntensity", 0.0)
+        except Exception:
+            pass
 
 
 def set_control_rate_50hz(env_cfg: IsaacLabArenaManagerBasedRLEnvCfg) -> IsaacLabArenaManagerBasedRLEnvCfg:

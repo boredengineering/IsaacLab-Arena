@@ -1,0 +1,131 @@
+env_name: pick_banana_to_plate
+embodiment:
+  id: franka
+  registry_name: franka_ik
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.3371
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: maple_table
+  registry_name: maple_table_robolab
+  params: {}
+objects:
+- id: banana
+  registry_name: banana_ycb_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.29
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: plate
+  registry_name: plate_large_vomp_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.29
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: maple_table
+  params: {}
+- kind: 'on'
+  subject: banana
+  reference: maple_table
+  params:
+    sector_bounds: front_right
+- kind: 'on'
+  subject: plate
+  reference: maple_table
+  params:
+    sector_bounds: front_left
+reified_relations:
+- reifier_id: reifier_banana_table
+  source_id: banana
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_top
+  surface_sector: front_right
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: 0.25
+    max_val: 0.4
+    nominal: 0.32
+  delta_y:
+    min_val: -0.35
+    max_val: -0.2
+    nominal: -0.28
+  delta_z:
+    min_val: 0.0
+    max_val: 0.02
+    nominal: 0.01
+  required_headroom: 0.25
+  required_friction: 0.55
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.8
+  posterior_entropy: 0.08
+  evidence_sources:
+  - tabletop_spatial_planner
+  - right_sector_constraint
+- reifier_id: reifier_plate_table
+  source_id: plate
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_top
+  surface_sector: front_left
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: 0.25
+    max_val: 0.4
+    nominal: 0.32
+  delta_y:
+    min_val: 0.2
+    max_val: 0.35
+    nominal: 0.28
+  delta_z:
+    min_val: 0.0
+    max_val: 0.02
+    nominal: 0.01
+  required_headroom: 0.15
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.8
+  posterior_entropy: 0.08
+  evidence_sources:
+  - tabletop_spatial_planner
+  - left_sector_constraint
+task:
+  composition: atomic
+  description: Pick up the yellow banana from the right side of the table and place
+    it onto the plate on the left.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: banana
+      destination_location: plate
+      background_scene: maple_table

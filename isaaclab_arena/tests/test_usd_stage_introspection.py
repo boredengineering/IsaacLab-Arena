@@ -8,21 +8,17 @@
 from __future__ import annotations
 
 import numpy as np
-
 import pytest
 import shapely.geometry
-from pxr import Gf, Usd, UsdGeom, Vt
 
-from isaaclab_arena.agentic_environment_generation.usd_stage_introspection import (
-    AffordancePatch,
-    DollhouseSubPrim,
-    extract_geometric_affordance_patches,
-    format_dollhouse_catalog,
-)
+# pxr and usd_stage_introspection are imported inside each test function rather than at module level:
+# pxr loaded during pytest collection breaks simulation tests that start SimulationApp later in the same process.
 
 
 def test_affordance_patch_dataclass_instantiation():
     """Verify AffordancePatch dataclass attributes and defaults."""
+    from isaaclab_arena.agentic_environment_generation.usd_stage_introspection import AffordancePatch
+
     patch = AffordancePatch(
         patch_id="shelf_patch_1",
         parent_prim="/World/shelf",
@@ -44,6 +40,12 @@ def test_affordance_patch_dataclass_instantiation():
 
 def test_extract_geometric_affordance_patches_on_synthetic_mesh():
     """Test vectorized affordance patch extraction on an in-memory USD mesh."""
+    from pxr import Gf, Usd, UsdGeom, Vt
+
+    from isaaclab_arena.agentic_environment_generation.usd_stage_introspection import (
+        extract_geometric_affordance_patches,
+    )
+
     stage = Usd.Stage.CreateInMemory()
     xform_prim = UsdGeom.Xform.Define(stage, "/World/Table")
     mesh_prim = UsdGeom.Mesh.Define(stage, "/World/Table/Mesh")
@@ -80,6 +82,12 @@ def test_extract_geometric_affordance_patches_on_synthetic_mesh():
 
 def test_concave_l_shape_representative_point():
     """Verify that representative_point() places the anchor strictly inside a concave L-shape."""
+    from pxr import Gf, Usd, UsdGeom, Vt
+
+    from isaaclab_arena.agentic_environment_generation.usd_stage_introspection import (
+        extract_geometric_affordance_patches,
+    )
+
     stage = Usd.Stage.CreateInMemory()
     xform_prim = UsdGeom.Xform.Define(stage, "/World/LDesk")
     mesh_prim = UsdGeom.Mesh.Define(stage, "/World/LDesk/Mesh")
@@ -121,6 +129,12 @@ def test_concave_l_shape_representative_point():
 
 def test_multipolygon_dumbbell_erosion():
     """Verify that a dumbbell shape with narrow neck splits into 2 distinct patches."""
+    from pxr import Gf, Usd, UsdGeom, Vt
+
+    from isaaclab_arena.agentic_environment_generation.usd_stage_introspection import (
+        extract_geometric_affordance_patches,
+    )
+
     stage = Usd.Stage.CreateInMemory()
     xform_prim = UsdGeom.Xform.Define(stage, "/World/Dumbbell")
     mesh_prim = UsdGeom.Mesh.Define(stage, "/World/Dumbbell/Mesh")
@@ -163,6 +177,12 @@ def test_multipolygon_dumbbell_erosion():
 
 def test_long_edge_principal_orientation():
     """Verify that principal_orientation_deg is consistently aligned with the longest major edge."""
+    from pxr import Gf, Usd, UsdGeom, Vt
+
+    from isaaclab_arena.agentic_environment_generation.usd_stage_introspection import (
+        extract_geometric_affordance_patches,
+    )
+
     stage = Usd.Stage.CreateInMemory()
     xform_prim = UsdGeom.Xform.Define(stage, "/World/TiltedBench")
     mesh_prim = UsdGeom.Mesh.Define(stage, "/World/TiltedBench/Mesh")
@@ -198,6 +218,11 @@ def test_long_edge_principal_orientation():
 
 def test_format_dollhouse_catalog():
     """Verify dollhouse catalog text formatting for LLM context prompts."""
+    from isaaclab_arena.agentic_environment_generation.usd_stage_introspection import (
+        DollhouseSubPrim,
+        format_dollhouse_catalog,
+    )
+
     sub_prims = [
         DollhouseSubPrim(
             prim_path="/World/shelf",

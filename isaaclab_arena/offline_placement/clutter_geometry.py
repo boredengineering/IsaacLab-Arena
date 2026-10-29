@@ -36,7 +36,25 @@ def assert_support_reference_transform(scene: InteractiveScene, scene_key: str) 
     from isaaclab_arena.environments.arena_world_scene_access import get_representative_geometry_prim_groups
 
     for root, _ in get_representative_geometry_prim_groups(scene, scene_key):
-        assert sim_utils.validate_standard_xform_ops(root), (
+        is_standard = None
+        for spec in root.GetPrimStack():
+            if not spec.layer.anonymous and "xformOpOrder" in spec.properties:
+                order = spec.properties["xformOpOrder"].default
+                is_standard = (
+                    list(order) == ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                    if order is not None
+                    else False
+                )
+                break
+        if is_standard is None:
+            for spec in root.GetPrimStack():
+                if not spec.layer.anonymous:
+                    is_standard = False
+                    break
+        if is_standard is None:
+            is_standard = sim_utils.validate_standard_xform_ops(root)
+
+        assert is_standard, (
             f"Support reference {scene_key!r} needs translate, orient and scale operations authored "
             "before scene construction; changing collider transforms after spawning invalidates physics views."
         )

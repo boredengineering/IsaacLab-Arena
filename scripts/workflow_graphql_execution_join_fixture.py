@@ -30,7 +30,13 @@ def synthetic_catalogue():
         },
         "relations": {"relations": [
             {"name": name, "unary": unary, "summary": "Synthetic adapter schema vocabulary only."}
-            for name, unary in (("is_anchor", True), ("on", False), ("position_limits", True), ("at_position", True))
+            for name, unary in (
+                ("is_anchor", True),
+                ("on", False),
+                ("position_limits", True),
+                ("position_limits_box", True),
+                ("at_position", True),
+            )
         ]},
         "tasks": {"tasks": [{
             "name": "PickAndPlaceTask",

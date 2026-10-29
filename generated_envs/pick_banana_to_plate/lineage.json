@@ -1,0 +1,20 @@
+{
+  "env_name": "pick_banana_to_plate",
+  "created_at": "2026-10-29T18:06:53.382479+00:00",
+  "versions": [
+    {
+      "version": 1,
+      "created_at": "2026-10-29T18:06:53.382479+00:00",
+      "trigger": "initial_generation",
+      "prompt": "Pick up the yellow banana from the right side of the table and place it onto the plate on the left",
+      "parent_version": null,
+      "remediations": [],
+      "diagnostics": [],
+      "spec_file": "pick_banana_to_plate/v1/pick_banana_to_plate.yaml",
+      "policy_file": "pick_banana_to_plate/v1/policy_config.yaml",
+      "evaluation": null
+    }
+  ],
+  "current_version": 1,
+  "updated_at": "2026-10-29T18:06:53.382479+00:00"
+}

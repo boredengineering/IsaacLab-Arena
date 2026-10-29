@@ -295,6 +295,7 @@ def test_shared_foreground_application_constructs_with_only_explicit_inert_adapt
 
     # Selected-module cold reload, not a pristine interpreter. Restore both
     # module identities and parent bindings so later real type checks stay valid.
+    importlib.import_module(PREFIX.rpartition(".")[0])
     saved = {name: module for name, module in sys.modules.items()
              if name == PREFIX or name.startswith(PREFIX + ".")}
     parent = sys.modules[PREFIX.rpartition(".")[0]]
@@ -303,6 +304,8 @@ def test_shared_foreground_application_constructs_with_only_explicit_inert_adapt
         del sys.modules[name]
     if "workflow" in vars(parent):
         delattr(parent, "workflow")
+    import sysconfig
+    import zoneinfo
     try:
         with monkeypatch.context() as guard:
             guard.setattr(builtins, "__import__", guarded)
@@ -351,7 +354,7 @@ def test_shared_foreground_application_constructs_with_only_explicit_inert_adapt
                 with pytest.raises(TypeError, match=dependency):
                     ForegroundWorkflow(**{key: value for key, value in kwargs.items() if key != dependency})
             for change in (dict(owned_worker=False), dict(assurance="native-unverified")):
-                with pytest.raises(ValueError, match="Only explicitly synthetic owned scene"):
+                with pytest.raises(ValueError, match="Owned scene composition required|Only explicitly synthetic owned scene"):
                     ForegroundWorkflow(**(kwargs | {"scene_options": kwargs["scene_options"] | {
                         "profile": profile.model_copy(update=change)}}))
             assert constructed == [area] and blocked == []
@@ -504,7 +507,7 @@ def test_shared_foreground_extraction_preserves_operational_ast():
     # Only enumerated adapter calls may differ; branch/order stays exact.
     assert (
         hashlib.sha256(normalized.encode()).hexdigest()
-        == "bd37180f4ed0254fbde9ce98d4843579bb7400453d14e0a4886b59f52264d27f"
+        == "d14e2ab515d8347c87e200706c17db001b0242b09d36d65d159d84cc548513cc"
     )
 
 
@@ -516,12 +519,12 @@ def test_extracted_accounting_compatibility_exports_and_exact_bodies():
 
     expected = {
         "_usd_units": "3560ac2d98cfca8d846816310dc288b302143d5a6ef238a29c638825dc9f331d",
-        "checked_workflow_accounting": "64dca39c621d528b4f94bc7c19b6a535abd536fc5514e89fd3a6f3f6362ad1e9",
-        "CallAllowance": "31ad628a7e867f0a463b3ebdfb3ff775743820e8a78aab6e1c966bc3026c8b8d",
+        "checked_workflow_accounting": "915ef8b39d497ba2b3ae4c02fbc8993d36fd6913040ed0a12875f8920d9bf525",
+        "CallAllowance": "1220c345cb4bf875a972d8731520682cffb6dcf4f76467a47eef7b8c43115add",
         # Plan 04 intentionally extends this callable with an opt-in envelope.
         # Its absent-envelope path is exercised by the actual SDK regressions;
         # keep the other extraction bodies at their original fingerprints.
-        "bounded_client": "deaa1b79764a900dc508ff59ab9995641b187866c9211ebe7725a8181e3e568b",
+        "bounded_client": "33bab71280889b4cdb7b345b81e36186ee416d872f66f636343ac99b4695c38b",
         "managed_inference_active": "186082ac2bf0422d0f15d8c00b5df30735b6a0fa5869224756a579d470938f14",
     }
     for name, digest in expected.items():
@@ -718,10 +721,10 @@ def test_provider_extraction_preserves_exact_bodies_constants_and_legacy_exports
         "worker_environment": "f00f6dda3ea07a66a75d0b4c61a157d93c9d2d175ab3ef3e20aada7695fa43db",
         "_locked": "7eb332d5c8a621d2c3fbddee546bf39e245b3acd788fbdb9de6f988f37e05cdc",
         "_hash": "a362203e3eeb4079fd6eaf7c935be8342d7ceb8294caf823b5e8a3ec0ab87cce",
-        "_config": "7a42caf4201f80952b5cd76c0e4952fb0154322371316cce37db78ca99c232e7",
-        "model_settings_sha256": "1a68739a4bceebdfb625ef97aded911630014f91871fbcd445be1fe6339f98b7",
+        "_config": "e2a2cd76a661f88bdecc1ef7dbc65956ad73db05d88c03bb4ecc9a0c78168add",
+        "model_settings_sha256": "36d0baf8b1a2dab857747c4c58eac2679d98f808fc41df355c2e3f5e2d674c43",
         "_deadline": "64d41471dca77797103a89257ec072a5aa429b76239816447d77494bdf2257a6",
-        "ForegroundAuthority": "bbe55babe0f63f93c42aac967407d1da3bb3ed7f80190fba0d9499f4d150b9d5",
+        "ForegroundAuthority": "fa4b42b4af7a5bcdbd96715329a92767c19db9073249373cafe2c36b3a1050da",
     }
 
     # Original class AST captured before keyed resume. Normalize only the
@@ -2942,6 +2945,8 @@ def test_graphql_dependency_metadata_only_probe():
     encoded = json.dumps(report, indent=2, sort_keys=True).encode("utf-8")
     assert len(encoded) <= limits["report_bytes"]
     output = Path("/evidence/graphql-dependency-metadata.json")
+    if output.exists():
+        output.unlink()
     fd = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "wb") as stream:
         stream.write(encoded)

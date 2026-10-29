@@ -35,12 +35,11 @@ async def schema(request: Request):
 
 def execution_catalogue_sha256(*, assets=None, relations=None, tasks=None):
     """Hash supplied vocabulary, a scoped adapter catalogue, or the current registries."""
-    if assets is None and relations is None and tasks is None:
-        from isaaclab_arena.environment_spec.execution_catalogue import current_catalogue
+    from isaaclab_arena.environment_spec.execution_catalogue import current_catalogue
 
-        supplied = current_catalogue()
-        if supplied is not None:
-            return supplied.sha256
+    supplied = current_catalogue()
+    if supplied is not None:
+        return supplied.sha256
 
     from isaaclab_arena.agentic_environment_generation.environment_generation_agent import (
         build_asset_catalogue,

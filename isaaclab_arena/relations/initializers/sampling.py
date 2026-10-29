@@ -75,8 +75,11 @@ def get_child_bbox_given_parent_position(
 
     parent_min, parent_max = parent_world_bbox.min_point[0].clone(), parent_world_bbox.max_point[0].clone()
     sec_name = getattr(on_relation, "surface_sector", None) or getattr(on_relation, "surface_anchor", None)
-    if getattr(on_relation, "sector_bounds", None) is not None:
-        sb = on_relation.sector_bounds
+    sb = getattr(on_relation, "sector_bounds", None)
+    if isinstance(sb, str):
+        sec_name = sec_name or sb
+        sb = None
+    if sb is not None:
         parent_min[0], parent_max[0] = float(sb[0]), float(sb[1])
         parent_min[1], parent_max[1] = float(sb[2]), float(sb[3])
     elif sec_name is not None:

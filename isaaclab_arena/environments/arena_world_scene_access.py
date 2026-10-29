@@ -11,7 +11,11 @@ import numpy as np
 import torch
 
 import isaaclab.sim as sim_utils
-from isaaclab import cloner
+try:
+    from isaaclab.cloner.query import iter_sources
+except (ImportError, AttributeError):
+    from isaaclab.cloner.cloner_utils import iter_clone_plan_matches as iter_sources
+
 from isaaclab.scene import InteractiveScene
 from isaaclab.sim.views import FrameView
 from pxr import Usd, UsdGeom, UsdPhysics
@@ -32,7 +36,7 @@ def get_representative_geometry_prim_groups(
     geometry_prim_path = getattr(scene.cfg, scene_key).prim_path.format(ENV_REGEX_NS=scene.env_regex_ns)
     assert scene.clone_plan is not None, f"Cannot resolve geometry for scene key '{scene_key}' without a clone plan."
 
-    clone_matches = tuple(cloner.query.iter_sources(scene.clone_plan, geometry_prim_path))
+    clone_matches = tuple(iter_sources(scene.clone_plan, geometry_prim_path))
     assert (
         clone_matches
     ), f"Geometry path '{geometry_prim_path}' for scene key '{scene_key}' does not match the scene clone plan."

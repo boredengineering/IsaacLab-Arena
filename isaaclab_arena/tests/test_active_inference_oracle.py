@@ -152,6 +152,7 @@ def test_invalid_solver_result_never_applied(spec, monkeypatch, converged, energ
 
 @pytest.mark.parametrize("reified", [False, True])
 def test_support_sector_limits_xy_proposal(spec, reified):
+    spec.background.registry_name = "maple_table"
     spec.background.params["initial_pose"]["rotation_xyzw"] = [0, 0, 0, 1]
     spec.objects[0].params["initial_pose"]["position_xyz"][1] = 0.259
     if reified:

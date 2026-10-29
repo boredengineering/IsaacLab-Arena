@@ -595,6 +595,16 @@ class InferenceBackend:
                     )
                 )
                 last_exc = exc
+                if "grammar is too large" in str(exc).lower() and mode == "json_schema":
+                    mode = "json_object"
+                    output = {"response_format": {"type": "json_object"}}
+                    if "\nReturn only a JSON object matching this schema" not in messages[0]["content"]:
+                        messages[0]["content"] += (
+                            "\nReturn only a JSON object matching this schema (local validation; "
+                            "no provider-side schema enforcement is claimed):\n"
+                            + json.dumps(request.schema, sort_keys=True)
+                        )
+                    continue
                 if isinstance(exc, APIStatusError) and exc.status_code in (400, 401, 403, 404, 422):
                     # Repeating identical invalid requests cannot repair their contract.
                     break

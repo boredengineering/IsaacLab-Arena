@@ -242,14 +242,15 @@ def instantiate_assets_from_spec(
         initial_pose_data = params.pop("initial_pose", None)
         asset_instance = asset_registry.get_asset_by_name(obj.registry_name)(**params)
         parsed_obj_pose = _parse_pose_data(initial_pose_data)
-        is_anchor_obj = any(r.kind == "is_anchor" and r.subject == obj.id for r in graph_spec.relations)
-        has_relations = any(r.subject == obj.id and r.kind != "is_anchor" for r in graph_spec.relations)
-        if (
-            parsed_obj_pose is not None
-            and (is_anchor_obj or not has_relations)
-            and hasattr(asset_instance, "set_initial_pose")
-        ):
-            asset_instance.set_initial_pose(parsed_obj_pose)
+        if parsed_obj_pose is not None and hasattr(asset_instance, "set_initial_pose"):
+            is_anchor_obj = any(r.kind == "is_anchor" and r.subject == obj.id for r in (graph_spec.relations or []))
+            has_relations = any(r.subject == obj.id and r.kind != "is_anchor" for r in (graph_spec.relations or []))
+            create_reset = is_anchor_obj or not has_relations
+            try:
+                asset_instance.set_initial_pose(parsed_obj_pose, create_reset_event=create_reset)
+            except TypeError:
+                if create_reset:
+                    asset_instance.set_initial_pose(parsed_obj_pose)
         assets_by_node_id[obj.id] = asset_instance
 
     for object_set in graph_spec.object_sets or []:

@@ -70,10 +70,16 @@ def _configure_arena_visualizer_defaults(env_cfg: IsaacLabArenaManagerBasedRLEnv
     Compatibility layer to enable Arena's legacy ViewerCfg to work with Lab's default_visualizer_cfg.
     This can be removed once Arena migrates off ViewCfg and into KitVisualizerCfg.
     """
-    from isaaclab.envs.common import _apply_deprecated_viewer_cfg
+    if not hasattr(env_cfg.sim, "default_visualizer_cfg"):
+        return
 
-    if env_cfg.sim.default_visualizer_cfg is None:
-        _apply_deprecated_viewer_cfg(env_cfg)
+    try:
+        from isaaclab.envs.common import _apply_deprecated_viewer_cfg
+
+        if env_cfg.sim.default_visualizer_cfg is None:
+            _apply_deprecated_viewer_cfg(env_cfg)
+    except ImportError:
+        pass
     visualizer_cfg = env_cfg.sim.default_visualizer_cfg
     if visualizer_cfg is None:
         visualizer_cfg = VisualizerCfg(background_color=None)
@@ -441,7 +447,11 @@ class ArenaEnvBuilder:
         episode_recorders_cfg = self._compose_episode_recorders_cfg(self.arena_env.episode_recorder_terms)
 
         viewer_cfg = task.get_viewer_cfg()
-        if (viewer_cfg is None or getattr(viewer_cfg, "eye", None) == (7.5, 7.5, 7.5)) and embodiment is not None:
+        if (
+            (viewer_cfg is None or getattr(viewer_cfg, "eye", None) == (7.5, 7.5, 7.5))
+            and embodiment is not None
+            and not isinstance(embodiment, NoEmbodiment)
+        ):
             from isaaclab_arena.utils.cameras import compute_robot_relative_viewer_cfg
 
             lookat_target = getattr(task, "pick_up_object", None)

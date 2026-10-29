@@ -148,10 +148,11 @@ class RigidObjectSet(Object):
         max_pts = torch.stack([bounding_boxes[idx].max_point[0] for idx in self.variant_indices_by_env], dim=0)
         return AxisAlignedBoundingBox(min_point=min_pts, max_point=max_pts)
 
-    def get_contact_sensor_prim_path(self) -> str:
+    def get_contact_sensor_prim_path(self, usd_path: str | None = None) -> str:
         """Return the contact-sensor path shared by all normalized member USDs."""
         get_member_prim_path = super().get_contact_sensor_prim_path
-        member_prim_paths = [get_member_prim_path(usd_path) for usd_path in self.member_usd_paths]
+        paths_to_check = [usd_path] if usd_path is not None else self.member_usd_paths
+        member_prim_paths = [get_member_prim_path(path) for path in paths_to_check]
         assert len(set(member_prim_paths)) == 1, (
             f"RigidObjectSet '{self.name}' member USDs must have the same contact-sensor prim path; "
             f"got {member_prim_paths}."

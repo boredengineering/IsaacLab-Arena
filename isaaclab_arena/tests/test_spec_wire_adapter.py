@@ -76,7 +76,7 @@ def test_committed_banana_on_plate_dictionaries_round_trip():
         "pick_up_object": "banana",
         "destination_location": "plate",
         "background_scene": "maple_table_robolab",
-        "episode_length_s": 20.0,
+        "episode_length_s": 70.0,
     }
     adapter = SpecWireAdapter()
     assert adapter.decode(adapter.encode(data)) == data
@@ -209,9 +209,51 @@ def make_backend(model="gpt-4.1", base_url="https://api.openai.com/v1"):
 
 
 def infer(inference, traces):
-    catalog = MagicMock()
-    catalog.to_catalog_string.return_value = "catalog"
-    return inference.infer("place object", traces, catalog, catalog, catalog)
+    from isaaclab_arena.agentic_environment_generation.catalogues import (
+        RelationCatalogue,
+        RelationCatalogueEntry,
+        TaskCatalogue,
+        TaskCatalogueEntry,
+    )
+    from isaaclab_arena.tests.utils.agentic_environment_generation import (
+        catalog as make_catalog,
+    )
+
+    rel_cat = RelationCatalogue(
+        relations=[
+            RelationCatalogueEntry("is_anchor", True, [], [], {}, ""),
+            RelationCatalogueEntry(
+                "on",
+                False,
+                [],
+                ["relation_loss_weight", "surface_sector", "sector_bounds", "surface_anchor", "nominal_height", "options", "empty", "params"],
+                {},
+                "",
+            ),
+        ]
+    )
+    rel_cat.to_catalog_string = lambda: "catalog"
+
+    task_cat = TaskCatalogue(
+        tasks=[
+            TaskCatalogueEntry(
+                "PickAndPlaceTask",
+                ["pick_up_object", "destination_location", "background_scene"],
+                ["episode_length_s", "options", "empty", "params"],
+                {},
+                "",
+            )
+        ]
+    )
+    task_cat.to_catalog_string = lambda: "catalog"
+
+    return inference.infer(
+        "place object",
+        traces,
+        asset_catalog=make_catalog("catalog"),
+        relation_catalog=rel_cat,
+        task_catalog=task_cat,
+    )
 
 
 @pytest.mark.parametrize("model", ["gpt-4.1", "gpt-6-astra"])
@@ -336,7 +378,10 @@ def test_actual_generated_schema_has_no_open_objects_or_tuple_keywords():
     maps = [path for path, node in schema_nodes(raw) if node.get("additionalProperties") is True]
     assert set(maps) == {
         ("$defs", name, "properties", "params")
-        for name in ("AssetSpec", "ObjectReferenceSpec", "TaskSpec", "SpatialRelationSpec")
+        for name in ("AssetSpec", "ObjectReferenceSpec", "TaskSpec", "SpatialRelationSpec", "ObjectSetSpec")
+    } | {
+        ("properties", "env_cfg_override", "anyOf", 0),
+        ("properties", "placer_params", "anyOf", 0),
     }
     assert [path for path, node in schema_nodes(raw) if "prefixItems" in node] == [
         ("$defs", "ReifiedRelationSpec", "properties", "contact_normal")
@@ -347,7 +392,9 @@ def test_actual_generated_schema_has_no_open_objects_or_tuple_keywords():
         "CompositeTaskSpec",
         "ContinuousIntervalSpec",
         "ObjectReferenceSpec",
+        "ObjectSetSpec",
         "ObjectType",
+        "PhysicsBackend",
         "PlacementValidatorSpec",
         "ReifiedRelationSpec",
         "SpatialRelationSpec",
@@ -384,7 +431,7 @@ def test_actual_generated_schema_has_no_open_objects_or_tuple_keywords():
             assert sum(branch.get("type") == "null" for branch in node["anyOf"]) == 1
             pending.extend(node["anyOf"])
         else:
-            assert node["type"] in {"object", "array", "string", "number", "null"}
+            assert node["type"] in {"object", "array", "string", "number", "null", "boolean"}
         pending.extend(node.get("$defs", {}).values())
         pending.extend(node.get("properties", {}).values())
         if "items" in node:

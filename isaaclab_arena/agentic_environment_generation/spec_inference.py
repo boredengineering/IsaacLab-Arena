@@ -90,7 +90,7 @@ def _sanitize_spec_candidate(data: dict[str, Any]) -> dict[str, Any]:
         }
         for rel in data["relations"]:
             if isinstance(rel, dict):
-                if rel.get("kind") in unary_kinds:
+                if rel.get("kind") in unary_kinds and rel.get("reference") is not None:
                     rel["reference"] = None
 
     if "placement_validators" in data and isinstance(data["placement_validators"], dict):

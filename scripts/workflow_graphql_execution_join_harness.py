@@ -1419,7 +1419,7 @@ class JoinGuards(base.Guards):
 
     def profile(self, frame, event, arg):
         if (
-            BOUNDS_NEGATIVE and event == "return" and type(arg) is dict
+            globals().get("BOUNDS_NEGATIVE", False) and event == "return" and type(arg) is dict
             and frame.f_globals.get("__name__") == "isaaclab_arena.agentic_environment_generation.workflow.application"
             and frame.f_code.co_name in {"_generate", "_scene"}
             and (arg.get("disposition") == "blocked" or arg.get("state") == "stopped")
@@ -1441,12 +1441,8 @@ class JoinGuards(base.Guards):
             assert len(self.model_send_authorizations) < 8
             self.model_send_authorizations.append(dict(pid=frame.f_locals["owned"].process.pid, **frame.f_locals["message"]))
             return
-        # Neither this guard nor its base inspects return/C events. Dispatching
-        # those through every policy layer dominates cold Pydantic imports.
-        if event != "call" or frame.f_code.co_name not in PROFILE_CALL_NAMES:
-            return
         if (
-            REQUESTED_CASE == "prior"
+            globals().get("REQUESTED_CASE") == "prior"
             and self.role == "server"
             and frame.f_code.co_name == "set_exception"
             and frame.f_globals.get("__name__") == "concurrent.futures._base"
@@ -1466,7 +1462,7 @@ class JoinGuards(base.Guards):
                 trace = trace.tb_next
             write_evidence("join-prior-failure.json", dict(error_type=type(failure).__name__, sites=sites))
         if (
-            JOIN_CASE == "resume"
+            globals().get("JOIN_CASE") == "resume"
             and self.role == "server"
             and self.cli_arguments[4] == INSTANCE
             and frame.f_code.co_name == "claim_intent"
@@ -1490,7 +1486,7 @@ class JoinGuards(base.Guards):
                 now = time.monotonic()
                 operation = frame.f_locals.get("operation")
                 expected_client = CLIENT if self.cli_arguments == SUBMIT else READ_CLIENT
-                if JOIN_CASE == "operator":
+                if globals().get("JOIN_CASE") == "operator":
                     expected_client = OPERATOR_CLIENT if self.cli_arguments in (OPERATOR_AFTER, READBACK) else CLIENT
                     if self.cli_arguments == OPERATOR_AFTER and self.http_operations == ["receipt", "status"]:
                         assert operation == "status"
@@ -1500,9 +1496,9 @@ class JoinGuards(base.Guards):
                     self.http_started = now
                 if self.cli_arguments == SUBMIT:
                     assert operation == "submit" and not self.http_operations
-                elif (JOIN_CASE == "cancel" or BOUNDS_NEGATIVE) and self.cli_arguments == CANCEL:
+                elif (globals().get("JOIN_CASE") == "cancel" or globals().get("BOUNDS_NEGATIVE", False)) and self.cli_arguments == CANCEL:
                     assert operation == "cancel" and not self.http_operations
-                elif JOIN_CASE == "resume" and self.cli_arguments == resume_arguments():
+                elif globals().get("JOIN_CASE") == "resume" and self.cli_arguments == resume_arguments():
                     assert operation == "resume" and not self.http_operations
                 elif self.cli_arguments == LOST_RESPONSE:
                     assert (
@@ -1557,7 +1553,7 @@ class JoinGuards(base.Guards):
                 self.owner_constructions += 1
                 return
         if (
-            REQUESTED_CASE == "prior"
+            globals().get("REQUESTED_CASE") == "prior"
             and frame.f_code.co_name == "retrieve_snapshot"
             and frame.f_globals.get("__name__")
             == "isaaclab_arena_examples.agentic_environment_generation.web_api.graph_access"
@@ -1581,7 +1577,7 @@ class JoinGuards(base.Guards):
             and frame.f_globals.get("__name__") == "neo4j._sync.driver"
         ):
             self.basic_auth_handoffs.append(getattr(frame.f_locals.get("auth"), "scheme", None) == "basic")
-            if REQUESTED_CASE == "prior" and self.prior_reads:
+            if globals().get("REQUESTED_CASE") == "prior" and self.prior_reads:
                 from workflow_graphql_execution_join_fixture import operator_sentinels
 
                 auth = frame.f_locals.get("auth")

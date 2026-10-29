@@ -8,7 +8,28 @@ import torch
 from types import SimpleNamespace
 
 import pytest
-from isaaclab.test.utils import DeviceScope, test_devices
+try:
+    from isaaclab.test.utils import DeviceScope, test_devices
+except ImportError:
+    class DeviceScope:  # noqa: D101
+        CPU_AND_DEFAULT_CUDA = "cpu_and_default_cuda"
+
+    def _get_test_devices(scope=None):
+        devices = ["cpu"]
+        if torch.cuda.is_available():
+            devices.append("cuda:0")
+        return devices
+
+    test_devices = _get_test_devices
+    test_devices.__test__ = False
+
+try:
+    from isaaclab.sim.spawners.shapes import CableCfg
+    HAS_CABLE = True
+except ImportError:
+    HAS_CABLE = False
+
+pytestmark = pytest.mark.skipif(not HAS_CABLE, reason="Cable deformable feature not available in IsaacLab")
 
 from isaaclab_arena.tests.utils.persistent_simulation_app import run_function_with_persistent_simulation_app
 
@@ -132,7 +153,10 @@ def test_cable_scene_export(tmp_path: pathlib.Path):
 
 def test_cable_asset_config():
     import isaaclab.sim as sim_utils
-    from isaaclab.assets import CableObjectCfg
+    try:
+        from isaaclab.assets import CableObjectCfg
+    except ImportError:
+        from isaaclab_arena.assets.cable import CableObjectCfg
     from isaaclab.managers import EventTermCfg
     from isaaclab.sim import SimulationCfg
     from isaaclab_newton.physics import MJWarpSolverCfg, NewtonCfg

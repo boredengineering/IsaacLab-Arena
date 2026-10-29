@@ -7,9 +7,26 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from isaaclab.assets import CableObjectCfg
+try:
+    from isaaclab.assets import CableObjectCfg
+except ImportError:
+    from isaaclab.assets.asset_base_cfg import AssetBaseCfg
+    from isaaclab.utils.configclass import configclass
+
+    @configclass
+    class CableObjectCfg(AssetBaseCfg):  # type: ignore[no-redef]
+        class_type: str = "isaaclab_newton.assets:CableObject"
+
 from isaaclab.managers import EventTermCfg, SceneEntityCfg
-from isaaclab.sim.spawners.shapes import CableCfg
+try:
+    from isaaclab.sim.spawners.shapes import CableCfg
+except ImportError:
+    from isaaclab.sim.spawners.spawner_cfg import SpawnerCfg
+    from isaaclab.utils.configclass import configclass
+
+    @configclass
+    class CableCfg(SpawnerCfg):  # type: ignore[no-redef]
+        pass
 
 from isaaclab_arena.assets.object_base import ObjectBase
 from isaaclab_arena.assets.object_type import ObjectType

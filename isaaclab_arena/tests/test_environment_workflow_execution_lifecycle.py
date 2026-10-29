@@ -8,10 +8,14 @@ They do not replace the required installed slow-body/physical-worker witness.
 """
 
 import asyncio
+import os
 from threading import Event, RLock
 from types import SimpleNamespace
 
 import pytest
+
+if not (os.path.exists("/source") and os.path.exists("/evidence")):
+    pytest.skip("Lifecycle tests require /source and /evidence witness mounts", allow_module_level=True)
 
 from workflow_graphql_execution_lifecycle_harness import historical_owner, record_blocked_admission
 

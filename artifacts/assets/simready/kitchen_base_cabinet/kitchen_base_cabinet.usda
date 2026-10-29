@@ -1,0 +1,484 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary SimReady_Metadata = {
+            float3 asset_extents = (0.6, 0.622, 0.908)
+            string asset_license = "CC-BY-4.0"
+            string asset_name = "kitchen_base_cabinet"
+            string asset_type = "prop"
+            string author = "ForgeCAD"
+            string category = "furniture"
+            double mass = 39.785377502441406
+            string qcode = "Q1306022"
+            int rigid_body_count = 3
+            string source = "ForgeCAD"
+            string source_file = "main.usda"
+            string usd_date_generated = "2026-10-17"
+        }
+        string asset_name = "kitchen_base_cabinet"
+        string asset_type = "prop"
+        string source_file = "main.usda"
+        string usd_date_generated = "2026-10-17"
+    }
+    defaultPrim = "Model"
+    doc = "022 Kitchen Base Cabinet root stage. Geometry, parameters, joints, and physics come from main.forge.js. This stage owns materials, textures, and the finish choices."
+    endTimeCode = 144
+    metersPerUnit = 1
+    startTimeCode = 0
+    subLayers = [
+        @./forgecad/animation.usda@
+    ]
+    upAxis = "Z"
+)
+
+def Xform "Model" (
+    prepend apiSchemas = ["SemanticsLabelsAPI:class", "SemanticsLabelsAPI:wikidata_qcode"]
+    prepend references = @./forgecad/geometry.usda@</Model>
+    variants = {
+        string finish = "oak_veneer"
+        string handle_finish = "brushed_stainless"
+        string physics = "physics"
+    }
+    prepend variantSets = ["physics", "finish", "handle_finish"]
+)
+{
+    token[] semantics:labels:class = ["kitchen cabinet", "base cabinet"]
+    token[] semantics:labels:wikidata_qcode = ["Q1306022"]
+
+    over "Geometry"
+    {
+        over "Carcass"
+        {
+            over "Panels" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = </Model/Materials/Melamine>
+            }
+
+            over "Back_Panel" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = </Model/Materials/BackPanel>
+            }
+
+            over "Plinth" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = </Model/Materials/Plinth>
+            }
+
+            over "Legs" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = </Model/Materials/LegPlastic>
+            }
+
+            over "Hardware" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = </Model/Materials/Hardware>
+            }
+
+            over "Countertop" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = </Model/Materials/Worktop>
+            }
+
+            over "Shelf" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = </Model/Materials/Melamine>
+            }
+
+            over "Drawer_1"
+            {
+                over "Front" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </Model/Materials/Front>
+                }
+
+                over "Box" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </Model/Materials/Melamine>
+                }
+
+                over "Drawer_1_Handle" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </Model/Materials/Handle>
+                }
+            }
+
+            over "Door_1"
+            {
+                over "Front" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </Model/Materials/Front>
+                }
+
+                over "Hinge_Cups" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </Model/Materials/Hardware>
+                }
+
+                over "Door_1_Handle" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </Model/Materials/Handle>
+                }
+            }
+        }
+    }
+
+    def Scope "Materials"
+    {
+        def Material "Melamine" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:surface.connect = </Model/Materials/Melamine/Surface.outputs:surface>
+            token[] semantics:labels:material = ["wood"]
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.68, 0.67, 0.64)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.55
+                token outputs:surface
+            }
+        }
+
+        def Material "BackPanel" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:surface.connect = </Model/Materials/BackPanel/Surface.outputs:surface>
+            token[] semantics:labels:material = ["wood"]
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.78, 0.77, 0.74)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.7
+                token outputs:surface
+            }
+        }
+
+        def Material "Plinth" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:surface.connect = </Model/Materials/Plinth/Surface.outputs:surface>
+            token[] semantics:labels:material = ["wood"]
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.07, 0.075, 0.08)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.45
+                token outputs:surface
+            }
+        }
+
+        def Material "LegPlastic" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:surface.connect = </Model/Materials/LegPlastic/Surface.outputs:surface>
+            token[] semantics:labels:material = ["plastic"]
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.015, 0.015, 0.015)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.6
+                token outputs:surface
+            }
+        }
+
+        def Material "Hardware" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:surface.connect = </Model/Materials/Hardware/Surface.outputs:surface>
+            token[] semantics:labels:material = ["metal"]
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.6, 0.61, 0.62)
+                float inputs:metallic = 1
+                float inputs:roughness = 0.35
+                token outputs:surface
+            }
+        }
+
+        def Material "Worktop" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:surface.connect = </Model/Materials/Worktop/Surface.outputs:surface>
+            token[] semantics:labels:material = ["wood"]
+
+            def Shader "St"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                string inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "Tile"
+            {
+                uniform token info:id = "UsdTransform2d"
+                float2 inputs:in.connect = </Model/Materials/Worktop/St.outputs:result>
+                float2 inputs:scale = (1.6667, 1.6667)
+                float2 outputs:result
+            }
+
+            def Shader "Albedo"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @./assets/stone-worktop.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </Model/Materials/Worktop/Tile.outputs:result>
+                token inputs:wrapS = "repeat"
+                token inputs:wrapT = "repeat"
+                float3 outputs:rgb
+            }
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </Model/Materials/Worktop/Albedo.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.45
+                token outputs:surface
+            }
+        }
+    }
+    variantSet "finish" = {
+        "matte_white" {
+            over "Materials"
+            {
+                def Material "Front" (
+                    prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+                )
+                {
+                    token outputs:surface.connect = </Model/Materials/Front/Surface.outputs:surface>
+                    token[] semantics:labels:material = ["wood"]
+
+                    def Shader "Surface"
+                    {
+                        uniform token info:id = "UsdPreviewSurface"
+                        color3f inputs:diffuseColor = (0.83, 0.83, 0.81)
+                        float inputs:metallic = 0
+                        float inputs:roughness = 0.65
+                        token outputs:surface
+                    }
+                }
+            }
+
+        }
+        "oak_veneer" {
+            over "Materials"
+            {
+                def Material "Front" (
+                    prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+                )
+                {
+                    token outputs:surface.connect = </Model/Materials/Front/Surface.outputs:surface>
+                    token[] semantics:labels:material = ["wood"]
+
+                    def Shader "St"
+                    {
+                        uniform token info:id = "UsdPrimvarReader_float2"
+                        string inputs:varname = "st"
+                        float2 outputs:result
+                    }
+
+                    def Shader "Tile"
+                    {
+                        uniform token info:id = "UsdTransform2d"
+                        float2 inputs:in.connect = </Model/Materials/Front/St.outputs:result>
+                        float inputs:rotation = 90
+                        float2 inputs:scale = (1.6667, 1.6667)
+                        float2 outputs:result
+                    }
+
+                    def Shader "Albedo"
+                    {
+                        uniform token info:id = "UsdUVTexture"
+                        asset inputs:file = @./assets/oak-veneer.png@
+                        token inputs:sourceColorSpace = "sRGB"
+                        float2 inputs:st.connect = </Model/Materials/Front/Tile.outputs:result>
+                        token inputs:wrapS = "repeat"
+                        token inputs:wrapT = "repeat"
+                        float3 outputs:rgb
+                    }
+
+                    def Shader "Surface"
+                    {
+                        uniform token info:id = "UsdPreviewSurface"
+                        color3f inputs:diffuseColor.connect = </Model/Materials/Front/Albedo.outputs:rgb>
+                        float inputs:metallic = 0
+                        float inputs:roughness = 0.45
+                        token outputs:surface
+                    }
+                }
+            }
+
+        }
+        "sage_lacquer" {
+            over "Materials"
+            {
+                def Material "Front" (
+                    prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+                )
+                {
+                    token outputs:surface.connect = </Model/Materials/Front/Surface.outputs:surface>
+                    token[] semantics:labels:material = ["wood"]
+
+                    def Shader "Surface"
+                    {
+                        uniform token info:id = "UsdPreviewSurface"
+                        float inputs:clearcoat = 0.4
+                        float inputs:clearcoatRoughness = 0.2
+                        color3f inputs:diffuseColor = (0.254, 0.323, 0.198)
+                        float inputs:metallic = 0
+                        float inputs:roughness = 0.3
+                        token outputs:surface
+                    }
+                }
+            }
+
+        }
+        "walnut" {
+            over "Materials"
+            {
+                def Material "Front" (
+                    prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+                )
+                {
+                    token outputs:surface.connect = </Model/Materials/Front/Surface.outputs:surface>
+                    token[] semantics:labels:material = ["wood"]
+
+                    def Shader "St"
+                    {
+                        uniform token info:id = "UsdPrimvarReader_float2"
+                        string inputs:varname = "st"
+                        float2 outputs:result
+                    }
+
+                    def Shader "Tile"
+                    {
+                        uniform token info:id = "UsdTransform2d"
+                        float2 inputs:in.connect = </Model/Materials/Front/St.outputs:result>
+                        float inputs:rotation = 90
+                        float2 inputs:scale = (1.6667, 1.6667)
+                        float2 outputs:result
+                    }
+
+                    def Shader "Albedo"
+                    {
+                        uniform token info:id = "UsdUVTexture"
+                        asset inputs:file = @./assets/walnut-veneer.png@
+                        token inputs:sourceColorSpace = "sRGB"
+                        float2 inputs:st.connect = </Model/Materials/Front/Tile.outputs:result>
+                        token inputs:wrapS = "repeat"
+                        token inputs:wrapT = "repeat"
+                        float3 outputs:rgb
+                    }
+
+                    def Shader "Surface"
+                    {
+                        uniform token info:id = "UsdPreviewSurface"
+                        color3f inputs:diffuseColor.connect = </Model/Materials/Front/Albedo.outputs:rgb>
+                        float inputs:metallic = 0
+                        float inputs:roughness = 0.45
+                        token outputs:surface
+                    }
+                }
+            }
+
+        }
+    }
+    variantSet "handle_finish" = {
+        "brushed_stainless" {
+            over "Materials"
+            {
+                def Material "Handle" (
+                    prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+                )
+                {
+                    token outputs:surface.connect = </Model/Materials/Handle/Surface.outputs:surface>
+                    token[] semantics:labels:material = ["metal"]
+
+                    def Shader "Surface"
+                    {
+                        uniform token info:id = "UsdPreviewSurface"
+                        color3f inputs:diffuseColor = (0.62, 0.62, 0.61)
+                        float inputs:metallic = 1
+                        float inputs:roughness = 0.3
+                        token outputs:surface
+                    }
+                }
+            }
+
+        }
+        "matte_black" {
+            over "Materials"
+            {
+                def Material "Handle" (
+                    prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+                )
+                {
+                    token outputs:surface.connect = </Model/Materials/Handle/Surface.outputs:surface>
+                    token[] semantics:labels:material = ["metal"]
+
+                    def Shader "Surface"
+                    {
+                        uniform token info:id = "UsdPreviewSurface"
+                        color3f inputs:diffuseColor = (0.02, 0.02, 0.02)
+                        float inputs:metallic = 0
+                        float inputs:roughness = 0.7
+                        token outputs:surface
+                    }
+                }
+            }
+
+        }
+    }
+    variantSet "physics" = {
+        "none" {
+
+        }
+        "physics" (
+            prepend references = @./forgecad/physics.usda@</Model>
+        ) {
+
+        }
+    }
+}
+

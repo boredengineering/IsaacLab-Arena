@@ -1,0 +1,615 @@
+---
+title: "Living Session Memory & Plan 04 Checkpoint Ledger"
+category: "Plan 04 Implementation & Hermes Agent"
+date_created: "2026-09-23"
+last_updated: "2026-09-28"
+status: "Living Session Memory"
+subsystem: "Cross-Agent Coordination / Checkpoints"
+tags: ["session-memory", "checkpoints", "resource-allocations", "freeze-hashes", "plan04"]
+---
+
+> **Topic / Category**: Plan 04 Implementation & Hermes Agent  
+> **Date of Creation (YYYY-MM-DD)**: 2026-09-23 | **Last Updated (YYYY-MM-DD)**: 2026-09-28  
+> **Status**: Living Session Memory  
+> **Subsystem**: Cross-Agent Coordination / Checkpoints  
+> **Summary**: Cross-agent decision record and living checkpoint history tracking resource allocations, PhysX admission tokens, freeze hashes, and autonomous continuation boundaries during Plan 04 execution.
+
+---
+
+# Session memory
+
+## Active Plan 04 checkpoint — 2026-09-23 — autonomous S2 continuation
+
+User approved48native/6GiB init-server and5/500MiB eachotherrole, no more subagent reviews/mockcollector tests. Applied exactly in Admission.__init__, aggregate63/8015314944 below64/8GiB. Actuald219316e301a4fee808155d12bdddf59 clearsnativequota (30identities/2572440870bytes, runtime0); PhysX extension nowfails required toml at exact pinnedextscache pip_prebundle/toml. Outer installPhysX message wraps thisadmissionfailure; noinstall needed/proven. No catalogue/schema completion; initialization_success=false. Frozenhashes/export/readback0/exactcleanup verified; onlyinit-server ran. H6e0f371e350d1beeb99bc19c72c09795e47cbf4d668a50b63becf498d972b56c; resumption/approved-allocation-source-freeze.json and observed-approved-allocation/result.json. Oldresourcehold superseded, nextblocker toml; noadditionaladmission yet.
+
+STOP for resource authority: real403f74b4785743a4b90cad42383f28da exhausted16/16 native identities at libnvrtc-builtins.so.12.8; reads1867176724 of2147483648 bytes. Schema failed/no catalogue/initialization_success=false.385source hashes, seven partial-evidence hashes, readback0 and exact cleanup/fresh absence verified. No limits changed or further attempt. Decision `resumption/init-server-resource-decision.md` proposes init-server-only allocation of existing total64identities/8GiB (explicit per-role amendment), other roles disabled and other controls unchanged. Await approval, not another review or metadata task. Origin review deleg_c2005c26 completed PASS before this run; no active delegates. Broader S2/C/IF-D remain outside current goal.
+
+Current narrow goal only: run `arena-s2-init-0037335814c1468eb8b62dc784bd6c76` reached PhysX configuration, failed missing isaaclab_physx; caught native denial exact libcublas.so.12 now retained. Source/export/readback/cleanup verified, no catalogue. Parent exact PhysX root plus sixteen retained native preload filenames implemented with unchanged quotas/no-device controls; 38 focused checks/staging pass. Freeze `resumption/physx-native-source-freeze.json`, H333ec0e21aecb02f8e3eab3f1fcd4185d548027a751b97c259ccd256ec7bedc6; review deleg_c2005c26 pending. On PASS real retry, stop if actual quota/authority blocker. Metadata and broader four-role/C tasks cancelled from active list; do not revive historical checkpoints below.
+
+Actual optional-fix run6d260b97b0b34632a705e10d62f8d940 clears NumPy optional miss; now real Torch requires torchgen. Export/hash/readback/cleanup passed, no catalogue. Native sticky1 reason notretained. Parent exacttorchgen+boundedfirstnativeerror correction37guardsGREEN/staging; scopedreview deleg_f40fb3b0 pending. H8367dc5864958f6b16a2cf0c0fef11a57abeae4d96de47c99cd23b1ea6dee711, freeze torchgen-admission-source-freeze.json. AfterPASS realretry, no metadata or quota changes.
+
+New narrow /goal: achieve actual init-server preparation/schema/catalogue, not wholePlan04. Metadata closed. Parent optional-submodule absence regression RED→GREEN: internal False sentinel becomes ModuleNotFoundError outside sticky violation catch, preventing unverified fallback;37focused checks/staging pass. H d8ede0732ddd9235d2d6d71972dfa345745c543a3f5ec5a6503713cbebeddf1f. Scoped review deleg_e784df9e pending; afterPASS immediately real diagnostic+readback/cleanup against optional-import-source-freeze.json. No collector tests/reopening.
+
+LATEST USER STOP: no more metadata probes/paging or new mock collector tests; supersedes older tasks. Named five packages admitted in both S2 maps; exact Isaac Lab utils already covered. Refusal collector call removed. Actual run `arena-s2-init-bd8b6fbcea49407fbd391840ca1eff7e` reaches YAML/schema validation but fails on missing numpy._distributor_init_local; initialization_success=false/no catalogue hash. No metadata probe. 385source hashes/readback/export1/sevenleaves/exactcleanup verified, resources empty. `observed-named-admission/result.json`; requested attempt/report finished. Do not resume DIST or remaining-boundary delegates (stopped).
+
+Actual EP-B `arena-s2-init-52248cdbeb864dd5bff8aebc956af17a`:17contents/1600bytes,sixlink refusals, zerohelpers/native;385freeze hashes/export1/sevenpartial leaves/isolation/readback/exactcleanup verified. Original lazy_loader refusal. DIST literal/test selected; preflight10 passes214methods+385staging. H d20bdef4a8cf66473c67a35db93a6af254a45a286c324337bb4b69b771bfede2; tests521e05e3ffb67f126e5d3824dafd6ae1a996732af144fa0f88f76715a103faa3. `deleg_d6894a1f`:DIST review + remaining sixlink/provider/coldcache authority/design review. No nofollow relaxation/admission; next launch gated PASS/freeze.
+
+Actual EP-A `arena-s2-init-d51170aade154185abe761afc038d788`:32metadata+4targethelper captures;385source freeze match, original lazy_loader refusal, exporter1/sevenhashed leaves/readback/isolation/exactcleanup verified (`observed-metadata-ep-a`). Staged/six recognized atstart, discovery stillunknown. EP-B onlyliteral/testexpectation selected; preflight08 preserves staleexpectation failure,09 passes214methods+385staging. H5f84714c7f1dfbd8aebd90fd315a508a591d6c098de42839bf99ae552a48889a; tests3904e803cee2b214158904119d7617924493bb18f610b70797e2156d3afe926c. `deleg_58b57824` EP-B review and targetmetadata semantics review active; no EP-B launch before PASS/freeze.
+
+Provider/page integration complete; parent matched H `fbd32bc54d5dd757ffc68e8a99366715f53dcb630fce8e3a0037ed1d03d52e19`, tests `99907932a968730f78823dc4405d76fa3fbf4abc0def343a0df221dce2c0080f`. `integration-preflight-07`:214 methods/nine suites +385-leaf staging pass; separate six readback tests/diff pass. No test-owned containers/networks. Fresh diagnostic-only EP-A review `deleg_979e1ee0` active, `metadata-pages-implementation/combined-review/`; no runtime until PASS/freeze. Older variant copies stale; numerical/C/IF-D gates unchanged.
+
+Fixed metadata-page writer done (`metadata-pages-implementation/report.md`,127tests reported sharedsnapshot); provider recognizer still pending, authorized narrow page-provider integration now page writer stopped. Parent raw_hex readback RED→GREEN,6tests pass retaining decodefailure semantics. Regenerate variant hashes and combinedpreflight/review after integration; no runtime.
+
+Residual reviews read; parent-native-decision confirms conditional15preload read sum2421874497>2147483648, but unavoidability unproven so no quota amendment requested. Provider recognition `deleg_6b3ffde5` and fixed metadata pages `deleg_09c4d1e9` implementing disjoint H/test scopes. PageEP-A32/EP-B23/DIST25 keep allrunlimits; target metadatahelper sources added onlyEP-A; no providercalls/admission or unioncompleteness. Combinedpreflight/freshreview/freeze required before each actual selected variant. Reports `provider-recognition-implementation/`, `metadata-pages-implementation/`.
+
+Latest actual run `arena-s2-init-c349819271b1419dbb3cbdbefdb41f02`: original lazy_loader failure;385staged hashes match residual freeze; exporter1/seven partial leaves+readback/isolation/exact cleanup verified. `observed-residual-packet/run-summary.json`:6sources177430bytes,Jinja link refused;24native selectors stat-complete;baseline complete;zip/NumPyhook absent;GMP fixedroot absence only. Candidate read sum2854052436 is NOT unavoidable runtime demand. Metadata unknown. `deleg_9bc36a85` reviews new provider/effects and native necessity; no admissions/quotachange/C execution.
+
+Residual packet complete; parent `integration-preflight-05` passes190 methods9suites+AST385-leaf staging/legacy comparison. Harness a160f91016f3d21c4d91fd63084d3815c388d672ab56ae14713f92572fe0abe8/tests fcc8022e8d138768e490b9359371a32e4726cde2426f0043b187d7f9717cbe92 matched. Independent diagnostic review `deleg_1812bb8f` pending (`residual-packet-implementation/independent-review.md`); no launch yet. Unknown providers/metadata remain incomplete; native table/quotas/admission/C unchanged.
+
+Parent independently rehashed all three retained source manifests into `resumption/observed-boundary-packet/retained-source-index.json`:50 distinct origins/744882 bytes; duplicate content agrees. Index is historical content integrity only, not current-role observations/admission/closure. Residual implementation remains pending.
+
+Post-run reviews complete under `resumption/observed-boundary-packet/{dependency-effects-review,next-step-review}.md`: no family admission; metadata112known leaves vs32/run, native impossibility still conditional. Parent accepted residual-only fixed-native-first diagnostic implementation (`deleg_d3385f2c`, report `residual-packet-implementation/`), unchanged quotas/refusal; no runtime release. Known unread metadata membership frozen separately `metadata-page-membership.json` (EP-A32/EP-B23/DIST25), not execution or complete provider proof. All prior failed outcomes preserved.
+
+Latest actual run `arena-s2-init-fda1fe67d99d469997d24745cb648ca6`: reviewed collector diagnostic only;385 staged hashes match freeze, original lazy_loader refusal/nonpass. Approved exporter1/seven hashed partial leaves, readback+isolation+exact cleanup verified; no owned resources. `resumption/observed-boundary-packet/run-summary.json`:21 source/data captures,2missing;32 metadata read/80limit;512directories;11native stat identities only. Completeness unknown, quotas unchanged. Read-only `deleg_18b416f2` reviews new effects and bounded next step/authority; reports under observed-boundary-packet. Do not repeat unchanged run or claim initialization/C acceptance.
+
+B1–B3 correction complete; parent `resumption/integration-preflight-04` passes182 methods9 suites+AST385-leaf staging/legacy comparison, plus5 separate metadata-readback tests. Harness e035e29078acab2c991c138befd66c26df6fe6704ee2f7ddfbb4861ca75fa6ba/tests cb125dd0ab25aeb7672251aaf5efca8f9bd41c521dc433aa2f5e5c83d1aa847e verified. Fresh re-review `deleg_bbd8e844` active, report target `boundary-packet-implementation/corrections/independent-review.md`; includes readback helper. No runtime or gate release yet.
+
+Parent extended ignored `resumption/readback.py` for new packet metadata byte/hash/origin validation and non-promoting boundary summaries. Five `test_metadata_readback.py` checks pass, final log `metadata-readback-final-green.log`; UNITONLY only, no new image evidence. B1–B3 correction delegate remains the runtime prerequisite; next review should include readback helper changes.
+
+Collector review `deleg_58c64ba8` BLOCKED: B1 custom metaclass descriptor execution, B2 spoofed provider-label false completeness, B3 case-variant metadata suffix omission. Full `resumption/boundary-packet-implementation/independent-review.md` read; correction delegate `deleg_eae19a3f` active, results under `boundary-packet-implementation/corrections/`. No diagnostic launched. Prior174 checks are source-bound, not release; require new combined preflight/review after fixes. C source ownership correction remains cleared.
+
+Boundary collector finished; parent `resumption/integration-preflight-03/verification.json`:174 methods/nine suites and AST385-leaf staging/legacy comparison passed. Settled harness8e2ed0380dd7961cc06c7f721ffffbe7886dc48d6602e6dad2c56c285b886a49 and tests c7b8121dd0204f3e7bc0bc360f698e361934f56bb7401fd75b86c95c9fb1160e verified. Collector diagnostic-only independent review `deleg_58c64ba8` pending; unconditional refusal and all admission gates unchanged. No new runtime; current label-filtered disposable containers/networks empty. Full report `resumption/boundary-packet-implementation/report.md`.
+
+C-IR-1 re-review PASS (`cases-followup/ownership-review.md`): 20 C/containment tests and 56 additional negative identity vectors; parent matched current monitor function hash to reviewed bytes. Ownership source correction cleared, not runtime release. Pending boundary implementation and final combined preflight/freeze remain unchanged.
+
+Parent preflight reconciliation: updated ignored `autonomous-continuation/completeness/checks.py` UNITONLY C vectors for persisted-started failure/external containment and unclean-exit receipts; all7 pass. `resumption/integration-preflight-02` passed completeness7/exporter21/runner19/orchestration7/gate7, then stopped on the active collector's hook-identity regression (88 methods,1failure). Owner notified; final settled full preflight/freeze still required. No new runtime.
+
+C review found pre-signal full-launch-identity mismatch gap; parent RED→GREEN fix now joins seven typed fields across cached launch/disk launch/checkpoint before live check and signalling owned PID.20 C/containment tests pass; `deleg_96058023` re-reviews that narrow fix. Evidence `cases-followup/ownership-{red,green}.log` and `ownership-and-containment-green.log`; no runtime and no final combined freeze yet.
+
+C implementer finished (`cases-followup/report.md`); parent independently passed14 targeted release-guard tests. Independent C review `deleg_9dc3c47d` dispatched; boundary collector `deleg_4d1808d4` still active. Last full suite was transiently failing during concurrent dependency edits, so no combined green/freeze/runtime claim. C gates remain closed; no additional runtime or resource changes.
+
+Dependency completion report is finished: `resumption/dependency-completion-review.md`, parent-verified30 unique sources/421281 bytes in `dependency-completion-source-index.json`. `deleg_4d1808d4` implements its single bounded source/metadata/native-stat packet with regression tests; it integrates the parent directory primitive. Disjoint C-case implementer `deleg_bd42fdb0` remains active. No new import permission, quota increase, runtime freeze or execution yet; review final combined bytes before any acquisition run.
+
+Full delayed `deleg_e6cfb04b` results arrived and are saved as `resumption/review-e6cfb04b.md`. Follow-up `deleg_bd42fdb0` has all findings: grouped dependency/plugin/native inspection, conditional17-per-role/68-total vs16/64 native quota issue (not observed branch yet), plus C DB wiring/readiness, parked-failure lifecycle, exact exception identity and partial diagnostic retention. Do not repeat transcript recovery or silently enlarge quotas. Parent AST calculation is in `conditional-native-quota.json`; no new runtime.
+
+`deleg_e6cfb04b` reviews completed (manifest verified), not still running; full delivery was unavailable and transcripts truncate findings. Parent confirmed C-case missing disposable-DB environment wiring. Follow-up `deleg_bd42fdb0` owns narrow C harness/test corrections (runtime gates remain closed) and a persisted coherent dependency-completion report; parent handles admissions and execution after independent review. No new runtime yet; do not confuse this delivery recovery with an authority blocker.
+
+Empty-source correction independently passed `deleg_a41cb9e2` with matching source hashes and no findings; no broader admission/runtime release. Dependency/C-case review `deleg_e6cfb04b` remains pending. The147-method parent verification remains the current source-isolated result, not initialization acceptance.
+
+Renewed completion goal reconciled latest `f7c20094f5734b4db0ed059b4c880b36` source/evidence and fresh exact owned-resource absence in `resumption/resumed-goal-readback/manifest.json`. Services remain running; simulator healthcheck only searches old default Kit logs, not current readiness (no new simulation workload launched). Current root-cause fix: physical reader mislabeled zero-byte Python initializers as oversized. Exact two Torch candidates are zero bytes in existing runtime; allow empty `.py`/`.pyi` identities only, retaining empty-native/executable refusal. Regression RED then GREEN retained in `resumption/empty-source-{red,green}.log`;147 parent source-isolated methods/385-source staging pass in `empty-source-preflight/verification.json`. No new runtime or import admission yet. Independent dependency/C-case review `deleg_e6cfb04b` and narrow empty-source review `deleg_a41cb9e2` dispatched; results pending, not presumed complete. Harness now `7fece7b22c2d26a0d33b935fddcdd49ae71f6120d2472cc680297038167058c0`.
+
+Newest user instruction explicitly authorized agent restoration of Arena, GR00T and Neo4j, superseding the operator-only wait below. All three existing containers were started without recreation or discovery changes. Non-root real headless Arena reset/two steps/clean exit passed; GR00T ping and DROID modality schema passed on5559; Neo4j HTTP7475 and Bolt TCP7688 passed (no authenticated query or policy inference performed). Containers remain running; bounded simulator smoke closed. Exit137/non-OOM stops preceded current boot and all restart policies were `no`; exact SIGKILL cause is unknown. Plan/logs: `autonomous-continuation/resumption/stack-restoration/`; repository dev-container skill now distinguishes lossless `docker start` from launcher recreation and service vs workload readiness.
+
+After restoration, unchanged reviewed S2 source retry `arena-s2-init-f7c20094f5734b4db0ed059b4c880b36` passed discovery/export but intentionally failed lazy_loader admission. Parent readback verified385 source hashes/seven evidence leaves and exact cleanup; `resumption/observed-after-restoration/manifest.json` retains partial fixed-batch source capture,189394 bytes. Two entries (`torch/_strobelight/__init__.py`, `torch/_vendor/__init__.py`) were labeled `not_read_oversize`; investigate actual sizes/guard before assuming oversized. Positive/C/IF-D remain incomplete; no new import admission. The service-restoration blocker is resolved, not an active authority hold.
+
+The entries below are historical checkpoints; the restoration and actual retry above supersede their stopped-service/await-user statements.
+
+User decision: “I will restore the simulator; do not change discovery.” Await operator restoration; no stopped-runtime selector, shared-service start or discovery change. After restoration, freshly verify same-clone running runtime/pinned provenance and resume reviewed source acquisition under existing S2 authority. Current work/evidence retained; S2 is incomplete.
+
+Decision gate confirmed by `deleg_4d887489`: no authorized existing bypass for stopped simulator discovery. One proposed S2-only full-ID stopped-runtime provenance selector preserves exact clone/state/image and existing parent/provision checks, with no start/exec/GPU/shared-service effects. Await approval of `autonomous-continuation/resumption/discovery-amendment.md` or operator restoration. No shared helper edit/restart made; prior command-forwarding scope does not authorize this semantic change.
+
+Current resumption boundary: reviewed run `arena-s2-init-065af14c49644d1da569c66aeeadd842` failed discovery before staging/creates (`Cannot uniquely identify runtime image`). Shared discovery requires a running simulator, but clone container595905ed4b61 is stopped; its immutable base matches provenance, pinned test image exists. No owned resources/new inner evidence; fresh absence verified in `autonomous-continuation/resumption/discovery-stop-readback/manifest.json`. Do not start shared GPU-configured services or change discovery semantics under command-forwarding-only authority. Challenge `deleg_4d887489` reviews minimal decision. Implemented sticky denials/23-source batch have fresh limited PASS and146 parent source-only checks/staging; formatter unavailable, no installation. Positive/C/IF-D remain incomplete; no new import admission.
+
+Fresh dependency review `deleg_da4590be`: no new effect boundary, but missing initialization sources preclude a coherent NumPy/SymPy/Torch admission. Caught native-load exceptions can evade current nonsticky assertions; implementer `deleg_2456d015` adds sticky forbidden accounting and next fixed source-read batch, keeping lazy_loader refusal/quotas. Exact review in `autonomous-continuation/resumption/dependency-review.md`; no new runtime yet, fresh final-source review required. C selectors remain source-gated; no IF-D.
+
+API-timeout resumption: user reaffirmed autonomous S2 completion within existing per-run/effect controls, no campaign ceilings or automatic IF-D. Clean intake HEAD `347218bba573454abfac2bb1673fd68e457a35b0`;385 captured sources,381 repository matches, ten dependency copies and seven evidence leaves rehashed without mismatch. Exact and test-label container/network absence freshly verified, pinned image present. `autonomous-continuation/resumption/intake.json` retains readback. Interrupted dependency review not recovered; fresh read-only reviews `deleg_da4590be` cover effects and verification procedure. Parent51 source-isolated methods pass; no new import admission or runtime run. Follow canonical handoff, not older pending-delegate claims.
+
+Latest meaningful observation: actual inspection-bearing run `daa09bc22ff34e38808ffaba7d60a57c` captured all ten fixed source files (242688 bytes), full syntactic summaries and663 baseline entries; overallpositive still intentionally fails lazy_loader admission. Source copies/hashes and cleanup parent-verified in `autonomous-continuation/observed-frontier/manifest.json`. No source candidate was newly imported by the probe. Earlier28ac... baseline-serialization starvation is retained; linear/source-first correction passes135 parent checks/fresh review. Current parallel read-only task `deleg_f2f6fdfa` reviews actual pure/lazy/SymPy and Torch/NumPy effects for a coherent specific admission batch, not blanket purelib permission. No campaign ceilings or extraapproval per routine reviewed dependency; extra effects/resources still require authority.
+
+Latest actual positive `2339d5215d5840e7b65df34d2d1f5faf`: real PythonAPI bootstrap completed, actual terminal alias and physical/kernel interpreter identity observed. Canonical YAML parsing reached real schema/default registration; next refusal is Isaac Lab's lazy_loader dependency. Full initialization still fails. Parent verified385 captured hashes, seven leaves and fresh exact cleanup (`autonomous-continuation/positive-05-parent-verification.json`). Next task `deleg_1fd4fb5b` investigates a bounded grouped required-dependency source inspection; do not solve this through blind one-package allowlist additions or broad directory exemptions.120 prior source-isolated methods/fresh review passed; no campaign ceiling applies.
+
+Current frontier: actual positive `3084aa261d9c43e799524fd8a5a2f123` cleared the pytest fixture edge and captured a distinct stdlib ctypes PythonAPI bootstrap refusal; previous teardown None AttributeError absent. Fixture corrections reviewed,96 parent source-isolated methods pass, real partial evidence/source hashes and cleanup verified (`autonomous-continuation/positive-03-parent-verification.json`). Selected next fix is exact once-per-role witnessed `ctypes.pythonapi=PyDLL(None)` during original stdlib module initialization, NOT arbitrary None native loads or later worker parent-death `CDLL(None).prctl`. Source investigation `deleg_443397c7`, implementation `deleg_8c7d8d55`; fresh review before next run. Do not stop for old campaign counters or claim native feasibility from these partial runs.
+
+Latest: mandatory actual-evidence gap fixed/reviewed;85 parent source-isolated checks and transport regression `6d72526ec62e4e7ab6a3c619762a74f6` pass. Positive `7d862afef3af41a891a7fba5195d7cad` produced seven retrievable evidence leaves and an honest failed first role: test-fixture utility imports unadmitted pytest. This is not a CUDA failure. Partial evidence remains nonpass; source/evidence hashes and exact cleanup/fresh absence verified. Retain `autonomous-continuation/positive-02-parent-verification.json` under S2 output root. Continue investigating both fixture paths before a narrow correction; no repeated identical trial or broad import exemption. Failure/timeout and E1 remain unverified.
+
+Transport is now container-verified: `arena-s2-init-510b10d87ab74c40b10f37d5a949f7a3`, three real evidence files, exact30-byte payload/digest, non-root one-shot exporter, source385 hashes and fresh owned-resource absence verified by parent. Evidence: `s2-initialization/autonomous-continuation/transport-parent-verification.json` under outputs/workflow/plan04-implementation. Fresh exporter/C2 reviews passed,77 source-isolated cases pass. This closes collection only; real native positive/failure/timeout and joined E1 remain unverified. Parent continues into positive-path release review, no campaign ceilings or new approval needed for routine admitted S2 work. No live/provider/production/GPU workloads. Preserve user-owned `database-workflow-challenges_01.md` edits.
+
+User submitted the replacement /goal authorizing the narrow fixed non-root stdlib exporter, real known-byte tmpfs transport before initialization, then positive/failure/timeout verification. Campaign time/attempt/review-round/fixed correction-count ceilings are explicitly removed; old budgets remain historical records, not reasons to stop. Runtime deadlines, resource/output quotas, source-bound review, exact-owner cleanup and effect prohibitions remain. No automatic IF-D/live authority or S1 pivot. HEAD `272d0374607b3dfe86d83e4c8008eafd24f7cf15`, clean intake; five prior source identities and retained385-leaf failed run match. New evidence baseline: `outputs/workflow/plan04-implementation/s2-initialization/autonomous-continuation/intake.json`. Parent proceeds autonomously through file-owned implementation, fresh critique and real approved verification; no execution before exporter specification/review. Historical STOP below is superseded by this exact authority, not erased.
+
+## Historical Plan 04 checkpoint — 2026-09-23 — collection STOP
+
+The shared three-function command-injection amendment is implemented and verified; S2 runner/cold-role source is delivered. After scoped final-source reviews, one positive attempt `arena-s2-init-b5134c85cac94476a92464ea10d36a2a` failed to retrieve any inner evidence or completion marker. Docker documents `docker cp` cannot copy tmpfs; this invalidates the chosen evidence transport and was missed during planning/review. Native initialization progress remains UNKNOWN. Exact client removal and fresh empty owned-label/network listings are verified; no DB/network was created. Preserve failed run/source hashes. All initialization cases are reclosed.
+
+Resume from `outputs/workflow/plan04-implementation/s2-initialization/collection-stop.md`, `first-attempt-parent-readback.json`, `continuation-final-verification.json` and the canonical handoff. Next proposal is an explicitly admitted fixed non-root stdlib exporter within the existing owned container, not arbitrary exec, unbounded host storage, weakened evidence, S1 or a new orchestrator. Verify known-byte tmpfs export before another initialization run; that verification also consumes the shared attempt budget. One of three slots used, two remain;49-minute continuation conservatively charged through01:15:27Z and its round consumed. Further time/process-collection authority must be explicit. C2 cleanup-allowance correction is source-only; final status is in the verification record. IF-B/IF-C/IF-D/live acceptance is still incomplete. Historical claims of zero attempts and active continuations below are superseded. No commits/pushes.
+
+## Historical Plan 04 checkpoint — 2026-09-22 — discussion hold
+
+**S2 continuation amendment approved:** the user explicitly directs implementing optional command forwarding in shared `run.py` plus remaining runner/harness wiring. Intake clean HEAD `c9c45b88edda23f9eeb309fe0d4415fe2e60885e`, start `2026-09-23T00:26:27Z`;19 carried +30 approved minutes =49 active minutes, one continuation/review round, same three unused diagnostic slots. Continuous deadline01:15:27Z; approval-wait was paused, not reset. Scope and original approved text are in `outputs/workflow/plan04-implementation/s2-initialization/amendment-intake.json` / `approved-scope-amendment.md`. Independent file owners implement shared forwarding, runner bounded command/collector, and actual cold-role controls; no runtime until parent final-source review/preflight. Preserve default legacy behavior and strict no-browser injected path. IF-D/live simulation remains excluded. NR04-17/handoff supersede the older shared-helper STOP only within this precise amendment.
+
+**S2 implementation STOP, partial source retained:** user approved the IF-A packet's next step; file-owned implementation found a supported scope gap in shared `web/arena-workbench/tests/e2e/functional-v7/run.py`, outside its allowed list. No helper edit, container launch, native/DB/provider work or diagnostic attempt occurred. Runner/inside entrypoints explicitly refuse. Partial clocks/flags/archive/env/reader controls and real dormant preparation seams exist; runtime origin/cache enforcement, dispatch, collection/cleanup and actual IF-B/IF-C cases remain unfinished. Fresh critique found three dormant defects, now corrected with RED/GREEN and a limited final PASS; parent final 19 stdlib/source-isolated tests pass, not runtime acceptance. Exact source fingerprint `9504a9d525c7aec385c884dd3f40d6360bdcb9947ef4ae1a40f831500bc45529` and evidence are in `outputs/workflow/plan04-implementation/s2-initialization/`.
+
+Next decision is its `scope-amendment.md`: optional command forwarding in only `discover`/`select_runtime`/`provision_image_metadata`, unchanged defaults, no injected browser path; plus one additional bounded implementation/review round and 30 active minutes. Original budget consumption is 15 + 26 charged minutes, two rounds, zero diagnostic attempts; 19 minutes/zero rounds/three attempts remain, paused after closeout `2026-09-23T00:19:38Z`. If approved, 49 active minutes/one round/the same three attempts; no resource/effect expansion. No automatic budget reset or S1 pivot. All delegates ended. NR04-16 and the canonical handoff own this checkpoint; earlier approval/active-state paragraphs are historical.
+
+**S2 next step approved:** after IF-A's explicit §8 packet, user directed “proceed with the next step.” Parent proceeds with bounded implementation and only conditionally released IF-B/IF-C, not IF-D/live work. Intake HEAD `fb225335302b5d0c60c1d043dcb15950df76be3e`, clean; user documentation changes preserved. Remaining45minutes start `2026-09-22T23:53:38Z`, hard stop `2026-09-23T00:38:38Z`, one round/three attempts; no reset. Approved packet/source/timing evidence lives at `outputs/workflow/plan04-implementation/s2-initialization/`. File-owned implementers split runner/collector from harness/real startup, with no runtime permission for children. Parent final-source review/preflight precedes every new diagnostic release. Both pinned image IDs were checked read-only; no new test resources launched at intake. NR04-16/canonical handoff override earlier awaiting-approval entries; do not infer any completed implementation or native success.
+
+**IF-A completed:** the source-bound [S2 approval packet](../../plans/event-mapping-plan04-s2-initialization-approval.md) is ready for an explicit decision, not execution. Independent safety/lifecycle review passed; budget review's single missing-consumption finding was resolved with `outputs/workflow/plan04-planning/s2-if-a/budget-ledger.json`. Conservatively charged15minutes/one round/zero diagnostics;45active minutes/one round/three diagnostic attempts remain pending approval. No automatic reset; implementation/review time also counts, and three full experiment/cleanup ceilings reserve21minutes. The packet requests specific harness/startup/diagnostic/cache/quota/deadline changes and an explicit4GiB/256PID client increase; these are not implemented. Native binary/image-trust and package/cache uncertainties are disclosed execution gates. IF-B/IF-C/IF-D remain unrun; no application/harness source, package imports/tests, containers, native effects or credentials were touched. Final source/docs/evidence checks and NR04-15/handoff govern resume. Next action is one approval decision, not a probe, S1 fallback or renewed options review.
+
+**IF-A now authorized, source-only:** the user's explicit goal authorizes preparing and independently reviewing one concrete S2 initialization-feasibility/execution-approval packet, not executing it. Intake HEAD `4dd679599dea3e9682d463380d31d8fe89bb3fb1`, clean worktree. Baseline and retained-evidence comparisons are in `outputs/workflow/plan04-planning/s2-if-a/`; prior source hashes match and historical 563-case evidence is not a rerun. Source-only discovery covers exact harness roles/limits and retained initialization/cache findings, followed by fresh critics. Preserve S2 selection and all user changes; stop before IF-B, with no application/harness implementation, package imports/tests, container/native/provider/DB activity or credential reads. Canonical handoff/NR04-15 own current progress; older discussion holds below do not prevent the newly authorized source-only preparation.
+**Selection correction for all agents:** the user correctly identified that “no solution selected” contradicted the agreed direction. **S2 is selected:** controlled real initialization in an isolated environment, via IF-A contract → IF-B registration/schema → IF-C failure/cleanup → IF-D joined E1. S1/S3 are contingency options, not concurrent workstreams; S4 is complementary testing. Strategy selection is not permission to execute: IF-A's concrete admission, effect limits and implementation/test approval remain pending. Do not reopen four-way strategy debate by default. Earlier “undecided/no solution selected” entries below are historical. The previous reviews checked boundaries but missed this plan-fidelity inconsistency; NR04-14 records the correction. Source-preserving documentation evidence is under `outputs/workflow/plan04-planning/selected-s2-correction/` (intake HEAD `41125b5fb5dc35563aeb161d1087b371fa437264`).
+**Newest planning checkpoint:** the user requests Plan 04 incorporate and review the staged initialization-feasibility proposal. The next proposed path is S2 feasibility, not automatic permission to run it. IF-A prepares the exact contract; IF-B tests real cold-role catalogue/schema initialization after approval; IF-C verifies failure/deadline/owned cleanup; IF-D returns to joined E1 under amended admission. Observing an effect does not authorize it. The packet distinguishes enforcement, observation and trusted residual risk; checks imports before bootstrap and worker-local initialization; bounds temporary cache writes, resources, children, outer timeout and cleanup. The three-correction rule remains for defects; discovery has a shared hypothesis/round/run/time budget. Repeats must answer a discriminating question, IF-D cannot conceal further probes, and budget exhaustion never abandons owned cleanup. All gates remain proposed/unrun, E1 remains incomplete, and only documentation/review is authorized. NR04-13 and `outputs/workflow/plan04-planning/initialization-feasibility/` own this revision's evidence; prior notes below remain historical/contextual.
+
+This entry is shared repository context for **Hermes, Antigravity and other agents**, not agent-private memory. It supersedes older continuation directions for Plan 04 only; preserve the historical studies below. Current user request: consolidate the registration finding into Plan 04 and remember what was done, where work stopped and why; **several design ideas must be debated before proceeding**. Do not infer execution permission from an old goal, task list, accepted design review or past isolated-test approval.
+
+**Latest discussion update:** the user supports isolating workflow/database interactions before simulation but challenges making strict no-initialization an architectural objective. E1 is a server/client/DB/owned-worker integration test with synthetic provider/capture effects; it stopped at startup catalogue registration, **not at a two-seed simulator run**. Lazy registration is legitimate; executable imports with native side effects are the coupling at issue. Moving registration earlier or later alone does not remove those effects. No GPU computation, no exposed device and no native/CUDA probing are distinct contracts. Existing admission still excludes unreviewed initialization; no new execution is authorized.
+
+Plan 04 P1/G04-13/A04-17 selects S2 runtime-faithful isolated initialization. S1 side-effect-free metadata and S3 a separate owned-process boundary are contingencies requiring an explicit pivot; S4 complementary contract testing cannot replace real E1 proof. Keep workflow/DB → real registry/schema integration → native calibration → live pilot evidence levels distinct. Next deliverable is S2's bounded IF-A contract, not another strategy comparison. NR04-12 preserves the earlier options discussion; NR04-14 corrects its obsolete undecided status. Execution remains unapproved.
+
+### Goal and coordination contract
+
+- Goal A: implement and isolated-verify Plan 04's application-owned workflow, preserving Plan 03, Neo4j-only authority, query-only compatibility, exact replay/evidence, execution fencing and accounting. Goal B (live scene) and Goal C (required-policy pilot) are separate approvals. External coding agents coordinate implementation; they must not become the application's runtime orchestrator.
+- One parent coordinator assigns small file-owned implementers, obtains fresh read-only concrete-counterexample critiques and verifies final source-content hashes with real admitted tests. Accept usable joined behavior, not a child saying “done” or aggregate component counts. Preserve failed evidence; no commits/pushes or changes to user-owned notes.
+- Three unsuccessful corrections still stop one defect. Plan 04 now adds a prospective **architectural-blocker** budget shared across its entire dependency chain: two discovery/challenge rounds, three explicitly admitted isolated diagnostic invocations, or 60 active wall-clock minutes, whichever ends first. Carry consumed budget across agents/restarts; failed probes count; unknown consumption stops. At a design/authority boundary or limit, one consolidated amendment/decision packet replaces successive small approval requests. These proposed defaults remain debatable and authorize no new investigation now.
+
+### Work completed and evidence limits
+
+- Plan 03's foundation was implemented/isolated-verified before this campaign. Plan 04 added the offline setup/readiness CLI/report, already-reset preparation seam, bounded request envelopes (including SDK clone/auth-resend/assessment negatives), shared application admission/one-shot drive and the authority→DB cancellation lock correction. Later work added E0 versioned installed configuration, synthetic execution composition/owner/schema/client, query compatibility and isolated lifecycle handling.
+- Earlier parent acceptance retained **1,603 passing case occurrences across 10 cohorts** at `outputs/workflow/plan04-implementation/final-verification.json`. The later checkpoint records **563 across six cohorts** at `outputs/workflow/plan04-implementation/installed-execution/checkpoint-verification.json`, including seven real-owner/in-process ASGI lifecycle cases. These are overlapping source-bound snapshots, not unique/additive coverage and not current reruns. Neither proves joined E1 or live behavior.
+- E1's installed submit→detached owned workers→durable result→fresh-client readback has **never passed**. Existing source is implemented in part, not end-to-end accepted. Real active-worker cancel/incomplete-body shutdown/recovery, remaining provider/prior/grounding/policy/campaign joins and live V1/V2 remain incomplete.
+- Approved diagnostic work resolved narrower startup/import issues and inspected immutable pinned-image bytes. Final source extraction `arena-neo4j-a82eef70f240418d8897a8c566bb9a02` retained 65 complete selected Warp units, with verification in `installed-execution/registration-context-parent-verification.json`. These establish inspected source/cleanup, not executed native behavior. All failed E1 runs remain retained.
+
+### Where and why we stopped
+
+Catalogue hashing imports the generation agent; actual catalogue/schema membership loads runtime registries, reaching Isaac Lab `utils.warp` → `wp.init()` → Warp Runtime/native library loading and native `wp_init` before conditional CUDA queries. Native initializer effects remain unproven. Quiet mode, absent GPU devices or later CPU defaults do not establish no-CUDA behavior. Expanded registration imports/Warp initialization were **not executed**. Keep the boundary before this import path rather than merely before simulation/kernel launch.
+
+Independent source review `deleg_1c02878c` required STOP; the user selected strict no-CUDA registration-only design investigation. Read-only analyses `deleg_42c38c89` and final challenge `deleg_b369d6f0` supported a **candidate** opt-in canonical metadata view with explicit schema context and separate runtime class resolution. The selected E1 `proposal_only=True` route returns before USD grounding, making that bounded design plausible; it is not native-free full generation or a working implementation.
+
+The user subsequently requested consolidation **and further debate before implementation**. Latest edits are documentation only. Do not restart the old probe chain, lower harness guards, invent registry/digest data, suppress initializers, bypass the real schema or treat historical cleanup as active-worker shutdown proof.
+
+### Governing documents, decisions and resume gate
+
+- [Plan 04](../../plans/event-mapping-refactoring_plan_04.md): G04-13/P1 registration/runtime-boundary decision; A04-17 common/route-specific acceptance; §8 investigation budget. Same software goal—not a mandatory metadata redesign.
+- [Review ledger](../../plans/event-mapping-refactoring_plan_04-review.md): NR04-10 import-chain evidence, NR04-11 budget correction and NR04-12 strategy/effect-boundary reframing.
+- [Registration-only design](../../plans/event-mapping-registration-only-design.md#first-implementation-contract-to-approve): **conditional S1 candidate** for ordered/versioned declarations, explicit extensions, separate metadata identity and real-schema context. Its obligations apply if S1 is selected; no runtime classes or V1 receipts are silently replaced.
+- [Canonical implementation handoff](../../plans/dashboard_cli_workflow_parity/research-stack-implementation-handoff.md): current status owner, exact evidence and source/resource checkpoints. This memory is a cross-agent index, not another lifecycle authority.
+- Open for debate first: required control-plane/runtime architecture and whether bounded native initialization is acceptable in an isolated test. Then define the chosen strategy's source/effect/compatibility contract; S1 still needs ordered membership, identity encoding/context map and runtime parity. No executable descriptor manifest, metadata redesign, successful alternative initialization or new joined positive exists. Implementation requires explicit bounded authority.
+- Intake HEAD `acda01b159d8ce07e86330c12727ba9d343b7009`, branch `dev/0.3.0-prerelease`; HEAD advanced outside this documentation task to `fd67f5022f20d6854cf407989d10eac153081313`. Captured dirty Python/RST source bytes remained unchanged; preserve that commit and the existing source/user note `.agents/references/quick_notes/plan04_and_hermes/hermes_plan_04_review.md`. Its broader completion claims are not execution permission. No assistant commit/push was made. Documentation evidence: `outputs/workflow/plan04-planning/registration-consolidation/`.
+- The prior stopped checkpoint records owned test resources cleaned up and all jobs ended. This documentation pass launches none; it does not freshly inspect services. Before any later authorized resumption, re-read current user direction/plan/handoff, recheck Git and source hashes, reconstruct consumed investigation allowance, verify exact owned resources and revalidate affected evidence. Delegates do not survive a parent restart by assumption.
+- `.agents` records are accessible to other agents in this checkout; ignored `outputs/` evidence and some `.agents` notes are not automatically preserved by a source commit or present in another clone. Check availability rather than inventing missing proof. No secrets belong in these notes.
+
+## Current study and progress — 2026-09-18
+
+### Trajectory-tool follow-up — narrowly resumed
+
+The user subsequently authorized finishing `render_policy_trajectory.py` before returning to the hypothetical event-mapping study. This supersedes the implementation pause **only for that tool**; dashboard/orchestration work, terminal configuration, service restarts and queued workloads were not resumed.
+
+- Closed native parser registration and failure-exit gaps: simulator options are registered before required trajectory inputs; errors are printed before `SimulationApp.close(exit_code=1)` can terminate the process. Native `--help` exits 0. The installed SimulationApp's explicit `exit_code` parameter was inspected; this is not a claim about every simulator version.
+- Completed capture manifests are retained before policy/environment cleanup. Cleanup failures preserve capture evidence, propagate failure and prevent assessment-provider construction.
+- Both receipts retain the exact resolved `policy_instruction`, distinct from the authored task, and assessment receives both. Simulator device is forwarded; `--policy_device` defaults to it and supports an explicit override.
+- Final independent review `deleg_aa90a307` passed with no security concerns, logic errors or suggestions after the three blockers from `deleg_21d7a1fa` were fixed by `deleg_9476209e` and parent-verified. The narrow tool correction is complete; live GR00T-plus-VLM acceptance remains unperformed, not implied by that code-review verdict.
+- Parent final offline rerun: `web/arena-workbench/tests/e2e/functional-v7/.runs/arena-f0-backend-1ee01539491d` — 59 tests, zero failures/errors/skips; all forbidden-call counters zero and owned container cleanup verified. Scoped host pre-commit and `git diff --check` passed. This replaces the earlier 43-test result for the current trajectory source, not for unrelated harnesses.
+- Native final-source check: `outputs/trajectory-tool-native-check/final-run/native-check.json` binds source/image hashes and records **nine real 1280×720 RGB frames from three cameras over two zero-action steps**. A deliberately injected pre-provider failure preserved `capture.json`/PNGs and returned process exit 1. `final-native.log` retains diagnostics; no matching smoke process remained. Material/texture warnings remain, so this is capture/lifecycle evidence, not rendering-fidelity certification.
+- No live GR00T inference, VLM assessment, graph write, automatic repair, deployment or commit. The native check uses the existing maple-table test fixture and real ZeroActionPolicy, not the hypothetical banana task. Offline assessment responses remain explicitly synthetic. Ignored `.runs/` and `outputs/` evidence will not be preserved by a normal source commit.
+
+### Previous interruption and preservation boundary
+
+The user requested: **“please save the progress and the study we have performed into a session memory so we can remember.”** This is preservation only. Immediately beforehand they reported **“have you messed up the cli again ? I cannot see the terminal anymore.”** Application work was paused. Do not resume edits, run research workloads, restart services or release queued work from this record.
+
+The terminal-display issue is **unresolved**. A read-only probe observed Hermes running on `pts/2` and the tool command channel responding; this does not prove the user's display works. Desktop discovery exposed container processes but no host application windows; attempted capture did not yield a usable view. The pending question is whether the terminal panel/window disappeared or remains open with blank/corrupted text, and whether it is inside VS Code or a separate terminal. No terminal/Hermes configuration changes, process kills or service restarts were performed in that investigation. Do not assume either causation by the code change or absence of an effect.
+
+Current checkout observation: branch `dev/0.3.0-prerelease`, HEAD `0fb91a10aeb7` (the user's later commit, not an assistant commit). The presentation file `.agents/references/presentations/category_a_b_manipulation_experiments.md` was already modified before this task and remains user-owned. No staging/commits were performed. The [current handoff](../../plans/dashboard_cli_workflow_parity/research-stack-implementation-handoff.md) owns overall status; this note retains the study and narrow change evidence. The older dashboard disappearance after refresh remains independently unresolved.
+
+### Purpose and method of the study
+
+The user wanted a **hypothetical, step-by-step terminal workflow followed by event modeling**, not execution of the example commands. They want the domain model and DDD documentation to drive GraphQL information design/API contracts, not another screen or a replacement backend. No banana-scene generation, simulation, VLM request, policy evaluation or graph operation was launched during this exercise.
+
+For each meaningful outcome, ask: what happened; to which identifiable object; who knows authoritatively; where is it retained; what should the user see/do? Also establish preconditions, permitted actions, recovery and lifetime. Commands request work; events record facts. Accepted submission is not completed generation. GraphQL mutations expose commands; queries expose retained read models. Resolvers/cache keys do not create ownership or persistence. TanStack Query is a cache, not durable workflow state; URL identity does not preserve an unsaved draft. These distinctions do not require event sourcing or microservices.
+
+### What the CLI paths actually do
+
+- `--mode resolve` is the valid mode, not `generate`. New generation retrieves Graph-RAG priors when available, infers a spec, grounds/reifies relations, runs bounded specification-level validation/repair, saves a version and attempts graph synchronization. Retrieval can be unavailable without aborting; process success does not prove graph publication or physical correctness.
+- The generation loop caps its iterations at `min(max_retries, 2)` and can return a fallback with `converged=False`. Its final fallback is not run through another complete validation pass. `generation_completed`/returned YAML means an output exists, not all requested criteria satisfied (`environment_generation_agent.py:248–388`; runner `resolve_env_spec`).
+- `--mode build` loads the captured spec, constructs the environment, performs a specification-based critic call, runs zero-action steps and optionally records. Recording alone does not feed images into the critic. It is not policy-task evaluation or DCRG.
+- The assistant initially proposed two Builds against the same candidate merely to add recording. That was an unnecessary split: record in the first Build when evidence is required. A subsequent Build is justified after refinement changes the candidate.
+- With only a visual observation/text feedback, the existing correction path is `resolve --base_spec <exact-version> --feedback <observation-and-constraints>`. It calls `refine_spec`; it does not perform New-generation prior retrieval. The new version must be reassessed. Illustrative v1/v2 paths in the discussion were hypothetical, not produced artifacts.
+- `--mode auto_heal` consumes matching evaluation telemetry/metrics/episode records and policy configuration, diagnoses and patches a new version. It conditionally uses geometric relaxation, but does not invoke DCRG, fresh generation-prior retrieval, automatic video interpretation or the next evaluation. Missing metrics default some rates to zero in the current legacy code; a Build-video directory is not valid policy-failure evidence.
+- `dcrg_runner.py` owns a separate bounded measured loop: baseline evaluation → graph feedback → allowed XY proposal → candidate validation → reevaluation → accept/reject. It preserves task/physics/Z/other configuration and currently allows only target XY within bounds. It is not a general repair for wrong embodiment, support/Z or arbitrary scene defects. Acceptance by its task/lift comparison is separate from its terminal success condition.
+
+### Main findings and proof boundaries
+
+The important gap is **application-owned transitions and outcome contracts**, not lack of every component. A wrong initial proposal is expected; silently stopping with an unverified candidate is different. Keep `CandidateProduced`, execution completion, assessment and acceptance distinct. Authored graph, realized placement, visual assessment and measured task success are different representations/evidence. A policy can fail in a valid scene; changing the scene to make that policy succeed may invalidate the research objective. Graph relations do not execute control flow.
+
+Pre-fix source audit at HEAD `0fb91a10ae`: 828 tracked first-party Python files parsed with no errors; seven static assertions passed. Main generation and Build called `evaluate_scene_spec(spec)` with no images; the VLM branches require `rendered_images`. Generation already fed critic feedback into repair, but it was specification-based critique in that path. The standalone `tools/render_policy_trajectory.py` captured frames, called `multimodal_chat`, printed and ended; its prompt assumed failed red-apple manipulation and a particular viewpoint. The dashboard adapter explicitly states that generation does not run simulation/policy evaluation. The static audit is saved at `/tmp/arena_visual_loop_audit.py` and `/tmp/arena_visual_loop_audit.json`; it records **pre-fix** source hashes and is not current runtime acceptance. `/tmp` and ignored archives are not durable Git evidence.
+
+Independent audit `deleg_44bceaf4` checked counterexamples and test scope. Visual-critic tests used authored coordinates without images; generation repair used synthetic responses; multimodal tests verified request serialization; DCRG controller tests used synthetic episodes; an opt-in real snapshot test validates PNGs/artifact inventory, not repair. These tests are useful but do not establish the full visual loop. `docs/pages/example_workflows/agentic_env_gen/dcrg.rst:180–209` documents a real DCRG baseline/candidate rejection and resume pilot; raw evidence is external and was not re-read here. Therefore **“no closed loop exists” is incorrect**; the narrower rendered-image → VLM → automatic repair → rerender acceptance claim was not established in the inspected code/evidence.
+
+The user clarified that external-agent coordination (Hermes/Claude Code/Antigravity reading stdout and choosing another command) **was never the intended architecture**. Such a caller can technically orchestrate the tools, but it is a gap-filling workaround, not the target. No retained end-to-end acceptance of the intended application-owned visual-repair workflow was found. This finding does not diagnose the dashboard refresh failure.
+
+### Proposed solution — discussed, not broadly implemented or approved for rollout
+
+- One application-owned durable coordinator, with explicit specialist strategies rather than one enormous loop or unrelated loops that reset their budgets. Freeze intent, acceptance criteria, preserved constraints, allowed changes, model/runtime profiles, total budget and effect policy.
+- Sequence: generate/load → validate → realize/capture → assess → accept, collect more evidence, request permitted repair, or stop with an explicit reason. Every revised candidate needs fresh relevant evidence. Inconclusive must not become pass. A VLM contributes observations/hypotheses, not unqualified physical truth or arbitrary execution authority.
+- Reuse the current generation/refiner, renderer, critic, policy runner and DCRG. DCRG remains a measured experiment with its own intervention contract; use it after scene prerequisites when policy-performance improvement is requested and allowed. No claim that VLM augmentation improves DCRG until measured.
+- The coordinator owns the overall outcome/phase, child jobs, decisions, budgets, cancellation and recovery. It must not occupy the existing serial Supervisor's worker slot while waiting for a child. Retained decisions/next-work intent and idempotency prevent duplicate model/simulator execution; unknown outcomes require reconciliation, not blind retry.
+- SQLite is **not required** by DDD/CQRS/orchestration. It was initially suggested because the existing Journal uses it. Following the user's challenge, the proposed target is Neo4j as workflow/provenance authority, with transactional claims/transitions, budget reservation, concurrency fencing and result receipts. Images/videos/YAML remain artifact files. Explicitly migrate/adapt relevant existing Journal responsibilities; do not keep two authoritative workflow histories. No SQLite→Neo4j migration has been implemented.
+- Keep operational candidates/assessments distinct from accepted reusable research priors. Retention/publication is not successful experience; retrieve exact attributed context/evidence. Do not claim native lossless RDF-star or causal proof from reification alone.
+- Consolidate **reusable implementation** under `isaaclab_arena/agentic_environment_generation/`. Existing engines and `dcrg/` stay. Proposed `workflow/`, `execution/`, `interfaces/` packages would separate decisions, workers and CLI/HTTP adapters. Examples become thin compatibility callers; GUI widgets and tests stay in appropriate interface/test locations. This target tree is a proposal, not a completed repository reorganization.
+- Concrete misplaced responsibilities: the example runner owns substantial application behavior; snapshot worker imports capture from `review_gui/simapp`; trajectory tool owned import-time simulator startup and a hardcoded prompt. Core must not depend on examples; importing contracts must not start simulation/provider calls. Both CLI and eventual GraphQL call the same application service.
+- First acceptance target: a single application submission observes a supported defect, retains assessment, produces a constrained repair, rerenders and reassesses without an external agent writing feedback/choosing the next command. Also prove forbidden-change rejection, inconclusive/exhausted stops and restart without duplicate completed work. This full workflow remains **unimplemented/unverified**.
+
+### Narrow fix explicitly authorized and implemented
+
+User: **“About the render_policy_trajectory.py ... It is not intended to be a scenario-specific prompt and output printing. It must be fixed.”** This authorized the targeted tool correction, not the full orchestration/storage/reorganization proposal.
+
+Changed/new production code:
+
+- `isaaclab_arena/agentic_environment_generation/trajectory_capture.py` — reusable bounded single-Arena-environment camera capture; selected or available camera keys, initial/sampled frames, actual steps/stop reason and image-count bound.
+- `isaaclab_arena/agentic_environment_generation/trajectory_assessment.py` — task/spec-driven prompt, supplied frame bytes, strict bounded JSON assessment (`satisfactory`, `issues_detected`, `inconclusive`), spec/image digests, model identity and retained `assessment.json`. Returned data supports application callers; stdout is only a summary. Empty capture retains inconclusive without constructing/calling a backend. Malformed responses do not become accepted receipts; an existing receipt is not overwritten. `task_success` remains unknown.
+- `isaaclab_arena_examples/tools/render_policy_trajectory.py` — import-safe parser and explicit simulator lifecycle; delegates to core helpers, configurable assessment model/endpoint/cameras, unique generic output default, new explicit run directory, retained `spec.yaml`, frames, `capture.json`, `assessment.json`. Legacy policy/port defaults remain compatibility defaults, not service discovery.
+- Example README has a task-driven trajectory-assessment section with effects, outputs, limitations and migration from the scenario-specific output path.
+- New `isaaclab_arena/tests/test_trajectory_assessment.py`; exact-file offline admission in `functional-v7/stage.py` and `backend_checks.py`, with `test_backend_checks.py` regression. Existing defaults and isolation guards preserved.
+
+Independent review `deleg_85bfe934` found two blockers; fixes by `deleg_07ced246` were parent-verified and re-reviewed by `deleg_e5f9e477` (passed, no focused security/logic findings):
+
+1. IsaacLab resets ended environments before returning step observations. Terminal/truncated returned images are now **omitted**, with `terminal_image_unavailable` and stop reason in capture, prompt and assessment; the last supplied image must not be called terminal. No pre-reset recorder hook was added.
+2. Successfully constructed policy/provider clients are now closed; nested cleanup preserves environment cleanup after policy-close errors, and main closes SimulationApp. Shared backend constructor-failure cleanup was not changed. SimulationApp still lives through model assessment; no native lifecycle acceptance was claimed.
+
+### Verification and retained evidence
+
+Strict RED→GREEN was exercised in the existing nonroot, network-none, read-only staged-source runner. All model/simulator seams in these tests are explicitly synthetic; no live pixels or completions were fabricated as research evidence.
+
+Evidence root: `web/arena-workbench/tests/e2e/functional-v7/.runs/` (ignored; not preserved by a normal commit).
+
+- Initial feature RED: `arena-f0-backend-41fec9040c6d`; prompt/retention GREEN: `arena-f0-backend-079507b1bbdf`.
+- Validation/import regressions: `arena-f0-backend-444305ac1057`, `arena-f0-backend-0c59bdadf684`; later initial wiring GREEN: `arena-f0-backend-9c8c9fff3069` (16 tests, historical subset).
+- Autoreset RED/GREEN: `arena-f0-backend-f25cf5df09a7` / `arena-f0-backend-9fee418f8900`.
+- Cleanup RED/GREEN: `arena-f0-backend-3a44d36f9ed4` / `arena-f0-backend-1c31df07dc1f`.
+- Final **parent rerun**: `arena-f0-backend-a8702b439854/run-proof.json` — **43 tests passed**, all forbidden network/provider/graph/render/workload/subprocess counters zero; cleanup verified, no owned resources remaining. Corresponding JUnit: `evidence/pytest.xml`.
+- Runner contract suite: `arena-core-units-596009bd0f94` — 96 tests passed, owned cleanup verified.
+- Scoped pre-commit passed on production helpers, CLI, trajectory tests and README; `git diff --check` passed. Whole touched-harness pre-commit exposed existing R501/R502/C901 findings; affected baseline function ASTs were verified unchanged. Unrelated formatter/license churn in harness files was reverted, retaining only intended admission changes. An isolated harness shutdown AttributeError was reported by the fix worker; it did not change pytest/proof success and was not fixed in this scope.
+- No live rollout, provider call, graph write, service restart, queue release, deployment, staging or commit. Full orchestration, physical scene acceptance, task success and the terminal-display problem remain unresolved.
+
+Recovery: Hermes session `20260916_171442_92ddc8`; audit/review units listed above. Source line references in earlier chat refer to the pre-fix script and may have shifted. Preserve current dirty work; do not bulk-add `.runs`, output/model/data directories or unrelated presentation changes.
+
+## Previous checkpoint — 2026-09-17 (historical dashboard context)
+
+The user reported **“I refreshed the page and everything disappeared”** after the v7 Resume queue change. They requested preservation and consolidation, intend to commit themselves, and will reconsider the strategy. No new strategy has been agreed. Stop implementation and live effects; older approvals are historical, not permission to continue automatically.
+
+Read the [single current dashboard handoff](../../plans/dashboard_cli_workflow_parity/research-stack-implementation-handoff.md) for the change map, last-known runtime/queue state, evidence links and remaining limitations. Use the [reference index](../README.md) to navigate; do not reconstruct current status by combining scattered owner reports.
+
+- Git checkpoint: `dev/0.3.0-prerelease`, HEAD `f9519bd3ef`; tracked modifications and untracked source/evidence await user review. No commit or staging was performed during this preservation pass.
+- Implemented during the session: general README-based readiness, existing-service host control/resource corrections, frozen user-defined model profiles, GR00T endpoint propagation, and finally a visible global Resume queue control. Earlier editor/Graph-RAG/policy work is retained, not replaced.
+- These source changes have isolated tests and some bounded live observations. **They do not establish a reliable refreshed dashboard or completed research workflow.** The disappearance has not been diagnosed; persisted-data loss has not been established either.
+- Last observed queued jobs: generation `2da78c386c234556b012c65c5d31a830`; Build `1e537acb672246edb9520f060c9fe7e2`. The agent tested Resume confirmation using Cancel and did not release either job. Current state after the user's refresh is unknown.
+- Last observed deployment: frontend on 3010; existing Neo4j on Bolt 7688/HTTP 7475; GR00T DROID on 5559. Host helper, Arena API session, model key and queue dispatch are separate lifecycles. API start-paused dispatch is not the journal pause flag.
+- Credentials: no approval was received to reuse the existing Neo4j account for the API. Do not copy credentials or assume the user's current generation-key state. Do not save secrets in these notes.
+- A2 physical placement remains unresolved; valid YAML/short Build is not physical correctness. Preserve the LPG/RDF-reification/provenance/DCRG research history without treating older theoretical or empirical claims as newly verified facts.
+- Commit does not capture private host installation/state, browser state, cached dependencies or ignored `.runs/` and `outputs/control-setup/` artifacts. Do not bulk-add those directories.
+
+Conversation recovery anchor: Hermes session `20260916_171442_92ddc8`. Important later units: `deleg_6f08e125` (model profiles), `deleg_33933044` (endpoint/helper), `deleg_0895c08e` (model reviews), `deleg_cc8108f6` (Resume control). Their scoped reports are historical evidence; the latest user failure/pause takes precedence.
+
+## Historical research notes — retained, not current operating instructions
+
+The material below predates this checkpoint and was not re-audited in this preservation pass. Ports, container assumptions, scenario-specific constants, statistical interpretations and “completed/proved” claims must be checked against their original evidence before reuse. They neither establish dashboard acceptance nor authorize experiments.
+
+### Earlier topic: Active Inference & Robot Vision-Language-Action (VLA) Calibration
+
+<details>
+<summary>Expand historical research notes — not revalidated at this checkpoint</summary>
+
+## 1. DROID / Franka Geometric & Visual Standoff Constants
+* **Robot Base Origin**: `[-0.55, 0.0, 0.0]` (Franka mounted on DROID stand).
+* **Table-to-Arm Proximity**:
+  * In real DROID physical setups, the Franka base is mounted immediately adjacent to the table edge ($10\text{ cm} - 15\text{ cm}$ gap).
+  * Table origin is shifted to `[-0.25, 0.0, 0.0]` so the tabletop front edge sits directly against the Franka stand and tabletop center is within $0.30\text{ m} - 0.40\text{ m}$ of the robot base.
+* **VLA Fine-Tuning Distribution & Near-Field Inductive Bias**:
+  * **VLA Training Distribution**: VLA models (`GR00T-N1.6-DROID`, OpenVLA, Octo, $\pi_0$) are trained exclusively on human teleoperated demonstrations where objects are located strictly in the **near-field manipulation zone** ($20\text{ cm} - 45\text{ cm}$ directly in front of the robot arm).
+  * **Visual Perception Limit**: Franka's downward-angled camera ($45^\circ$) only captures $X_{\text{world}} \in [-0.35, 0.05]\text{ m}$ ($20\text{ cm} - 50\text{ cm}$ in front of base). Anything further is outside the camera FOV, and the VLA cannot pick what it cannot see.
+  * **Spatial Constraint Invariant**: All manipulands, target receptacles, and interactive objects must be placed within $d \in [0.25, 0.45]\text{ m}$ ($X \in [-0.30, -0.10]\text{ m}, Y \in [-0.20, 0.20]\text{ m}$) relative to the robot base.
+
+## 2. Spatial Placement & Sector-Confined Pocket Randomization
+* **Sector-Bounded Initial Sampling**:
+  * `On(parent, surface_sector='front_right')` and `On(parent, surface_sector='front_left')` constrain candidate sampling in `ObjectPlacer` strictly to the designated sector bounds (e.g. $Y \in [-0.26, -0.10]\text{ m}$ for `front_right`, $Y \in [0.10, 0.26]\text{ m}$ for `front_left`), accounting for parent fixture translation.
+* **Pocket Randomization on Reset**:
+  * Objects with `surface_sector` automatically receive `RandomAroundSolution(x_half_m=0.03, y_half_m=0.03)`. On every episode reset, objects randomize within a $\pm 3\text{ cm}$ local pocket inside their section, rather than jumping across the entire tabletop.
+* **Bilateral Workspace Separation**:
+  * Source manipulands and destination receptacles are placed in opposite sectors (`front_right` vs. `front_left`), maintaining $\ge 28\text{ cm} - 36\text{ cm}$ lateral clearance.
+  * This avoids visual feature overlap in wrist/exterior cameras and eliminates gripper-receptacle collisions during pre-grasp.
+
+## 3. Environment & Container Setup
+* **Host vs Container Storage Mount Conventions**:
+  * **On the Host**:
+    * Datasets: `$HOME/datasets/isaaclab_arena/<tutorial_name>` (e.g. `$HOME/datasets/isaaclab_arena/locomanipulation_tutorial`, `$HOME/datasets/isaaclab_arena/static_apple_tutorial`)
+    * Models: `$HOME/models/isaaclab_arena/<tutorial_name>` (e.g. `$HOME/models/isaaclab_arena/locomanipulation_tutorial`, `$HOME/models/isaaclab_arena/static_apple_tutorial`)
+  * **Inside the Container**:
+    * Datasets: `/datasets/isaaclab_arena/<tutorial_name>`
+    * Models: `/models/isaaclab_arena/<tutorial_name>`
+    * Workspace / Repo: `/workspaces/IsaacLab-Arena` (or `/workspaces/isaaclab_arena` in sim container)
+* **Devcontainer Persistent State**:
+  * Development container: `isaaclab_arena-latest`
+  * Submodules present: `IsaacLab`, `Isaac-GR00T`
+  * System tools: `uv`, `rerun`, `huggingface_hub`
+
+## 4. Unified Environment & Evaluation Semantic Versioning
+* **Canonical Directory Hierarchy**:
+  * Graph specs: `/workspaces/isaaclab_arena/generated_envs/<env_name>/v1, v2, v3, ...` with `latest` symlink pointer.
+  * Evaluation runs: `/workspaces/isaaclab_arena/eval_output/<env_name>/v1, v2, v3, ...` with `latest` symlink pointer.
+* **Dual-Ledger Lineage Tracking**:
+  * Human/Agent JSON: `lineage.json` with parent version pointers, refinement triggers, and success rates.
+  * W3C PROV-O RDF-star: `lineage.ttl` tracking agent activities, derivations, and evaluations.
+* **Automated Telemetry Sync**:
+  * `policy_runner.py` automatically synchronizes evaluation metrics (`success_rate`, `object_moved_rate`, `episode_count`) into `lineage.json` and `lineage.ttl` upon rollout completion.
+
+## 5. Foundation Policy Server (Isaac-GR00T)
+* **Architecture**: `nvidia/GR00T-N1.6-DROID` with `AlternateVLDiT` diffusion action chunking.
+* **Embodiment Specification**: Must use `droid_abs_joint_pos` with DROID camera and joint space.
+* **Protocol**: ZeroMQ RPC on port `5557` (default port `5556` may be in use by other services).
+* **Language Conditioning**: Policy config YAML **must** declare `language_instruction: "<task description>"`. Without this, the multimodal language backbone receives empty string and fails to ground objects.
+* **Evaluation Horizon**: Use at least $\ge 1500 - 2000\text{ steps}$ ($30 - 40\text{ s}$) for complete pick-and-place trajectories.
+
+## 5. Active Inference Self-Healing Pipeline
+* **Diagnostic Oracle**: `EvaluationDiagnosticOracle` ingests `eval_telemetry.ttl` and classifies defects (`camera_occlusion`, `unconditioned_vla`, `horizon_truncation`, `reach_singularity`).
+* **Remediation Engine**: `EvaluationRemediationEngine` auto-patches policy YAML, pulls table/objects into the near-field VLA sweet spot ($X \in [-0.30, -0.10]\text{ m}$), assigns bilateral sectors, and re-relaxes the `SpatialFactorGraph`.
+* **Single-Command Pipeline**:
+  `python isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py --mode auto_heal --env_name <env_name>`
+
+## 6. Grasp Affordance, Contact Dynamics & Parallel Data Science Flywheel
+* **Beyond Spatial Placement**: In addition to spatial reach and camera line-of-sight, organic/spherical objects (e.g. `apple_01_objaverse_robolab`) require tactile contact compliance and friction (`physics_material: friction >= 0.8`). The 2-finger parallel Franka gripper experiences rotational slip against spherical curvatures if approached without top-down alignment.
+* **Parallel Simulation Scalability (`--num_envs N`)**: GPU tensorized execution allows simulating $N = 4, 16, 32, 64$ parallel environments concurrently ($32\times$ data collection speedup).
+* **Data Science Diagnostic Flywheel**: When local compute is constrained for full foundation model fine-tuning, parallel trajectory generation provides the rich dataset required for offline data science (trajectory clustering, contact affordance heatmaps, sub-goal failure mode classification).
+## 7. Statistical Diagnostic Methodology (Empirical Case Study N=65)
+* **Markov Progression Funnel**:
+  * Stage 0 (Settled): $65/65$ ($100\%$).
+  * Stage 1 (Lifted off Table): $56/65$ ($86.2\%$) — proves perception, visual line-of-sight, and reach are solved.
+  * Stage 2 (Placed in Receptacle): $8/65$ ($12.3\%$) — conversion from Lift $\to$ Place is only $14.3\%$ ($8/56$).
+* **Chi-Square Test of Stage Independence**: $\chi^2 = 59.51,\; p = 1.22 \times 10^{-14}$. Proves failure is overwhelmingly localized to the in-flight transport and release phase, not the approach.
+* **Grasp Decisiveness (Mann-Whitney U Test)**: Clean, prompt grasps ($< 300\text{ steps}$, median $293$) correlate with higher success vs delayed fumbling grasps (median $417\text{ steps}$).
+* **In-Flight Survival Holding Time**: Failed lifted episodes held the apple in the air for an average of $448.9\text{ steps}$ ($9.0\text{ s}$) before rotational slip or time-out.
+
+## 8. Realistic Policy/Controller Remediation & Graph Causal Memory
+* **Sim-to-Real Invariant**: Never artificially inflate USD `physics_material` friction to force simulation success. In physical reality, fruit friction cannot be altered. Remediation must fix the controller, policy execution, and inference dynamics.
+* **Valid Remediation Knobs**:
+  1. *Receding Horizon Control*: Halve `action_chunk_length` to $16$ (or $8$) to enable $6 - 12\text{ Hz}$ closed-loop replanning and active slip correction.
+  2. *Temporal Smoothing (EMA)*: Eliminates joint acceleration jerks ($\ddot{q}$) at chunk boundaries, reducing inertial flinging forces ($F = m \cdot a$).
+  3. *Binary Gripper Squeeze Bias*: Snap continuous gripper predictions $> 0.5$ to $1.0$ (full rated motor clamping torque), maximizing normal force $F_N$.
+  4. *Diffusion Steps*: Increase denoising steps (16–32) for low-variance trajectory synthesis.
+* **Active Inference Auto-Heal Integration**:
+  * `EvaluationDiagnosticOracle` parses `episode_results_rank*.jsonl`.
+  * If $\text{Lift Rate} \ge 50\%$ and $\text{Conversion Rate} < 35\%$, it classifies `in_flight_slip_inertia` (Severity: 0.92) and patches `action_chunk_length = 16`.
+* **Causal Knowledge Graph (Neo4j LPG + RDF-star)**:
+  * Records `EvaluationRun` metrics (`lift_rate`, `conversion_rate`, $\chi^2$ p-value) and links versions via `(v2)-[:REMEDIATED_FROM {defect: 'in_flight_slip_inertia', patch: 'action_chunk_length=16'}]->(v1)`.
+  * Forms a persistent empirical memory of which control parameters stabilize grasps for given object geometries.
+
+## 9. False Positive Diagnostics & Codebase Containment Fix
+* **Discrepancy Discovered**: Visual inspection in Omniverse Kit viewport (`--viz kit`) revealed that raw contact sensor telemetry (`object_on_destination`) logged false successes whenever an object grazed or bounced off the *exterior rim/base* of a receptacle.
+* **Architectural Patch**: In `isaaclab_arena/tasks/pick_and_place_task.py`:
+  1. Container auto-guarding sets default `max_separation = [0.12, 0.12, 0.15]` for all receptacle destinations (`bin`, `bowl`, `box`, `basket`).
+  2. `objects_in_proximity` is formally added to `predicate_groups` in `get_progress_objectives`, guaranteeing that success requires both physical contact AND spatial centroid containment inside the cavity volume.
+
+## 10. Scenario B1 (`droid_tomato_soup_to_blue_bin`) State
+* **v1 Generated**: `tomato_soup_can_ycb_robolab` in `front_right`, `bin_b03_vomp_robolab` in `front_left`. 1 iteration, 0 errors.
+* **Initial Visual Findings**:
+  * Fast grasp acquisition ($122\text{ steps}$ vs $417\text{ steps}$ for apple) due to planar jaw surface alignment on vertical cylinder.
+  * Rollouts timed out at 1000 steps ($20.0\text{ s}$) before completing place.
+* **v2 Healed Configuration**:
+  * Added `episode_length_s: 40.0` (2000 steps horizon) to allow full approach-lift-transfer-place execution.
+  * Configured `max_separation: [0.15, 0.15, 0.15]`.
+  * Policy instruction simplified to direct verb form: `"pick up the tomato soup can and place it into the blue bin"`.
+
+## 12. Scenario B1 (`droid_tomato_soup_to_blue_bin`) Empirical Benchmark Results (N=50)
+* **Statistical Funnel Breakdown**:
+  * **Stage 0 (Settled)**: $50/50$ ($100.0\%$)
+  * **Stage 1 (Lifted)**: $47/50$ ($94.0\%$) — confirms fast, reliable grasp acquisition on cylinder geometry (Median grasp step: $143$).
+  * **Stage 2 (Placed / Success)**: $23/50$ ($46.0\%$) — strict centroid proximity inside receptacle cavity.
+  * **Conversion Rate ($\text{Lift} \to \text{Place}$)**: $23/47$ ($48.9\%$).
+  * **Temporal Dynamics**: Median place step: $370$ ($7.4\text{ s}$).
+* **Comparison vs Organic/Spherical Asset (`apple_01`)**:
+  * Tomato soup can Lift Rate ($94.0\%$) is significantly higher than Apple ($86.2\%$), with virtually no initial approach failures.
+  * Conversion Rate ($48.9\%$) is $>3.4\times$ higher than baseline apple ($14.3\%$), confirming planar parallel gripper alignment against cylindrical faces drastically reduces rotational slip during high-acceleration transfer maneuvers.
+
+## 14. Scenario B1 (`droid_tomato_soup_to_blue_bin`) v3 Evaluation Results (N=52)
+* **Statistical Funnel Breakdown**:
+  * **Stage 0 (Settled)**: $52/52$ ($100.0\%$)
+  * **Stage 1 (Lifted)**: $44/52$ ($84.6\%$) — Median grasp step: $142$ ($2.8\text{ s}$).
+  * **Stage 2 (Placed / Success)**: $23/52$ ($44.2\%$ strict proximity, $48.1\%$ ledger score).
+  * **Conversion Rate ($\text{Lift} \to \text{Place}$)**: $23/44$ ($52.3\%$) — improvement over v2 ($48.9\%$) and $>3.6\times$ over baseline apple ($14.3\%$).
+  * **Temporal Dynamics Acceleration**: Median place step dropped from $370\text{ steps}$ ($7.4\text{ s}$) in v2 down to **$226\text{ steps}$ ($4.5\text{ s}$)** in v3 ($39\%$ faster trajectory execution).
+## 15. Hybrid Deterministic & LLM-Assisted Auto-Healing Architecture & v4 Synthesis
+* **Architecture Implementation**:
+  * Added `--healing_mode {hybrid, deterministic, llm}` to `environment_generation_runner.py` (defaults to `hybrid`).
+  * **Option A (Deterministic Statistical & Spatial Oracle)**:
+    * Analyzes empirical Markov stage funnels (Lift vs Conversion).
+    * Defect threshold tuned (`lift >= 50% and conversion < 75%`) to detect in-flight rotational slippage and open-loop inertial drift.
+    * Automatically applies receding horizon chunk compression (`action_chunk_length: 16 -> 8`).
+  * **Option B (Generative LLM Reasoning via OpenRouter/Gemini/OpenAI)**:
+    * Automatically activated in `llm` mode or as a fallback in `hybrid` mode when failures cannot be resolved by standard deterministic rules.
+## 16. Scenario B1 (`droid_tomato_soup_to_blue_bin`) v4 Empirical Benchmark (N=42) & Receding Horizon Trade-offs
+* **Statistical Funnel Results**:
+  * **Stage 0 (Settled)**: $42/42$ ($100.0\%$)
+  * **Stage 1 (Lifted)**: $37/42$ ($88.1\%$)
+  * **Stage 2 (Placed / Success)**: $6/42$ ($14.3\%$)
+  * **Conversion Rate ($\text{Lift} \to \text{Place}$)**: $6/37$ ($16.2\%$)
+  * **Median Execution Speed**: Grasp step: $240$, Place step: $614$ ($12.3\text{ s}$).
+## 17. Scenario B4 (`droid_spam_can_to_grey_bin`) Empirical Benchmark Results (N=70)
+* **Statistical Funnel Breakdown**:
+  * **Stage 0 (Settled)**: $70/70$ ($100.0\%$)
+  * **Stage 1 (Lifted)**: $68/70$ ($97.1\%$) — Median grasp step: $175$ ($3.5\text{ s}$).
+  * **Stage 2 (Placed / Success)**: $18/70$ ($25.7\%$) — Median place step: $415$ ($8.3\text{ s}$).
+  * **Conversion Rate ($\text{Lift} \to \text{Place}$)**: $18/68$ ($26.5\%$).
+* **Auto-Heal Triggered (`v1` -> `v2`)**:
+  * The automated oracle detected the high-lift ($97.1\%$) with lower conversion ($26.5\%$) and generated `v2` remediation snapshot in `generated_envs/droid_spam_can_to_grey_bin/v2/`.
+  * Lineages updated across `lineage.json`, `lineage.ttl`, `README.md`, and Neo4j.
+
+
+## 18. Unitree G1 Humanoid Tabletop Manipulation (`GN1x-Tuned-Arena-G1-Static-PickNPlace`) & VLM-in-the-Loop Failure Autopsy
+* **Headless-First Diagnostic Principle**:
+  * Run simulation evaluation completely headless across parallel GPU environments (`--num_envs 4`, `--num_steps 2000`) for maximum throughput (~15–20 steps/s).
+  * Do not rely on persistent GUI viewports. If a milestone stalls or drops to 0%, trigger a multi-frame trajectory rollout (`render_policy_trajectory.py`) and submit keyframes to an LLM/VLM reasoning engine (Anthropic Claude 3.5 Sonnet / Claude 4.5 via OpenRouter).
+* **Embodiment & Action Space Contract**:
+  * The pre-trained checkpoint `nvidia/GN1x-Tuned-Arena-G1-Static-PickNPlace` produces **50-dimensional joint actions** (`action_dim: 50`).
+  * Testing `g1_wbc_agile_pink` fails (`ValueError: Invalid action shape, expected: 23, received: 50` and `assert self.num_envs == 1`).
+  * The correct embodiment is **`g1_wbc_agile_joint`** (paired with AGILE lower-body WBC balancing and upper-body joint commands).
+  * Mandatory parameters: `initial_joint_pos: G1_STATIC_OPEN_ARM_JOINT_POS` (pre-clearing arms away from torso), high-friction finger physics (`static_friction=6.0`, `dynamic_friction=5.0`), and `action_chunk_length: 40`.
+* **Empirical Proof on Reference Training Setup**:
+  * Evaluating `galileo_g1_static_pick_and_place` on the exact same policy server (`127.0.0.1:5557`) achieved **100% success (`success_rate: 1.0, object_moved_rate: 1.0`)**, proving server health, joint mapping, and execution fidelity.
+* **Root-Cause of High Tabletop Failure (`v6`)**:
+  * **Vertical Out-Of-Distribution Gap**: In training, the apple was on a low warehouse shelf at $Z = -0.8015\text{ m}$ below the pelvis. On `maple_table`, the tabletop is at $Z = -0.0126\text{ m}$ below the pelvis ($\Delta Z = 80\text{ cm}$ mismatch).
+  * **Kinematic Trajectory Tracking**: The policy reaches forward between steps 0–30, then attempts to plunge downward toward knee level ($Z \approx 0.69\text{ m}$), where it encounters the table plane and aborts/retreats.
+  * **Visual Domain Shift**: Head camera views light-colored wood grain filling the viewport instead of dark metal warehouse racks.
+* **Strategic Roadmap**:
+  * Plan 1 (Production Tabletop): Collect 50–100 teleoperated demonstrations on `maple_table` at chest height and fine-tune GR00T N1.7.
+  * Plan 2 (Zero-Shot Baseline): Lower the table/support surface so $\Delta Z \approx -0.80\text{ m}$ relative to the pelvis.
+  * Plan 3 (Algorithmic Bridge): Implement vertical Cartesian delta compensation in the policy wrapper.
+
+
+## 19. Spatial Forcing Scale-Invariance Literature Audit (2026-09) — Why Cosine Alignment Cannot Inject Metric Range
+* **Verdict**: Leading hypothesis, not yet a finding. A scale-invariant cosine alignment loss very probably cannot close a systematic absolute range error, via two stacking removals of metric scale. Removal 1 is a code fact; Removal 2 is an architectural argument that our own measurement partly undercuts (the `focal/300` factorisation does not actually produce metric depth — plan §2.5b), so the settling experiment below is still owed.
+* **Removal 1 — the loss discards magnitude**: Both SF reference implementations (`openvla-SF/prismatic/models/projectors.py`, `openpi-SF/src/openpi/models_pytorch/projectors.py`) compute `1 - cos` on `F.normalize`d vectors, and cosine is the **only** implemented loss (`else: raise NotImplementedError`). Rescaling the teacher leaves the loss bit-identical.
+* **Removal 2 — the teacher has no metres**:
+  * **VGGT** (arXiv:2503.11651, §3.4) normalises GT by "the average Euclidean distance of all 3D points in the point map $P$ to the origin", applied to camera translations, point map **and** depth map. Critically: "**unlike [DUSt3R], we do not apply such normalization to the predictions** ... instead, we force it to learn the normalization" — the scale-blindness is baked into the learned function, not invertible post-hoc.
+  * **`DA3METRIC-LARGE` is affected too**: its metric-ness is a scalar *outside* the network — `external_dependencies/depth-anything-3/src/depth_anything_3/utils/alignment.py:118`, `depth * (focal_length / 300.0)`, applied to `metric_output.depth` **after** the DPT head. `da3metric-large.yaml` is a plain `DinoV2` + `DPT(output_dim: 1)` with **no camera head**. So layer-23 features are canonical-space, focal-normalised: metres live in a post-hoc multiply, never in the representation.
+  * **Consequence**: "metric teacher" is a far weaker differentiator from `DA3MONO-LARGE` than originally assumed. The `DA3MONO-LARGE` contrast arm is the right detector.
+* **Third strike (SF-specific)**: SF slices `agg_vggt_hidden[:, :, patch_start_idx:, :]`, keeping only patch tokens and **discarding VGGT's camera token** (which carries predicted intrinsics). Evo-0 by contrast keeps camera + register + 3D tokens.
+* **Precision caveat on the argument**: cosine invariance alone proves only that the *norm* $\lVert f_i \rVert$ is discarded — one scalar per token. Absolute depth is also one scalar, so it *could* in principle live in the direction of a 1024-D vector. Useful decomposition (own derivation, not a citable result): $\lVert f_T - f_S \rVert^2 = (\lVert f_T \rVert - \lVert f_S \rVert)^2 + 2\lVert f_T \rVert \lVert f_S \rVert (1 - \cos\theta)$ — cosine penalises only the second term. **Cheap settling experiment**: run the `probe_depth_readout.py` ridge probe on **L2-normalised** vs. unnormalised layer-23 features. Survives $\Rightarrow$ direction carries scale; collapses $\Rightarrow$ magnitude does.
+* **What SF actually reports (explicit negatives, full PDF read)**:
+  * Ablations are only: target representation (SigLIP 94.0 / DINOv2 94.1 / VGGT-no-PE 94.7 / VGGT 96.9), aligned layer (1/8/16/24/32, best **24**), train iters, data fraction; plus $\alpha$ (0 / 0.02 / 0.1 / **0.5** / 2.5 / 12.5).
+  * **No** relative-vs-metric teacher ablation. **No** loss-form (cosine vs MSE) ablation. **No** claim to fix absolute range — "metric"/"absolute" absent from its motivation.
+  * **Zero cm/mm anywhere**: `\bcm\b` 0 hits, `\bmm\b` 0 hits, "positional error" 0 hits. Depth probing (Fig. 3) is **purely qualitative** rendered depth maps, probed with an affine-invariant DPT head. All metrics are success rate.
+  * Its one height task ("place green block", height variation) is $67.5 \to 85.0\%$ SR — *relative* placement height, smallest relative gain, highest baseline.
+* **Upstream loss-form gap**: REPA (arXiv:2410.06940) compares only NT-Xent vs negative cosine — **both scale-invariant**, never MSE. GLaD (arXiv:2512.09619) independently uses unnormalised squared $L_2$ against the same frozen VGGT and cites SF without ablating against it. **No paper runs cosine-vs-$L_2$ with a fixed teacher, and no paper critiques SF for discarding metric scale.**
+* **Strongest empirical prior against SF here** — 3D-Mix (arXiv:2603.24393) nine-scheme pilot on Qwen3-VL-4B, SIMPLER avg, base $=57.81$: **3D-Tokens** (cosine align on a `<|vggt|>` token, VGGT-free at inference) $=56.25$ — **below base**; **Spatial Forcing** $=58.85$ (**+1.04**); Concat Fusion $=60.42$; **GatedFusion/3D-Mix** $=68.23$ (+10.42, VGGT-1B live at inference). Both zero-inference-cost schemes are the weakest non-catastrophic ones. AE Fusion (3.13) and Visual Fusion (4.69) *destroy* the policy — "add VGGT" is violently sensitive to *how*. Repo 404s.
+
+## 20. Metric-Range Remedies for RGB-Only VLAs — Ranked, with Inference Cost
+* **The architectural split is the key finding**: depth regression *through the shared VLM backbone* destabilises; depth regression in a **separate branch** works.
+  * **Against a shared-backbone head**: GLaD — "explicit geometry supervision (predicting depth maps) ... **caused training divergence due to conflicting objectives**" (one line, no numbers). QDepth-VLA — pixel-wise regression instead of quantised tokens costs **$-3.9\%$**; removing the **depth expert** costs $-8.5\%$ (largest drop, so the *branch* matters more than the target format). BridgeVLA — swapping its heatmap head for direct MSE position regression craters RLBench **$88.2 \to 31.4\%$**.
+  * **For a separate branch**: DepthVLA **+16.0** on Simpler over its own $\pi_0$ (58.8 $\to$ 74.8); QDepth-VLA's expert; MVUCF.
+* **Metric scale specifically is the load-bearing ingredient** — OASIS (arXiv:2605.25829), matched-backbone, LIBERO-Long: full **95.2%**, w/o Metric **91.8%**, w/ Rel. (Depth Anything V2) **92.0%**. Quote: "**Metric scale, not depth in general, is what helps**." Also names our teacher: "Unlike Depth Anything V2 and VGGT, which produce **normalized relative depth maps**, Depth Anything 3 estimates metric depth." *Caveat: metric depth is a frozen input feature there, not an auxiliary regression target.* Its richness ladder shows **2D image-plane supervision buys ~nothing** (89.5 no-traj $\to$ 90.7 2D $\to$ 92.3 3D $\to$ 93.2 world-frame $\to$ 95.2).
+* **Ranked shortlist** (fit to "absolute metric range, RGB-only at inference"):
+  1. **MVUCF-style training-only metric-depth head** (arXiv:2608.01826) — Softplus head regressing **metres** (valid 0.05–5.0 m) at **GR00T-N1.6 layer 15**, cross-view correspondence, **all heads deleted at deployment**. Cost: **zero** ("no extra inference FLOPs"; "camera calibration is used only to construct training targets"). **Only paper in ~25 surveyed reporting cm-level accuracy**: depth-probe MAE $4.9 \to 0.44\text{ cm}$; within 2 cm $44\% \to 97\%$. Freezes layers 0–7; **layer 12 "degraded token-level separation after training"** — directly relevant to the `backbone_layer_{6,9,12}` sweep. No code.
+  2. **Metric depth as frozen input feature** (OASIS) — cost: depth-model forward. No code.
+  3. **One-shot per-setup metric calibration** (MOMA, arXiv:2506.17110, IROS 2025) — scale-shift-**rotation** fit from sparse GT depth, once at calibration; sensor disabled after. ~ms/frame. Numbers mirror ours exactly: DAM RMSE $12.3 \to 1.6\text{ cm}$; Metric3Dv2 $32.8 \to 2.0\text{ cm}$; grasp SR 82% (SSRA) vs 72% (GSSA) vs 62% (LWLR).
+  4. **3D-Mix gated fusion** — +10.42 but **VGGT-1B live**; teacher scale-normalised, so unlikely to fix range.
+  5. **DepthVLA** (arXiv:2510.13375) — depth expert in a mixture-of-transformers, **no sensor**, "latency marginally". Loss is Eigen scale-invariant log at **$\lambda = 0.5$** (i.e. *partially* scale-aware) against **metric** pseudo-labels (UniDepthV2 + DAv2). No code found.
+  6. **QDepth-VLA** (arXiv:2510.14836, AAMAS 2026) — VQ-VAE depth tokens + cross-entropy, **MIT**, +12.2% params, no sensor. **Relative depth only** (Video-Depth-Anything). Concedes: "**relative depth lacks absolute positional encoding necessary for stable control**."
+  7. **Heatmap/voxel head over a metric grid** — BridgeVLA (Apache-2.0), PerAct (Apache-2.0, 1 cm voxels).
+  8. **Object-centric residual RL** (arXiv:2606.18953) on GR00T-N1.5 — sidesteps perception; Table 6 lists verbatim "**Hovers above cube, misses grasp** $\to$ Residual Fix: **Pushes end-effector down to the cube**."
+  9. Depth-at-inference family (**ruled out, no depth sensor**): SpatialBot (MIT, true mm), PointVLA (no code), GeoVLA (MIT), 3D-CAVLA (no licence), DP3/iDP3 (MIT), RVT/RVT-2 (**non-commercial**).
+  10. SpatialVLA / RoboPoint / 3D-VLA — don't target absolute scale. SpatialVLA runs ZoeDepth **in-graph** but **requires intrinsics** (ships one hardcoded matrix, fx=fy=623.588) and explicitly disclaims scale: Ego3D PE "renders precise scale **unnecessary**". RoboPoint (Apache-2.0) needs depth *downstream* to lift 2D$\to$3D.
+* **Recommendation**: do **not** distil a foundation-model teacher's metric scale. Regress **sim GT metric depth in metres** from a **separate small branch** (not a backbone head), with a scale-*aware* loss (Eigen log at low $\lambda$, or a binned/heatmap readout over a metric range given BridgeVLA/PerAct), deleted at deployment MVUCF-style. Keep `align` only as a *relative-structure* regulariser if the arms justify it. Replacing cosine with unnormalised $L_2$ against DA3METRIC layer-23 transfers feature magnitude, **not** metres.
+* **Our decisive advantage — perfect metric GT**: every objection SF and QDepth-VLA raise against depth supervision ("sensor noise, hardware heterogeneity, incomplete depth coverage", "insufficient spatial–temporal consistency ... introducing substantial noise") is about **pseudo-labels**, and is void in Isaac Lab. G³VLA (arXiv:2606.24472) prices it: its monocular teacher predicted median depth **3.535 m against simulator GT median 0.027 m — a $132.4\times$ ratio** — concluding "**simulator ground-truth depth provides aligned point-map supervision and improves success rate**." **Corrected against our own measurement (2026-09-05)**: the earlier "24.6 cm / $1.48\times$" figure is **retracted** — it paired dataset RGB against a default-pose render, and applied DA3's `focal/300` transform, which *doubles* the error here. On a properly paired frame, table region: raw $1.568\times$ / 29.1 cm; with `focal/300` $2.566\times$ / 79.5 cm; **one fitted global scale $1.027\times$ / 1.64 cm** — i.e. inside the 7 cm gap once anchored. The canonical-focal units explanation is refuted (feeding at $f_\text{eff}\approx300$ gives $2.358\times$), so 0.655 is a fitted anchor, not a formula. See `geometry_supervision_evidence_repair_plan.md` §2.5b.
+* **Note**: most "depth-aux" VLAs throw scale away anyway — DreamVLA uses a **scale-normalized MSE** that explicitly "removes the global scale ambiguity ... while ignoring any arbitrary global scale shift."
+
+## 21. Two Confounds That Outrank the Loss Question (G1 Tabletop 7 cm Gap)
+* **Confound 1 — the training corpus has ZERO spatial variation**: `APPLE_SPAWN_XY_RANGE_M = 0.0`, while evaluation uses a $20 \times 22\text{ cm}$ placement range. **No perception-side auxiliary loss can help**: there is nothing for a spatial objective to bind to, and a constant scene at constant table height cannot teach range-from-vision. LIBERO-PRO (arXiv:2510.03827) prices this failure mode — under **Position Perturbation**: **GR00T-N1.6 = 28.1**, $\pi_0$ = 5.9, OpenVLA = **0.0**, all from $>0.9$ on stock LIBERO. **Adding spawn variation is cheaper than any remedy in §20 and is a prerequisite for measuring any of them.**
+* **Confound 2 — "irreducible monocular range error" may be mis-attributed** *(inference; the debug record concludes otherwise)*: the 7 cm is a **signed, systematic** offset under an essentially constant scene. Monocular scale ambiguity is *multiplicative* and should co-vary with range; a constant bias at constant table height is equally consistent with a calibration/posture mismatch — and posture, pelvis height, stance and camera pitch are already known to be **coupled through the WBC**, with F1 failing in the *opposite* sign to the hypothesis.
+  * Supporting: VLATest (arXiv:2409.12894) — VLAs pass only **34.0%** of cases under mutated camera poses. "Do You Know Where Your Camera Is?" (arXiv:2510.02268) — policies "**infer camera pose using visual cues from static backgrounds** in fixed scenes" and "this shortcut collapses" — precisely a fixed-scene corpus evaluated at a shifted pose.
+  * **GR00T N1's only spatial auxiliary is a pure image-plane bearing loss** (normalised bbox centre $x, y$ — **no range term**), strikingly consistent with "bearing good, range bad".
+  * **Cheap discriminator** (no paper does this decomposition): a latency-caused offset scales with horizon $\times$ descent speed; a perception/calibration-caused one does not. The $16 \to 8 \to 4$ plateau (4.9 cm then 0.7 cm) already says the residual is *not* staleness, but does **not** separate perception from calibration.
+* **Closest published match to our symptom**: arXiv:2605.28736 (suture following, ACT/DP/SmolVLA/$\pi_0$) decomposes error into **lateral** vs **depth** and finds "**depth errors are the dominant failure mode**" (20–35% of episodes) vs lateral (0–25%) — and that this is "**bottlenecked by the available perceptual signal rather than by demonstration count**" (i.e. more demos will not fix it). Camera ablation separates the axes cleanly: on-arm-only spikes depth errors to 40–65%; side-cam-only shifts mass to lateral 30–45%.
+
+## 22. Literature Absences Worth Knowing (verified negatives, 2026-09)
+* **No paper decomposes VLA reach error into latency vs perception vs calibration.** RTC (arXiv:2506.07339) reports success/throughput only; its only decomposition tables are *compute* latency by component. It blames chunk **discontinuity**, not bias.
+* **No paper reports a signed per-axis $(x/y/z)$ end-effector bias in cm for a VLA.** Closest: arXiv:2511.11298 names "small Z-offset ... closes above surface" but unsigned.
+* **No arXiv technical report exists for GR00T N1.5 / N1.6 / N1.7**, and no NVIDIA document reports a vertical bias. GR00T N1 (arXiv:2503.14734) contains no failure analysis at all.
+* **FLARE is entirely absent from our vendored `submodules/Isaac-GR00T`** (`grep -rn -i flare` returns only an unrelated CSS hit in `external_dependencies/depth-anything-3`). There is **no alignment infrastructure to repurpose**; the geometry path is our own `gr00t/model/modules/geometry_conditioning.py`.
+* **No learned residual *calibration* correction for a learned policy** — residual RL corrects in action space, not calibration space.
+* **No auxiliary-loss experiment that regresses metric depth in metres and compares against scale-normalised depth as the target.** OASIS varies a frozen input; QDepth-VLA and DreamVLA use relative/normalised targets only. **This is exactly our hypothesis, and it is unpublished.**
+* **Licence corrections**:
+  * **VGGT code** is a bespoke Meta "Research Materials" licence (GitHub API `NOASSERTION`); the word "commercial" appears **nowhere** in it, but its incorporated AUP bars "operation of ... **heavy machinery**" — worth a legal read for robotics regardless. The binding constraint is that **`facebook/VGGT-1B` weights are CC-BY-NC-4.0**. Existing §8.2 treatment is correct.
+  * **`UniDepthV2`** is architecturally ideal as a metric teacher (metric, GT-intrinsics injectable, uncertainty output) but is **CC BY-NC-4.0 code with untagged weights** — belongs on the ruled-out list beside VGGT.
+  * **Spatial Forcing's own repo is MIT** (`github.com/OpenHelix-Team/Spatial-Forcing`, ICLR 2026). **QDepth-VLA is MIT.** 3D-Mix, MVUCF, G³VLA, DepthVLA, OASIS, PointVLA: **no code published**.
+* **Not verified — do not cite without checking**: OpenReview for SF (`euMVC1DO4k`) is bot-gated; **reviewer discussion of scale-invariance could not be read** and may be worth a signed-in look. Search-level only: Evo-0 (2507.00416), MetricAnything (2601.22054), AugVLA-3D (2602.10698), Pose-VLA (2602.19710), CamVLA (2607.05396), grounded-3D-point action-head injection (2606.27663, PDF would not decode), invariant-representation limits (2012.10713).
+
+## 23. Cross-Cutting Conclusions & Plan Sync (2026-09-06)
+* **Make range OBSERVABLE before trying to infer it — but a second camera is NOT cheap** *(corrected 2026-09-06; an earlier version of this bullet claimed it was)*. §21's camera ablation (arXiv:2605.28736) shows range and bearing are carried by *different baselines* — removing the side camera spikes depth errors to **40–65%**; removing the on-arm camera shifts failure mass into **lateral** error (30–45%) instead. The direction is right, the costing was wrong:
+  * **The error to avoid**: `pov_cam_name_sim` accepts a *list* and the DROID path already runs two views (`["external_camera_rgb", "wrist_camera_rgb"]`), which looks like the plumbing is free. That is the **policy config**; the binding constraint is the **rig**. **`G1CameraCfg` exposes exactly one camera** (`robot_head_cam`) and the corpus recorded exactly one view (`observation.images.ego_view`), so a genuine spatial baseline costs an embodiment change **plus** a 251-episode re-record. It folds into the re-record cost rather than competing with it.
+  * **What IS cheap and already built**: **temporal** parallax — `g1_sim_wbc_data_gr00t_n_1_7_parallax_config.py` stacks the same camera at `delta_indices [-8, 0]`, and the `parallax` / `align_parallax` arms are already wired in the launcher. No new sensor, no re-record. Weaker than triangulation (the baseline is only whatever the head moved in 8 frames, and in a corpus this static that may be ~nothing — the ~1 cm `obj_z` spread is a warning), so **measure the effective baseline before trusting a null result**.
+  * If a re-record is funded anyway, add the second camera **in the same pass** — marginal cost is small there.
+* **More data alone will not close a range gap.** Depth-error rate in arXiv:2605.28736 is **flat from 40 to 160 episodes per task** — "bottlenecked by the available perceptual signal rather than by demonstration count." Spatial variation (§21 confound 1) is *necessary* for a spatial objective to bind, but not *sufficient* if the error is perceptual-absolute.
+* **The magnitude-preserving alignment variant is in use and unmeasured against ours.** GLaD applies **unnormalised squared $L_2$** at the same LLM-hidden-state site against the same frozen VGGT and reports **94.1%** LIBERO avg — without ever ablating against cosine. Upstream SF implements cosine *only* (`else: raise NotImplementedError`), and REPA compared only NT-Xent vs cosine (**both** scale-invariant). So cosine-vs-$L_2$ is unablated everywhere, not just in SF.
+* **$\lambda$ is a design decision, not a default** (for any scale-aware depth objective): DepthVLA succeeds at Eigen log **$\lambda = 0.5$** with a *separate expert* (+16.0 Simpler over its own $\pi_0$); DreamVLA neutralises scale **on purpose** ("removes the global scale ambiguity ... ignoring any arbitrary global scale shift"); GLaD **diverges outright** with a backbone head. At $\lambda = 1$ the loss is fully scale-invariant and degenerates back into the §19 problem.
+* **A published remedy exists for our literal symptom, on our base family.** arXiv:2606.18953 (GR00T-N1.5): object-centric residual trained **only in sim** against the frozen base's own failures, transferring zero-shot because it "observes object pose, a representation invariant across domains" — i.e. **it never looks at an image**, so it is immune to both the frozen-render bug and the memorisation diagnosis. Cheaper than a depth branch and orthogonal to it. The existing `cartesian_vertical_offset_adapter` is the zeroth-order version; if a constant offset closes the gap, the residual is unnecessary.
+* **"No metres" means "no absolute ANCHOR", not "no usable geometry".** Collapsing that distinction is how the old plan talked itself into selecting a teacher on the wrong axis. The measurements cut against over-arguing scale-blindness: every teacher resolves the apple's relief with the correct **sign**, `DA3METRIC-LARGE` reproduces the true $+6.8\%$-of-range ratio to within **1.3x**, and **one fitted global scale reaches 1.64 cm at 0.5 m** — inside the 7 cm target. What is missing is a single global scalar, and it is fittable (RANSAC scale-shift against the table plane, once per camera pose).
+* **A claim of mine that did NOT survive contact with the code**: the SF "camera-token discard" is real upstream (`agg_vggt_hidden[:, :, patch_start_idx:, :]` drops VGGT's intrinsics-bearing camera token) but is **void for our teacher** — `DA3METRIC-LARGE` is monocular and emits no camera token, so there is nothing to discard. It is *not* a third removal of metric scale in our setup; it only explains why **SF's own published results are uninformative either way about metric transfer**. Removal count stays at **two**.
+* **Plan sync**: landed in `plans/geometry_supervision_evidence_repair_plan.md` **v2.2** (2026-09-06) — §2.6 loss recipes, **§2.8** (range/bearing corroboration, with the second-camera claim retracted in place), **§2.9** (verified absences), **W9** (residual), risks 6–7, open decision 5. W3b was rewritten (by another pass) to lead with temporal parallax; §2.4's "third removal" and §2.8's "cheapest remedy" were **both retracted**. No v2 finding was retracted.
+
+## 24. G1 Reinforcement Learning: Operational Space Control (7-D Diff-IK), WBC Balance & Multi-Keypoint Guidance (2026-09-08)
+* **Curse of Dimensionality Solved**: Raw 50-D joint action exploration ($O(\epsilon^{50})$) suffered catastrophic exploration collapse (knuckle twitching/swatting). Reduced policy action space to $\mathbb{R}^7$: $\mathbf{a}_t = [\Delta x, \Delta y, \Delta z, \Delta \text{roll}, \Delta \text{pitch}, \Delta \text{yaw}, g_{\text{finger}}]$.
+* **Decoupled WBC Diff-IK Action Architecture (`G1DecoupledWBCDiffIKAction`)**:
+  * Diff-IK operates in parallel on GPU using PhysX link Jacobians and Damped Least Squares (DLS: $\mathbf{J}^\dagger = \mathbf{J}^T (\mathbf{J}\mathbf{J}^T + \lambda^2 \mathbf{I})^{-1}$).
+  * **Floating-Base Jacobian Slicing Rule**: In Isaac Lab, floating-base articulations reserve columns $0..5$ for base 6-DoF. Joint columns start at `num_base_dofs = 6`. Correct slice: `[idx + num_base_dofs for idx in arm_joint_ids]`.
+  * **Standing Balance**: Unitree AGILE Whole-Body Controller (WBC) dynamically manages 12 leg joints to maintain 0.75m pelvis height and bipedal balance, completely decoupled from arm task-space control.
+  * **Finger Synergy**: 1D scalar $g \in [-1, 1]$ smoothly actuates all 7 left hand finger joints (`left_hand_thumb_*`, `left_hand_index_*`, `left_hand_middle_*`).
+* **Finger Grasp Polarity Correction**: G1 hand URDF requires negative joint positions to curl index/middle fingers (`-pos / 1.0`), while thumb curls positive (`pos / 0.7`). Previous reward penalised closing the hand; corrected in `finger_grasp_enclosure`.
+* **Multi-Keypoint Geometric Guidance (`multi_keypoint_grasp_guidance`)**: Exponential guidance reward tracking distances between 4 hand link keypoints (`left_wrist_yaw_link`, `left_hand_thumb_2_link`, `left_hand_index_1_link`, `left_hand_middle_1_link`) and the target object, simultaneously solving position, approach orientation, and grasp aperture.
+* **Empirical Validation (150 Iterations / 230k Steps on RTX PRO 6000 Blackwell)**:
+  * Mean total reward surged **0.67 $\to$ 3.87 (+477%)**.
+  * Mean episode length extended **24.0 $\to$ 73.3 steps**.
+  * `finger_grasp_enclosure` reached **0.4287**, `approach_alignment` reached **0.1729**.
+  * Checkpoint: `logs/rsl_rl/g1_diff_ik_7d_validation/2026-09-08_21-20-25/model_149.pt`.
+  * Rollout evaluation (`policy_runner.py`): 100% standing stability (0 falls), 100% object moved rate, active finger enclosure.
+
+## 25. Multi-Tier Arm Velocity Mitigation, EMA Smoothing, and Visual Rollout Validation (2026-09-08 / 2026-09-09)
+* **Excessive Speed Mitigation & Kinematic Smoothing**:
+  * Clamped maximum single-step Cartesian displacement: `scale_pos = 0.025m` ($2.5\,\text{cm}$) and `scale_rot = 0.08rad`, strictly capping maximum end-effector linear velocity to $\le 1.25\,\text{m/s}$ at $50\,\text{Hz}$.
+  * Added EMA command low-pass filtering ($\alpha = 0.8$) in `G1DecoupledWBCDiffIKAction` to eliminate high-frequency action chatter.
+  * Added `arm_joint_vel_l2` penalty (weight `-0.0005`) in `PickAndPlaceRewardCfg`.
+  * Increased action rate penalty by 5x (`action_rate_l2 = -0.005`).
+  * Fixed camera/replicator auto-initialization in `policy_runner.py` for `--record_viewport_video`.
+* **Visual Evaluation Rollout**:
+  * Recorded 300-step (6.0s) rollout (`outputs/2026-09-08_22-46-43/rl-video-step-0.mp4`).
+  * 100% bipedal standing balance maintained by Unitree AGILE WBC throughout rollout.
+  * Controlled Cartesian descent with palm downward over apple; zero ballistic swatting, zero knuckle collisions.
+  * Hand hovers in pre-grasp enclosure directly over the target apple.
+  * Committed in `5a39b3104f` on `dev/0.3.0-prerelease`.
+
+## 26. Reverse Curriculum Architecture (Milestone M4) & Pre-Grasp / Lift Kinematics (2026-09-09)
+* **Empirical Pre-Grasp Kinematics Extraction**:
+  * Extracted from step 10 of rollout evaluation checkpoint `model_149.pt` where palm reached hover $1.7\,\text{cm}$ above apple:
+    * `left_shoulder_pitch_joint`: -0.1038, `left_shoulder_roll_joint`: -0.0865, `left_shoulder_yaw_joint`: 0.2141
+    * `left_elbow_joint`: 0.4491
+    * `left_wrist_roll_joint`: 0.1850, `left_wrist_pitch_joint`: -0.0044, `left_wrist_yaw_joint`: 0.1924
+* **Reverse Curriculum Event Terms (`pick_and_place_task_rl.py`)**:
+  * `reset_robot_arm_reverse_curriculum`: Selects fraction `curriculum_ratio` (default $0.35$ in training) of resetting envs and writes arm joint angles to pre-grasp posture with zero velocity.
+  * **Isaac Lab Joint Order Contract**: `robot.find_joints(joint_names)` defaults to sorting indices internally; must explicitly pass `preserve_order=True` when mapping dictionary values to index order.
+  * `reset_object_reverse_curriculum`: Selects fraction `lift_curriculum_ratio` (default $0.15$ in training) and elevates the manipuland by `lift_height_offset = 0.025m`, training the policy directly on in-flight transport and release without having to explore the full reach-and-grasp sequence from scratch every episode.
+* **Honest Evaluation Decoupling**:
+  * In `g1_apple_to_plate_rl_environment.py`, curriculum ratios are dynamically zeroed when `rl_training_mode=False`.
+  * Standalone evaluation runs (`policy_runner.py`) always test the policy from the canonical home posture without artificial reset assistance.
+
+## 27. Reverse Curriculum Calibration, Stance Loading Dynamics, and Extended Training Convergence (Milestone M4) (2026-09-09)
+* **Stance Transition vs Forward-Reaching Arm Coupling (Root Cause Diagnosis)**:
+  * In initial curriculum testing, the G1 humanoid spawned in a 14 cm deep crouch ($Z = 0.0007\,\text{m}$), causing its forward outstretched arm during pre-grasp reset to dip down to $Z = -0.028\,\text{m}$ (10 cm into table surface) during the stance loading transient.
+  * PhysX penetration forces pushed the hand down, causing table collisions and object scattering.
+  * Extracted settled standing posture from physics rollout: Pelvis $Z = 0.1414\,\text{m}$, root pos `[-0.4896, 0.0, 0.1414]`, and lower-body leg angles `G1_SETTLED_LOWER_BODY_JOINT_POS`.
+  * In [`g1_apple_to_plate_rl_environment.py`](../../../../isaaclab_arena_environments/g1_apple_to_plate_rl_environment.py), bound `G1_SETTLED_LOWER_BODY_JOINT_POS` and initialized robot at settled standing root pose.
+* **Mid-Air Spawning Depenetration Explosion (Root Cause Diagnosis)**:
+  * Attempting to spawn rigid manipuland in mid-air (`lift_curriculum_ratio = 0.15`) without physical attachment or active grasping caused severe PhysX depenetration impulses against the robot fingers, catapulting the apple 7.25m into the air and triggering `object_dropped` at 98%.
+  * Setting `lift_curriculum_ratio = 0.0` while retaining arm pre-grasp curriculum (`curriculum_ratio = 0.50`) eliminated object explosions completely, providing smooth, stable descent and grasp exploration.
+* **Extended RL Training (250 Iterations / 384,000 Steps on RTX PRO 6000 Blackwell)**:
+  * Run directory: `logs/rsl_rl/g1_diff_ik_curriculum_m4_standing/2026-09-09_01-31-26/`
+  * Checkpoint: `model_249.pt`
+  * Wall time: 391.63s (~6.5 minutes at ~960 steps/sec across 64 parallel PhysX environments).
+  * **Mean Total Reward**: Surged to **16.63** (M1 $\to 0.82$, M3 $\to 3.87$, M4 $\to \mathbf{16.63}$ - a **+330%** jump over M3 and **+2380%** over M1).
+  * **Mean Episode Length**: Reached **230.87 steps** (76% of episodes run to full 300-step horizon timeout; drop rate dropped from 98% to 24%).
+  * **Finger Grasp Enclosure**: Reached **0.8096** (near complete finger flexion around apple).
+  * **Approach Alignment**: Reached **0.3238**, Multi-Keypoint Guidance reached **0.5686**.
+  * **Active Lifting Discovered**: `Episode_Reward/lifting_object: 0.0750`.
+  * **Active Transport Discovered**: `Episode_Reward/transporting_object: 0.0212`.
+* **Evaluation Rollout (`policy_runner.py`)**:
+  * Zero falls, zero NaN actions, 100% standing balance across all 3 episodes (300 steps each).
+  * Viewport video recorded (`outputs/2026-09-09_01-38-31/rl-video-step-0.mp4`): G1 stands stably at the table, reaches arm directly toward target apple, closes fingers with vertical posture, avoiding drop terminations.
+  * Telemetry recorded (`eval_telemetry.ttl`, `episode_results_rank0.jsonl`).
+  * Milestone M4 marked **COMPLETED**.
+
+## 28. RAPTOR Meta-Learning Privileged Teacher-Student Distillation Architecture (Milestone M5) (2026-09-09)
+* **Privileged Observation Space (`teacher_obs`)**:
+  * In `PickAndPlaceObservationsCfg` (`pick_and_place_task_rl.py`), integrated an 18-dimensional privileged observation group:
+    * `object_lin_vel` (3D): ground-truth linear velocity in world frame (`wp.to_torch(object.data.root_lin_vel_w)[:, :3]`).
+    * `object_ang_vel` (3D): ground-truth angular velocity in world frame (`wp.to_torch(object.data.root_ang_vel_w)[:, :3]`).
+    * `keypoints_to_object` (12D): 3D relative displacement vectors from 4 contact links (`left_wrist_yaw_link`, `left_hand_thumb_2_link`, `left_hand_index_1_link`, `left_hand_middle_1_link`) directly to the target object centroid.
+  * Concatenated into a single 18-dim tensor per env when `concatenate_terms = True`.
+* **RAPTOR Configurations (`isaaclab_arena_examples/policy/raptor_distillation_cfg.py`)**:
+  * `G1PrivilegedTeacherPolicyCfg`: PPO on-policy runner observing `["policy", "task_obs", "teacher_obs"]` for both actor and critic, discovering robust manipulation trajectories under full physics observability.
+  * `G1RaptorRecurrentPpoCfg`: Recurrent PPO on-policy runner with GRU memory (`rnn_hidden_dim=128`, `hidden_dims=[256, 128]`) operating strictly on observable histories (`["policy", "task_obs"]`) for online in-context system identification.
+  * `G1RaptorDistillationRunnerCfg`: `RslRlDistillationRunnerCfg` distilling privileged MLP teacher into student GRU policy with sequence length 20, learning rate 1e-3, 4 epochs per batch.
+* **Environment Dynamic Configuration (`g1_apple_to_plate_rl_environment.py`)**:
+  * Added `policy_cfg` string and `enable_teacher_obs` boolean to `G1AppleToPlateRLEnvironmentCfg`.
+  * Allows CLI execution via `--policy_cfg G1PrivilegedTeacherPolicyCfg` or `--policy_cfg G1RaptorDistillationRunnerCfg`.
+* **Empirical Validation**:
+  * Unit tests: `test_raptor_distillation_cfg.py` passed 3/3 in 0.96s.
+  * Runtime test: `test_pick_and_place_task_rl.py` passed in 29.35s (verified `teacher_obs` shape `(4, 18)`).
+  * Smoke training: 10 iterations of privileged teacher (`logs/rsl_rl/g1_privileged_teacher/2026-09-09_01-47-46/`) completed in 16.66s (1010 steps/sec across 64 envs) reaching mean reward 5.65, finger enclosure 0.7315, and approach alignment 0.3979 with zero NaNs.
+  * Neo4j LPG synchronized with `MetaLearningArchitecture` and decision `IMPLEMENT_RAPTOR_META_LEARNING_M5`.
+  * Milestone M5 marked **COMPLETED**.
+
+</details>

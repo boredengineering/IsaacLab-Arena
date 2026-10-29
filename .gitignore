@@ -36,6 +36,8 @@
 
 # IDE stuff
 *.vscode
+.vscode/mcp.json
+.cursor/
 *.*~
 TAGS
 
@@ -102,3 +104,50 @@ core.*
 
 # uv venv (Arena native install)
 .venv*/
+
+# Installed external NVIDIA Agent Skills catalog & skills CLI artifacts
+skills-lock.json
+.agents/skills-lock.json
+.hermes/
+.claude/
+
+# Ignore external downloaded skills in .agents/skills/
+.agents/skills/*/
+
+# Whitelist core first-party Arena skills (always tracked)
+!.agents/skills/agentic-rdf-star-env-gen/
+!.agents/skills/arena-digital-twin-grounding/
+!.agents/skills/arena-session-startup/
+!.agents/skills/arena-local-inference-experiments/
+!.agents/skills/commit-and-pr/
+!.agents/skills/dev-container/
+!.agents/skills/install-nvidia-skills/
+!.agents/skills/isaac-automator/
+!.agents/skills/isaac-installer/
+!.agents/skills/run-tests/
+
+# Evaluation and asset thumbnail outputs
+eval_output/asset_thumbnails/
+eval_output/isolated_thumbnails/
+*asset_thumbnails/
+eval_output/*.png
+eval_output/*.mp4
+# Rollout media in per-run subdirectories. The .jsonl result/evidence files are kept.
+eval_output/**/*.png
+eval_output/**/*.mp4
+
+# Local environment variables & secrets
+.env
+.env.*
+
+# Local model weights and cache
+artifacts/openpi_cache/
+
+
+# temp
+consulting_services_agreement_signed_version.md
+cybernetic_physics_review_02.md
+cybernetic_physics_review_updated.md
+calendar_vs_engineering_days.md
+project-progress-report.md
+appendix_orchestrator_rsi_and_dashboard_justification.md

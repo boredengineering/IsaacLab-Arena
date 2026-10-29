@@ -38,9 +38,28 @@ dependencies = [
     # HDF5 -> LeRobot conversion (isaaclab_arena_gr00t.lerobot.convert_hdf5_to_lerobot), imported at module level.
     # Pinned to 2.2.3 to match the version used in GR00T.
     "pandas==2.2.3",
+    # USD stage introspection (isaaclab_arena.agentic_environment_generation.usd_stage_introspection),
+    # imported at module level.
+    "shapely",
+    # Neo4j LPG experience memory (isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync).
+    # Imported lazily so simulation-only environments stay importable without it, but evaluation
+    # writes its telemetry into the graph, so the evaluation image needs it present.
+    "neo4j",
 ]
 
 [project.optional-dependencies]
+workflow-api = [
+    "strawberry-graphql[fastapi]==0.327.7",
+    "graphql-core==3.2.6",
+    "cross-web==0.6.0",
+    "fastapi>=0.120.4,<1",
+]
+web = [
+    "fastapi>=0.120.4,<1",
+    "uvicorn>=0.52.4,<0.53",
+    # HTTP/UDS contract tests for the optional workbench API.
+    "httpx>=0.28.1,<0.29",
+]
 dev = [
     "jupyter",
     "debugpy",
@@ -328,7 +347,7 @@ reportPrivateUsage = "warning"
 
 
 [tool.codespell]
-skip = '*.usd,*.svg,*.png,_isaac_sim*,*.bib,*.css,*/_build'
+skip = '*.usd,*.svg,*.png,_isaac_sim*,*.bib,*.css,*/_build,web/arena-workbench/package-lock.json'
 quiet-level = 0
 # the world list should always have words in lower case
-ignore-words-list = "haa,slq,collapsable,buss,crate,reacher"
+ignore-words-list = "haa,slq,collapsable,buss,crate,reacher,nd"

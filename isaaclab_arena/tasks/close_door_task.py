@@ -56,3 +56,30 @@ class CloseDoorTask(RotateRevoluteJointTask):
             arm_mode=arm_mode,
             openable_object_name=self.openable_object.name,
         )
+
+
+@agent_ready
+@register_task
+class CloseDrawerTask(CloseDoorTask):
+    """Task for pushing a prismatic drawer or sliding sub-prim closed along its reverse stroke."""
+
+    def __init__(
+        self,
+        openable_object: Openable,
+        closedness_threshold: float | None = None,
+        reset_openness: float = 1.0,
+        episode_length_s: float | None = None,
+        task_description: str | None = None,
+    ):
+        desc = (
+            f"Push the {openable_object.name} handle back until the drawer is completely closed."
+            if task_description is None
+            else task_description
+        )
+        super().__init__(
+            openable_object=openable_object,
+            closedness_threshold=closedness_threshold,
+            reset_openness=reset_openness,
+            episode_length_s=episode_length_s,
+            task_description=desc,
+        )

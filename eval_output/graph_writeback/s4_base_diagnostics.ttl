@@ -1,0 +1,80 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:activity_eval_run_s4_base_20260907 a prov:Activity ;
+    prov:endedAtTime "2026-09-07T01:30:00+00:00"^^xsd:dateTime ;
+    prov:generated :eval_run_s4_base_20260907 ;
+    prov:used :policy_gn1x_static_apple_base .
+
+:belief_eval_run_s4_base_20260907_harness_false_success a arena:ProbeObservation ;
+    arena:observationMetric "posterior_belief::harness_false_success"^^xsd:string ;
+    arena:observationValue "0.5"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_base_20260907 .
+
+:belief_eval_run_s4_base_20260907_kinematic_unreachable a arena:ProbeObservation ;
+    arena:observationMetric "posterior_belief::kinematic_unreachable"^^xsd:string ;
+    arena:observationValue "0.02"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_base_20260907 .
+
+:belief_eval_run_s4_base_20260907_vertical_reach_ood a arena:ProbeObservation ;
+    arena:observationMetric "posterior_belief::vertical_reach_ood"^^xsd:string ;
+    arena:observationValue "0.15"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_base_20260907 .
+
+:observation_eval_run_s4_base_20260907_0 a arena:ProbeObservation ;
+    rdfs:comment "base: 20 episodes, object_moved_rate=0.75"^^xsd:string ;
+    arena:likelihoodRatio "3.0"^^xsd:float ;
+    arena:observationMetric "reference_scene_success_rate"^^xsd:string ;
+    arena:observationValue "0.05"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_base_20260907 ;
+    arena:producedByTechnique :diagnostic_reference_scene_control_run ;
+    arena:supports :failure_harness_false_success .
+
+:observation_eval_run_s4_base_20260907_1 a arena:ProbeObservation ;
+    rdfs:comment "pinned frame left_hand_middle_1_link; mixed-frame value understated this by ~50%"^^xsd:string ;
+    arena:likelihoodRatio "3.0"^^xsd:float ;
+    arena:observationMetric "hand_lateral_to_obj_at_closest"^^xsd:string ;
+    arena:observationValue "0.10225999999999999"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_base_20260907 ;
+    arena:producedByTechnique :diagnostic_reference_scene_control_run .
+
+:observation_eval_run_s4_base_20260907_2 a arena:ProbeObservation ;
+    rdfs:comment "pinned frame left_hand_middle_1_link; lateral exceeds vertical"^^xsd:string ;
+    arena:likelihoodRatio "3.0"^^xsd:float ;
+    arena:observationMetric "hand_z_minus_obj_at_closest"^^xsd:string ;
+    arena:observationValue "0.06975"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_base_20260907 ;
+    arena:producedByTechnique :diagnostic_reference_scene_control_run ;
+    arena:refutes :failure_vertical_reach_ood .
+
+:observation_eval_run_s4_base_20260907_3 a arena:ProbeObservation ;
+    rdfs:comment "208 demos; oracle band -0.35..+0.45 rejects its own corpus"^^xsd:string ;
+    arena:likelihoodRatio "3.0"^^xsd:float ;
+    arena:observationMetric "measured_wrist_reach_rel_pelvis_min"^^xsd:string ;
+    arena:observationValue "-0.9115"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_base_20260907 ;
+    arena:producedByTechnique :diagnostic_pre_flight_geometry_oracle ;
+    arena:refutes :failure_kinematic_unreachable .
+
+:failure_kinematic_unreachable arena:posteriorBelief "0.02"^^xsd:float .
+
+:failure_vertical_reach_ood arena:posteriorBelief "0.15"^^xsd:float .
+
+:failure_harness_false_success arena:posteriorBelief "0.5"^^xsd:float .
+
+:eval_run_s4_base_20260907 a arena:EvaluationRun ;
+    arena:appliedTechnique :diagnostic_pre_flight_geometry_oracle,
+        :diagnostic_reference_scene_control_run ;
+    arena:attributedToFailureMode :failure_harness_false_success ;
+    arena:evaluatedGraph :galileo_g1_static_pick_and_place ;
+    arena:evaluatedPolicy :policy_gn1x_static_apple_base ;
+    arena:metric_hand_lateral_to_obj_at_closest "0.10225999999999999"^^xsd:float ;
+    arena:metric_hand_z_minus_obj_at_closest "0.06975"^^xsd:float ;
+    arena:metric_num_episodes 20 ;
+    arena:metric_object_moved_rate "0.75"^^xsd:float ;
+    arena:metric_success_rate "0.05"^^xsd:float ;
+    arena:metricsPayload "{\"success_rate\": 0.05, \"num_episodes\": 20.0, \"object_moved_rate\": 0.75, \"hand_lateral_to_obj_at_closest\": 0.10225999999999999, \"hand_z_minus_obj_at_closest\": 0.06975}"^^xsd:string ;
+    arena:nextTechnique :diagnostic_success_progress_consistency_check .

@@ -17,14 +17,27 @@ def _make_soft_cube(physics_backend: PhysicsBackend, initial_pose=None):
     import isaaclab.sim as sim_utils
     from isaaclab_newton.sim.schemas import NewtonDeformableBodyPropertiesCfg
     from isaaclab_newton.sim.spawners.materials import NewtonDeformableBodyMaterialCfg
-    from isaaclab_physx.sim.schemas import PhysxCollisionCfg, PhysxDeformableBodyPropertiesCfg
+    from isaaclab_physx.sim.schemas import PhysxDeformableBodyPropertiesCfg
+
+    try:
+        from isaaclab_physx.sim.schemas import PhysxCollisionCfg
+
+        _collision_is_list = True
+    except ImportError:
+        from isaaclab_physx.sim.schemas import PhysxCollisionPropertiesCfg as PhysxCollisionCfg
+
+        _collision_is_list = False
     from isaaclab_physx.sim.spawners.materials import PhysxDeformableBodyMaterialCfg
 
     from isaaclab_arena.assets.deformable_object import DeformableObject
 
     if physics_backend is PhysicsBackend.PHYSX:
         deformable_props = PhysxDeformableBodyPropertiesCfg()
-        collision_props = [PhysxCollisionCfg(rest_offset=0.0025, contact_offset=0.01)]
+        collision_props = (
+            [PhysxCollisionCfg(rest_offset=0.0025, contact_offset=0.01)]
+            if _collision_is_list
+            else PhysxCollisionCfg(rest_offset=0.0025, contact_offset=0.01)
+        )
         physics_material = PhysxDeformableBodyMaterialCfg(
             youngs_modulus=8.0e4,
             poissons_ratio=0.4,

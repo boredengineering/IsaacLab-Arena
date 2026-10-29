@@ -1,0 +1,81 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:activity_eval_run_v32_aligned_20260907 a prov:Activity ;
+    prov:endedAtTime "2026-09-07T12:20:58+00:00"^^xsd:dateTime ;
+    prov:generated :eval_run_v32_aligned_20260907 ;
+    prov:used :g1_tabletop_apple_to_plate,
+        :policy_gn1x_static_apple_baseline .
+
+:policy_gn1x_static_apple_baseline a prov:Entity, arena:Policy ;
+    arena:modelWeightsPath "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/baseline"^^xsd:string .
+
+:belief_eval_run_v32_aligned_20260907_lateral_reach_error a arena:ProbeObservation ;
+    arena:observationMetric "posterior_belief::lateral_reach_error"^^xsd:string ;
+    arena:observationValue "0.35"^^xsd:float ;
+    arena:observedDuring :eval_run_v32_aligned_20260907 .
+
+:belief_eval_run_v32_aligned_20260907_kinematic_alignment a arena:ProbeObservation ;
+    arena:observationMetric "posterior_belief::kinematic_alignment_success"^^xsd:string ;
+    arena:observationValue "0.85"^^xsd:float ;
+    arena:observedDuring :eval_run_v32_aligned_20260907 .
+
+:observation_eval_run_v32_aligned_20260907_0 a arena:ProbeObservation ;
+    rdfs:comment "v32_aligned: 20 episodes, success=0.0, partial_lift=0.35"^^xsd:string ;
+    arena:likelihoodRatio "3.0"^^xsd:float ;
+    arena:observationMetric "reference_scene_success_rate"^^xsd:string ;
+    arena:observationValue "0.0"^^xsd:float ;
+    arena:observedDuring :eval_run_v32_aligned_20260907 ;
+    arena:producedByTechnique :diagnostic_reference_scene_control_run .
+
+:observation_eval_run_v32_aligned_20260907_1 a arena:ProbeObservation ;
+    rdfs:comment "pinned frame left_hand_middle_1_link; lateral error 0.0385m (collapsed from 0.1225m in s4_griptest)"^^xsd:string ;
+    arena:likelihoodRatio "5.0"^^xsd:float ;
+    arena:observationMetric "hand_lateral_to_obj_at_closest"^^xsd:string ;
+    arena:observationValue "0.0385"^^xsd:float ;
+    arena:observedDuring :eval_run_v32_aligned_20260907 ;
+    arena:producedByTechnique :diagnostic_reference_scene_control_run .
+
+:observation_eval_run_v32_aligned_20260907_2 a arena:ProbeObservation ;
+    rdfs:comment "pinned frame left_hand_middle_1_link; vertical error +0.0480m"^^xsd:string ;
+    arena:likelihoodRatio "3.0"^^xsd:float ;
+    arena:observationMetric "hand_z_minus_obj_at_closest"^^xsd:string ;
+    arena:observationValue "0.0480"^^xsd:float ;
+    arena:observedDuring :eval_run_v32_aligned_20260907 ;
+    arena:producedByTechnique :diagnostic_reference_scene_control_run .
+
+:observation_eval_run_v32_aligned_20260907_3 a arena:ProbeObservation ;
+    rdfs:comment "pinned frame left_hand_middle_1_link; 3d distance 0.0590m (halved from 0.1406m in s4_griptest)"^^xsd:string ;
+    arena:likelihoodRatio "5.0"^^xsd:float ;
+    arena:observationMetric "hand_dist_to_obj_at_closest"^^xsd:string ;
+    arena:observationValue "0.0590"^^xsd:float ;
+    arena:observedDuring :eval_run_v32_aligned_20260907 ;
+    arena:producedByTechnique :diagnostic_reference_scene_control_run .
+
+:observation_eval_run_v32_aligned_20260907_4 a arena:ProbeObservation ;
+    rdfs:comment "physical contact force observed in 2/20 episodes (max 2.0894 N); apple lifted in 5/20 episodes (max 0.0268 m)"^^xsd:string ;
+    arena:likelihoodRatio "4.0"^^xsd:float ;
+    arena:observationMetric "max_lift_height_m"^^xsd:string ;
+    arena:observationValue "0.0268"^^xsd:float ;
+    arena:observedDuring :eval_run_v32_aligned_20260907 ;
+    arena:producedByTechnique :diagnostic_reach_and_lift_trace .
+
+:failure_lateral_reach_error arena:posteriorBelief "0.35"^^xsd:float .
+
+:eval_run_v32_aligned_20260907 a arena:EvaluationRun, prov:Entity ;
+    prov:wasGeneratedBy :activity_eval_run_v32_aligned_20260907 ;
+    arena:appliedTechnique :diagnostic_reach_and_lift_trace,
+        :diagnostic_reference_scene_control_run ;
+    arena:evaluatedGraph :g1_tabletop_apple_to_plate ;
+    arena:evaluatedPolicy :policy_gn1x_static_apple_baseline ;
+    arena:metric_dist_median_m "0.0590"^^xsd:float ;
+    arena:metric_lateral_median_m "0.0385"^^xsd:float ;
+    arena:metric_num_episodes 20 ;
+    arena:metric_success_rate 0 ;
+    arena:metric_vertical_median_m "0.0480"^^xsd:float ;
+    arena:metric_lift_rate "0.35"^^xsd:float ;
+    arena:metric_contact_rate "0.10"^^xsd:float ;
+    arena:metricsPayload "{\"success_rate\": 0.0, \"num_episodes\": 20, \"lateral_median_m\": 0.0385, \"vertical_median_m\": 0.0480, \"dist_median_m\": 0.0590, \"lift_rate\": 0.35, \"contact_rate\": 0.10, \"max_lift_m\": 0.0268, \"max_contact_n\": 2.0894}"^^xsd:string .

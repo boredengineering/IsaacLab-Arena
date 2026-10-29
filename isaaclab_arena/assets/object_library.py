@@ -6,6 +6,7 @@
 
 import copy
 from abc import ABC
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import isaaclab.sim as sim_utils
@@ -1993,3 +1994,47 @@ class ProceduralCube(Object):
             **self.asset_cfg_addon,
         )
         return self._add_initial_pose_to_cfg(cfg)
+
+
+_SIMREADY_LOCAL_DIR = Path(__file__).resolve().parents[2] / "artifacts" / "assets" / "simready"
+
+
+@register_asset
+class ScrewTopJar(LibraryObject):
+    """SimReady ForgeCAD screw-top cylindrical jar manipuland."""
+
+    name = "screw_top_jar"
+    tags = ["object", "graspable", "simready"]
+    usd_path = str(_SIMREADY_LOCAL_DIR / "screw_top_jar" / "screw_top_jar.usda")
+
+
+@register_asset
+class SalineBottle(ScrewTopJar):
+    """Sterile clinical saline bottle manipuland backed by SimReady ScrewTopJar."""
+
+    name = "saline_bottle"
+    tags = ["object", "graspable", "simready", "clinical"]
+
+
+@register_asset
+class FoodBeverageBeerBottle(LibraryObject):
+    """SimReady NVIDIA glass beer bottle beverage manipuland."""
+
+    name = "food_beverage_beerBottle_o01"
+    tags = ["object", "graspable", "simready", "beverage"]
+    usd_path = str(_SIMREADY_LOCAL_DIR / "food_beverage_beerBottle_o01" / "sm_food_beverage_beerBottle_o01_01.usd")
+
+
+@register_asset
+class SmFoodBeverageBeerBottleO01(FoodBeverageBeerBottle):
+    """Canonical SimReady asset alias for FoodBeverageBeerBottle."""
+
+    name = "sm_food_beverage_beerBottle_o01_01"
+
+
+@register_asset
+class BeerBottle(FoodBeverageBeerBottle):
+    """Canonical short alias for beer bottle."""
+
+    name = "beer_bottle"
+

@@ -1,0 +1,662 @@
+{
+  "generated_utc": "2026-09-15T17:18:30.181120+00:00",
+  "method": "AST only; no imports/app construction/OpenAPI calls. Follow application.py include_router aliases and constant prefixes. Framework-generated docs routes excluded.",
+  "source_route_count": 47,
+  "dependency_scope": "router_dependencies and decorator_options capture only those declaration sites, not handler-parameter Depends(...) or transitive authorization checks. Empty fields do not mean unauthenticated. Trace the recorded handler and service guards before assessing access.",
+  "included_router_modules": [
+    "security",
+    "model_settings",
+    "jobs",
+    "events",
+    "editor",
+    "research_routes",
+    "publication_routes",
+    "catalogues",
+    "graph_queries",
+    "workflow_routes"
+  ],
+  "fastapi_constructors": [
+    {
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/application.py",
+      "line": 337,
+      "arguments": "FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)"
+    }
+  ],
+  "source_sha256": {
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/application.py": "ddd186d19002bdb45648ab0cbf55eccf13c296ec14fc7ccdfb4a06bd5a02d7ae",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/security.py": "85ba56d3225bc616c55f1cb7ecd262c89bcd5dfda4cfb3a6c8bb59dd2950f724",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/model_settings.py": "9064b82404af0b969983603af2aeff9c2a06b4810c08693ef13978154deb2cbe",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/jobs.py": "24a5f94b894590734288c9267ef95e4c15f58dafbee609aa54169775090bb7cf",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/events.py": "b7392cef4cce9d750a783fffeaa2504353a3d0a9e1252fa8ba24e97afc97558a",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/editor.py": "6bdba53f7a34a493a2999e97a8f542733edc275b7fb913a0983a9228bd2cf1ec",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/research_routes.py": "b358862ecd3801c7ea84d1df5a89efbb54c29255022a00e25a2b8a9be063b820",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/publication_routes.py": "20b472671fe81a3123e08c3a338e44ca80483886a582dd9f601c7743aea4e11c",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/catalogues.py": "66bd8780689753685777b14f99dcb5470c83b27bb08fa73ff27df9f872fe49b0",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/graph_queries.py": "b2a2ee8fe29d3fe2c849241510fa1f7a04628e9f2474b5fbcd3b22feec6e2acb",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/workflow_routes.py": "efcfa1895bdbbb1d2efeefd253f144602079fcd363627e8907492b4ec305736f"
+  },
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/editor",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/editor.py",
+      "decorator_line": 83,
+      "handler": "index",
+      "handler_line": 84,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E001"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/artifacts/{artifact_id}",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/editor.py",
+      "decorator_line": 419,
+      "handler": "artifact",
+      "handler_line": 420,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_session)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E002"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/catalogues",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/catalogues.py",
+      "decorator_line": 67,
+      "handler": "catalogues",
+      "handler_line": 68,
+      "router_dependencies": [
+        "[Depends(require_session)]"
+      ],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E003"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/documents/{document_id}",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/editor.py",
+      "decorator_line": 122,
+      "handler": "document",
+      "handler_line": 123,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_session)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E004"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/generate",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/editor.py",
+      "decorator_line": 302,
+      "handler": "generate",
+      "handler_line": 303,
+      "router_dependencies": [],
+      "decorator_options": {
+        "status_code": "202"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E005"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/generate/operations/{idempotency_key}",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/editor.py",
+      "decorator_line": 285,
+      "handler": "generation_operation",
+      "handler_line": 286,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_session)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E006"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/generations/{job_id}/reauthorization-disposition",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/workflow_routes.py",
+      "decorator_line": 92,
+      "handler": "disposition",
+      "handler_line": 93,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E007"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/generations/{job_id}/reauthorize",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/workflow_routes.py",
+      "decorator_line": 26,
+      "handler": "reauthorize",
+      "handler_line": 27,
+      "router_dependencies": [],
+      "decorator_options": {
+        "status_code": "202"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E008"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/previews/{canonical_hash}",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/editor.py",
+      "decorator_line": 431,
+      "handler": "preview",
+      "handler_line": 432,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_session)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E009"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/revisions/{revision_id}/download",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/editor.py",
+      "decorator_line": 205,
+      "handler": "download",
+      "handler_line": 206,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_session)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E010"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/save",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/editor.py",
+      "decorator_line": 150,
+      "handler": "save",
+      "handler_line": 151,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_mutation)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E011"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/schema",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/catalogues.py",
+      "decorator_line": 29,
+      "handler": "schema",
+      "handler_line": 30,
+      "router_dependencies": [
+        "[Depends(require_session)]"
+      ],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E012"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/snapshots",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/editor.py",
+      "decorator_line": 395,
+      "handler": "snapshots",
+      "handler_line": 396,
+      "router_dependencies": [],
+      "decorator_options": {
+        "status_code": "202"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E013"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/validate",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/editor.py",
+      "decorator_line": 145,
+      "handler": "validate",
+      "handler_line": 146,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_mutation)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E014"
+    },
+    {
+      "method": "GET",
+      "path": "/api/events",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/events.py",
+      "decorator_line": 56,
+      "handler": "events",
+      "handler_line": 57,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_session)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E015"
+    },
+    {
+      "method": "GET",
+      "path": "/api/graph/examples",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/graph_queries.py",
+      "decorator_line": 259,
+      "handler": "examples",
+      "handler_line": 260,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_session)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E016"
+    },
+    {
+      "method": "POST",
+      "path": "/api/graph/query",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/graph_queries.py",
+      "decorator_line": 276,
+      "handler": "run_query",
+      "handler_line": 277,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_mutation)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E017"
+    },
+    {
+      "method": "GET",
+      "path": "/api/graph/status",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/graph_queries.py",
+      "decorator_line": 264,
+      "handler": "status",
+      "handler_line": 265,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_session)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E018"
+    },
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/application.py",
+      "decorator_line": 410,
+      "handler": "health",
+      "handler_line": 411,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E019"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/jobs.py",
+      "decorator_line": 43,
+      "handler": "jobs",
+      "handler_line": 44,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_session)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E020"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/jobs.py",
+      "decorator_line": 58,
+      "handler": "submit",
+      "handler_line": 59,
+      "router_dependencies": [],
+      "decorator_options": {
+        "status_code": "202"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E021"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/resume-queue",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/jobs.py",
+      "decorator_line": 75,
+      "handler": "resume_queue",
+      "handler_line": 76,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_mutation)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E022"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/{job_id}",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/jobs.py",
+      "decorator_line": 53,
+      "handler": "job",
+      "handler_line": 54,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_session)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E023"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/cancel",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/jobs.py",
+      "decorator_line": 83,
+      "handler": "cancel",
+      "handler_line": 84,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_mutation)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E024"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/model-settings",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/model_settings.py",
+      "decorator_line": 149,
+      "handler": "forget",
+      "handler_line": 150,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E025"
+    },
+    {
+      "method": "GET",
+      "path": "/api/model-settings",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/model_settings.py",
+      "decorator_line": 136,
+      "handler": "status",
+      "handler_line": 137,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E026"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/model-settings",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/model_settings.py",
+      "decorator_line": 141,
+      "handler": "save",
+      "handler_line": 142,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E027"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/publication-profiles",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/research_routes.py",
+      "decorator_line": 42,
+      "handler": "publication_profiles",
+      "handler_line": 43,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E028"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/research_routes.py",
+      "decorator_line": 58,
+      "handler": "stores",
+      "handler_line": 59,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E029"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/candidates/{job_id}",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/research_routes.py",
+      "decorator_line": 445,
+      "handler": "candidate",
+      "handler_line": 446,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E030"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/publications/{effect_id}",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/publication_routes.py",
+      "decorator_line": 64,
+      "handler": "disposition",
+      "handler_line": 66,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E031"
+    },
+    {
+      "method": "POST",
+      "path": "/api/research/stores/{store_id}/publications/{effect_id}/cancel",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/publication_routes.py",
+      "decorator_line": 147,
+      "handler": "cancel",
+      "handler_line": 148,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E032"
+    },
+    {
+      "method": "POST",
+      "path": "/api/research/stores/{store_id}/publications/{effect_id}/reconcile",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/publication_routes.py",
+      "decorator_line": 121,
+      "handler": "reconcile",
+      "handler_line": 122,
+      "router_dependencies": [],
+      "decorator_options": {
+        "status_code": "202"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E033"
+    },
+    {
+      "method": "POST",
+      "path": "/api/research/stores/{store_id}/publications/{effect_id}/renew",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/publication_routes.py",
+      "decorator_line": 134,
+      "handler": "renew",
+      "handler_line": 135,
+      "router_dependencies": [],
+      "decorator_options": {
+        "status_code": "202"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E034"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/publications/{effect_id}/requests/{request_id}",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/publication_routes.py",
+      "decorator_line": 65,
+      "handler": "disposition",
+      "handler_line": 66,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E035"
+    },
+    {
+      "method": "POST",
+      "path": "/api/research/stores/{store_id}/publications/{effect_id}/write",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/publication_routes.py",
+      "decorator_line": 84,
+      "handler": "write",
+      "handler_line": 85,
+      "router_dependencies": [],
+      "decorator_options": {
+        "status_code": "202"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E036"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/versions",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/research_routes.py",
+      "decorator_line": 299,
+      "handler": "versions",
+      "handler_line": 300,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E037"
+    },
+    {
+      "method": "POST",
+      "path": "/api/research/stores/{store_id}/versions",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/research_routes.py",
+      "decorator_line": 232,
+      "handler": "persist",
+      "handler_line": 233,
+      "router_dependencies": [],
+      "decorator_options": {
+        "status_code": "201"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E038"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/versions/{reservation_id}",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/research_routes.py",
+      "decorator_line": 346,
+      "handler": "version",
+      "handler_line": 347,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E039"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/versions/{reservation_id}/artifacts/{name}",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/research_routes.py",
+      "decorator_line": 413,
+      "handler": "artifact",
+      "handler_line": 414,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E040"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/versions/{reservation_id}/publication-binding",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/research_routes.py",
+      "decorator_line": 367,
+      "handler": "publication_binding",
+      "handler_line": 368,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E041"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/session",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/security.py",
+      "decorator_line": 81,
+      "handler": "revoke",
+      "handler_line": 82,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E042"
+    },
+    {
+      "method": "GET",
+      "path": "/api/session",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/security.py",
+      "decorator_line": 67,
+      "handler": "inspect_session",
+      "handler_line": 68,
+      "router_dependencies": [],
+      "decorator_options": {},
+      "status": "source_registered_not_live_verified",
+      "id": "E043"
+    },
+    {
+      "method": "POST",
+      "path": "/api/session/activity",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/security.py",
+      "decorator_line": 72,
+      "handler": "activity",
+      "handler_line": 73,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_mutation)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E044"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sessions",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/security.py",
+      "decorator_line": 58,
+      "handler": "establish",
+      "handler_line": 59,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_origin)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E045"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/default",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/jobs.py",
+      "decorator_line": 48,
+      "handler": "workspace",
+      "handler_line": 49,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_session)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E046"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/save-requests/{idempotency_key}",
+      "source": "isaaclab_arena_examples/agentic_environment_generation/web_api/editor.py",
+      "decorator_line": 186,
+      "handler": "save_request",
+      "handler_line": 187,
+      "router_dependencies": [],
+      "decorator_options": {
+        "dependencies": "[Depends(require_session)]"
+      },
+      "status": "source_registered_not_live_verified",
+      "id": "E047"
+    }
+  ]
+}

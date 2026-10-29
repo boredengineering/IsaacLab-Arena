@@ -5,12 +5,9 @@
 
 from __future__ import annotations
 
-import math
-import torch
 from enum import Enum
+import math
 from typing import TYPE_CHECKING, TypeVar
-
-from isaaclab.utils.math import euler_xyz_from_quat
 
 from isaaclab_arena.assets.register import agent_ready, register_object_relation
 from isaaclab_arena.assets.registries import ObjectRelationLibraryRegistry
@@ -206,6 +203,10 @@ class On(Relation):
         clearance_m: float = 0.01,
         edge_margin_m: float = DEFAULT_ON_EDGE_MARGIN_M,
         overlap: bool = False,
+        surface_sector: str | None = None,
+        sector_bounds: tuple[float, float, float, float] | None = None,
+        surface_anchor: str | None = None,
+        nominal_height: float | None = None,
     ):
         """
         Args:
@@ -216,6 +217,10 @@ class On(Relation):
                 meters (default: 5cm), applied only for containment. Ignored for overlap.
             overlap: Allow footprint overlap instead of full containment on both X and Y
                 axes (default: False). Ignores edge_margin_m when True.
+            surface_sector: Designated surface section (e.g. 'front_center', 'front_left', 'front_right').
+            sector_bounds: Explicit (min_x, max_x, min_y, max_y) section boundary.
+            surface_anchor: Semantic fixture anchor on composite parent (e.g. 'counter_top', 'island').
+            nominal_height: Explicit surface deck Z height in parent/world frame.
         """
         super().__init__(parent, relation_loss_weight)
         assert clearance_m >= 0.0, f"Clearance must be non-negative, got {clearance_m}"
@@ -223,6 +228,10 @@ class On(Relation):
         self.clearance_m = clearance_m
         self.edge_margin_m = edge_margin_m
         self.overlap = overlap
+        self.surface_sector = surface_sector
+        self.sector_bounds = sector_bounds
+        self.surface_anchor = surface_anchor
+        self.nominal_height = nominal_height
 
     def is_child_bottom_z_within_placement_height_range(
         self, bottom: float, support_top: float, tolerance_m: float
@@ -453,6 +462,9 @@ class RandomAroundSolution(RelationBase):
             PoseRange spanning ± half-extents around the position and rotation.
         """
         # Convert quaternion to euler angles (roll, pitch, yaw)
+        import torch
+        from isaaclab.utils.math import euler_xyz_from_quat
+
         quat_tensor = torch.tensor([rotation_xyzw])
         roll, pitch, yaw = euler_xyz_from_quat(quat_tensor)
         center_roll = float(roll[0])

@@ -1,0 +1,18 @@
+query Discovery($first: Int!, $after: String, $revision: Revision!) {
+  workflowProfile(id: "public-model", revision: $revision) { __typename ... on WorkflowProfile { id revision kind roles settingsDigest bodyDigest model endpoint billing
+      settings { model endpoint billing
+        inferencePolicy { id revision provider model endpoint origin support verification documentationUrls
+          requestPolicy { api temperatureMode tokenLimitParameter structuredOutput multimodalOutput store } }
+        workflowAccounting { version attested model endpoint maxTokens maxCostUsd }
+      } } }
+  workflows(first: $first, after: $after) {
+    __typename
+    ... on WorkflowConnection { semantics floor ceiling hasMore endCursor eventWatermark nodes { id operationId state phase version eventCounter } }
+    ... on QueryFailure { code }
+  }
+  workflowEvents(first: $first) {
+    __typename
+    ... on WorkflowEventPage { floor ceiling hasMore resumeCursor events { schemaVersion sequence runId operationId kind sourceId commandKind commandOperationId } }
+    ... on QueryFailure { code }
+  }
+}

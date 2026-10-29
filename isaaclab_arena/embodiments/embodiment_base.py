@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from isaaclab.assets import ArticulationCfg, RigidObjectCfg
-from isaaclab.envs import ManagerBasedRLMimicEnv
 from isaaclab.managers import EventTermCfg
 
 from isaaclab_arena.embodiments.common.arm_mode import ArmMode
@@ -26,6 +25,8 @@ from isaaclab_arena.utils.pose import Pose, PosePerEnv, PoseRange
 
 if TYPE_CHECKING:
     import trimesh
+
+    from isaaclab.envs import ManagerBasedRLMimicEnv
 
 
 @dataclass(frozen=True)

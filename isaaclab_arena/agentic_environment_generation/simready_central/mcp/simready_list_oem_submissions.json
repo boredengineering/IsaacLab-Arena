@@ -1,0 +1,20 @@
+{
+  "name": "simready_list_oem_submissions",
+  "description": "List verified SimReady submissions from leading robotics OEMs (e.g. 'nvidia', 'frankarobotics', 'Robotiq-Official', 'FANUC-CORPORATION').",
+  "parameters": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "oem": {
+        "type": "string",
+        "description": "OEM or creator namespace (e.g. 'nvidia', 'frankarobotics', 'Robotiq-Official').",
+        "default": "nvidia"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Maximum number of submission records to return (default: 10).",
+        "default": 10
+      }
+    }
+  }
+}

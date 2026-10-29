@@ -276,14 +276,29 @@ def compute_world_aligned_bounding_box_relative_to_prim_origin(
     bbox = bbox_cache.ComputeWorldBound(prim)
     bbox_range = bbox.ComputeAlignedBox()
 
+    if bbox_range.IsEmpty():
+        parent = prim.GetParent()
+        while parent and not parent.IsPseudoRoot():
+            bbox = bbox_cache.ComputeWorldBound(parent)
+            bbox_range = bbox.ComputeAlignedBox()
+            if not bbox_range.IsEmpty():
+                break
+            parent = parent.GetParent()
+
     # Get world-space min/max
     world_min = bbox_range.GetMin()
     world_max = bbox_range.GetMax()
 
     # Get the target prim's world position to compute local bounding box
-    prim_xformable = UsdGeom.Xformable(prim)
-    prim_world_transform = prim_xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
-    prim_world_position = prim_world_transform.ExtractTranslation()
+    xform_prim = prim
+    while xform_prim and not xform_prim.IsPseudoRoot() and not xform_prim.IsA(UsdGeom.Xformable):
+        xform_prim = xform_prim.GetParent()
+    if xform_prim and xform_prim.IsA(UsdGeom.Xformable):
+        prim_xformable = UsdGeom.Xformable(xform_prim)
+        prim_world_transform = prim_xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+        prim_world_position = prim_world_transform.ExtractTranslation()
+    else:
+        prim_world_position = Gf.Vec3d(0.0, 0.0, 0.0)
 
     min_point_from_prim_origin = Gf.Vec3d(
         world_min[0] - prim_world_position[0],
@@ -349,7 +364,7 @@ def extract_trimesh_from_usd(
     included_mesh_count = 0
     offset = 0
 
-    for prim in stage.Traverse():
+    for prim in stage.Traverse(Usd.TraverseInstanceProxies()):
         prim_path = str(prim.GetPath())
         if any(prim_path == path or prim_path.startswith(f"{path}/") for path in excluded_paths):
             excluded_mesh_count += int(prim.IsA(UsdGeom.Mesh))
@@ -426,8 +441,10 @@ def extract_trimesh_from_prim(
     root_prim = stage.GetPrimAtPath(prim_path)
     if not root_prim:
         raise ValueError(f"No prim found at path {prim_path}")
-    if not root_prim.IsA(UsdGeom.Xformable):
-        raise ValueError(f"Prim at path {prim_path} is not Xformable")
+    while root_prim and not root_prim.IsPseudoRoot() and not root_prim.IsA(UsdGeom.Xformable):
+        root_prim = root_prim.GetParent()
+    if not root_prim or not root_prim.IsA(UsdGeom.Xformable):
+        raise ValueError(f"Prim at path {prim_path} (and its ancestors) is not Xformable")
 
     root_world_tf = np.array(UsdGeom.Xformable(root_prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default()))
     root_world_tf_inv = np.linalg.inv(root_world_tf)

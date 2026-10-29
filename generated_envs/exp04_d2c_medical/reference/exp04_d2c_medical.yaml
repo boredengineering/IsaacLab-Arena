@@ -1,0 +1,135 @@
+env_name: exp04_d2c_medical
+embodiment:
+  id: droid
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.85
+      - 0.0
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: cart_medical_utility
+  registry_name: cart_medical_utility
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.10
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+objects:
+- id: saline_bottle
+  registry_name: saline_bottle
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.18
+      - 0.05
+      - 0.9109
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+object_references:
+- id: left_door
+  parent_id: cart_medical_utility
+  prim_path: /Geometry/bigLid_01_obj_00/bigLid_01_mesh_00
+  object_type: articulation
+  params:
+    openable_joint_name: joint_bigLid_01_joint_00
+- id: right_door
+  parent_id: cart_medical_utility
+  prim_path: /Geometry/bigLid_02_obj_00/bigLid_02_mesh_00
+  object_type: articulation
+  params:
+    openable_joint_name: joint_bigLid_02_joint_00
+relations:
+- kind: is_anchor
+  subject: cart_medical_utility
+  params: {}
+- kind: is_anchor
+  subject: left_door
+  params: {}
+- kind: is_anchor
+  subject: right_door
+  params: {}
+- kind: 'on'
+  subject: saline_bottle
+  reference: cart_medical_utility
+  params:
+    surface_anchor: preparation_tray
+    surface_sector: front_left
+    nominal_height: 0.9109
+- kind: at_position
+  subject: saline_bottle
+  params:
+    x: 0.18
+    y: 0.05
+reified_relations:
+- reifier_id: reifier_saline_bottle_medical_cart
+  source_id: saline_bottle
+  relation_type: PLACED_ON
+  target_id: cart_medical_utility
+  surface_anchor: preparation_tray
+  surface_sector: front_left
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: 0.13
+    max_val: 0.23
+    nominal: 0.18
+  delta_y:
+    min_val: 0.00
+    max_val: 0.10
+    nominal: 0.05
+  delta_z:
+    min_val: 0.9109
+    max_val: 0.9109
+    nominal: 0.9109
+  required_headroom: 0.25
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+  - motion_clearance_engine
+placement_validators:
+  enabled_checks:
+  - non_overlap
+  - reachability
+  - containment
+  required_checks:
+  - non_overlap
+  - reachability
+  - containment
+task:
+  composition: sequential
+  description: Unlatch and swing open both counter-rotating doors of the medical utility cabinet past 75 degrees, then lower the saline bottle onto the interior storage shelf.
+  subtasks:
+  - kind: OpenDoorTask
+    params:
+      openable_object: left_door
+      openness_threshold: 0.80
+  - kind: OpenDoorTask
+    params:
+      openable_object: right_door
+      openness_threshold: 0.80
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: saline_bottle
+      destination_location: cart_medical_utility
+      background_scene: cart_medical_utility

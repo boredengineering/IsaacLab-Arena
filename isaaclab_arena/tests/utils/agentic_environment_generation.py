@@ -146,6 +146,8 @@ def catalog(text: str) -> AssetCatalogue:
             {"name": "bowl_ycb_robolab", "object_type": "rigid", "tags": []},
             {"name": "avocado01_fruits_veggies_robolab", "object_type": "rigid", "tags": []},
             {"name": "plate_large_vomp_robolab", "object_type": "rigid", "tags": []},
+            {"name": "wireshelving_a01_vomp_robolab", "object_type": "rigid", "tags": []},
+            {"name": "banana_ycb_robolab", "object_type": "rigid", "tags": []},
         ],
     )
     catalogue.to_catalog_string = lambda: text  # type: ignore[method-assign]
@@ -159,7 +161,14 @@ def relation_catalog(text: str) -> RelationCatalogue:
     catalogue = RelationCatalogue(
         relations=[
             RelationCatalogueEntry("is_anchor", True, [], [], {}, ""),
-            RelationCatalogueEntry("on", False, [], [], {}, ""),
+            RelationCatalogueEntry(
+                "on",
+                False,
+                [],
+                ["relation_loss_weight", "surface_sector", "sector_bounds", "surface_anchor", "nominal_height"],
+                {},
+                "",
+            ),
         ]
     )
     catalogue.to_catalog_string = lambda: text  # type: ignore[method-assign]

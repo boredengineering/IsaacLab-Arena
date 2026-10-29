@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import hashlib
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from isaaclab_arena.assets.object_base import ObjectBase
+if TYPE_CHECKING:
+    from isaaclab_arena.assets.object_base import ObjectBase
 
 AabbDimensionsM = tuple[float, float, float]
 
@@ -32,7 +33,7 @@ def resolve_aabb_dimensions_m(assets_by_node_id: dict[str, Any]) -> dict[str, Aa
     """Return axis-aligned bounding box sizes in meters for each snapshot asset (objects and references)."""
     dimensions: dict[str, AabbDimensionsM] = {}
     for node_id, asset in assets_by_node_id.items():
-        if not isinstance(asset, ObjectBase):
+        if not callable(getattr(asset, "get_bounding_box", None)):
             continue
         dims = aabb_dimensions_from_asset(asset)
         if dims is not None:
@@ -49,6 +50,10 @@ def resolve_node_usd_paths(assets_by_node_id: dict[str, object], node_ids: list[
             print(f"[asset_usd]   {node_id}: not found in instantiated assets, skipping.", file=sys.stderr)
             continue
         usd_path = getattr(asset, "usd_path", None)
+        if not usd_path:
+            # EmbodimentBase.get_bounding_box uses this same articulation spawn.
+            robot = getattr(getattr(asset, "scene_config", None), "robot", None)
+            usd_path = getattr(getattr(robot, "spawn", None), "usd_path", None)
         if usd_path:
             paths[node_id] = usd_path
     return paths
@@ -64,12 +69,24 @@ def object_reference_cache_key(usd_path: str, relative_prim_path: str) -> str:
     return hashlib.sha1(f"{usd_path}::{relative_prim_path}".encode()).hexdigest()[:16]
 
 
-def absolute_prim_path(stage, relative_suffix: str) -> str:
-    """Join a default-prim-relative suffix to the stage default prim."""
+def absolute_prim_path(stage, relative_suffix: str, *, parent_name: str | None = None) -> str:
+    """Resolve a USD-relative or runtime-namespaced reference, rejecting missing prims."""
     default_prim = stage.GetDefaultPrim()
     if not default_prim or not default_prim.IsValid():
         raise RuntimeError("USD stage has no default prim")
     base = str(default_prim.GetPath())
-    if not relative_suffix:
-        return base
-    return f"{base}/{relative_suffix.lstrip('/')}"
+    suffix = relative_suffix
+    if suffix.startswith("{ENV_REGEX_NS}/"):
+        # Match ObjectReference.isaaclab_prim_path_to_original_prim_path, with a
+        # component boundary ("kitchen2" must not match parent "kitchen").
+        prefix = f"{{ENV_REGEX_NS}}/{parent_name}"
+        if parent_name is None or not (suffix == prefix or suffix.startswith(prefix + "/")):
+            raise ValueError("Reference namespace does not match its parent asset")
+        suffix = suffix[len(prefix) :]
+    elif suffix == base or suffix.startswith(base + "/"):
+        suffix = suffix[len(base) :]
+    path = base + ("/" + suffix.lstrip("/") if suffix else "")
+    prim = stage.GetPrimAtPath(path)
+    if not prim or not prim.IsValid():
+        raise ValueError(f"Reference prim does not exist: {path}")
+    return path

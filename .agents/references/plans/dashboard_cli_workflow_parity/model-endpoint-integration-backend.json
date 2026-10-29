@@ -1,0 +1,18 @@
+{
+  "passed": 682,
+  "runs": [
+    {
+      "run": "arena-f0-backend-f6f839e2b5e0",
+      "passed": 622,
+      "proof_sha256": "97f83e520a0502a22b77fb6d242b98d628436b6cfde55a3c5ca8afaf82cdcfea",
+      "cleanup_verified": true
+    },
+    {
+      "run": "arena-f0-backend-e058258c30f4",
+      "passed": 60,
+      "proof_sha256": "81e28e0d6e7b6add938704b1275af2326f0d27ca206c4b50412ede12bcc10617",
+      "cleanup_verified": true
+    }
+  ],
+  "scope": "isolated combined model-profile/endpoint units plus separate SDK synthetic wire units"
+}

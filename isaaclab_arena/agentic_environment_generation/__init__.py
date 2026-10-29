@@ -2,3 +2,7 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
+
+from isaaclab_arena.agentic_environment_generation.telemetry import ActiveInferenceTelemetry
+
+__all__ = ["ActiveInferenceTelemetry"]

@@ -1,0 +1,4554 @@
+{
+  "schema_version": 1,
+  "scope": "baseline_HEAD_source_registered_Arena_API; not concurrent owner worktree or deployed coverage",
+  "baseline_commit": "f9519bd3efe4cb72a6e04d091c9ff5ad2e6f0688",
+  "evidence_status": "not_run",
+  "completion_claim": "Registration enumeration reconciled only. Full API connection coverage is NOT claimed; parent must merge and check new routes, decoders, admission and exact-request recovery.",
+  "summary": {
+    "registered_route_declarations": 53,
+    "reachable_registered_method_paths": 53,
+    "deduplicated_registered_method_paths": 53,
+    "duplicate_method_paths": 0,
+    "unreachable_route_declarations": 0,
+    "included_routers": 12,
+    "app_local_routes": 1,
+    "by_method": {
+      "DELETE": 2,
+      "GET": 31,
+      "POST": 19,
+      "PUT": 1
+    },
+    "by_classification": {
+      "diagnostic": 1,
+      "operator": 8,
+      "workflow": 44
+    },
+    "unrelated_registered_routes": 0,
+    "caller_match_kind": {
+      "inferred": 14,
+      "literal_ref": 24,
+      "template_ref": 12,
+      "unknown": 3
+    },
+    "rows_with_relevant_test_source": 53,
+    "registered_rows_evidence_not_run": 53,
+    "executed_tests": 0,
+    "verified_runtime_routes": 0,
+    "proposed_contract_entries": 7,
+    "proposed_new_routes": 5,
+    "proposed_existing_route_extensions": 2,
+    "registration_scan_python_files": 49,
+    "source_hash_entries": 99,
+    "gap_entries": 16
+  },
+  "provenance": {
+    "repository": "/workspaces/IsaacLab-Arena",
+    "source_read_method": "git show <baseline_commit>:<path>; Python stdlib AST only; no application imports, tests, services, secrets, network or workload execution",
+    "planning_inputs": [
+      {
+        "path": ".agents/references/plans/dashboard_cli_workflow_parity/research-stack-readiness.md",
+        "source_kind": "worktree_planning_input_not_baseline",
+        "sha256": "576666d5a2b7cb173ca4c40e3f79b4d41b79c5220244b9f593b3ec4047625a32"
+      },
+      {
+        "path": ".agents/references/plans/dashboard_cli_workflow_parity/research-stack-contracts.md",
+        "source_kind": "worktree_planning_input_not_baseline",
+        "sha256": "bacde01f93acff40ed880c7a480bc1b35e9f5f036af989ab5412e9284ab286ca"
+      }
+    ],
+    "planning_name_resolution": "sharedcontracts.md was absent; read research-stack-contracts.md linked by the main plan. Its exact filename is preserved above.",
+    "source_prefixes": {
+      "api": "isaaclab_arena_examples/agentic_environment_generation/web_api/",
+      "core": "isaaclab_arena/agentic_environment_generation/workbench/",
+      "ui": "web/arena-workbench/src/",
+      "tests": "isaaclab_arena_examples/tests/"
+    },
+    "reference_format": "prefix/file:start-end#symbol, inclusive baseline lines. $handler means the current row handler source. Planning inputs alone are worktree bytes; all source_hashes are baseline Git blobs.",
+    "registration": "Follow application.py ImportFrom router aliases into all include_router calls, accumulate APIRouter prefix and include prefix (none supplied), then all method decorators including empty suffix and both publication aliases. Compare against independent decorator census over all 49 baseline web_api Python files.",
+    "framework_routes": "FastAPI docs_url=None, redoc_url=None, openapi_url=None at api/application.py:339; no docs/OpenAPI routes counted. No mount/add_route/add_api_route or unresolved dynamic registration found in baseline web_api.",
+    "limits": "Static reachability is not factory startup/admission/deployment success. No implicit HEAD/OPTIONS invented. TypeScript caller mapping is source inspection, not compiler/dataflow execution. Dynamic/composed callers labelled separately; missing literal hits are not proof of global absence. Test list is selected relevant bodies, not exhaustive suite coverage.",
+    "caller_match_kinds": {
+      "literal_ref": "Production source contains literal endpoint string (ApiClient adds /api).",
+      "template_ref": "Production request contains endpoint structure with interpolated IDs/query.",
+      "inferred": "Actual composed/generic/returned-URL call tied to route by inspected source; not literal path proof.",
+      "unknown": "No production caller found in scanned baseline source; no execution claim."
+    },
+    "registration_method_path_sha256": "3b882d6cd3180ccf1cba100a7663a6ed2b980f9cad490d7e245a9bec1e05b798",
+    "registration_digest_encoding": "Sorted by path then method; METHOD + space + PATH + newline, UTF-8.",
+    "inspected_source_corpus_files": 260,
+    "inspected_corpus_manifest_sha256": "49d4e6092796e2777ad116127bbb62f807086afdb578fc0a3089f014ea11c486",
+    "corpus_digest_encoding": "Sorted source-id to UTF-8 byte SHA256 map, canonical JSON sort_keys=True separators=(comma,colon); includes initial web_api/frontend/test scan, workbench core sources and native GR00T client."
+  },
+  "common_sources": {
+    "http_boundary": "api/application.py:388-410#browser_boundary",
+    "validation_errors": "api/application.py:372-373#invalid_input",
+    "session": "api/security.py:32-36#require_session",
+    "mutation": "api/security.py:39-43#require_mutation",
+    "origin": "api/security.py:26-29#require_origin",
+    "api_transport": "ui/api.ts:87-125#ApiClient.request",
+    "job_decoder": "ui/contracts.ts:74-90#isJob",
+    "workspace_decoder": "ui/contracts.ts:105-116#isWorkspace"
+  },
+  "registered_routes": [
+    {
+      "method": "GET",
+      "path": "/api/editor",
+      "workflow": "research_stack",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/editor.py:94",
+        "router_prefix": "/api/editor",
+        "router_source": "api/editor.py:31",
+        "import": "api/application.py:28",
+        "include": "api/application.py:430",
+        "include_prefix": ""
+      },
+      "handler": "api/editor.py:95-137#index",
+      "request": {
+        "signature": "request: Request, session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/editor.py:260-267#protect_revision_bundle",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/editor.tsx:125-136"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/editor.tsx:125-136",
+          "ui/environment-library-contract.ts:1-141"
+        ],
+        "decoder_status": "partial_runtime_checks_not_capability_version_admission"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_managed_cli.py:659-680#test_absolute_request_deadline",
+          "match": "literal_or_template_method_path",
+          "request_line": 678,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_managed_cli.py:856-870#test_cleanup_exceptions_are_sanitized",
+          "match": "literal_or_template_method_path",
+          "request_line": 868,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "capability_and_decoder_matrix"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/artifacts/{artifact_id}",
+      "workflow": "research_stack",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/editor.py:493",
+        "router_prefix": "/api/editor",
+        "router_source": "api/editor.py:31",
+        "import": "api/application.py:28",
+        "include": "api/application.py:430",
+        "include_prefix": ""
+      },
+      "handler": "api/editor.py:494-502#artifact",
+      "request": {
+        "signature": "request: Request, artifact_id: str",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/snapshots.tsx:137-158"
+        ],
+        "note": "Image src receives artifact URL from snapshot result; browser decodes PNG, no literal route call."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/snapshot-model.ts:18-36",
+          "ui/snapshots.tsx:146-158"
+        ],
+        "decoder_status": "structural_url_checks_and_browser_image_decode"
+      },
+      "readback": {
+        "status": "artifact_id_not_submission_key",
+        "contract": "Indexed PNG bytes; not exact snapshot-request lost-ACK recovery.",
+        "sources": [
+          "api/snapshot_service.py:474-491#artifact_path"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_editor.py:289-343#test_snapshot_job_runs_off_loop_and_authenticates_artifacts",
+          "match": "literal_or_template_method_path",
+          "request_line": 342,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/build",
+      "workflow": "build",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/editor.py:435",
+        "router_prefix": "/api/editor",
+        "router_source": "api/editor.py:31",
+        "import": "api/application.py:28",
+        "include": "api/application.py:430",
+        "include_prefix": ""
+      },
+      "handler": "api/editor.py:436-466#build",
+      "request": {
+        "signature": "request: Request, body: BuildDraft, session=Depends(require_mutation)",
+        "models": [
+          "api/editor.py:59-60#BuildDraft",
+          "api/editor.py:34-44#Draft"
+        ],
+        "dependencies": [
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/public_records.py:37-39#protect_public_record",
+          "api/editor.py:291-295#frozen_draft",
+          "api/editor.py:298-315#submit_editor",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/editor-jobs.tsx:84-105"
+        ],
+        "note": "Actual api.mutate(`/editor/${kind}`) at line99; useEditorJob kind union at line30 binds this route. Not an exact literal path."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/editor-jobs.tsx:99-102",
+          "ui/contracts.ts:74-90",
+          "ui/build-environment.tsx:10-24"
+        ],
+        "decoder_status": "job_envelope_only_then_kind_specific_result_decoder"
+      },
+      "readback": {
+        "status": "post_replay_only_until_job_id_known",
+        "contract": "No dedicated read-only key/hash lookup. Journal.get_submission is internal; UI retains exact POST then observes GET job after receiving ID. Workspace snapshot is not an exact-request disposition.",
+        "sources": [
+          "core/journal.py:656-663#get_submission",
+          "api/editor.py:298-315#submit_editor",
+          "ui/editor-jobs.tsx:65-105"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_build.py:597-624#test_busy_shared_gpu_lease_never_spawns_build",
+          "match": "literal_or_template_method_path",
+          "request_line": 610,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_build.py:693-725#test_log_setup_failure_does_not_leak_owner_pipe",
+          "match": "literal_or_template_method_path",
+          "request_line": 711,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "job_key_readback",
+        "safe_mutation_admission"
+      ],
+      "evidence_status": "not_run",
+      "worker_path": {
+        "match_kind": "source_call_chain_not_http",
+        "sources": [
+          "api/editor_execution.py:57-143#execute",
+          "api/build_execution.py:38-120#execute_build"
+        ],
+        "status": "not_run"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/catalogues",
+      "workflow": "research_stack",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/catalogues.py:67",
+        "router_prefix": "/api/editor",
+        "router_source": "api/catalogues.py:19",
+        "import": "api/application.py:27",
+        "include": "api/application.py:435",
+        "include_prefix": ""
+      },
+      "handler": "api/catalogues.py:68-74#catalogues",
+      "request": {
+        "signature": "request: Request",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/metadata-browser.tsx:47-59"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/metadata-browser.tsx:1-59"
+        ],
+        "decoder_status": "permissive_display_helpers_not_contract_validator"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_catalogues.py:18-43#test_schema_and_catalogue_are_actual_read_only_metadata",
+          "match": "literal_or_template_method_path",
+          "request_line": 34,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "capability_and_decoder_matrix"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/documents/{document_id}",
+      "workflow": "research_stack",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/editor.py:140",
+        "router_prefix": "/api/editor",
+        "router_source": "api/editor.py:31",
+        "import": "api/application.py:28",
+        "include": "api/application.py:430",
+        "include_prefix": ""
+      },
+      "handler": "api/editor.py:141-165#document",
+      "request": {
+        "signature": "request: Request, document_id: str",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/public_records.py:12-14#protect_yaml",
+          "api/research_routes.py:187-217#open_research_version",
+          "api/editor.py:260-267#protect_revision_bundle",
+          "core/documents.py:210-258#load",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "template_ref",
+        "sources": [
+          "ui/editor.tsx:358-380"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/editor.tsx:361-380"
+        ],
+        "decoder_status": "partial_runtime_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_editor.py:202-218#test_save_http_guards_hashes_and_request_bounds",
+          "match": "literal_or_template_method_path",
+          "request_line": 206,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_editor.py:125-146#test_real_default_document_and_semantic_validation",
+          "match": "literal_or_template_method_path",
+          "request_line": 131,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/evaluate",
+      "workflow": "evaluate",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/evaluate.py:39",
+        "router_prefix": "/api/editor",
+        "router_source": "api/evaluate.py:19",
+        "import": "api/application.py:30",
+        "include": "api/application.py:432",
+        "include_prefix": ""
+      },
+      "handler": "api/evaluate.py:40-74#evaluate",
+      "request": {
+        "signature": "request: Request, body: EvaluateDraft, session=Depends(require_mutation)",
+        "models": [
+          "api/evaluate.py:22-31#EvaluateDraft",
+          "api/editor.py:59-60#BuildDraft",
+          "api/editor.py:34-44#Draft"
+        ],
+        "dependencies": [
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/public_records.py:37-39#protect_public_record",
+          "api/editor.py:291-295#frozen_draft",
+          "api/editor.py:298-315#submit_editor",
+          "api/evaluation_profiles.py:15-43#compatible_spec",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/editor-jobs.tsx:84-105"
+        ],
+        "note": "Actual api.mutate(`/editor/${kind}`) at line99; useEditorJob kind union at line30 binds this route. Not an exact literal path."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/editor-jobs.tsx:99-102",
+          "ui/contracts.ts:74-90",
+          "ui/evaluate-policy.tsx:115-138"
+        ],
+        "decoder_status": "job_envelope_only_then_kind_specific_result_decoder"
+      },
+      "readback": {
+        "status": "post_replay_only_until_job_id_known",
+        "contract": "No dedicated read-only key/hash lookup. Journal.get_submission is internal; UI retains exact POST then observes GET job after receiving ID. Workspace snapshot is not an exact-request disposition.",
+        "sources": [
+          "core/journal.py:656-663#get_submission",
+          "api/editor.py:298-315#submit_editor",
+          "ui/editor-jobs.tsx:65-105"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_evaluate.py:383-389#test_route_rejects_overrides_and_bad_instruction",
+          "match": "literal_or_template_method_path",
+          "request_line": 388,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_evaluate.py:403-416#test_incompatible_source_is_rejected_before_dispatch",
+          "match": "literal_or_template_method_path",
+          "request_line": 410,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "job_key_readback",
+        "safe_mutation_admission",
+        "worker_policy_admission"
+      ],
+      "evidence_status": "not_run",
+      "worker_path": {
+        "match_kind": "source_call_chain_not_http",
+        "sources": [
+          "api/editor_execution.py:57-143#execute",
+          "api/build_execution.py:38-120#execute_build",
+          "api/evaluation_worker.py:24-128#run_evaluation"
+        ],
+        "status": "not_run"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/evaluation-profiles",
+      "workflow": "research_stack",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/evaluate.py:34",
+        "router_prefix": "/api/editor",
+        "router_source": "api/evaluate.py:19",
+        "import": "api/application.py:30",
+        "include": "api/application.py:432",
+        "include_prefix": ""
+      },
+      "handler": "api/evaluate.py:35-36#profiles",
+      "request": {
+        "signature": "",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/evaluate-policy.tsx:40-46"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/evaluate-policy.tsx:14-34"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_evaluate.py:37-75#test_fixed_profiles_route_freezes_and_replays_without_resolving_source",
+          "match": "literal_or_template_method_path",
+          "request_line": 40,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/evaluations/{job_id}/artifacts/{name}",
+      "workflow": "research_stack",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/evaluate.py:77",
+        "router_prefix": "/api/editor",
+        "router_source": "api/evaluate.py:19",
+        "import": "api/application.py:30",
+        "include": "api/application.py:432",
+        "include_prefix": ""
+      },
+      "handler": "api/evaluate.py:78-105#artifact",
+      "request": {
+        "signature": "request: Request, job_id: str, name: str",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/evaluation_artifacts.py:164-170#job_root",
+          "api/public_records.py:37-39#protect_public_record",
+          "api/evaluation_artifacts.py:255-273#verify_result",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "template_ref",
+        "sources": [
+          "ui/evaluate-policy.tsx:183-216"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/evaluate-policy.tsx:183-216"
+        ],
+        "decoder_status": "artifact_bytes_digest_and_job_identity_checks"
+      },
+      "readback": {
+        "status": "exact_artifact_bytes",
+        "contract": "Succeeded evaluate job and bounded name allowlist; verify_result checks bound local artifacts, client checks byte count and SHA256.",
+        "sources": [
+          "api/evaluation_artifacts.py:255-273#verify_result",
+          "ui/evaluate-policy.tsx:188-211"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_evaluate.py:445-503#test_parent_rejects_invalid_result_identity_and_artifacts",
+          "match": "literal_or_template_method_path",
+          "request_line": 503,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_evaluate.py:562-582#test_cancellation_signals_owned_group_and_hides_artifacts",
+          "match": "literal_or_template_method_path",
+          "request_line": 582,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/generate",
+      "workflow": "prompt_first_new_or_explicit_refine",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/editor.py:336",
+        "router_prefix": "/api/editor",
+        "router_source": "api/editor.py:31",
+        "import": "api/application.py:28",
+        "include": "api/application.py:430",
+        "include_prefix": ""
+      },
+      "handler": "api/editor.py:337-432#generate",
+      "request": {
+        "signature": "request: Request, body: GenerateDraft, session=Depends(require_mutation)",
+        "models": [
+          "api/editor.py:63-91#GenerateDraft"
+        ],
+        "dependencies": [
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/public_records.py:37-39#protect_public_record",
+          "api/editor.py:298-315#submit_editor",
+          "api/editor.py:291-295#frozen_draft",
+          "api/editor.py:260-267#protect_revision_bundle",
+          "api/workflow_authorization.py:36-109#capture",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/editor-jobs.tsx:84-105"
+        ],
+        "note": "Actual api.mutate(`/editor/${kind}`) at line99; useEditorJob kind union at line30 binds this route. Not an exact literal path."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/editor-jobs.tsx:99-102",
+          "ui/contracts.ts:74-90"
+        ],
+        "decoder_status": "job_envelope_only_then_kind_specific_result_decoder"
+      },
+      "readback": {
+        "status": "exact_hash_backend_missing_ui_read",
+        "contract": "GET /api/editor/generate/operations/{idempotency_key}?request_sha256=...; returns job:null for absent acceptance; mismatch409. UI presently retries POST.",
+        "sources": [
+          "api/editor.py:319-333#generation_operation",
+          "core/journal.py:656-663#get_submission",
+          "ui/editor-jobs.tsx:90-105"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_reauthorization.py:203-228#test_no_renewal_for_nonblocked_work",
+          "match": "literal_or_template_method_path",
+          "request_line": 207,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_workflow_authorization.py:155-160#test_failed_submission_rolls_back_grants",
+          "match": "literal_or_template_method_path",
+          "request_line": 159,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "generation_disposition_caller",
+        "safe_mutation_admission"
+      ],
+      "evidence_status": "not_run",
+      "worker_path": {
+        "match_kind": "source_call_chain_not_http",
+        "sources": [
+          "api/editor_execution.py:145-286#execute_managed",
+          "api/generation_worker.py:24-94#main",
+          "api/generation.py:53-82#generate",
+          "api/graph_access.py:67-121#retrieve_snapshot"
+        ],
+        "status": "not_run"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/generate/operations/{idempotency_key}",
+      "workflow": "generation_recovery",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/editor.py:318",
+        "router_prefix": "/api/editor",
+        "router_source": "api/editor.py:31",
+        "import": "api/application.py:28",
+        "include": "api/application.py:430",
+        "include_prefix": ""
+      },
+      "handler": "api/editor.py:319-333#generation_operation",
+      "request": {
+        "signature": "request: Request, idempotency_key: str, request_sha256: str",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/public_records.py:37-39#protect_public_record",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "unknown",
+        "sources": [],
+        "note": "No production frontend/worker HTTP caller found in the baseline scan; tests are not callers."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [],
+        "decoder_status": "unknown"
+      },
+      "readback": {
+        "status": "exact_key_and_hash",
+        "contract": "Does not resolve source or issue grants; request_sha256 query required and unknown/duplicate query fields rejected.",
+        "sources": [
+          "core/journal.py:656-663#get_submission"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_editor_revision_api.py:152-212#test_generation_recovery_checks_complete_current_record_without_resolving_view",
+          "match": "composed_exact_key_hash_route_test_body",
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "generation_disposition_caller"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/generations/{job_id}/reauthorization-disposition",
+      "workflow": "generation_reauthorization",
+      "classification": "operator",
+      "registration": {
+        "source": "api/workflow_routes.py:134",
+        "router_prefix": "/api/editor/generations",
+        "router_source": "api/workflow_routes.py:18",
+        "import": "api/application.py:47",
+        "include": "api/application.py:437",
+        "include_prefix": ""
+      },
+      "handler": "api/workflow_routes.py:135-157#disposition",
+      "request": {
+        "signature": "request: Request, job_id: str, idempotency_key: str=Query(min_length=1, max_length=128, pattern='^[A-Za-z0-9_.:-]+$'), fingerprint: str=Query(pattern='^[a-f0-9]{64}$'), session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/workflow_routes.py:27-37#screen_record",
+          "api/workflow_routes.py:40-55#accepted_response",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "template_ref",
+        "sources": [
+          "ui/generation-reauthorization.tsx:150-167"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/generation-reauthorization.tsx:28-49",
+          "ui/generation-reauthorization.tsx:125-167"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "exact_request_fingerprint",
+        "contract": "GET disposition with idempotency_key + fingerprint; then GET exact job. No automatic credential substitution.",
+        "sources": [
+          "api/workflow_routes.py:135-157#disposition",
+          "ui/generation-reauthorization.tsx:150-167"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_reauthorization.py:522-533#test_disposition_does_not_reflect_private_query_key",
+          "match": "literal_or_template_method_path",
+          "request_line": 528,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/generations/{job_id}/reauthorize",
+      "workflow": "generation_reauthorization",
+      "classification": "operator",
+      "registration": {
+        "source": "api/workflow_routes.py:58",
+        "router_prefix": "/api/editor/generations",
+        "router_source": "api/workflow_routes.py:18",
+        "import": "api/application.py:47",
+        "include": "api/application.py:437",
+        "include_prefix": ""
+      },
+      "handler": "api/workflow_routes.py:59-131#reauthorize",
+      "request": {
+        "signature": "request: Request, job_id: str, body: Reauthorize, session=Depends(require_mutation)",
+        "models": [
+          "api/workflow_routes.py:21-24#Reauthorize"
+        ],
+        "dependencies": [
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/workflow_routes.py:27-37#screen_record",
+          "api/workflow_routes.py:40-55#accepted_response",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "template_ref",
+        "sources": [
+          "ui/generation-reauthorization.tsx:125-139"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/generation-reauthorization.tsx:28-49",
+          "ui/generation-reauthorization.tsx:125-167"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "exact_request_fingerprint",
+        "contract": "GET disposition with idempotency_key + fingerprint; then GET exact job. No automatic credential substitution.",
+        "sources": [
+          "api/workflow_routes.py:135-157#disposition",
+          "ui/generation-reauthorization.tsx:150-167"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_reauthorization.py:203-228#test_no_renewal_for_nonblocked_work",
+          "match": "literal_or_template_method_path",
+          "request_line": 222,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_reauthorization.py:474-495#test_sealing_storage_failure_is_ambiguous",
+          "match": "literal_or_template_method_path",
+          "request_line": 488,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/previews/{canonical_hash}",
+      "workflow": "research_stack",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/editor.py:505",
+        "router_prefix": "/api/editor",
+        "router_source": "api/editor.py:31",
+        "import": "api/application.py:28",
+        "include": "api/application.py:430",
+        "include_prefix": ""
+      },
+      "handler": "api/editor.py:506-549#preview",
+      "request": {
+        "signature": "request: Request, canonical_hash: str",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/preview_options.py:30-42#normalized_options",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "template_ref",
+        "sources": [
+          "ui/snapshots.tsx:78-87"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/snapshots.tsx:82-87",
+          "ui/snapshot-model.ts:18-36"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "canonical_options_not_submission_key",
+        "contract": "Preview receipt keyed by canonical draft/options; historical assets explicitly marked; not exact requesting-job recovery.",
+        "sources": [
+          "api/snapshot_service.py:357-419#lookup",
+          "ui/snapshots.tsx:82-87"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_editor.py:57-93#test_preview_lookup_is_authenticated_read_only_and_independent_of_jobs",
+          "match": "literal_or_template_method_path",
+          "request_line": 87,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/readiness",
+      "workflow": "readiness_v1",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/readiness.py:133",
+        "router_prefix": "/api/editor/readiness",
+        "router_source": "api/readiness.py:22",
+        "import": "api/application.py:40",
+        "include": "api/application.py:431",
+        "include_prefix": ""
+      },
+      "handler": "api/readiness.py:134-135#readiness",
+      "request": {
+        "signature": "request: Request, session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/public_records.py:37-39#protect_public_record",
+          "api/readiness.py:42-69#metadata",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "metadata_only",
+        "note": "Baseline schema_version1; empty CheckInput only. API-side RETURN1 and policy TCP only; not native-worker graph retrieval or loaded-policy identity/transport."
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/workflow-readiness.tsx:58-64"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/workflow-readiness.tsx:28-50"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_readiness.py:38-56#test_readiness_reports_missing_configuration_without_network_or_jobs",
+          "match": "literal_or_template_method_path",
+          "request_line": 41,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_readiness.py:181-191#test_graph_readiness_rejects_retriever_incompatible_database_before_probe",
+          "match": "literal_or_template_method_path",
+          "request_line": 187,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "readiness_v2",
+        "worker_policy_admission"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/readiness/check",
+      "workflow": "readiness_v1",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/readiness.py:138",
+        "router_prefix": "/api/editor/readiness",
+        "router_source": "api/readiness.py:22",
+        "import": "api/application.py:40",
+        "include": "api/application.py:431",
+        "include_prefix": ""
+      },
+      "handler": "api/readiness.py:139-156#check",
+      "request": {
+        "signature": "request: Request, body: CheckInput, session=Depends(require_mutation)",
+        "models": [
+          "api/readiness.py:26-29#CheckInput"
+        ],
+        "dependencies": [
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/security.py:32-36#require_session",
+          "api/readiness.py:42-69#metadata",
+          "api/public_records.py:37-39#protect_public_record",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "explicit_consent_bounded_dependency_reads",
+        "note": "Baseline schema_version1; empty CheckInput only. API-side RETURN1 and policy TCP only; not native-worker graph retrieval or loaded-policy identity/transport."
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/workflow-readiness.tsx:75-86"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/workflow-readiness.tsx:28-50"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "immediate_response_no_retained_request",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_readiness.py:195-236#test_busy_probe_retains_slot_until_thread_finishes",
+          "match": "literal_or_template_method_path",
+          "request_line": 225,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_readiness.py:114-126#test_revoked_session_cannot_receive_completed_check",
+          "match": "literal_or_template_method_path",
+          "request_line": 126,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "readiness_v2",
+        "worker_policy_admission"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/revisions/{revision_id}/download",
+      "workflow": "research_stack",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/editor.py:236",
+        "router_prefix": "/api/editor",
+        "router_source": "api/editor.py:31",
+        "import": "api/application.py:28",
+        "include": "api/application.py:430",
+        "include_prefix": ""
+      },
+      "handler": "api/editor.py:237-257#download",
+      "request": {
+        "signature": "request: Request, revision_id: str",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/public_records.py:12-14#protect_yaml",
+          "api/editor.py:260-267#protect_revision_bundle",
+          "core/documents.py:326-338#download",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/editor-revision-save.tsx:193-195"
+        ],
+        "note": "Actual download anchor consumes validated server download_url; no literal fetch of the route."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/editor-revision-contracts.ts:37-55"
+        ],
+        "decoder_status": "url_identity_checked_browser_download_no_content_decoder"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_editor_revision_api.py:101-146#test_committed_revision_rechecks_current_secret_policy_without_changing_artifacts",
+          "match": "returned_download_url_test_body",
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/save",
+      "workflow": "immutable_editor_save",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/editor.py:173",
+        "router_prefix": "/api/editor",
+        "router_source": "api/editor.py:31",
+        "import": "api/application.py:28",
+        "include": "api/application.py:430",
+        "include_prefix": ""
+      },
+      "handler": "api/editor.py:174-212#save",
+      "request": {
+        "signature": "request: Request, body: SaveDraft",
+        "models": [
+          "api/editor.py:47-51#SaveDraft",
+          "api/editor.py:34-44#Draft"
+        ],
+        "dependencies": [
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/editor.py:270-288#checked_validation",
+          "api/public_records.py:12-14#protect_yaml",
+          "api/editor.py:260-267#protect_revision_bundle",
+          "core/documents.py:292-324#save",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/editor-revision-save.tsx:127-143",
+          "ui/editor.tsx:294-304"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/editor-revision-contracts.ts:1-59"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "keyed_receipt_legacy_unkeyed_exception",
+        "contract": "With idempotency_key: GET save-requests key and decodeEditorSaveReceipt binds complete request hash; unkeyed legacy saves have no exact-key recovery.",
+        "sources": [
+          "core/documents.py:292-324#save",
+          "core/documents.py:446-452#save_request",
+          "ui/editor-revision-contracts.ts:29-58"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_editor.py:202-218#test_save_http_guards_hashes_and_request_bounds",
+          "match": "literal_or_template_method_path",
+          "request_line": 208,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_manual_research_api.py:237-288#test_fresh_immutable_draft_checks_complete_original_policy",
+          "match": "literal_or_template_method_path",
+          "request_line": 251,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "safe_mutation_admission"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/save-requests/{idempotency_key}",
+      "workflow": "research_stack",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/editor.py:215",
+        "router_prefix": "/api/editor",
+        "router_source": "api/editor.py:31",
+        "import": "api/application.py:28",
+        "include": "api/application.py:430",
+        "include_prefix": ""
+      },
+      "handler": "api/editor.py:216-233#save_request",
+      "request": {
+        "signature": "request: Request, idempotency_key: str",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/editor.py:260-267#protect_revision_bundle",
+          "core/documents.py:446-452#save_request",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "template_ref",
+        "sources": [
+          "ui/editor-revision-save.tsx:146-156"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/editor-revision-contracts.ts:1-59"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_editor_revision_api.py:52-96#test_keyed_revision_replay_and_immutable_open_survive_api_restart",
+          "match": "literal_or_template_method_path",
+          "request_line": 66,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_editor_revision_api.py:101-146#test_committed_revision_rechecks_current_secret_policy_without_changing_artifacts",
+          "match": "literal_or_template_method_path",
+          "request_line": 133,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/schema",
+      "workflow": "research_stack",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/catalogues.py:29",
+        "router_prefix": "/api/editor",
+        "router_source": "api/catalogues.py:19",
+        "import": "api/application.py:27",
+        "include": "api/application.py:435",
+        "include_prefix": ""
+      },
+      "handler": "api/catalogues.py:30-33#schema",
+      "request": {
+        "signature": "request: Request",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/catalogues.py:22-26#_digest",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/metadata-browser.tsx:47-59"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/metadata-browser.tsx:1-59"
+        ],
+        "decoder_status": "permissive_display_helpers_not_contract_validator"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_catalogues.py:18-43#test_schema_and_catalogue_are_actual_read_only_metadata",
+          "match": "literal_or_template_method_path",
+          "request_line": 31,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "capability_and_decoder_matrix"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/snapshots",
+      "workflow": "snapshots",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/editor.py:469",
+        "router_prefix": "/api/editor",
+        "router_source": "api/editor.py:31",
+        "import": "api/application.py:28",
+        "include": "api/application.py:430",
+        "include_prefix": ""
+      },
+      "handler": "api/editor.py:470-490#snapshots",
+      "request": {
+        "signature": "request: Request, body: SnapshotDraft, session=Depends(require_mutation)",
+        "models": [
+          "api/editor.py:54-56#SnapshotDraft",
+          "api/editor.py:34-44#Draft",
+          "api/preview_options.py:16-27#RenderOptions"
+        ],
+        "dependencies": [
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/editor.py:291-295#frozen_draft",
+          "api/editor.py:298-315#submit_editor",
+          "api/preview_options.py:30-42#normalized_options",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/editor-jobs.tsx:84-105"
+        ],
+        "note": "Actual api.mutate(`/editor/${kind}`) at line99; useEditorJob kind union at line30 binds this route. Not an exact literal path."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/editor-jobs.tsx:99-102",
+          "ui/contracts.ts:74-90",
+          "ui/snapshot-model.ts:18-36"
+        ],
+        "decoder_status": "job_envelope_only_then_kind_specific_result_decoder"
+      },
+      "readback": {
+        "status": "post_replay_only_until_job_id_known",
+        "contract": "No dedicated read-only key/hash lookup. Journal.get_submission is internal; UI retains exact POST then observes GET job after receiving ID. Workspace snapshot is not an exact-request disposition.",
+        "sources": [
+          "core/journal.py:656-663#get_submission",
+          "api/editor.py:298-315#submit_editor",
+          "ui/editor-jobs.tsx:65-105"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_editor_secrets.py:129-139#test_snapshot_submission_guards_idempotency_key",
+          "match": "literal_or_template_method_path",
+          "request_line": 134,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_editor.py:25-53#test_snapshot_options_are_frozen_validated_and_idempotent",
+          "match": "literal_or_template_method_path",
+          "request_line": 31,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "job_key_readback",
+        "safe_mutation_admission",
+        "snapshot_replay_source"
+      ],
+      "evidence_status": "not_run",
+      "worker_path": {
+        "match_kind": "source_call_chain_not_http",
+        "sources": [
+          "api/editor_execution.py:57-143#execute",
+          "api/snapshot_service.py:110-502#SnapshotService"
+        ],
+        "status": "not_run"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/validate",
+      "workflow": "authoring",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/editor.py:168",
+        "router_prefix": "/api/editor",
+        "router_source": "api/editor.py:31",
+        "import": "api/application.py:28",
+        "include": "api/application.py:430",
+        "include_prefix": ""
+      },
+      "handler": "api/editor.py:169-170#validate",
+      "request": {
+        "signature": "request: Request, body: Draft",
+        "models": [
+          "api/editor.py:34-44#Draft"
+        ],
+        "dependencies": [
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/editor.py:270-288#checked_validation",
+          "core/documents.py:260-290#validate",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "authorized_source_schema_validation",
+        "note": "Draft schema + frozen include/source and public-content guards only; not save/generation/GPU/graph-publication admission."
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/editor.tsx:393-412"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/editor.tsx:398-412"
+        ],
+        "decoder_status": "typescript_shape_and_local_checks_not_strict_response_union"
+      },
+      "readback": {
+        "status": "immediate_response_no_retained_request",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_editor.py:202-218#test_save_http_guards_hashes_and_request_bounds",
+          "match": "literal_or_template_method_path",
+          "request_line": 213,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_editor.py:125-146#test_real_default_document_and_semantic_validation",
+          "match": "literal_or_template_method_path",
+          "request_line": 139,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/events",
+      "workflow": "job_observation",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/events.py:78",
+        "router_prefix": "/api",
+        "router_source": "api/events.py:20",
+        "import": "api/application.py:31",
+        "include": "api/application.py:429",
+        "include_prefix": ""
+      },
+      "handler": "api/events.py:79-95#events",
+      "request": {
+        "signature": "request: Request",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/events.py:37-75#event_stream",
+          "api/security.py:22-23#cookie_token",
+          "api/public_records.py:37-39#protect_public_record",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "template_ref",
+        "sources": [
+          "ui/stream-hub.ts:95-118"
+        ],
+        "note": "SharedWorker EventSource from events.shared-worker.ts:3; reconnect uses read-only after cursor."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/stream-hub.ts:95-138",
+          "ui/contracts.ts:92-103"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_api.py:672-716#test_real_cli_uds_sse_and_durable_restart",
+          "match": "literal_or_template_method_path",
+          "request_line": 714,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_api.py:298-333#test_sse_http_cursor_precedence_gap_and_slow_consumer",
+          "match": "literal_or_template_method_path",
+          "request_line": 306,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/graph/examples",
+      "workflow": "graph_explorer_not_worker_retrieval",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/graph_queries.py:262",
+        "router_prefix": "/api/graph",
+        "router_source": "api/graph_queries.py:241",
+        "import": "api/application.py:32",
+        "include": "api/application.py:436",
+        "include_prefix": ""
+      },
+      "handler": "api/graph_queries.py:263-264#examples",
+      "request": {
+        "signature": "",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/neo4j.tsx:61-88"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/neo4j.tsx:61-88"
+        ],
+        "decoder_status": "typed_cast_no_strict_examples_decoder"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_graph_queries.py:302-332#test_graph_routes_require_session_and_csrf_and_return_live_service_results",
+          "match": "literal_or_template_method_path",
+          "request_line": 319,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/graph/query",
+      "workflow": "graph_explorer_not_worker_retrieval",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/graph_queries.py:279",
+        "router_prefix": "/api/graph",
+        "router_source": "api/graph_queries.py:241",
+        "import": "api/application.py:32",
+        "include": "api/application.py:436",
+        "include_prefix": ""
+      },
+      "handler": "api/graph_queries.py:280-296#run_query",
+      "request": {
+        "signature": "body: GraphQueryInput",
+        "models": [
+          "api/graph_queries.py:245-250#GraphQueryInput"
+        ],
+        "dependencies": [
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/graph_queries.py:138-160#validate_query",
+          "api/graph_queries.py:180-210#query",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "explicit_consent_bounded_read_query",
+        "note": "GraphQueryInput plus GraphQueryService query classification/bounds; database access differs from worker grant/config path."
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/neo4j.tsx:125-143"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/neo4j.tsx:131-143"
+        ],
+        "decoder_status": "typed_cast_then_graph_projection_helpers_not_exact_wire_validator"
+      },
+      "readback": {
+        "status": "immediate_response_no_retained_request",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_graph_queries.py:302-332#test_graph_routes_require_session_and_csrf_and_return_live_service_results",
+          "match": "literal_or_template_method_path",
+          "request_line": 322,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/graph/status",
+      "workflow": "graph_explorer_not_worker_retrieval",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/graph_queries.py:267",
+        "router_prefix": "/api/graph",
+        "router_source": "api/graph_queries.py:241",
+        "import": "api/application.py:32",
+        "include": "api/application.py:436",
+        "include_prefix": ""
+      },
+      "handler": "api/graph_queries.py:268-276#status",
+      "request": {
+        "signature": "",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/graph_queries.py:180-210#query",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "explicit_consent_bounded_database_read",
+        "note": "Unlike readiness metadata, this GET executes GraphQueryService RETURN1; not a worker retrieval check."
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/neo4j.tsx:61-88"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/neo4j.tsx:61-88"
+        ],
+        "decoder_status": "typed_cast_no_strict_status_decoder"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_graph_queries.py:302-332#test_graph_routes_require_session_and_csrf_and_return_live_service_results",
+          "match": "literal_or_template_method_path",
+          "request_line": 325,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "workflow": "research_stack",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/application.py:412",
+        "router_prefix": "",
+        "router_source": null,
+        "import": null,
+        "include": null,
+        "include_prefix": ""
+      },
+      "handler": "api/application.py:413-424#health",
+      "request": {
+        "signature": "",
+        "models": [],
+        "dependencies": [],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/runtime.tsx:58-69"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/runtime.tsx:58-69"
+        ],
+        "decoder_status": "typescript_cast_no_strict_health_decoder"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_api.py:672-716#test_real_cli_uds_sse_and_durable_restart",
+          "match": "literal_or_template_method_path",
+          "request_line": 678,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_api.py:37-46#test_numeric_loopback_alias_and_nonlocal_origin_isolation",
+          "match": "literal_or_template_method_path",
+          "request_line": 46,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "capability_and_decoder_matrix"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs",
+      "workflow": "job_observation",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/jobs.py:44",
+        "router_prefix": "/api",
+        "router_source": "api/jobs.py:16",
+        "import": "api/application.py:33",
+        "include": "api/application.py:428",
+        "include_prefix": ""
+      },
+      "handler": "api/jobs.py:45-46#jobs",
+      "request": {
+        "signature": "request: Request",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/public_records.py:37-39#protect_public_record",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "unknown",
+        "sources": [],
+        "note": "No production frontend/worker HTTP caller found in the baseline scan; tests are not callers."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [],
+        "decoder_status": "unknown"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_api.py:672-716#test_real_cli_uds_sse_and_durable_restart",
+          "match": "literal_or_template_method_path",
+          "request_line": 705,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_generation_modes.py:81-95#test_new_rejects_any_implicit_base_fields",
+          "match": "literal_or_template_method_path",
+          "request_line": 95,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs",
+      "workflow": "diagnostic_only",
+      "classification": "diagnostic",
+      "registration": {
+        "source": "api/jobs.py:59",
+        "router_prefix": "/api",
+        "router_source": "api/jobs.py:16",
+        "import": "api/application.py:33",
+        "include": "api/application.py:428",
+        "include_prefix": ""
+      },
+      "handler": "api/jobs.py:60-82#submit",
+      "request": {
+        "signature": "request: Request, body: Submission, session=Depends(require_mutation)",
+        "models": [
+          "api/jobs.py:27-34#Submission",
+          "api/jobs.py:19-24#DiagnosticInputs"
+        ],
+        "dependencies": [
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/public_records.py:37-39#protect_public_record",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only",
+        "note": "Submission.kind only diagnostic; diagnostics flag defaults off. Not a generation/build readiness probe."
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/api.ts:175-184"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/api.ts:180-181",
+          "ui/contracts.ts:74-90"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "immediate_response_no_retained_request",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_api.py:672-716#test_real_cli_uds_sse_and_durable_restart",
+          "match": "literal_or_template_method_path",
+          "request_line": 684,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_public_job_protection.py:175-183#test_submission_exception_text_is_not_public",
+          "match": "literal_or_template_method_path",
+          "request_line": 180,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "diagnostic_not_stack_probe"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/resume-queue",
+      "workflow": "explicit_operator_recovery",
+      "classification": "operator",
+      "registration": {
+        "source": "api/jobs.py:85",
+        "router_prefix": "/api",
+        "router_source": "api/jobs.py:16",
+        "import": "api/application.py:33",
+        "include": "api/application.py:428",
+        "include_prefix": ""
+      },
+      "handler": "api/jobs.py:86-90#resume_queue",
+      "request": {
+        "signature": "request: Request",
+        "models": [],
+        "dependencies": [
+          "require_mutation"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only",
+        "note": "No body model or reviewed queue membership/revision; resumes current queue. Startup must never call it."
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/app.tsx:226-242"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/app.tsx:234-237"
+        ],
+        "decoder_status": "partial_runtime_checks"
+      },
+      "readback": {
+        "status": "partial_workspace_state",
+        "contract": "Workspace read observes paused/queued state, not a retained resume-request receipt.",
+        "sources": [
+          "api/jobs.py:50-51#workspace"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_build.py:512-552#test_unknown_cleanup_retains_ownership_even_after_queue_resume",
+          "match": "literal_or_template_method_path",
+          "request_line": 538,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_evaluate.py:718-750#test_unverified_evaluation_cleanup_retains_dispatch_slot_and_lease",
+          "match": "literal_or_template_method_path",
+          "request_line": 737,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "queue_scope"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/{job_id}",
+      "workflow": "job_observation",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/jobs.py:54",
+        "router_prefix": "/api",
+        "router_source": "api/jobs.py:16",
+        "import": "api/application.py:33",
+        "include": "api/application.py:428",
+        "include_prefix": ""
+      },
+      "handler": "api/jobs.py:55-56#job",
+      "request": {
+        "signature": "request: Request, job_id: str",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/public_records.py:37-39#protect_public_record",
+          "api/jobs.py:37-41#lookup",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "template_ref",
+        "sources": [
+          "ui/editor-jobs.tsx:65-73"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/editor-jobs.tsx:71-72",
+          "ui/contracts.ts:74-90"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_api.py:672-716#test_real_cli_uds_sse_and_durable_restart",
+          "match": "literal_or_template_method_path",
+          "request_line": 713,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_editor.py:435-472#test_generation_wall_clock_budget_reaps_owned_process",
+          "match": "literal_or_template_method_path",
+          "request_line": 464,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/cancel",
+      "workflow": "explicit_job_cancellation",
+      "classification": "operator",
+      "registration": {
+        "source": "api/jobs.py:93",
+        "router_prefix": "/api",
+        "router_source": "api/jobs.py:16",
+        "import": "api/application.py:33",
+        "include": "api/application.py:428",
+        "include_prefix": ""
+      },
+      "handler": "api/jobs.py:94-117#cancel",
+      "request": {
+        "signature": "request: Request, job_id: str",
+        "models": [],
+        "dependencies": [
+          "require_mutation"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/jobs.py:37-41#lookup",
+          "api/public_records.py:37-39#protect_public_record",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only",
+        "note": "Intent is not cleanup; 503 may follow accepted cancellation."
+      },
+      "callers": {
+        "match_kind": "template_ref",
+        "sources": [
+          "ui/editor-jobs.tsx:119-135"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/editor-jobs.tsx:130-132"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "job_id",
+        "contract": "GET /api/jobs/{job_id}; verify exact ID and terminal cleanup state",
+        "sources": [
+          "api/jobs.py:55-56#job",
+          "ui/editor-jobs.tsx:130-132"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_critic_cancellation.py:81-97#test_renewed_queued_cancel_endpoint_is_fenced",
+          "match": "literal_or_template_method_path",
+          "request_line": 93,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_critic_cancellation.py:64-78#test_blocked_cancel_endpoint_frees_quota_without_dispatch",
+          "match": "literal_or_template_method_path",
+          "request_line": 70,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/model-settings",
+      "workflow": "generation_credentials",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/model_settings.py:191",
+        "router_prefix": "/api/model-settings",
+        "router_source": "api/model_settings.py:28",
+        "import": "api/application.py:35",
+        "include": "api/application.py:427",
+        "include_prefix": ""
+      },
+      "handler": "api/model_settings.py:192-194#forget",
+      "request": {
+        "signature": "request: Request, session=Depends(require_mutation)",
+        "models": [],
+        "dependencies": [
+          "require_mutation"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/model_settings.py:179-180#status",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/model-settings.tsx:136-141"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/model-settings.tsx:138-141"
+        ],
+        "decoder_status": "ignores_mutation_body_then_decodes_status_read"
+      },
+      "readback": {
+        "status": "metadata_only",
+        "contract": "GET /api/model-settings: private credential bytes never readable",
+        "sources": [
+          "api/model_settings.py:179-180#status",
+          "ui/model-settings.tsx:25-28"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_model_settings.py:232-261#test_settings_authenticated_save_and_forget_never_persist_key",
+          "match": "literal_or_template_method_path",
+          "request_line": 259,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_model_settings.py:200-228#test_server_profile_uses_actual_endpoint_without_exposing_override",
+          "match": "literal_or_template_method_path",
+          "request_line": 227,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/model-settings",
+      "workflow": "generation_credentials",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/model_settings.py:178",
+        "router_prefix": "/api/model-settings",
+        "router_source": "api/model_settings.py:28",
+        "import": "api/application.py:35",
+        "include": "api/application.py:427",
+        "include_prefix": ""
+      },
+      "handler": "api/model_settings.py:179-180#status",
+      "request": {
+        "signature": "request: Request, session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/model-settings.tsx:25-28"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/model-settings-contracts.ts:1-117"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_model_settings.py:284-290#test_settings_invalid_inputs_have_generic_errors",
+          "match": "literal_or_template_method_path",
+          "request_line": 290,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_model_settings.py:412-431#test_capacity_and_session_deadline_bound_retention",
+          "match": "literal_or_template_method_path",
+          "request_line": 424,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/model-settings",
+      "workflow": "generation_credentials",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/model_settings.py:183",
+        "router_prefix": "/api/model-settings",
+        "router_source": "api/model_settings.py:28",
+        "import": "api/application.py:35",
+        "include": "api/application.py:427",
+        "include_prefix": ""
+      },
+      "handler": "api/model_settings.py:184-188#save",
+      "request": {
+        "signature": "request: Request, body: SettingsInput, session=Depends(require_mutation)",
+        "models": [
+          "api/model_settings.py:31-43#SettingsInput"
+        ],
+        "dependencies": [
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/model_settings.py:179-180#status",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/model-settings.tsx:174-182"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/model-settings.tsx:178-182"
+        ],
+        "decoder_status": "ignores_mutation_body_then_decodes_status_read"
+      },
+      "readback": {
+        "status": "metadata_only",
+        "contract": "GET /api/model-settings: private credential bytes never readable",
+        "sources": [
+          "api/model_settings.py:179-180#status",
+          "ui/model-settings.tsx:25-28"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_editor_secrets.py:143-165#test_decoded_validation_warnings_are_guarded",
+          "match": "literal_or_template_method_path",
+          "request_line": 147,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_manual_research_api.py:334-358#test_candidate_reads_protect_the_actual_root",
+          "match": "literal_or_template_method_path",
+          "request_line": 353,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/publication-profiles",
+      "workflow": "research_versions_or_publication_metadata",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/research_routes.py:42",
+        "router_prefix": "/api/research",
+        "router_source": "api/research_routes.py:22",
+        "import": "api/application.py:42",
+        "include": "api/application.py:433",
+        "include_prefix": ""
+      },
+      "handler": "api/research_routes.py:43-55#publication_profiles",
+      "request": {
+        "signature": "request: Request, session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/research_routes.py:25-39#protect_public",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/research-versions.tsx:128-140"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/research-versions.tsx:128-140"
+        ],
+        "decoder_status": "bounded_metadata_shape_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_research_api.py:625-634#test_profile_listing_skips_malformed_connections_without_whole_failure",
+          "match": "literal_or_template_method_path",
+          "request_line": 630,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_research_api.py:42-66#test_publication_profiles_are_authenticated_bounded_metadata_without_schema",
+          "match": "literal_or_template_method_path",
+          "request_line": 45,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores",
+      "workflow": "research_versions_or_publication_metadata",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/research_routes.py:58",
+        "router_prefix": "/api/research",
+        "router_source": "api/research_routes.py:22",
+        "import": "api/application.py:42",
+        "include": "api/application.py:433",
+        "include_prefix": ""
+      },
+      "handler": "api/research_routes.py:59-85#stores",
+      "request": {
+        "signature": "request: Request, session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/research_routes.py:25-39#protect_public",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/research-versions.tsx:128-140"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/research-versions.tsx:128-140"
+        ],
+        "decoder_status": "bounded_metadata_shape_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_publication_lifecycle.py:43-69#test_unused_publication_secret_guard_is_wired",
+          "match": "literal_or_template_method_path",
+          "request_line": 59,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_research_api.py:979-997#test_profile_read_verifies_the_actual_area_and_registry_binding",
+          "match": "literal_or_template_method_path",
+          "request_line": 988,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/candidates/{job_id}",
+      "workflow": "research_versions_or_publication_metadata",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/research_routes.py:445",
+        "router_prefix": "/api/research",
+        "router_source": "api/research_routes.py:22",
+        "import": "api/application.py:42",
+        "include": "api/application.py:433",
+        "include_prefix": ""
+      },
+      "handler": "api/research_routes.py:446-454#candidate",
+      "request": {
+        "signature": "request: Request, store_id: str, job_id: str, session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/research_routes.py:25-39#protect_public",
+          "api/research_routes.py:220-229#selected_store",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "template_ref",
+        "sources": [
+          "ui/research-versions.tsx:142-146"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/research-versions.tsx:17-21",
+          "ui/research-versions.tsx:144-146"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_research_api.py:842-889#test_explicit_save_persists_exact_candidate_and_recovers_same_version",
+          "match": "literal_or_template_method_path",
+          "request_line": 879,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/publications/{effect_id}",
+      "workflow": "publication_recovery",
+      "classification": "operator",
+      "registration": {
+        "source": "api/publication_routes.py:64",
+        "router_prefix": "/api/research/stores/{store_id}/publications",
+        "router_source": "api/publication_routes.py:16",
+        "import": "api/application.py:38",
+        "include": "api/application.py:434",
+        "include_prefix": ""
+      },
+      "handler": "api/publication_routes.py:66-81#disposition",
+      "request": {
+        "signature": "request: Request, store_id: str, effect_id: str, request_id: str, run=Depends(enabled), session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "enabled",
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/publication_routes.py:40-61#scope",
+          "api/publication_routes.py:34-37#enabled",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read",
+        "note": "Both aliases use disposition(request_id required). Short alias requires query request_id; enabled dependency rejects even reads when publication_admitting is false."
+      },
+      "callers": {
+        "match_kind": "unknown",
+        "sources": [],
+        "note": "No production frontend/worker HTTP caller found in the baseline scan; tests are not callers."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [],
+        "decoder_status": "unknown"
+      },
+      "readback": {
+        "status": "exact_request_feature_gated",
+        "contract": "Retained acceptance plus current effect state; scope verifies owner/session/store/effect/request.",
+        "sources": [
+          "api/publication_routes.py:40-61#scope"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_publication_routes.py:79-109#test_cancelled_write_then_explicit_reconcile_without_second_write",
+          "match": "BASE_or_returned_Location_test_body",
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_publication_routes.py:182-199#test_disabled_routes_never_open_store_or_worker_schema",
+          "match": "feature_disabled_behavior_test_body",
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "publication_alias_query",
+        "publication_feature_off_readback"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/research/stores/{store_id}/publications/{effect_id}/cancel",
+      "workflow": "publication_cancel",
+      "classification": "operator",
+      "registration": {
+        "source": "api/publication_routes.py:147",
+        "router_prefix": "/api/research/stores/{store_id}/publications",
+        "router_source": "api/publication_routes.py:16",
+        "import": "api/application.py:38",
+        "include": "api/application.py:434",
+        "include_prefix": ""
+      },
+      "handler": "api/publication_routes.py:148-167#cancel",
+      "request": {
+        "signature": "request: Request, store_id: str, effect_id: str, body: CancelRequest, run=Depends(enabled), session=Depends(require_mutation)",
+        "models": [
+          "api/publication_routes.py:29-31#CancelRequest",
+          "api/publication_routes.py:20-22#WriteRequest"
+        ],
+        "dependencies": [
+          "enabled",
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/publication_routes.py:40-61#scope",
+          "api/publication_routes.py:34-37#enabled",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "template_ref",
+        "sources": [
+          "ui/publication-controls.tsx:200-211"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/publication-controls.tsx:203-211"
+        ],
+        "decoder_status": "cancel_ack_and_followup_exact_disposition"
+      },
+      "readback": {
+        "status": "exact_request_feature_gated",
+        "contract": "GET /api/research/stores/{store_id}/publications/{effect_id}/requests/{request_id}; feature-off recovery unavailable.",
+        "sources": [
+          "api/publication_routes.py:66-81#disposition",
+          "ui/publication-controls.tsx:167-175"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_publication_routes.py:79-109#test_cancelled_write_then_explicit_reconcile_without_second_write",
+          "match": "BASE_or_returned_Location_test_body",
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_publication_routes.py:182-199#test_disabled_routes_never_open_store_or_worker_schema",
+          "match": "feature_disabled_behavior_test_body",
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "safe_mutation_admission"
+      ],
+      "evidence_status": "not_run",
+      "worker_path": {
+        "match_kind": "source_call_chain_not_http",
+        "sources": [
+          "api/publication_scheduler.py:70-464#PublicationScheduler",
+          "api/publication_worker.py:31-75#main"
+        ],
+        "status": "not_run"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/research/stores/{store_id}/publications/{effect_id}/reconcile",
+      "workflow": "publication_reconcile",
+      "classification": "operator",
+      "registration": {
+        "source": "api/publication_routes.py:121",
+        "router_prefix": "/api/research/stores/{store_id}/publications",
+        "router_source": "api/publication_routes.py:16",
+        "import": "api/application.py:38",
+        "include": "api/application.py:434",
+        "include_prefix": ""
+      },
+      "handler": "api/publication_routes.py:122-131#reconcile",
+      "request": {
+        "signature": "request: Request, store_id: str, effect_id: str, body: FollowupRequest, background: BackgroundTasks, run=Depends(enabled), session=Depends(require_mutation)",
+        "models": [
+          "api/publication_routes.py:25-26#FollowupRequest",
+          "api/publication_routes.py:20-22#WriteRequest"
+        ],
+        "dependencies": [
+          "enabled",
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/publication_routes.py:97-118#admit",
+          "api/publication_routes.py:34-37#enabled",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/publication-controls.tsx:158-165"
+        ],
+        "note": "Composed base at158 + frozen operation union write|renew|reconcile at16; actual POST160."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/publication-controls.tsx:67-118",
+          "ui/publication-controls.tsx:158-165"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "exact_request_feature_gated",
+        "contract": "GET /api/research/stores/{store_id}/publications/{effect_id}/requests/{request_id}; feature-off recovery unavailable.",
+        "sources": [
+          "api/publication_routes.py:66-81#disposition",
+          "ui/publication-controls.tsx:167-175"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_publication_routes.py:79-109#test_cancelled_write_then_explicit_reconcile_without_second_write",
+          "match": "BASE_or_returned_Location_test_body",
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_publication_routes.py:182-199#test_disabled_routes_never_open_store_or_worker_schema",
+          "match": "feature_disabled_behavior_test_body",
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "safe_mutation_admission"
+      ],
+      "evidence_status": "not_run",
+      "worker_path": {
+        "match_kind": "source_call_chain_not_http",
+        "sources": [
+          "api/publication_scheduler.py:70-464#PublicationScheduler",
+          "api/publication_worker.py:31-75#main"
+        ],
+        "status": "not_run"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/research/stores/{store_id}/publications/{effect_id}/renew",
+      "workflow": "publication_renew",
+      "classification": "operator",
+      "registration": {
+        "source": "api/publication_routes.py:134",
+        "router_prefix": "/api/research/stores/{store_id}/publications",
+        "router_source": "api/publication_routes.py:16",
+        "import": "api/application.py:38",
+        "include": "api/application.py:434",
+        "include_prefix": ""
+      },
+      "handler": "api/publication_routes.py:135-144#renew",
+      "request": {
+        "signature": "request: Request, store_id: str, effect_id: str, body: FollowupRequest, background: BackgroundTasks, run=Depends(enabled), session=Depends(require_mutation)",
+        "models": [
+          "api/publication_routes.py:25-26#FollowupRequest",
+          "api/publication_routes.py:20-22#WriteRequest"
+        ],
+        "dependencies": [
+          "enabled",
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/publication_routes.py:97-118#admit",
+          "api/publication_routes.py:34-37#enabled",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/publication-controls.tsx:158-165"
+        ],
+        "note": "Composed base at158 + frozen operation union write|renew|reconcile at16; actual POST160."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/publication-controls.tsx:67-118",
+          "ui/publication-controls.tsx:158-165"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "exact_request_feature_gated",
+        "contract": "GET /api/research/stores/{store_id}/publications/{effect_id}/requests/{request_id}; feature-off recovery unavailable.",
+        "sources": [
+          "api/publication_routes.py:66-81#disposition",
+          "ui/publication-controls.tsx:167-175"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_publication_routes.py:132-147#test_renew_retained_acceptance_after_bind_failure",
+          "match": "BASE_or_returned_Location_test_body",
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_publication_routes.py:182-199#test_disabled_routes_never_open_store_or_worker_schema",
+          "match": "feature_disabled_behavior_test_body",
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "safe_mutation_admission"
+      ],
+      "evidence_status": "not_run",
+      "worker_path": {
+        "match_kind": "source_call_chain_not_http",
+        "sources": [
+          "api/publication_scheduler.py:70-464#PublicationScheduler",
+          "api/publication_worker.py:31-75#main"
+        ],
+        "status": "not_run"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/publications/{effect_id}/requests/{request_id}",
+      "workflow": "publication_recovery",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/publication_routes.py:65",
+        "router_prefix": "/api/research/stores/{store_id}/publications",
+        "router_source": "api/publication_routes.py:16",
+        "import": "api/application.py:38",
+        "include": "api/application.py:434",
+        "include_prefix": ""
+      },
+      "handler": "api/publication_routes.py:66-81#disposition",
+      "request": {
+        "signature": "request: Request, store_id: str, effect_id: str, request_id: str, run=Depends(enabled), session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "enabled",
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/publication_routes.py:40-61#scope",
+          "api/publication_routes.py:34-37#enabled",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read",
+        "note": "Both aliases use disposition(request_id required). Short alias requires query request_id; enabled dependency rejects even reads when publication_admitting is false."
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/publication-controls.tsx:167-175"
+        ],
+        "note": "Composed publication base and exact frozen request ID; GET169."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/publication-controls.tsx:67-118",
+          "ui/publication-controls.tsx:167-175"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "exact_request_feature_gated",
+        "contract": "Retained acceptance plus current effect state; scope verifies owner/session/store/effect/request.",
+        "sources": [
+          "api/publication_routes.py:40-61#scope"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_publication_routes.py:54-76#test_http_real_child_write_readback_cleanup_and_exact_replay",
+          "match": "BASE_or_returned_Location_test_body",
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_publication_routes.py:182-199#test_disabled_routes_never_open_store_or_worker_schema",
+          "match": "feature_disabled_behavior_test_body",
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "publication_feature_off_readback"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/research/stores/{store_id}/publications/{effect_id}/write",
+      "workflow": "publication_write",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/publication_routes.py:84",
+        "router_prefix": "/api/research/stores/{store_id}/publications",
+        "router_source": "api/publication_routes.py:16",
+        "import": "api/application.py:38",
+        "include": "api/application.py:434",
+        "include_prefix": ""
+      },
+      "handler": "api/publication_routes.py:85-94#write",
+      "request": {
+        "signature": "request: Request, store_id: str, effect_id: str, body: WriteRequest, background: BackgroundTasks, run=Depends(enabled), session=Depends(require_mutation)",
+        "models": [
+          "api/publication_routes.py:20-22#WriteRequest"
+        ],
+        "dependencies": [
+          "enabled",
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/publication_routes.py:97-118#admit",
+          "api/publication_routes.py:34-37#enabled",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/publication-controls.tsx:158-165"
+        ],
+        "note": "Composed base at158 + frozen operation union write|renew|reconcile at16; actual POST160."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/publication-controls.tsx:67-118",
+          "ui/publication-controls.tsx:158-165"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "exact_request_feature_gated",
+        "contract": "GET /api/research/stores/{store_id}/publications/{effect_id}/requests/{request_id}; feature-off recovery unavailable.",
+        "sources": [
+          "api/publication_routes.py:66-81#disposition",
+          "ui/publication-controls.tsx:167-175"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_publication_routes.py:54-76#test_http_real_child_write_readback_cleanup_and_exact_replay",
+          "match": "BASE_or_returned_Location_test_body",
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_publication_routes.py:182-199#test_disabled_routes_never_open_store_or_worker_schema",
+          "match": "feature_disabled_behavior_test_body",
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "safe_mutation_admission"
+      ],
+      "evidence_status": "not_run",
+      "worker_path": {
+        "match_kind": "source_call_chain_not_http",
+        "sources": [
+          "api/publication_scheduler.py:70-464#PublicationScheduler",
+          "api/publication_worker.py:31-75#main"
+        ],
+        "status": "not_run"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/versions",
+      "workflow": "research_versions_or_publication_metadata",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/research_routes.py:299",
+        "router_prefix": "/api/research",
+        "router_source": "api/research_routes.py:22",
+        "import": "api/application.py:42",
+        "include": "api/application.py:433",
+        "include_prefix": ""
+      },
+      "handler": "api/research_routes.py:300-343#versions",
+      "request": {
+        "signature": "request: Request, store_id: str, family: str=Query(pattern='^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'), after_version: int=Query(default=0, ge=0), limit: int=Query(default=25, ge=1, le=50), session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/research_routes.py:25-39#protect_public",
+          "api/research_routes.py:220-229#selected_store",
+          "api/research_routes.py:167-179#protected_version_source",
+          "api/research_routes.py:182-184#research_open_source",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/research-versions.tsx:142-156"
+        ],
+        "note": "Composed base string at142, GET template149 plus explicit family/after_version/limit."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/research-versions.tsx:15-16",
+          "ui/research-versions.tsx:149-156"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_publication_lifecycle.py:157-189#test_unused_secret_in_durable_candidate_cannot_be_saved",
+          "match": "literal_or_template_method_path",
+          "request_line": 189,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_research_api.py:946-976#test_cooperating_writer_contention_is_retryable_not_internal_error",
+          "match": "literal_or_template_method_path",
+          "request_line": 975,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_research_api.py:842-889#test_explicit_save_persists_exact_candidate_and_recovers_same_version",
+          "match": "composed_versions_url_test_body",
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/research/stores/{store_id}/versions",
+      "workflow": "research_version_persistence",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/research_routes.py:232",
+        "router_prefix": "/api/research",
+        "router_source": "api/research_routes.py:22",
+        "import": "api/application.py:42",
+        "include": "api/application.py:433",
+        "include_prefix": ""
+      },
+      "handler": "api/research_routes.py:233-296#persist",
+      "request": {
+        "signature": "request: Request, response: Response, store_id: str, body: PersistCandidate | PersistTaggedCandidate | PersistEditorRevision, session=Depends(require_mutation)",
+        "models": [
+          "api/research_routes.py:95-103#PersistCandidate",
+          "api/research_routes.py:88-92#PublicationTarget",
+          "api/research_routes.py:137-143#PersistEditorRevision",
+          "api/research_routes.py:129-134#EditorRevisionSource",
+          "api/research_routes.py:114-126#PersistTaggedCandidate",
+          "api/research_routes.py:106-111#AcceptedCandidateSource"
+        ],
+        "dependencies": [
+          "require_mutation"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/research_routes.py:25-39#protect_public",
+          "api/research_routes.py:220-229#selected_store",
+          "api/research_routes.py:146-164#persist_manual",
+          "core/research_registry.py:56-58#digest",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only",
+        "note": "Accepted candidate OR immutable editor revision. Editor revision + publication_target explicitly422. Candidate preparation is not publication execution."
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/research-versions.tsx:170-191"
+        ],
+        "note": "Path variable174 and api.mutate175; same-request readback185."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/research-versions.tsx:27-41",
+          "ui/research-versions.tsx:175-191"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "post_replay_then_reservation_id",
+        "contract": "Internal get_reservation_for_workflow exists; no HTTP key/hash disposition. UI retries exact POST and reads returned reservation/manifest; listing family/latest is not exact lost-ACK recovery.",
+        "sources": [
+          "core/research_registry.py:389-408#get_reservation_for_workflow",
+          "api/research_routes.py:347-364#version",
+          "ui/research-versions.tsx:174-191"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_publication_lifecycle.py:157-189#test_unused_secret_in_durable_candidate_cannot_be_saved",
+          "match": "literal_or_template_method_path",
+          "request_line": 176,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_research_api.py:764-794#test_preparation_preserves_schema_store_and_busy_guards",
+          "match": "literal_or_template_method_path",
+          "request_line": 783,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_research_api.py:842-889#test_explicit_save_persists_exact_candidate_and_recovers_same_version",
+          "match": "composed_versions_url_test_body",
+          "status": "not_run"
+        }
+      ],
+      "gaps": [
+        "manual_publication_unsupported",
+        "research_key_readback",
+        "safe_mutation_admission"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/versions/{reservation_id}",
+      "workflow": "research_versions_or_publication_metadata",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/research_routes.py:346",
+        "router_prefix": "/api/research",
+        "router_source": "api/research_routes.py:22",
+        "import": "api/application.py:42",
+        "include": "api/application.py:433",
+        "include_prefix": ""
+      },
+      "handler": "api/research_routes.py:347-364#version",
+      "request": {
+        "signature": "request: Request, store_id: str, reservation_id: str, session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/research_routes.py:25-39#protect_public",
+          "api/research_routes.py:220-229#selected_store",
+          "api/research_routes.py:167-179#protected_version_source",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/research-versions.tsx:157-162"
+        ],
+        "note": "Composed versions base at142; checkedSelection GET at161."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/research-versions.tsx:27-41",
+          "ui/research-versions.tsx:157-162"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_research_api.py:842-889#test_explicit_save_persists_exact_candidate_and_recovers_same_version",
+          "match": "composed_versions_url_test_body",
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/versions/{reservation_id}/artifacts/{name}",
+      "workflow": "research_versions_or_publication_metadata",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/research_routes.py:413",
+        "router_prefix": "/api/research",
+        "router_source": "api/research_routes.py:22",
+        "import": "api/application.py:42",
+        "include": "api/application.py:433",
+        "include_prefix": ""
+      },
+      "handler": "api/research_routes.py:414-442#artifact",
+      "request": {
+        "signature": "request: Request, store_id: str, reservation_id: str, name: str, session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/research_routes.py:25-39#protect_public",
+          "api/research_routes.py:220-229#selected_store",
+          "api/research_routes.py:167-179#protected_version_source",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "inferred",
+        "sources": [
+          "ui/research-versions.tsx:262"
+        ],
+        "note": "Actual download anchor composes /api + versions base + reservation/environment.yaml."
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/research-versions.tsx:262"
+        ],
+        "decoder_status": "browser_download_no_artifact_content_decoder"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_research_api.py:842-889#test_explicit_save_persists_exact_candidate_and_recovers_same_version",
+          "match": "composed_versions_url_test_body",
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/stores/{store_id}/versions/{reservation_id}/publication-binding",
+      "workflow": "research_versions_or_publication_metadata",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/research_routes.py:367",
+        "router_prefix": "/api/research",
+        "router_source": "api/research_routes.py:22",
+        "import": "api/application.py:42",
+        "include": "api/application.py:433",
+        "include_prefix": ""
+      },
+      "handler": "api/research_routes.py:368-410#publication_binding",
+      "request": {
+        "signature": "request: Request, store_id: str, reservation_id: str, session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "core/research_registry.py:100-104#checked_identifier",
+          "api/research_routes.py:25-39#protect_public",
+          "api/research_routes.py:220-229#selected_store",
+          "api/publication_payload.py:28-95#prepare_publication",
+          "api/publication_payload.py:98-110#checked_frozen_config",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "template_ref",
+        "sources": [
+          "ui/publication-panel.tsx:49-61"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/publication-panel.tsx:11-35"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_research_api.py:220-258#test_publication_binding_rejects_unverified_or_wrong_identity",
+          "match": "literal_or_template_method_path",
+          "request_line": 256,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/session",
+      "workflow": "arena_session",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/security.py:81",
+        "router_prefix": "/api",
+        "router_source": "api/security.py:13",
+        "import": "api/application.py:44",
+        "include": "api/application.py:426",
+        "include_prefix": ""
+      },
+      "handler": "api/security.py:82-92#revoke",
+      "request": {
+        "signature": "request: Request, response: Response, session=Depends(require_mutation)",
+        "models": [],
+        "dependencies": [
+          "require_mutation"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/security.py:22-23#cookie_token",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/api.ts:77-81"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/api.ts:79-80"
+        ],
+        "decoder_status": "generic_json_no_revoked_decoder"
+      },
+      "readback": {
+        "status": "immediate_response_no_retained_request",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_workflow_authorization.py:189-215#test_dispatch_blocks_changed_origin_or_owner",
+          "match": "literal_or_template_method_path",
+          "request_line": 212,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_reauthorization.py:150-199#test_session_key_renewal_uses_current_explicit_owner",
+          "match": "literal_or_template_method_path",
+          "request_line": 168,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/session",
+      "workflow": "arena_session",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/security.py:67",
+        "router_prefix": "/api",
+        "router_source": "api/security.py:13",
+        "import": "api/application.py:44",
+        "include": "api/application.py:426",
+        "include_prefix": ""
+      },
+      "handler": "api/security.py:68-69#inspect_session",
+      "request": {
+        "signature": "session=Depends(require_session)",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/events.shared-worker.ts:5-10"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/events.shared-worker.ts:10"
+        ],
+        "decoder_status": "http_status_only_no_session_body_decoder"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_api.py:672-716#test_real_cli_uds_sse_and_durable_restart",
+          "match": "literal_or_template_method_path",
+          "request_line": 712,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_reauthorization.py:150-199#test_session_key_renewal_uses_current_explicit_owner",
+          "match": "literal_or_template_method_path",
+          "request_line": 192,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/session/activity",
+      "workflow": "arena_session",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/security.py:72",
+        "router_prefix": "/api",
+        "router_source": "api/security.py:13",
+        "import": "api/application.py:44",
+        "include": "api/application.py:426",
+        "include_prefix": ""
+      },
+      "handler": "api/security.py:73-78#activity",
+      "request": {
+        "signature": "request: Request",
+        "models": [],
+        "dependencies": [
+          "require_mutation"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/security.py:22-23#cookie_token",
+          "api/security.py:39-43#require_mutation"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/api.ts:66-75"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/api.ts:70-72"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "immediate_response_no_retained_request",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_model_settings.py:357-383#test_no_key_timer_follows_session_activity_but_not_polling",
+          "match": "literal_or_template_method_path",
+          "request_line": 370,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_api.py:49-88#test_sessions_are_durable_origin_bound_revocable_and_expire",
+          "match": "literal_or_template_method_path",
+          "request_line": 70,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sessions",
+      "workflow": "arena_session",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/security.py:58",
+        "router_prefix": "/api",
+        "router_source": "api/security.py:13",
+        "import": "api/application.py:44",
+        "include": "api/application.py:426",
+        "include_prefix": ""
+      },
+      "handler": "api/security.py:59-64#establish",
+      "request": {
+        "signature": "request: Request, response: Response, body: EmptySessionInput",
+        "models": [
+          "api/security.py:16-19#EmptySessionInput"
+        ],
+        "dependencies": [
+          "require_origin"
+        ]
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/security.py:22-23#cookie_token",
+          "api/security.py:46-55#set_cookie",
+          "api/security.py:26-29#require_origin"
+        ],
+        "safe_probe": "isolated_contract_only"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/api.ts:25-56"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/api.ts:39-47"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "immediate_response_no_retained_request",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_api.py:672-716#test_real_cli_uds_sse_and_durable_restart",
+          "match": "literal_or_template_method_path",
+          "request_line": 681,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_managed_cli.py:1039-1090#test_unix_transport_session_bounds_and_no_tcp",
+          "match": "literal_or_template_method_path",
+          "request_line": 1074,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/default",
+      "workflow": "job_observation",
+      "classification": "workflow",
+      "registration": {
+        "source": "api/jobs.py:49",
+        "router_prefix": "/api",
+        "router_source": "api/jobs.py:16",
+        "import": "api/application.py:33",
+        "include": "api/application.py:428",
+        "include_prefix": ""
+      },
+      "handler": "api/jobs.py:50-51#workspace",
+      "request": {
+        "signature": "request: Request",
+        "models": [],
+        "dependencies": [
+          "require_session"
+        ],
+        "model_status": "no_body_model; path/query/dependencies in signature and handler"
+      },
+      "admission": {
+        "global": "http_boundary",
+        "sources": [
+          "api/public_records.py:37-39#protect_public_record",
+          "api/security.py:32-36#require_session"
+        ],
+        "safe_probe": "authorized_read"
+      },
+      "callers": {
+        "match_kind": "literal_ref",
+        "sources": [
+          "ui/observation.ts:115-134"
+        ]
+      },
+      "response": {
+        "producer": "$handler",
+        "decoder_sources": [
+          "ui/reconcile.ts:1-52"
+        ],
+        "decoder_status": "runtime_checks"
+      },
+      "readback": {
+        "status": "resource_read",
+        "sources": [
+          "$handler"
+        ]
+      },
+      "tests": [
+        {
+          "source": "tests/test_workbench_api.py:91-155#test_job_submission_bounds_idempotency_and_queued_cancellation",
+          "match": "literal_or_template_method_path",
+          "request_line": 113,
+          "status": "not_run"
+        },
+        {
+          "source": "tests/test_workbench_readiness.py:38-56#test_readiness_reports_missing_configuration_without_network_or_jobs",
+          "match": "literal_or_template_method_path",
+          "request_line": 40,
+          "status": "not_run"
+        }
+      ],
+      "gaps": [],
+      "evidence_status": "not_run"
+    }
+  ],
+  "non_http_worker_boundaries": [
+    {
+      "workflow": "graph_generation",
+      "sources": [
+        "api/editor_execution.py:145-286#execute_managed",
+        "api/generation_worker.py:24-94#main",
+        "api/generation.py:85-175#_generate",
+        "api/graph_access.py:67-121#retrieve_snapshot"
+      ],
+      "note": "Private grant/config envelope and consumed retrieval outcome must be checked in the generation worker. Explorer query or readiness RETURN1 is not this path.",
+      "evidence_status": "not_run"
+    },
+    {
+      "workflow": "policy_evaluation",
+      "sources": [
+        "api/build_execution.py:38-120#execute_build",
+        "api/evaluation_worker.py:24-128#run_evaluation",
+        "isaaclab_arena_gr00t/policy/gr00t_remote_closedloop_policy.py:100-118",
+        "isaaclab_arena_gr00t/policy/gr00t_remote_closedloop_policy.py:207-300"
+      ],
+      "note": "Native PolicyClient path exists; baseline constructor ping/modalities and actual get_action do not bind trusted loaded-checkpoint/instance/codec admission. New metadata/codec/smoke endpoints are not Arena HTTP routes.",
+      "evidence_status": "not_run"
+    }
+  ],
+  "proposed_contracts_excluded_from_registered_counts": [
+    {
+      "method": "POST",
+      "path": "/control/session",
+      "kind": "new_route",
+      "registered_in_baseline": false,
+      "implementation_status": "not_audited_parallel_owner_changes",
+      "contract_source": ".agents/references/plans/dashboard_cli_workflow_parity/research-stack-contracts.md:7",
+      "request_contract": "{pairing_token:string} initial pairing OR {} recover valid control cookie",
+      "response_contract": "Exact {schema_version:1,csrf_token:string,expires_at:number}",
+      "admission_required": "Exact Host/Origin, bounded JSON/pair attempts; HttpOnly SameSite=Strict cookie Path=/control; token never stored publicly.",
+      "caller_decoder_required": "Shell control-api/research-services for control; coordinated version2 decoder for readiness. Proposed owner only, no baseline caller evidence.",
+      "readback_contract": "{} recovers same valid helper session; no service start.",
+      "tests_required": "Isolated real handler/decoder contracts; negative admission and retained-request tests. Source presence alone is not a pass.",
+      "gaps": [
+        "control_routes_absent"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "DELETE",
+      "path": "/control/session",
+      "kind": "new_route",
+      "registered_in_baseline": false,
+      "implementation_status": "not_audited_parallel_owner_changes",
+      "contract_source": ".agents/references/plans/dashboard_cli_workflow_parity/research-stack-contracts.md:8",
+      "request_contract": "Authenticated CSRF mutation; strict payload handling must be frozen by owner",
+      "response_contract": "Exact {schema_version:1,revoked:true}",
+      "admission_required": "Control cookie + CSRF; no Arena-session authority.",
+      "caller_decoder_required": "Shell control-api/research-services for control; coordinated version2 decoder for readiness. Proposed owner only, no baseline caller evidence.",
+      "readback_contract": "Subsequent authenticated control state denied; revokes control session only.",
+      "tests_required": "Isolated real handler/decoder contracts; negative admission and retained-request tests. Source presence alone is not a pass.",
+      "gaps": [
+        "control_routes_absent"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/control/research-services",
+      "kind": "new_route",
+      "registered_in_baseline": false,
+      "implementation_status": "not_audited_parallel_owner_changes",
+      "contract_source": ".agents/references/plans/dashboard_cli_workflow_parity/research-stack-contracts.md:9-11",
+      "request_contract": "Optional query request_id for exact retained lookup",
+      "response_contract": "Exact {schema_version:1,profile_revision:string,expected_policy:string,services:Service[],api:string,startup_allowed:boolean,operation:Operation|null}",
+      "admission_required": "Paired read; no protocol probes or Docker starts; fixed arena/neo4j/gr00t service order.",
+      "caller_decoder_required": "Shell control-api/research-services for control; coordinated version2 decoder for readiness. Proposed owner only, no baseline caller evidence.",
+      "readback_contract": "request_id returns exact retained Operation or404; no global latest substitution.",
+      "tests_required": "Isolated real handler/decoder contracts; negative admission and retained-request tests. Source presence alone is not a pass.",
+      "gaps": [
+        "control_routes_absent"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/control/research-services/start",
+      "kind": "new_route",
+      "registered_in_baseline": false,
+      "implementation_status": "not_audited_parallel_owner_changes",
+      "contract_source": ".agents/references/plans/dashboard_cli_workflow_parity/research-stack-contracts.md:10-11",
+      "request_contract": "Exact {request_id:lowercase32hex,profile_revision:lowercase64hex}",
+      "response_contract": "Operation exact {request_id,profile_revision,status,code}; status starting|completed|failed|unknown; static code allowlist from companion",
+      "admission_required": "CSRF + fixed approved existing targets; exact profile revision; durable reserve before bounded start; API paused; no queue resume/pull/recreate/stop.",
+      "caller_decoder_required": "Shell control-api/research-services for control; coordinated version2 decoder for readiness. Proposed owner only, no baseline caller evidence.",
+      "readback_contract": "GET control state?request_id=...; duplicate exact body reuses operation, mismatch409; preserve unknown effects across restart.",
+      "tests_required": "Isolated real handler/decoder contracts; negative admission and retained-request tests. Source presence alone is not a pass.",
+      "gaps": [
+        "control_routes_absent",
+        "queue_scope"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/editor/readiness",
+      "kind": "version_extension",
+      "registered_in_baseline": true,
+      "implementation_status": "not_audited_parallel_owner_changes",
+      "contract_source": ".agents/references/plans/dashboard_cli_workflow_parity/research-stack-contracts.md:15-23",
+      "request_contract": "Query version=2 and workflow=a2_gr00t|graph_generation|build; v1 unchanged",
+      "response_contract": "Exact v2 {schema_version:2,workflow,checked_at:null,checks,policy,ready}; exact Check/PolicyEvidence union from companion",
+      "admission_required": "Arena session; metadata only; no model/runtime initialization.",
+      "caller_decoder_required": "Shell control-api/research-services for control; coordinated version2 decoder for readiness. Proposed owner only, no baseline caller evidence.",
+      "readback_contract": "Not an operation receipt; invalidated metadata cannot authorize dispatch.",
+      "tests_required": "Isolated real handler/decoder contracts; negative admission and retained-request tests. Source presence alone is not a pass.",
+      "gaps": [
+        "readiness_v2",
+        "capability_and_decoder_matrix",
+        "v2_scope_integration"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/readiness/check",
+      "kind": "version_extension",
+      "registered_in_baseline": true,
+      "implementation_status": "not_audited_parallel_owner_changes",
+      "contract_source": ".agents/references/plans/dashboard_cli_workflow_parity/research-stack-contracts.md:18-23",
+      "request_contract": "Exact {schema_version:2,workflow,prompt?,yaml_text?,document_id?}; {} remains v1",
+      "response_contract": "Exact v2 checks + policy evidence; inference:not_run; ready only if all required checks passed",
+      "admission_required": "Session/CSRF; bounded server-configured dependency reads; strict source/secret guards; no get_action/reset/kill or omitted RPC endpoint.",
+      "caller_decoder_required": "Shell control-api/research-services for control; coordinated version2 decoder for readiness. Proposed owner only, no baseline caller evidence.",
+      "readback_contract": "Ephemeral evidence bound to expected profile/source/serving instance; actual worker/native connection independently rechecks.",
+      "tests_required": "Isolated real handler/decoder contracts; negative admission and retained-request tests. Source presence alone is not a pass.",
+      "gaps": [
+        "readiness_v2",
+        "worker_policy_admission",
+        "v2_scope_integration"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/editor/readiness/policy-smoke",
+      "kind": "new_route",
+      "registered_in_baseline": false,
+      "implementation_status": "not_audited_parallel_owner_changes",
+      "contract_source": ".agents/references/plans/dashboard_cli_workflow_parity/research-stack-contracts.md:37; .agents/references/plans/dashboard_cli_workflow_parity/research-stack-readiness.md:121-125",
+      "request_contract": "NOT FROZEN: explicit consent, bounded inference budget, frozen source/profile/instance and duplicate-safe job identity required",
+      "response_contract": "NOT FROZEN: existing job/lease result and inference evidence; never synthetic success",
+      "admission_required": "Separate approved inference action after trusted identity/transport gates; no rollout or graph writes.",
+      "caller_decoder_required": "Shell control-api/research-services for control; coordinated version2 decoder for readiness. Proposed owner only, no baseline caller evidence.",
+      "readback_contract": "NOT FROZEN: retain exact request and job/receipt using existing owners; mandatory lost-ACK recovery.",
+      "tests_required": "Isolated real handler/decoder contracts; negative admission and retained-request tests. Source presence alone is not a pass.",
+      "gaps": [
+        "policy_smoke_absent",
+        "worker_policy_admission"
+      ],
+      "evidence_status": "not_run"
+    }
+  ],
+  "gaps": [
+    {
+      "id": "capability_and_decoder_matrix",
+      "status": "required_extension",
+      "finding": "Health/editor capability booleans and display-oriented schema/catalogue consumers do not validate every method/request/response contract. Add versioned required-capability checks and strict decoders; test 404, old schema and wrong source without effectful POST probes.",
+      "sources": [
+        "api/application.py:413-423",
+        "ui/runtime.tsx:58-69",
+        "ui/metadata-browser.tsx:47-59"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "safe_mutation_admission",
+      "status": "missing_safe_validator_boundary",
+      "finding": "Existing Pydantic models/frozen_draft/compatible_spec/identifier checks are reusable, but grant capture, save reservation, submit_editor and publication accept also mutate. No registered dry-run admission contract covers generation/save/build/evaluate/snapshots/research/publication/renewal. Isolate pure request+source+profile checks and test real admissions under denied effects; do not call effectful POSTs for Check.",
+      "sources": [
+        "api/editor.py:291-295#frozen_draft",
+        "api/editor.py:298-315#submit_editor",
+        "api/workflow_authorization.py:36-109#capture",
+        "api/publication_routes.py:97-118#admit"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "readiness_v2",
+      "status": "absent_baseline_version",
+      "finding": "Baseline CheckInput only accepts {} and readiness returns schema_version1. No workflow/prompt/source-scoped v2 response, strict policy evidence or coordinated v2 frontend decoder. Existing endpoint presence is not v2 support.",
+      "sources": [
+        "api/readiness.py:26-29#CheckInput",
+        "api/readiness.py:42-69#metadata",
+        "ui/workflow-readiness.tsx:28-50"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "worker_policy_admission",
+      "status": "missing_baseline_verification",
+      "finding": "API probe uses RETURN1/TCP; evaluation accepts fixed DROID profile without expected checkpoint/config/instance/native-codec evidence. Add bounded generation-worker retrieval and same-instance native client verification at dispatch/reconnect; unknown identity/transport must block verified evaluation.",
+      "sources": [
+        "api/readiness.py:72-113#probe_graph",
+        "api/readiness.py:116-122#probe_policy",
+        "api/graph_access.py:67-121#retrieve_snapshot",
+        "api/evaluation_worker.py:24-128#run_evaluation",
+        "isaaclab_arena_gr00t/policy/gr00t_remote_closedloop_policy.py:100-118"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "job_key_readback",
+      "status": "missing_read_only_recovery",
+      "finding": "Build/Evaluate/Snapshots have internal Journal.get_submission and POST replay, not public GET exact-key/request-hash dispositions. Lost ACK before job ID requires effectful-path replay. Add read-only exact submission lookup and mounted caller; do not substitute whole-workspace/latest/canonical preview.",
+      "sources": [
+        "core/journal.py:656-663#get_submission",
+        "api/editor.py:436-489",
+        "api/evaluate.py:40-49",
+        "ui/editor-jobs.tsx:90-105"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "snapshot_replay_source",
+      "status": "recovery_order_gap",
+      "finding": "Snapshots resolves and validates the draft/source and checks runtime before retained submission comparison. Expired/replaced source view or unavailable renderer can block recovery of an accepted key. Compare retained exact request before resolving mutable prerequisites.",
+      "sources": [
+        "api/editor.py:470-489"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "generation_disposition_caller",
+      "status": "missing_mounted_readback_caller",
+      "finding": "Exact GET key+request_sha256 route exists and composed-path tests cover no grant/source resolution; no baseline production frontend caller found. Generic editor controller retries POST rather than consulting this read.",
+      "sources": [
+        "api/editor.py:319-333#generation_operation",
+        "ui/editor-jobs.tsx:90-105",
+        "tests/test_workbench_editor_revision_api.py:152-212#test_generation_recovery_checks_complete_current_record_without_resolving_view"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "research_key_readback",
+      "status": "missing_read_only_recovery",
+      "finding": "Internal store-scoped workflow lookup exists, but HTTP reads need reservation ID or family listing. Before receiving save ACK the UI retries exact POST; add key/request-bound reservation disposition rather than inferring latest version.",
+      "sources": [
+        "core/research_registry.py:389-408#get_reservation_for_workflow",
+        "ui/research-versions.tsx:174-191"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "publication_feature_off_readback",
+      "status": "existing_recovery_gate_conflict",
+      "finding": "Both GET publication dispositions depend on enabled/publication_admitting. Feature-off returns503 before retained acceptance read. Separate read owner from write admission if recovery while disabled is required; existing test asserts current refusal, not recovery success.",
+      "sources": [
+        "api/publication_routes.py:34-37#enabled",
+        "api/publication_routes.py:66-81#disposition",
+        "tests/test_workbench_publication_routes.py:182-199#test_disabled_routes_never_open_store_or_worker_schema"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "publication_alias_query",
+      "status": "operator_alias_not_an_extra_capability",
+      "finding": "GET /publications/{effect_id} still requires query request_id, although path omits it. Preferred mounted read uses /requests/{request_id}; retain both registration rows and test missing query422.",
+      "sources": [
+        "api/publication_routes.py:64-75",
+        "ui/publication-controls.tsx:167-175"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "queue_scope",
+      "status": "explicit_operator_only",
+      "finding": "resume-queue has no strict request/revision/membership model or retained request receipt; resumes current queue. Never invoke from Start/check/reconnect. Exact reviewed resume scope needs separately frozen admission.",
+      "sources": [
+        "api/jobs.py:86-90#resume_queue",
+        "ui/app.tsx:226-242"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "diagnostic_not_stack_probe",
+      "status": "explicitly_unsupported_for_stack_validation",
+      "finding": "POST /api/jobs accepts diagnostic only and is runtime-flag gated. It cannot validate generation/build/evaluation connections and must not be used as a readiness side effect.",
+      "sources": [
+        "api/jobs.py:27-34#Submission",
+        "api/jobs.py:59-82"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "manual_publication_unsupported",
+      "status": "explicitly_unsupported",
+      "finding": "Research persist supports editor_revision sources but rejects a publication_target for them. No retroactive publication-intent mutation route is registered; do not label arbitrary edited-YAML publication ready.",
+      "sources": [
+        "api/research_routes.py:232-245",
+        "ui/research-versions.tsx:262"
+      ],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "control_routes_absent",
+      "status": "proposed_new_owner",
+      "finding": "No baseline /control registrations. Helper pairing/authenticated state/exact start+retained lookup must remain outside Arena/session gates, with distinct owner and isolated lifecycle tests.",
+      "sources": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "policy_smoke_absent",
+      "status": "proposed_unsupported_until_implemented",
+      "finding": "No baseline policy-smoke HTTP handler, model, decoder, job/readback or budget contract. Metadata/codec success must leave inference not_run. Parent must freeze explicit consent/budgets and existing lease/job lifecycle before admitting smoke.",
+      "sources": [],
+      "evidence_status": "not_run"
+    },
+    {
+      "id": "v2_scope_integration",
+      "status": "integration_contract_check_required",
+      "finding": "Frozen companion v2 payload lists workflow/prompt/yaml_text/document_id but not explicit check-selection or profile_revision fields requested in the main plan. Verify server-owned fixed selection, frozen profile/source identity and release recheck, or amend the shared contract; do not silently infer these guarantees.",
+      "sources": [],
+      "evidence_status": "not_run"
+    }
+  ],
+  "explicitly_unsupported_scope": [
+    {
+      "scope": "generic research execution via POST /api/jobs",
+      "disposition": "diagnostic_only; do not infer generation/build from a jobs URL"
+    },
+    {
+      "scope": "Docker arbitrary target/command, build/pull/recreate/remove/stop or queue resume through Start",
+      "disposition": "unsupported_control_authority; none authorized by proposed fixed start"
+    },
+    {
+      "scope": "scenario harness, experiment orchestration, legacy healing, DCRG/controller-assistance new controls",
+      "disposition": "no baseline HTTP route/admission audited for these; retain CLI-only/unsupported rather than infer parity",
+      "source": "api/readiness.py:62-68"
+    },
+    {
+      "scope": "manual editor-revision graph publication and retroactive intent preparation",
+      "disposition": "explicitly_unsupported_by_baseline_persist_contract",
+      "source": "api/research_routes.py:240-245"
+    },
+    {
+      "scope": "policy inference readiness from TCP/metadata/codec alone",
+      "disposition": "unsupported_claim; proposed smoke remains not_run and contract_pending"
+    }
+  ],
+  "parent_integration_gates": [
+    "Re-extract merged registrations and count independently. Keep this baseline commit/hashes intact or replace with a clearly new source-bound audit; do not add owner routes to baseline counts.",
+    "Verify all four /control routes with helper registration/strict request schemas/retained readback and API-down actual Shell mount. v2 is an extension of two existing routes, not two extra paths.",
+    "Freeze/implement policy-smoke or report unsupported. Verify v1/v2 decoder compatibility and exact profile/source/check-selection release semantics.",
+    "Admit focused isolated real-handler and mounted frontend tests under existing runner; attach executed outcomes separately. These test-body citations all remain not_run.",
+    "Reconcile safe validators, Build/Evaluate/Snapshot/research lost-ACK reads, generation disposition caller and disabled-publication recovery; explicit operator actions never become startup probes.",
+    "Keep real service starts, model inference/GPU simulation/graph writes and deployment acceptance behind separate approval."
+  ],
+  "source_hashes": {
+    "core/documents.py": {
+      "sha256": "b4a052a56a4efd30f0266e6060bb4000bc264f38727f6816dfac703624202dec",
+      "git_blob_sha1": "c138a624bd8c0998a8bbd59b26913320d225569f"
+    },
+    "core/journal.py": {
+      "sha256": "1cae7808ba9d6a672be9b2b16f92e04dd827ca87e826b875aee8987e5d83775a",
+      "git_blob_sha1": "9ef288d075bf2ec81445d1d492a8b2aa5768f944"
+    },
+    "core/research_registry.py": {
+      "sha256": "c4dc0eee554ebc5f211d02f036638c6e9848ef19d1a35d61ab59451f1a346c4a",
+      "git_blob_sha1": "b273e2c1af27035e6a99fd33d21cdf0f75c0dd6b"
+    },
+    "api/__init__.py": {
+      "sha256": "19dd22167dc4ba6ddbf60f2129893cd08e17ad1b9139c82fcc37a4ec58361fb0",
+      "git_blob_sha1": "e87b2ca21febcd10038cd48250b6fd6cf8278e57"
+    },
+    "api/__main__.py": {
+      "sha256": "e681d09bafdb70529edc56a0d7361fc6bb3d854a99c4607477ff74121473d79b",
+      "git_blob_sha1": "251435343a1f65865f81ac246223c151cbceb8a3"
+    },
+    "api/application.py": {
+      "sha256": "9fa659a660690a11167c000464b8b5c31bc11abc0e59042c5574b2b9503045e2",
+      "git_blob_sha1": "7f5a54d3f8ccf776d343a5fa08459c401dd4f30c"
+    },
+    "api/build_execution.py": {
+      "sha256": "df818bc6de2428c224b2db7694c98f6a28ac33b029c04da45441d501320097df",
+      "git_blob_sha1": "bb8cc344ad82a7667ffe18fc94b55542be23fc59"
+    },
+    "api/build_worker.py": {
+      "sha256": "c76510605c96373691b585f8e5083a66d4c2868a37f000e885ce0208b8e96d86",
+      "git_blob_sha1": "8ad5cfe7774d8bde98934b9922e2fe164c3149e6"
+    },
+    "api/catalogues.py": {
+      "sha256": "66bd8780689753685777b14f99dcb5470c83b27bb08fa73ff27df9f872fe49b0",
+      "git_blob_sha1": "04041d6f965a73e35fbe712db301f61fb130048c"
+    },
+    "api/diagnostic_worker.py": {
+      "sha256": "323d7f1737df011ee94599d18a706b19598960c064ad5947ee0a490d0cb933c5",
+      "git_blob_sha1": "7cd2088d103824065f6f912542e32f65e9ca6d4f"
+    },
+    "api/editor.py": {
+      "sha256": "143e9509ed8d0abd92d66e7c1852c3ca729c800ea55c8cb081e2518996a62ae5",
+      "git_blob_sha1": "adbc6732702a4465916bddf1f3dad4678c8158a6"
+    },
+    "api/editor_execution.py": {
+      "sha256": "3bae0f205343756217220dbf46914740dbb02ccedfa2f8278937aae4339c1ab4",
+      "git_blob_sha1": "b8cf8a75ca75cee41702f15122f2f2af5c5d9f55"
+    },
+    "api/evaluate.py": {
+      "sha256": "9f7ba1614994ff1b736649edf15b27521baa068a31cf0cc2b2692f625fb39a5f",
+      "git_blob_sha1": "d6a86ee559050c5270f3e8bcc808955dc9189c92"
+    },
+    "api/evaluation_artifacts.py": {
+      "sha256": "c062ccd328be850185b9a98cea31c9d77a17f5c5c9238252c7e68fbcccb52255",
+      "git_blob_sha1": "12f65d335e619141998eb27b1128b808ba664272"
+    },
+    "api/evaluation_profiles.py": {
+      "sha256": "f67cf4a570e7317d8ac89a3bae30a163b154261a9becad4bd61839258530a0dc",
+      "git_blob_sha1": "1e366ed7480aa9bae0fa5b89f62379efea681937"
+    },
+    "api/evaluation_worker.py": {
+      "sha256": "a08e22c9893a83d38c78c060853c245633a7cad739e522b28d356709364742fa",
+      "git_blob_sha1": "ee92eadac09a993209b49e97e84af20fd44b016b"
+    },
+    "api/events.py": {
+      "sha256": "8707640d3f16b5fb9f2a9b734e1c76ed4e6ac45aafe8b943dc922ff2b4f2dd35",
+      "git_blob_sha1": "512c14bce324278c6f8716bdc0595afc1ba55cde"
+    },
+    "api/execution_grants.py": {
+      "sha256": "ce8c50eb0d0abb2c9f3d0bdb63ba6a1d1f48a0020ccdf77031c4d698dfa7ff7a",
+      "git_blob_sha1": "e0c7a55a27c9df0b1997b2d9a65497105ae388d1"
+    },
+    "api/generation.py": {
+      "sha256": "0d1f26011acd0b0045e5770fbd6985f11583af7363be244691e91811e89a9706",
+      "git_blob_sha1": "e1b275561841545756c562264c1f58667488a641"
+    },
+    "api/generation_diagnostics.py": {
+      "sha256": "a964e3ac56f48d8d607776fe31479e5fb92173527e3cd11fa5d0bc600cc6447d",
+      "git_blob_sha1": "44e68019860554ef763371fdcac4113bb4632d96"
+    },
+    "api/generation_worker.py": {
+      "sha256": "b45d09031c51a180c809e5c1e11b84f4f1c8a2a484510e448f6b3759c51979e1",
+      "git_blob_sha1": "f6dd7ea6d7092a5a5549aaec3249d8eecebffe70"
+    },
+    "api/graph_access.py": {
+      "sha256": "4a38dfe0e62975dcd805969137c6ea07e5dd0d077d8788efb87a2057444fb477",
+      "git_blob_sha1": "4f88d1b978053f4337f04eea88941f221b1fc11e"
+    },
+    "api/graph_projection.py": {
+      "sha256": "ad7ea0d6b9c77837c5597e20b674a9cee9709177d2c87db91c58d9187751f8a8",
+      "git_blob_sha1": "dcbbc8a7f51d3cd8f5128321fc25372daac370cb"
+    },
+    "api/graph_queries.py": {
+      "sha256": "99917d2745faf069276054ca574f46b1d0cbcca45f6388dc8dc9852fd9acef0f",
+      "git_blob_sha1": "2b8053c49741efcc5ce0e97f9b6a49455338d766"
+    },
+    "api/jobs.py": {
+      "sha256": "3db7a03de4cfd9bb0e43485f5e0e6ad5cb3663826e8fc60f61682706f52e7589",
+      "git_blob_sha1": "34f7d7946834411e2966f9f0b2d7e9d67deec98a"
+    },
+    "api/managed_retrieval.py": {
+      "sha256": "0f65e7c4892c4212fd5fe15df1a2aa1b91123231d4ad252c3a3e2492c222fd60",
+      "git_blob_sha1": "5c4f967636fc4a6d4cab59358335079c3d122313"
+    },
+    "api/model_settings.py": {
+      "sha256": "98acc4787e610537be38f87dfb76cdfc87fbec6bacc78ca9bde6fbb9f337824c",
+      "git_blob_sha1": "876064744efa909924b352e794dc055c09b247b1"
+    },
+    "api/owned_process_group.py": {
+      "sha256": "0a1bc786777017999bd63023413baad2c376c468a5547779d32c6a2bd97d97f6",
+      "git_blob_sha1": "79adb9612cbba2e64728149bf779dd22caf7ef75"
+    },
+    "api/preview_diagnostics.py": {
+      "sha256": "e31c11e76c405f189c8de5c1e81bc6a9f3f5f97c49d0fc73d066ca36fb2c9d3a",
+      "git_blob_sha1": "7cf8be7444ffd30411b9838316e1861beb16a715"
+    },
+    "api/preview_identity.py": {
+      "sha256": "6c4a3c0db195d963e82256a9890e244bcb4333ceb6c2d5a079b932b52259d7b4",
+      "git_blob_sha1": "44807391de71e0ce5a1647947a056af356f6c85f"
+    },
+    "api/preview_options.py": {
+      "sha256": "d47cb64e3b1cc636ca2cc46a7762c9240cd37563d668b7c6e6492aeacb45b54a",
+      "git_blob_sha1": "73d8f1d4bd928d10cd70b3a63d5f95226a73db60"
+    },
+    "api/preview_retention.py": {
+      "sha256": "22516ac488e80e7069a51dc7d9882c9937aeecbefccdad05083cff2156de0aee",
+      "git_blob_sha1": "01a39aec3ea65b83533ea5454d7b4eb0bc4ad2d7"
+    },
+    "api/process_identity.py": {
+      "sha256": "d4c9545269bf36e7669481790993ea6474ad75259ae1bf86a43b697ab9e56dc2",
+      "git_blob_sha1": "0298bce6547a758ccc21feeb8de184485396ff0a"
+    },
+    "api/provider_security.py": {
+      "sha256": "6899b0b408c5921e23f0671d36f4ac3de9cd5bd4ad3211685bb1a3877103ca2d",
+      "git_blob_sha1": "6c0dc9471b0b9539c6cd68d9550b24e1dc0894d3"
+    },
+    "api/public_records.py": {
+      "sha256": "38e735ed2c6327b65c91ab9b255ff24489b792f59e2405c9ac4240c44b8276c7",
+      "git_blob_sha1": "4b80a17779713690133acbf403556077f5548a30"
+    },
+    "api/publication_authorization.py": {
+      "sha256": "786f51eabf5f950b250a521b76e5fcf68fc9e881f9db019b77b91d8f8cd15e51",
+      "git_blob_sha1": "c03bf5ef81fad28217fcc7694c0e20db840d9f4c"
+    },
+    "api/publication_execution.py": {
+      "sha256": "b75ca13f10bf47688e4d9314b9c80eaf6c7b2e49c7b24107a93efa5e4be18251",
+      "git_blob_sha1": "a89bfc9a430fd78ed5a0753e68f39a88d40cfe39"
+    },
+    "api/publication_payload.py": {
+      "sha256": "67497fc698976adee4c80aa48f4200ed0e730385f5ca0c0f8409eeafa1875a2f",
+      "git_blob_sha1": "0312de6fd71a0db886bb76fb79d3f2fe005b3ac8"
+    },
+    "api/publication_routes.py": {
+      "sha256": "20b472671fe81a3123e08c3a338e44ca80483886a582dd9f601c7743aea4e11c",
+      "git_blob_sha1": "a9f715f89669e18d940bf24b108a6e798c034346"
+    },
+    "api/publication_scheduler.py": {
+      "sha256": "0ffcb8666dc46febb4526bda65243f2ff4319e8ed404f4de001587614dd7d133",
+      "git_blob_sha1": "9e9da79be16afca141fc05cb7bce28a0e8638a3d"
+    },
+    "api/publication_worker.py": {
+      "sha256": "b7c90acc52f246c5a3aa1dee4b3137877e43790eac16d5b77f29e40d23060356",
+      "git_blob_sha1": "2efe4435e32389a0f0a833d9a1ed96dfa2261df5"
+    },
+    "api/readiness.py": {
+      "sha256": "1d832d78d95aa543f488848e67a068384deaf61fef3976004305903c6cf43669",
+      "git_blob_sha1": "f4d3c8d93a08d1fc19c4b623152d4ca4cffe29e3"
+    },
+    "api/research_profiles.py": {
+      "sha256": "c8a500fb6925e0a5e16e1564d97b05b5469ed76fa60e694547c699fbfb608b57",
+      "git_blob_sha1": "17fb5b35de2f008119f6cd7d4011ef893dfc3b45"
+    },
+    "api/research_routes.py": {
+      "sha256": "b358862ecd3801c7ea84d1df5a89efbb54c29255022a00e25a2b8a9be063b820",
+      "git_blob_sha1": "2cc5d0b2f8dc5dc0b4d28712e22f6e51ea22f23e"
+    },
+    "api/runtime.py": {
+      "sha256": "18a2b374a477f09d15f1cff9499ec56a22b96b1dd57241d725534f594c576af7",
+      "git_blob_sha1": "fddd594a476193805db44fdfeb1e5f4f2cf4f576"
+    },
+    "api/security.py": {
+      "sha256": "85ba56d3225bc616c55f1cb7ecd262c89bcd5dfda4cfb3a6c8bb59dd2950f724",
+      "git_blob_sha1": "e65109cf068df91144d4ca94ba5e7839f4bd3df9"
+    },
+    "api/snapshot_process.py": {
+      "sha256": "2f307bbca5323bca6d654d131b5406ff72b81a64d5a7c10083610d93f855da6c",
+      "git_blob_sha1": "2e9d286c496c0e9f5d00f581463d84daba540a7e"
+    },
+    "api/snapshot_service.py": {
+      "sha256": "3dab9a6eed44b9fd5aaa1e9a814a28e6fd12a3d1d80990a8e0bb877dc54de498",
+      "git_blob_sha1": "6394de982d1ec5b884814e9a9d94e7892168a599"
+    },
+    "api/snapshot_worker.py": {
+      "sha256": "9f03e7624f4dc94d7d0a26a1f92c8704a5949fa37b711ebe13f134276df0cac3",
+      "git_blob_sha1": "048837990c1cc11dd764dd08a174378030f1c617"
+    },
+    "api/supervisor.py": {
+      "sha256": "eaea73ad436ea497727ed1e973900e791909bbb67bad33033feecf01e4b431d4",
+      "git_blob_sha1": "123817239b6a184e4dd3e484f44c2a6624c6d85d"
+    },
+    "api/workflow_authorization.py": {
+      "sha256": "6c964102946d11d358c014233406bea7f0d36dbcb1799c7873af91e91bb1b6a2",
+      "git_blob_sha1": "4770ef44c1d1e0f6fedbfde35e489ab34e02f8c0"
+    },
+    "api/workflow_routes.py": {
+      "sha256": "62e80ab76250e4a3f02aa350be75c5339a00692ab79e32ee5ab5b78459290e76",
+      "git_blob_sha1": "4b5551e8192d87d24c566781beeef52cef7611a3"
+    },
+    "tests/test_workbench_api.py": {
+      "sha256": "ba529a88c6a9534d39c294a6a0e1420e0c9324bd31ddd5acc61b1b0d77c08120",
+      "git_blob_sha1": "2f2c8b08e5fb75d57781136b8a7f4af7f71118d3"
+    },
+    "tests/test_workbench_build.py": {
+      "sha256": "6ff8258955a2a662b1a3f003c520e7b45a3e857d00da9d9ce4b5bb65c7c20eb1",
+      "git_blob_sha1": "f719ce29b0ba3a7daa9c6bfbc2cea58f3b707c39"
+    },
+    "tests/test_workbench_catalogues.py": {
+      "sha256": "0eba104a38784a56bd99203365b22f616321a30a69c58b7d203af4bf189f20b9",
+      "git_blob_sha1": "b80485f4079ce16d0f87ecf5d5e75b3eaeaf9e37"
+    },
+    "tests/test_workbench_critic_cancellation.py": {
+      "sha256": "e63a039ab46970e6dd4f7c43d7fbdb27e614f5201a55bb2b6415d3b1f6337453",
+      "git_blob_sha1": "867366dbeb9f5f525f8cfaf1fd01fade8c3ad84e"
+    },
+    "tests/test_workbench_editor.py": {
+      "sha256": "ce49b1e221dbc1e3d7b57c2b74100fa8f5d6001125986dfac828fba380084ea8",
+      "git_blob_sha1": "972391bde9c93cfff8cadbf474b1829137c33b4f"
+    },
+    "tests/test_workbench_editor_revision_api.py": {
+      "sha256": "5c0c1fc0df87cf5327a2d7f6d646a0df0bb3683f7bf36aa93ff67d8681e54eba",
+      "git_blob_sha1": "9225c261f9a9ffa059c6d73f1a0d3d1cbfcd494f"
+    },
+    "tests/test_workbench_editor_secrets.py": {
+      "sha256": "0bbb366a49a8301e13ec151425dcedc7958de4ee03f029bb356c6c76e0b15910",
+      "git_blob_sha1": "d38a3318600dcdd5e93d900c425d2f091679605a"
+    },
+    "tests/test_workbench_evaluate.py": {
+      "sha256": "1ba473329a1a6cb4d5df916ec238ac736895689f1d5400c5cae0e5d129df81ba",
+      "git_blob_sha1": "50142bab781e1902559ca797a65663dbaefcede3"
+    },
+    "tests/test_workbench_generation_modes.py": {
+      "sha256": "273cee4e27f31d33ec3578f8318b6f98adae30019de2d001c262256ba7050fb0",
+      "git_blob_sha1": "67a1e8ddfc24d608f02aa99bc1536500c5b4432e"
+    },
+    "tests/test_workbench_graph_queries.py": {
+      "sha256": "c421fc2cec87593fa58ddd34a44b5e895b503d9de63b9c381e6818cf65fa6589",
+      "git_blob_sha1": "c05c7cbc5dc5879cbc780a8a3e66ba332ad72683"
+    },
+    "tests/test_workbench_managed_cli.py": {
+      "sha256": "a45d0234b716d0e4bc2bd27666fc9ad39f03f0c533925f56b031863f784c8b8a",
+      "git_blob_sha1": "fcba6b54dfcec122e08cef6744e38316a90bea2c"
+    },
+    "tests/test_workbench_manual_research_api.py": {
+      "sha256": "bdcec8db318d9cb520ce6a6ba87b2dc222e88bc11351dc0ede90ad10b35349f8",
+      "git_blob_sha1": "edb9d64b2521a929f8ceb27db87049527dfbb67f"
+    },
+    "tests/test_workbench_model_settings.py": {
+      "sha256": "f84e09d73cf1b341810f4d9282495d81ab8bcb382ba89cb1fdee4361f2c59c1b",
+      "git_blob_sha1": "e15899d626f8e3d9d914a01452fce7bf520677fa"
+    },
+    "tests/test_workbench_public_job_protection.py": {
+      "sha256": "c271a96ed40f30b8b74d11f12581e46f8c9908b70574969ddb4e4a291abdb034",
+      "git_blob_sha1": "467211a678c975a5b6913f364f60bb42d174018b"
+    },
+    "tests/test_workbench_publication_lifecycle.py": {
+      "sha256": "10411508b57682210b94b260667a3bdbfacc3d125e4dc29839e2f4c461ef55a7",
+      "git_blob_sha1": "d1e2d80c777fd7cf1c8510bfc3710a371b5fc63e"
+    },
+    "tests/test_workbench_publication_routes.py": {
+      "sha256": "4067077a80ec2dbe462b8a53bc6b96fc4fd02eff588a261a595e00af4e3d6d73",
+      "git_blob_sha1": "b9ac1acde115233c077b90f911c01b75719f8409"
+    },
+    "tests/test_workbench_readiness.py": {
+      "sha256": "196f9b5fd41f1ec5621ec656446988b27dff8e775ebdf321e8d74f889c0e8925",
+      "git_blob_sha1": "eefa962e829f1b4741ae959d48be51493230eefb"
+    },
+    "tests/test_workbench_reauthorization.py": {
+      "sha256": "f6a46615a987861db07a37952f11db36bd6b67cbf583ee5088d9c9fe46e9b3d7",
+      "git_blob_sha1": "153cfe47c58ee9c58465a9d731f47525b1f2cdcf"
+    },
+    "tests/test_workbench_research_api.py": {
+      "sha256": "49105cd1ad5afe5b19d2e964ff8ea7cf3f8e8ca39a420453ba73aa2fc0fd068b",
+      "git_blob_sha1": "3527f3abd9b5423d12c89bae8bd2279643368147"
+    },
+    "tests/test_workbench_workflow_authorization.py": {
+      "sha256": "062313d050d5634b76e61422e0cb15bf54cdf6d87c0a895240dd66a5bc374eca",
+      "git_blob_sha1": "63853c1922e21d7009ab3fdf458089c203250723"
+    },
+    "isaaclab_arena_gr00t/policy/gr00t_remote_closedloop_policy.py": {
+      "sha256": "fd147386e25c1b0050a6a31252acee4a53c889aaf6546bd379040262bdb96eb2",
+      "git_blob_sha1": "21bbfb77391dd353c2430d3e214c5ecb3f787065"
+    },
+    "ui/api.ts": {
+      "sha256": "e24a23783d045d5efaaa8a5c8011a1d6ecb6580e4051730734055a5dd5d68315",
+      "git_blob_sha1": "370c4a772374dc81fad68439860da97180c00244"
+    },
+    "ui/app.tsx": {
+      "sha256": "2a1139b2cf401f26f9a1241e06ea3572c197b7769886a892a1dcbbb60537c6b4",
+      "git_blob_sha1": "b4badaf42526b910e192a945d286f33b29e5059a"
+    },
+    "ui/build-environment.tsx": {
+      "sha256": "650dc40e1dcc66b134d2e71c1a6baf0f563e78b4da42f398170b0d7edae7d7e9",
+      "git_blob_sha1": "66edf298c500bd0e40d156aaed5aadb9ff022712"
+    },
+    "ui/contracts.ts": {
+      "sha256": "d78af60348fa60e5e52e4e82403d355ab938b18d2118ba999dfc8771597a34ea",
+      "git_blob_sha1": "19cb9308fdda745378065fc8aee82fa7108abb9f"
+    },
+    "ui/editor-jobs.tsx": {
+      "sha256": "5da8a931b0793ff49e5557b8baa249a61e386a62309e5c2c7afdf92194f5fe3b",
+      "git_blob_sha1": "99eb84c227a620761464430f1ecd819f12f1bb54"
+    },
+    "ui/editor-revision-contracts.ts": {
+      "sha256": "c570b23079a313c19af0a64d92e5f04c60b5cf459eedf6fa5b3baf4bf452d4a9",
+      "git_blob_sha1": "867eeecbc8466e84ad1ef76805f5eea606ba476a"
+    },
+    "ui/editor-revision-save.tsx": {
+      "sha256": "49f457225b5cec4b715b0f50db5b0f9f5f6a8773e7f1c68e763f320504f2272d",
+      "git_blob_sha1": "4218176781a26cabf38d4cfa07055077a682472d"
+    },
+    "ui/editor.tsx": {
+      "sha256": "37f808dd9d1115398e1a21087c35171a231844b771380acf0aba900e190c1fd4",
+      "git_blob_sha1": "7920a99b89424e3fabfe6f658b8b27c5194072f9"
+    },
+    "ui/environment-library-contract.ts": {
+      "sha256": "a78f6d40095c712b04ba861e25a10f61e825761728435fa189aa6c4243b20e16",
+      "git_blob_sha1": "bf571c8dc77266523cc58fd9a78ce1d284146ee9"
+    },
+    "ui/evaluate-policy.tsx": {
+      "sha256": "41a38902abbf08612b428046fbdc1cf8f7fd40e4a8bcd75d6c5a6ddf1852c6f2",
+      "git_blob_sha1": "862f2a8f012ff494ebc5bd018dfbf8e39c941adc"
+    },
+    "ui/events.shared-worker.ts": {
+      "sha256": "bff9994960929e3dedbea21f8e570b68223b5363d25f8a2db577cb041e5ae70e",
+      "git_blob_sha1": "b816174d96d50c5f6f8591ad5206c016f8f69c50"
+    },
+    "ui/generation-reauthorization.tsx": {
+      "sha256": "be604950e9e196b46c66ba7a4f5b63e83a0242c848b9f4ea6dd3a05af5b3f168",
+      "git_blob_sha1": "25d39c55a2e79cf67cd3951527ec52e917b5295f"
+    },
+    "ui/metadata-browser.tsx": {
+      "sha256": "0ffea27ed085c955466dead74faaa73af5fc330dd79a259d282aee827b684d50",
+      "git_blob_sha1": "bd4ab66b0fa286c4ef17d6c75640148003664da6"
+    },
+    "ui/model-settings-contracts.ts": {
+      "sha256": "5a776887f1feaf26d197333d0715ec17603e9e8255b16dc5418cebc51837ece7",
+      "git_blob_sha1": "c44a886c7fc0682a45dc29f794d8de4871d9ce11"
+    },
+    "ui/model-settings.tsx": {
+      "sha256": "5c39f7fee33820ab38e7ba6842e51e01773b96f4ec3644aa816aa3c3e9fb473d",
+      "git_blob_sha1": "573857752036c9cbc45bc72c5071431eeef29c9d"
+    },
+    "ui/neo4j.tsx": {
+      "sha256": "e54752216a4966de50968855f03f18711eab29ba66dfa3574097e186f92e96fb",
+      "git_blob_sha1": "90de02e6c8c58b09636a541cf887df0ab8f49c96"
+    },
+    "ui/observation.ts": {
+      "sha256": "f0505ef03ba193359a2bbd9348f9a87a840ae24fc56e4230a85ae86de874bb97",
+      "git_blob_sha1": "1bef212190325e458714b2067bce57094faaa16e"
+    },
+    "ui/publication-controls.tsx": {
+      "sha256": "af68a7cff3d0dd94b50727b48b8477955dc2ffc23b1014975b677c0dd900f528",
+      "git_blob_sha1": "67e465eca4b98f1a0a79f8d8a43071c6a38ecc5a"
+    },
+    "ui/publication-panel.tsx": {
+      "sha256": "6583beda20aa8767f444da7a9d12eb14eebcf3f8731f8813dfd3d485403cf5b8",
+      "git_blob_sha1": "627a6c32398e1bd1d8a10359e5c94aee7fbcba7f"
+    },
+    "ui/reconcile.ts": {
+      "sha256": "7320d8a13dd51850a9c36e07ee9c97f2070237c2eea74c98b32515f03e577f4b",
+      "git_blob_sha1": "3e9ad80eaf0f3408afe8f9159b580bb3d30898a7"
+    },
+    "ui/research-versions.tsx": {
+      "sha256": "4da30d233b3047a3c0a007402ba833d4ef70fb63cf7fe7c31daf3845a3b8ece5",
+      "git_blob_sha1": "5f2c1fa7c02b36650504a2b2298bbae0ea67ffbb"
+    },
+    "ui/runtime.tsx": {
+      "sha256": "c852dafdffc345c46530ca6b23d161a0c476a59a4abe4f97493e02df772957a9",
+      "git_blob_sha1": "9e5031b696803c0d5f03e24d05d49b86f450d054"
+    },
+    "ui/snapshot-model.ts": {
+      "sha256": "3f4ea6af4628ac8573b985fb75bf699d9a35ff8fe6d277fc64ecff51d573a350",
+      "git_blob_sha1": "43cb3622754fc5f7b65f013eef53d235b1f11fb6"
+    },
+    "ui/snapshots.tsx": {
+      "sha256": "cfe6c162c7625491069e652ab637db415a79afffd69a1818eca1f0372472b78d",
+      "git_blob_sha1": "1b597387599740469e60aef30c53d0812f196530"
+    },
+    "ui/stream-hub.ts": {
+      "sha256": "cd0e8190ae458dcce40d296245e24b087e35719de5143552397cc4ce62c0e865",
+      "git_blob_sha1": "b697b6951083461fba8a53b5874cfcb0479e0876"
+    },
+    "ui/workflow-readiness.tsx": {
+      "sha256": "9acd259facd77262e3a12530ddc522049193a186da90e18b9629fd14024ebccc",
+      "git_blob_sha1": "ada8d896b2be895419f877543000b2a9d2339362"
+    }
+  },
+  "static_verification": {
+    "status": "completed",
+    "checks": [
+      "AST include traversal equals independent 49-file decorator census: 53/53",
+      "Method/path deduplication: 53 unique, zero duplicates",
+      "12 included routers plus one app-local route; docs/OpenAPI disabled; no dynamic/mounted registrations found",
+      "99 cited/scanned-source SHA256 and Git blob IDs verified against baseline Git tree",
+      "All abbreviated source reference line ranges exist in baseline source",
+      "All 53 rows have selected test-body citations marked not_run",
+      "Five proposed new routes absent; two version extensions match existing paths"
+    ],
+    "not_executed": [
+      "application_import",
+      "test_suite",
+      "HTTP_request",
+      "Docker_or_live_service",
+      "model_or_GPU",
+      "graph_query_or_write"
+    ]
+  }
+}

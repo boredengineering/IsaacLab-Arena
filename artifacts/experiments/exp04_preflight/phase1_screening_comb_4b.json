@@ -1,0 +1,132 @@
+{
+  "combination": "comb_4b",
+  "combination_info": {
+    "name": "DeepSeek-R1-32B + Physical AI Critic (V2)",
+    "spec_llm": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+    "critic": "nvidia/Cosmos-Reason2-2B",
+    "suite": "Phase 2 (32B Super-Pod)"
+  },
+  "exit_gate_passed": true,
+  "results": [
+    {
+      "combination": "comb_4b",
+      "combination_name": "DeepSeek-R1-32B + Physical AI Critic (V2)",
+      "suite": "Phase 2 (32B Super-Pod)",
+      "scenario": "D1-C",
+      "scenario_name": "Sequential Microwave Open & Stow",
+      "domain": "Office Breakroom",
+      "category": "Type A (Placed Prop)",
+      "spec_yaml": "generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml",
+      "or_preflight": "100.0%",
+      "pdr": "0.0%",
+      "k_rsi": 1,
+      "refusal_gate": "N/A",
+      "status": "PASSED",
+      "conforms": true,
+      "defects": [],
+      "passes": {
+        "pass1_schema": true,
+        "pass2_kinematics": true,
+        "pass3_swept_sector": true,
+        "pass3_footprint_clearance": true,
+        "pass4_handoff": true,
+        "pass5_facing": true,
+        "pass6_standoff_elevation": true
+      }
+    },
+    {
+      "combination": "comb_4b",
+      "combination_name": "DeepSeek-R1-32B + Physical AI Critic (V2)",
+      "suite": "Phase 2 (32B Super-Pod)",
+      "scenario": "D2-A",
+      "scenario_name": "Prismatic Kitchen Base Cabinet Drawer Stow",
+      "domain": "Residential / Kitchen",
+      "category": "Type B (Intrinsic Prismatic Sub-Prim)",
+      "spec_yaml": "generated_envs/exp04_d2a_cabinet/latest/exp04_d2a_cabinet.yaml",
+      "or_preflight": "100.0%",
+      "pdr": "0.0%",
+      "k_rsi": 1,
+      "refusal_gate": "N/A",
+      "status": "PASSED",
+      "conforms": true,
+      "defects": [],
+      "passes": {
+        "pass1_schema": true,
+        "pass2_kinematics": true,
+        "pass3_swept_sector": true,
+        "pass3_footprint_clearance": true,
+        "pass4_handoff": true,
+        "pass5_facing": true,
+        "pass6_standoff_elevation": true
+      }
+    },
+    {
+      "combination": "comb_4b",
+      "combination_name": "DeepSeek-R1-32B + Physical AI Critic (V2)",
+      "suite": "Phase 2 (32B Super-Pod)",
+      "scenario": "D2-NEG",
+      "scenario_name": "The Office Desk Anomaly (False-Positive & Refusal Gating)",
+      "domain": "Office Workspace",
+      "category": "False-Positive & Refusal",
+      "or_preflight": "N/A",
+      "pdr": "0.0%",
+      "k_rsi": 1,
+      "refusal_gate": "REFUSED (0.02)",
+      "status": "TRAPPED (PASS)",
+      "conforms": true,
+      "defects": []
+    },
+    {
+      "combination": "comb_4b",
+      "combination_name": "DeepSeek-R1-32B + Physical AI Critic (V2)",
+      "suite": "Phase 2 (32B Super-Pod)",
+      "scenario": "D2-B",
+      "scenario_name": "Sequential Counter Drawer Open, Stow & Close",
+      "domain": "Residential / Breakroom Counter",
+      "category": "Type B (Intrinsic Reversible Prismatic)",
+      "spec_yaml": "generated_envs/exp04_d2b_counter/latest/exp04_d2b_counter.yaml",
+      "or_preflight": "100.0%",
+      "pdr": "0.0%",
+      "k_rsi": 1,
+      "refusal_gate": "N/A",
+      "status": "PASSED",
+      "conforms": true,
+      "defects": [],
+      "passes": {
+        "pass1_schema": true,
+        "pass2_kinematics": true,
+        "pass3_swept_sector": true,
+        "pass3_footprint_clearance": true,
+        "pass4_handoff": true,
+        "pass5_facing": true,
+        "pass6_standoff_elevation": true
+      }
+    },
+    {
+      "combination": "comb_4b",
+      "combination_name": "DeepSeek-R1-32B + Physical AI Critic (V2)",
+      "suite": "Phase 2 (32B Super-Pod)",
+      "scenario": "D2-C",
+      "scenario_name": "Commercial Beverage Display Refrigerator Door Open & Beer Stow",
+      "domain": "Commercial / Beverage / Breakroom",
+      "category": "Type B (Intrinsic Revolute Sub-Prim)",
+      "spec_yaml": "generated_envs/exp04_d2c_fridge/latest/exp04_d2c_fridge.yaml",
+      "or_preflight": "100.0%",
+      "pdr": "0.0%",
+      "k_rsi": 1,
+      "refusal_gate": "N/A",
+      "status": "PASSED",
+      "conforms": true,
+      "defects": [],
+      "passes": {
+        "pass1_schema": true,
+        "pass2_kinematics": true,
+        "pass3_swept_sector": true,
+        "pass3_footprint_clearance": true,
+        "pass4_handoff": true,
+        "pass5_facing": true,
+        "pass6_standoff_elevation": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "env_name": "droid_banana_to_plate",
+  "created_at": "2026-09-28T17:50:21.756698+00:00",
+  "versions": [
+    {
+      "version": 1,
+      "created_at": "2026-09-28T17:50:21.756698+00:00",
+      "trigger": "initial_generation",
+      "prompt": "Grasp the yellow banana from the right side of the table and set it onto the white ceramic plate on the left.",
+      "parent_version": null,
+      "remediations": [],
+      "diagnostics": [],
+      "spec_file": "droid_banana_to_plate/v1/droid_banana_to_plate.yaml",
+      "policy_file": "droid_banana_to_plate/v1/policy_config.yaml",
+      "evaluation": null
+    },
+    {
+      "version": 2,
+      "created_at": "2026-09-28T18:05:17.897840+00:00",
+      "trigger": "initial_generation",
+      "prompt": "Grasp the yellow banana from the right side of the table and set it onto the white ceramic plate on the left.",
+      "parent_version": 1,
+      "remediations": [],
+      "diagnostics": [],
+      "spec_file": "droid_banana_to_plate/v2/droid_banana_to_plate.yaml",
+      "policy_file": "droid_banana_to_plate/v2/policy_config.yaml",
+      "evaluation": null
+    },
+    {
+      "version": 3,
+      "created_at": "2026-09-28T18:13:41.673969+00:00",
+      "trigger": "initial_generation",
+      "prompt": "Grasp the yellow banana from the right side of the table and set it onto the white ceramic plate on the left.",
+      "parent_version": 2,
+      "remediations": [],
+      "diagnostics": [],
+      "spec_file": "droid_banana_to_plate/v3/droid_banana_to_plate.yaml",
+      "policy_file": "droid_banana_to_plate/v3/policy_config.yaml",
+      "evaluation": {
+        "timestamp": "2026-09-28T22:17:05.824890+00:00",
+        "eval_dir": "/workspaces/isaaclab_arena/eval_output/droid_banana_to_plate/viz_run/2026-09-28_22-16-18",
+        "success_rate": 0.0,
+        "object_moved_rate": 0.0,
+        "num_episodes": 1,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 1,
+          "success_rate": 0.0,
+          "object_moved_rate": 0.0
+        }
+      }
+    }
+  ],
+  "current_version": 3,
+  "updated_at": "2026-09-28T18:13:41.673969+00:00"
+}

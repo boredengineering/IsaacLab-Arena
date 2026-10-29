@@ -3,18 +3,20 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Kit viewport PNG capture for review GUI node thumbnails (SimApp subprocess only)."""
+"""Isolated USD thumbnails; failures are scoped to individual graph nodes."""
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sys
+import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import omni.usd
-from omni.kit.viewport.utility import frame_viewport_prims, get_active_viewport
-from pxr import Gf, Sdf, UsdGeom, UsdLux
+from pxr import Gf, Sdf, UsdGeom, UsdLux, UsdUtils
 
 from isaaclab_arena.assets.registries import AssetRegistry
 from isaaclab_arena.environment_spec.arena_env_graph_conversion_utils import instantiate_assets_from_spec
@@ -36,10 +38,18 @@ from isaaclab_arena_examples.agentic_environment_generation.review_gui.simapp.ax
 from isaaclab_arena_examples.agentic_environment_generation.review_gui.simapp.kit_viewport import (
     PRE_CAPTURE_UPDATES,
     capture_viewport_png,
+    frame_targets,
     pump_app,
     set_viewport_camera_eye_lookat,
     thumbnail_cache_dir,
     wait_for_stage_load,
+)
+from isaaclab_arena_examples.agentic_environment_generation.review_gui.simapp.render_identity import (
+    RENDERER_VERSION,
+    normalize_options,
+    prune_raw_cache,
+    raw_cache_write_lease,
+    thumbnail_identity,
 )
 from isaaclab_arena_examples.agentic_environment_generation.review_gui.spec_visualization.asset_cards import (
     object_set_member_key,
@@ -65,7 +75,244 @@ class _UsdSnapshotJob:
     panorama_captures: list[tuple[str, Path]] = field(default_factory=list)
 
 
+def _error(errors, node_id, stage, exc):
+    errors.append({"id": node_id, "stage": stage, "code": type(exc).__name__, "message": str(exc)})
+    print(f"[thumbnail_capture] {node_id} {stage}: {exc}", file=sys.stderr)
+
+
+def _construct_asset(node, registry, *, embodiment=False, background=False):
+    """Materialize one constructor without letting a broken peer erase its result."""
+    from isaaclab_arena.environment_spec.arena_env_graph_conversion_utils import _parse_pose_data
+
+    params = dict(node.params)
+    pose = _parse_pose_data(params.pop("initial_pose", None))
+    joints = params.pop("initial_joint_pos", None) if embodiment else None
+    friction = params.pop("finger_contact_friction", None) if embodiment else None
+    if not embodiment and not background:
+        params.setdefault("instance_name", node.id)
+    if pose is not None and (embodiment or background):
+        params["initial_pose"] = pose
+    asset = registry.get_asset_by_name(node.registry_name)(**params)
+    if joints is not None:
+        asset.set_joint_initial_pos(joints)
+    if friction is not None:
+        asset.set_finger_contact_friction(**friction)
+    return asset
+
+
+def _dependencies(usd_path):
+    """Return a complete local USD/texture closure or an unverifiable sentinel."""
+    if not Path(usd_path).is_file():
+        return []
+    layers, assets, unresolved = UsdUtils.ComputeAllDependencies(usd_path)
+    # A warm Kit process retains Sdf layers. Reload their on-disk content before
+    # trusting the dependency closure: a changed root can point at a new texture.
+    for layer in layers:
+        if layer.realPath and Path(layer.realPath).is_file():
+            layer.Reload(force=True)
+    layers, assets, unresolved = UsdUtils.ComputeAllDependencies(usd_path)
+    if unresolved:
+        return []
+    return [*(layer.realPath for layer in layers), *assets]
+
+
+def _cache_read(path, metadata_path, resolution):
+    """Reject symlinks, partial PNGs, or bytes that differ from the capture receipt."""
+    try:
+        if path.is_symlink() or metadata_path.is_symlink():
+            return None
+        metadata = json.loads(metadata_path.read_text())
+        data = path.read_bytes()
+        if hashlib.sha256(data).hexdigest() != metadata["sha256"]:
+            return None
+        from PIL import Image
+
+        with Image.open(path) as image:
+            if image.format != "PNG" or image.size != (resolution, resolution):
+                return None
+            image.verify()
+        return data, metadata["capture"]
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def _isolate_subtree(stage, target_path):
+    """Hide siblings along the target's ancestry, retaining its transforms and lighting."""
+    target = Sdf.Path(target_path)
+    for prim in stage.Traverse():
+        path = prim.GetPath()
+        if path.HasPrefix(target) or target.HasPrefix(path):
+            continue
+        if prim.HasAPI(UsdLux.LightAPI):
+            continue
+        imageable = UsdGeom.Imageable(prim)
+        if imageable:
+            imageable.MakeInvisible()
+
+
 def render_thumbnails_with_app(
+    app,
+    spec: ArenaEnvGraphSpec,
+    *,
+    background_panorama: bool | None = None,
+    options=None,
+    output_dir: Path | None = None,
+    cache_dir: Path | None = None,
+    renderer_version=RENDERER_VERSION,
+    asset_revision=None,
+    errors: list | None = None,
+    timings: dict | None = None,
+    manifest: dict | None = None,
+) -> tuple[dict[str, Path], dict[str, AabbDimensionsM]]:
+    """Capture isolated assets with optional web diagnostics; retain the Streamlit tuple API.
+
+    When ``background_panorama`` is explicitly passed (Streamlit review GUI server), runs
+    the batch snapshot/panorama/axis-overlay pipeline. Otherwise runs the dependency-verified
+    isolated asset capture pipeline.
+    """
+    if background_panorama is not None:
+        return _render_review_gui_thumbnails_with_app(
+            app,
+            spec,
+            background_panorama=background_panorama,
+        )
+
+    import omni.usd
+
+    errors = errors if errors is not None else []
+    timings = timings if timings is not None else {}
+    manifest = manifest if manifest is not None else {}
+    nodes = [spec.background, spec.embodiment, *spec.objects]
+    refs = list(spec.object_references or [])
+    options = normalize_options(options, {n.id for n in [*nodes, *refs]})
+    cache_dir = Path(cache_dir) if cache_dir is not None else thumbnail_cache_dir()
+    output_dir = Path(output_dir) if output_dir is not None else cache_dir / ("capture-" + uuid.uuid4().hex)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    registry, assets, paths, dimensions = AssetRegistry(), {}, {}, {}
+    node_by_id = {node.id: node for node in nodes}
+    for node in nodes:
+        started = time.monotonic()
+        try:
+            assets[node.id] = _construct_asset(
+                node, registry, embodiment=node.id == spec.embodiment.id, background=node.id == spec.background.id
+            )
+        except Exception as exc:
+            _error(errors, node.id, "constructor", exc)
+        timings[f"constructor:{node.id}_s"] = time.monotonic() - started
+    usd_paths = resolve_node_usd_paths(assets, list(assets))
+    dependencies = {}
+    for node in [*nodes, *refs]:
+        started = time.monotonic()
+        try:
+            parent_id = node.parent_id if node in refs else node.id
+            asset = assets.get(parent_id)
+            usd_path = usd_paths.get(parent_id)
+            if not usd_path:
+                raise ValueError("Asset has no supported USD spawn (or its constructor failed)")
+            parent_node = node_by_id[parent_id]
+            view = options["asset_views"].get(node.id, options["view"])
+            # Freeze resolved constructor defaults before lookup, then render exactly
+            # those values. Authored params alone omit registry/spawn default scale.
+            scale = getattr(asset, "scale", None)
+            if scale is None:
+                robot = getattr(getattr(asset, "scene_config", None), "robot", None)
+                scale = getattr(getattr(robot, "spawn", None), "scale", None)
+            scale = tuple(float(value) for value in scale) if scale is not None else (1.0, 1.0, 1.0)
+            parent_name = asset.name if node in refs else None
+            if usd_path not in dependencies:
+                try:
+                    dependencies[usd_path] = _dependencies(usd_path)
+                except Exception as exc:
+                    # Cache discovery is not a prerequisite for a fresh render.
+                    print(f"[thumbnail_capture] dependency fingerprint unavailable: {exc}", file=sys.stderr)
+                    dependencies[usd_path] = []
+            identity = thumbnail_identity(
+                registry_name=parent_node.registry_name,
+                params={"parent": parent_node.params, "reference": node.params if node in refs else None},
+                resolved_render={"scale": scale, "parent_name": parent_name},
+                dependencies=dependencies[usd_path],
+                view=view,
+                resolution=options["resolution"],
+                renderer_version=renderer_version,
+                target=node.prim_path if node in refs else "",
+                # The RPC revision describes the entire scene bundle. Raw reuse is
+                # instead anchored to this asset's complete local dependency bytes.
+                asset_revision=None,
+            )
+            # Never form paths from node IDs: Streamlit callers need not have web ID validation.
+            filename = hashlib.sha256(node.id.encode()).hexdigest() + ".png"
+            destination = output_dir / filename
+            cached = cache_dir / f"{identity}.png" if identity else None
+            metadata_path = cache_dir / f"{identity}.json" if identity else None
+            hit = _cache_read(cached, metadata_path, options["resolution"]) if cached else None
+            if hit:
+                data, capture = hit
+                destination.write_bytes(data)  # An owned regular file, never a cache symlink.
+            else:
+                ctx = omni.usd.get_context()
+                if not ctx.open_stage(usd_path):
+                    raise RuntimeError(f"Could not open asset USD: {usd_path}")
+                wait_for_stage_load(app, ctx)
+                stage = ctx.get_stage()
+                # Camera, visibility, and scale changes must never mutate source USD files.
+                stage.SetEditTarget(stage.GetSessionLayer())
+                root = absolute_prim_path(stage, "")
+                if scale != (1, 1, 1):
+                    UsdGeom.Xformable(stage.GetPrimAtPath(root)).AddScaleOp(opSuffix="preview").Set(Gf.Vec3d(*scale))
+                target = absolute_prim_path(stage, node.prim_path, parent_name=parent_name) if node in refs else root
+                if node in refs:
+                    _isolate_subtree(stage, target)
+                _ensure_default_lighting(stage)
+                ctx.get_selection().clear_selected_prim_paths()
+                capture = frame_targets(app, stage, [target], view=view, resolution=options["resolution"])
+                capture.update({
+                    "usd_path": usd_path,
+                    "target": target,
+                    "pose": "authored_usd",
+                    "isolated": node in refs or node.id != spec.background.id,
+                })
+                data = capture_viewport_png(app, destination, resolution=options["resolution"])
+                if not data:
+                    raise RuntimeError("Viewport capture did not produce a PNG")
+                if cached:
+                    token = hashlib.sha256(uuid.uuid4().bytes).hexdigest()
+                    temporary = cache_dir / (token + ".tmp.png")
+                    metadata_temp = cache_dir / (token + ".tmp.json")
+                    try:
+                        with raw_cache_write_lease(cache_dir):
+                            try:
+                                temporary.write_bytes(data)
+                                temporary.replace(cached)
+                                metadata_temp.write_text(
+                                    json.dumps({"sha256": hashlib.sha256(data).hexdigest(), "capture": capture})
+                                )
+                                metadata_temp.replace(metadata_path)
+                            finally:
+                                temporary.unlink(missing_ok=True)
+                                metadata_temp.unlink(missing_ok=True)
+                    except OSError as exc:
+                        _error(errors, node.id, "cache", exc)
+            paths[node.id] = destination
+            dimensions[node.id] = tuple(capture["dimensions_m"])
+            manifest[node.id] = {
+                **capture,
+                "cache_hit": bool(hit),
+                "cache_key": identity,
+                "cache_policy": "local_dependency_bytes" if identity else "unverifiable_dependencies_no_reuse",
+            }
+        except Exception as exc:
+            _error(errors, node.id, "thumbnail", exc)
+        finally:
+            timings[f"asset:{node.id}_s"] = time.monotonic() - started
+    try:
+        prune_raw_cache(cache_dir)
+    except OSError as exc:
+        _error(errors, "assets", "cache_retention", exc)
+    return paths, dimensions
+
+
+def _render_review_gui_thumbnails_with_app(
     app,
     spec: ArenaEnvGraphSpec,
     *,
@@ -161,11 +408,7 @@ def render_thumbnails_with_app(
 def _resolve_object_set_members(
     spec: ArenaEnvGraphSpec, assets_by_node_id: dict[str, Any]
 ) -> tuple[dict[str, str], dict[str, AabbDimensionsM]]:
-    """Return the USD path and AABB of every object-set member, keyed so each gets its own card.
-
-    Member USD paths follow the order the members were declared in, and may point at the rescaled
-    copies RigidObjectSet writes to its cache.
-    """
+    """Return the USD path and AABB of every object-set member, keyed so each gets its own card."""
     usd_paths: dict[str, str] = {}
     dimensions: dict[str, AabbDimensionsM] = {}
     for object_set in spec.object_sets or []:
@@ -178,9 +421,6 @@ def _resolve_object_set_members(
             if member_dimensions is not None:
                 dimensions[member_key] = member_dimensions
     return usd_paths, dimensions
-
-
-# Capture orchestration — open each queued USD stage once and write PNGs.
 
 
 def _capture_usd_snapshot_jobs(app, jobs: list[_UsdSnapshotJob]) -> dict[str, bytes]:
@@ -196,6 +436,9 @@ def _capture_usd_snapshot_jobs(app, jobs: list[_UsdSnapshotJob]) -> dict[str, by
 
 def _capture_usd_snapshot_job(app, job: _UsdSnapshotJob) -> dict[str, bytes]:
     """Capture all queued snapshots for one opened parent USD."""
+    import omni.usd
+    from omni.kit.viewport.utility import frame_viewport_prims, get_active_viewport
+
     out: dict[str, bytes] = {}
     ctx = omni.usd.get_context()
     if not ctx.open_stage(job.usd_path):
@@ -225,15 +468,12 @@ def _capture_usd_snapshot_job(app, job: _UsdSnapshotJob) -> dict[str, bytes]:
                 out[node_id] = png_bytes
 
     if job.ref_captures:
-        # Seed the camera with the background viewer_cfg orientation before framing.
-        # frame_viewport_prims preserves the incoming view direction.
         if job.viewer_cfg is not None:
             _apply_viewer_cfg(app, job.viewer_cfg)
         _set_collision_mesh_visualization(enabled=True)
         try:
             for node_id, relative_prim_path, cache_path in job.ref_captures:
                 root_path = absolute_prim_path(stage, relative_prim_path)
-                # Selecting the subtree root is enough; Kit shows colliders for all prims below it.
                 omni.usd.get_context().get_selection().set_selected_prim_paths([root_path], True)
                 pump_app(app, count=PRE_CAPTURE_UPDATES)
                 viewport = get_active_viewport()
@@ -252,8 +492,6 @@ def _capture_usd_snapshot_job(app, job: _UsdSnapshotJob) -> dict[str, bytes]:
                         file=sys.stderr,
                     )
         finally:
-            # The collider-viz carb settings are persistent, so disable them and clear the
-            # selection to avoid leaking collider wireframes into later asset captures.
             omni.usd.get_context().get_selection().clear_selected_prim_paths()
             _set_collision_mesh_visualization(enabled=False)
 
@@ -276,6 +514,8 @@ def _capture_stage_snapshot(
     axis_prim,
 ) -> bytes | None:
     """Capture the active viewport for an already-open stage."""
+    from omni.kit.viewport.utility import frame_viewport_prims, get_active_viewport
+
     if viewer_cfg is not None:
         _apply_viewer_cfg(app, viewer_cfg)
     else:
@@ -291,16 +531,13 @@ def _capture_stage_snapshot(
 
 
 def _capture_with_origin_axes(app, prim, cache_path: Path) -> bytes | None:
-    """Capture the viewport, then composite always-on-top XYZ axis lines onto the PNG.
+    """Capture the viewport, then composite always-on-top XYZ axis lines onto the PNG."""
+    from omni.kit.viewport.utility import get_active_viewport
 
-    Kit debug-draw lines are depth-tested against the mesh, so axes are projected to
-    screen pixels and drawn on the captured image instead.
-    """
     png_bytes = capture_viewport_png(app, cache_path)
     if png_bytes is None or prim is None or not prim.IsValid():
         return png_bytes
 
-    # Capture writes at viewport resolution, so project in that pixel space.
     viewport = get_active_viewport()
     image_size = tuple(int(v) for v in viewport.resolution)
     segments_px = _project_prim_xyz_axes_to_pixels(prim, image_size=image_size)
@@ -318,6 +555,8 @@ def _project_prim_xyz_axes_to_pixels(
     image_size: tuple[int, int],
 ) -> list[tuple[tuple[int, int], tuple[int, int], tuple[int, int, int]]]:
     """Project local XYZ axis segments for ``prim`` into image-pixel line segments."""
+    from omni.kit.viewport.utility import get_active_viewport
+
     origin, x_dir, y_dir, z_dir = _prim_local_axes_world(prim)
     length_m = axis_length_from_extents(_prim_world_aabb_extents(prim))
     world_segments = local_xyz_axis_segments(origin, x_dir=x_dir, y_dir=y_dir, z_dir=z_dir, length_m=length_m)
@@ -348,11 +587,9 @@ def _world_to_image_pixel(
     ndc_x = clip[0] / clip[3]
     ndc_y = clip[1] / clip[3]
     ndc_z = clip[2] / clip[3]
-    # Discard points behind / outside the clip volume so we do not draw wild lines.
     if not (-1.5 <= ndc_x <= 1.5 and -1.5 <= ndc_y <= 1.5 and -0.1 <= ndc_z <= 1.1):
         return None
 
-    # Kit returns ``(pixel, ViewportAPI)``; keep the pixel only.
     pixel = viewport.map_ndc_to_texture_pixel(Gf.Vec2d(ndc_x, ndc_y))[0]
     vw, vh = viewport_size
     iw, ih = image_size
@@ -370,8 +607,6 @@ def _prim_local_axes_world(prim) -> tuple[
     """Return world-space origin and local +X/+Y/+Z basis rows for a prim."""
     world_tf = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(0)
     origin = world_tf.ExtractTranslation()
-    # USD treats vectors as rows on the left (p_world = p_local * M), so local basis
-    # vectors in world space are the first three rows of the upper 3x3.
     return (
         (float(origin[0]), float(origin[1]), float(origin[2])),
         (float(world_tf[0][0]), float(world_tf[0][1]), float(world_tf[0][2])),
@@ -386,7 +621,6 @@ def _world_aligned_box(prim):
     try:
         return cache.ComputeWorldBound(prim).ComputeAlignedBox()
     except Exception as exc:
-        # UsdGeom may raise Tf.ErrorException when Visibility attrs are broken on kitchen assets.
         print(f"[thumbnail_capture]   warning: AABB failed for {prim.GetPath()}: {exc}", file=sys.stderr)
         return None
 
@@ -409,6 +643,8 @@ def _prim_world_aabb_extents(prim) -> tuple[float, float, float]:
 
 def _capture_background_panorama(app, stage, cache_path: Path) -> bytes | None:
     """Capture a raw fisheyeSpherical 360 panorama from the stage centroid."""
+    from omni.kit.viewport.utility import get_active_viewport
+
     if stage.GetPrimAtPath(PANORAMA_CAMERA_PRIM_PATH):
         stage.RemovePrim(Sdf.Path(PANORAMA_CAMERA_PRIM_PATH))
 
@@ -440,8 +676,6 @@ def _capture_background_panorama(app, stage, cache_path: Path) -> bytes | None:
         cam_prim.CreateAttribute(attr_name, Sdf.ValueTypeNames.Float).Set(value)
 
     viewport = get_active_viewport()
-    # Remember the pinhole camera so we can restore it: later object_reference
-    # captures on the same stage must not inherit the fisheyeSpherical projection.
     prior_camera_path = str(viewport.camera_path)
     viewport.camera_path = PANORAMA_CAMERA_PRIM_PATH
     pump_app(app, count=PRE_CAPTURE_UPDATES)
@@ -452,7 +686,6 @@ def _capture_background_panorama(app, stage, cache_path: Path) -> bytes | None:
             print(f"[thumbnail_capture]   panorama capture produced no file: {cache_path}", file=sys.stderr)
         return png_bytes
     finally:
-        # Restore the pinhole camera and drop the panorama prim before any other capture.
         if prior_camera_path and prior_camera_path != PANORAMA_CAMERA_PRIM_PATH:
             viewport.camera_path = prior_camera_path
         if stage.GetPrimAtPath(PANORAMA_CAMERA_PRIM_PATH):
@@ -460,45 +693,33 @@ def _capture_background_panorama(app, stage, cache_path: Path) -> bytes | None:
         pump_app(app, count=PANORAMA_RESTORE_PUMP_UPDATES)
 
 
-# Viewport and stage setup — camera, lighting, and collision-mesh overlay.
-
-
 def _apply_viewer_cfg(app, viewer_cfg) -> None:
     """Point the active viewport camera at ``viewer_cfg`` eye/lookat (world frame)."""
+    from omni.kit.viewport.utility import get_active_viewport
+
     viewport = get_active_viewport()
     set_viewport_camera_eye_lookat(viewport, viewer_cfg.eye, viewer_cfg.lookat)
     pump_app(app, count=PRE_CAPTURE_UPDATES)
 
 
 def _ensure_default_lighting(stage) -> None:
-    """Add dome + key lights when the stage has none (standalone object USDs)."""
+    """Add neutral dome and key lights to standalone assets."""
     for prim in stage.Traverse():
-        if (
-            prim.HasAPI(UsdLux.LightAPI)
-            or prim.IsA(UsdLux.BoundableLightBase)
-            or prim.IsA(UsdLux.NonboundableLightBase)
-        ):
+        if prim.HasAPI(UsdLux.LightAPI):
             return
-
     dome = UsdLux.DomeLight.Define(stage, Sdf.Path("/_ReviewDomeLight"))
     dome.CreateIntensityAttr(800.0)
     dome.CreateColorAttr(Gf.Vec3f(1.0, 1.0, 1.0))
-
     key = UsdLux.DistantLight.Define(stage, Sdf.Path("/_ReviewKeyLight"))
     key.CreateIntensityAttr(2500.0)
     key.CreateAngleAttr(2.0)
-    key_xformable = UsdGeom.Xformable(key.GetPrim())
-    key_xformable.ClearXformOpOrder()
-    rot = key_xformable.AddRotateXYZOp()
-    rot.Set(Gf.Vec3f(-45.0, 30.0, 0.0))
+    UsdGeom.Xformable(key.GetPrim()).AddRotateXYZOp().Set(Gf.Vec3f(-45.0, 30.0, 0.0))
 
 
 def _set_collision_mesh_visualization(*, enabled: bool) -> None:
     """Toggle viewport Show By Type → Physics → Colliders → Selected."""
     import carb.settings
 
-    # VisualizerMode: 0=None, 1=Selected, 2=All. Use Selected so only the picked
-    # object_reference subtree shows collider wireframes, not the whole scene.
     settings = carb.settings.get_settings()
     settings.set_bool("/persistent/physics/visualizationCollisionMesh", enabled)
     settings.set_int("/persistent/physics/visualizationDisplayColliders", 1 if enabled else 0)

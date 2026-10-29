@@ -10,6 +10,14 @@ from __future__ import annotations
 import torch
 from typing import TYPE_CHECKING
 
+from isaaclab_arena.tasks.predicates.predicate_utils import (
+    get_env,
+    get_root_ang_vel_w,
+    get_root_lin_vel_w,
+    get_root_pos_w,
+    select,
+)
+
 if TYPE_CHECKING:
     from isaaclab.scene import InteractiveScene
 
@@ -75,13 +83,20 @@ class ObjectInitialRestPoseRecorder:
 def get_rest_pose_recorder(env: IsaacLabArenaManagerBasedRLEnv) -> ObjectInitialRestPoseRecorder:
     """Return the ``ObjectInitialRestPoseRecorder`` owned by the Arena environment."""
 
-    return env.object_initial_rest_pose_recorder
+    env = get_env(env)
+    recorder = getattr(env, "object_initial_rest_pose_recorder", None)
+    if recorder is None:
+        recorder = ObjectInitialRestPoseRecorder(env.num_envs, env.device)
+        env.object_initial_rest_pose_recorder = recorder
+    return recorder
 
 
 def reset_rest_pose_recorder(env: IsaacLabArenaManagerBasedRLEnv, env_ids=None) -> None:
     """Clear every recorded initial rest pose for ``env_ids``."""
 
-    env.object_initial_rest_pose_recorder.reset(env_ids)
+    recorder = getattr(get_env(env), "object_initial_rest_pose_recorder", None)
+    if recorder is not None:
+        recorder.reset(env_ids)
 
 
 def get_object_initial_rest_state(
@@ -142,6 +157,7 @@ def objects_settled(
     object_names: list[str],
     lin_vel_threshold: float = DEFAULT_LINEAR_VELOCITY_THRESHOLD,
     ang_vel_threshold: float = DEFAULT_ANGULAR_VELOCITY_THRESHOLD,
+    env_id: int | None = None,
 ) -> torch.Tensor:
     """Check whether every named object is at rest and record its first resting position.
 
@@ -157,12 +173,17 @@ def objects_settled(
         ang_vel_threshold=ang_vel_threshold,
     )
 
-    recorder = get_rest_pose_recorder(env)
+    unwrapped = get_env(env)
+    has_arena_world = hasattr(unwrapped, "arena_world") and unwrapped.arena_world is not None
+    recorder = get_rest_pose_recorder(unwrapped)
     for object_name in object_names:
-        object_position_w = env.arena_world.get_position_w(object_name)
+        if has_arena_world:
+            object_position_w = unwrapped.arena_world.get_position_w(object_name)
+        else:
+            object_position_w = get_root_pos_w(unwrapped, object_name)
         recorder.record(object_name, object_position_w, settled)
 
-    return settled
+    return select(settled, env_id)
 
 
 def objects_below_velocity_thresholds(
@@ -176,10 +197,20 @@ def objects_below_velocity_thresholds(
     This check does not record resting positions or count consecutive steps.
     """
 
-    return compute_objects_settled_mask(
-        env.arena_world,
-        env.scene,
-        object_names,
-        lin_vel_threshold,
-        ang_vel_threshold,
-    )
+    unwrapped = get_env(env)
+    if hasattr(unwrapped, "arena_world") and unwrapped.arena_world is not None:
+        return compute_objects_settled_mask(
+            unwrapped.arena_world,
+            unwrapped.scene,
+            object_names,
+            lin_vel_threshold,
+            ang_vel_threshold,
+        )
+    if not object_names:
+        return torch.ones(unwrapped.num_envs, dtype=torch.bool, device=unwrapped.device)
+    per_object_settled = []
+    for object_name in object_names:
+        linear_speed = torch.linalg.vector_norm(get_root_lin_vel_w(unwrapped, object_name), dim=-1)
+        angular_speed = torch.linalg.vector_norm(get_root_ang_vel_w(unwrapped, object_name), dim=-1)
+        per_object_settled.append((linear_speed < lin_vel_threshold) & (angular_speed < ang_vel_threshold))
+    return torch.stack(per_object_settled, dim=0).all(dim=0)

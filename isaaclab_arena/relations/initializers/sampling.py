@@ -73,7 +73,40 @@ def get_child_bbox_given_parent_position(
         # Intersection compares the child's far edge with the parent's near edge.
         child_min, child_max = child_max, child_min
 
-    parent_min, parent_max = parent_world_bbox.min_point[0], parent_world_bbox.max_point[0]
+    parent_min, parent_max = parent_world_bbox.min_point[0].clone(), parent_world_bbox.max_point[0].clone()
+    sec_name = getattr(on_relation, "surface_sector", None) or getattr(on_relation, "surface_anchor", None)
+    if getattr(on_relation, "sector_bounds", None) is not None:
+        sb = on_relation.sector_bounds
+        parent_min[0], parent_max[0] = float(sb[0]), float(sb[1])
+        parent_min[1], parent_max[1] = float(sb[2]), float(sb[3])
+    elif sec_name is not None:
+        from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
+            get_fixture_sector_bounds,
+            transform_sector_bounds_to_world,
+        )
+
+        parent_reg_name = getattr(on_relation.parent, "registry_name", getattr(on_relation.parent, "name", ""))
+        sec_bounds = get_fixture_sector_bounds(parent_reg_name, sec_name)
+        parent_pose = on_relation.parent.get_initial_pose() if hasattr(on_relation.parent, "get_initial_pose") else None
+        p_pos = (
+            parent_pose.position_xyz
+            if parent_pose is not None and hasattr(parent_pose, "position_xyz")
+            else (0.0, 0.0, 0.0)
+        )
+        p_rot = (
+            parent_pose.rotation_xyzw
+            if parent_pose is not None and hasattr(parent_pose, "rotation_xyzw")
+            else (0.0, 0.0, 0.0, 1.0)
+        )
+        w_bounds = transform_sector_bounds_to_world(sec_bounds, p_pos, p_rot)
+        parent_min[0], parent_max[0] = float(w_bounds[0]), float(w_bounds[1])
+        parent_min[1], parent_max[1] = float(w_bounds[2]), float(w_bounds[3])
+        if w_bounds[4] != 0.0:
+            parent_max[2] = float(w_bounds[4])
+
+    if getattr(on_relation, "nominal_height", None) is not None:
+        parent_max[2] = float(on_relation.nominal_height)
+
     footprint_min = parent_min[:2] - child_min[:2]
     footprint_max = parent_max[:2] - child_max[:2]
     child_fits = footprint_min < footprint_max

@@ -1,0 +1,138 @@
+env_name: microwave_tomato_soup_placement
+embodiment:
+  id: droid_abs_joint_pos
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.55
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: kitchen
+  registry_name: kitchen
+  params: {}
+objects:
+- id: tomato_soup_can
+  registry_name: tomato_soup_can_ycb_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.0
+      - 0.0
+      - 0.78
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: microwave
+  registry_name: microwave
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.0
+      - 0.0
+      - 0.78
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: kitchen
+  params: {}
+- kind: 'on'
+  subject: tomato_soup_can
+  reference: kitchen
+  params:
+    surface_anchor: counter_top
+    surface_sector: front_center
+- kind: 'on'
+  subject: microwave
+  reference: kitchen
+  params:
+    surface_anchor: counter_top
+    surface_sector: back_center
+reified_relations:
+- reifier_id: reifier_tomato_soup
+  source_id: tomato_soup_can
+  relation_type: PLACED_ON
+  target_id: kitchen
+  surface_anchor: counter_top
+  surface_sector: front_center
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: 0.0
+    max_val: 0.0
+    nominal: 0.0
+  delta_y:
+    min_val: -0.1
+    max_val: 0.1
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.0
+    nominal: 0.0
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+- reifier_id: reifier_microwave
+  source_id: microwave
+  relation_type: PLACED_ON
+  target_id: kitchen
+  surface_anchor: counter_top
+  surface_sector: back_center
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: 0.0
+    max_val: 0.0
+    nominal: 0.0
+  delta_y:
+    min_val: -0.1
+    max_val: 0.1
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.0
+    nominal: 0.0
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+placement_validators:
+  enabled_checks:
+  - contact_normal
+  - headroom
+  - friction
+  required_checks:
+  - contact_normal
+task:
+  composition: atomic
+  description: Pick up the Campbell's tomato soup can from the counter and place it
+    upright onto the microwave turntable.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: tomato_soup_can
+      destination_location: microwave
+      background_scene: kitchen

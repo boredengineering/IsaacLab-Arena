@@ -3,10 +3,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from __future__ import annotations
+
 import math
 import torch
+from typing import TYPE_CHECKING
 
-from isaaclab.envs.manager_based_env import ManagerBasedEnv
 from isaaclab.managers import SceneEntityCfg
 
 from isaaclab_arena.affordances.affordance_base import AffordanceBase
@@ -15,6 +17,9 @@ from isaaclab_arena.utils.joint_utils import (
     normalize_value,
     set_unnormalized_joint_position,
 )
+
+if TYPE_CHECKING:
+    from isaaclab.envs.manager_based_env import ManagerBasedEnv
 
 
 class Turnable(AffordanceBase):

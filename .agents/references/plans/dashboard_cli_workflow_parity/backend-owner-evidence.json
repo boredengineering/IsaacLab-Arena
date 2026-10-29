@@ -1,0 +1,322 @@
+{
+  "schema_version": 1,
+  "status": "unit_verified_integration_pending",
+  "scope": "isolated CPU tests; synthetic transport/graph/harness/process identity boundaries; real pipe and artifact bytes; not live policy or GPU evidence",
+  "run": "web/arena-workbench/tests/e2e/functional-v7/.runs/arena-f0-backend-f6dec4b98855",
+  "tests": 145,
+  "tests_by_file": {
+    "isaaclab_arena_examples.tests.test_workbench_readiness": 29,
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness": 16,
+    "isaaclab_arena_examples.tests.test_workbench_evaluate": 78,
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness": 22
+  },
+  "test_names": [
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_v2_metadata_is_exact_workflow_specific_and_never_infers_readiness",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_v2_check_uses_private_worker_and_preserves_unknowns",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_worker_retrieves_with_private_configuration_and_returns_only_static_codes",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_worker_process_receipt_rejects_unknown_or_arbitrary_metadata",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_v2_api_contract_requires_actual_routes_and_advertised_capability[a2_gr00t-/api/editor/evaluate]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_v2_api_contract_requires_actual_routes_and_advertised_capability[build-/api/editor/build]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_v2_api_contract_requires_actual_routes_and_advertised_capability[graph_generation-/api/editor/generate]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_readiness_process_uses_bounded_private_pipes_and_retains_unknown_cleanup[None]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_readiness_process_uses_bounded_private_pipes_and_retains_unknown_cleanup[duplicate]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_readiness_process_uses_bounded_private_pipes_and_retains_unknown_cleanup[oversize]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_readiness_process_uses_bounded_private_pipes_and_retains_unknown_cleanup[cleanup]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_v2_invalid_graph_profile_does_not_start_worker",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_v2_retires_policy_evidence_when_operator_pins_change",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_worker_runtime_missing_simulator_remains_unavailable",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_v2_requires_literal_version_and_omitted_or_string_optional_fields[extra0]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_v2_requires_literal_version_and_omitted_or_string_optional_fields[extra1]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_v2_requires_literal_version_and_omitted_or_string_optional_fields[extra2]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_v2_requires_literal_version_and_omitted_or_string_optional_fields[extra3]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_readiness_reports_missing_configuration_without_network_or_jobs",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_explicit_checks_use_server_targets_without_provider_calls_or_job_writes",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_readiness_does_not_relabel_old_graph_probe_after_configuration_change",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_revoked_session_cannot_receive_completed_check",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_graph_probe_uses_explicit_database_read_and_rolls_back",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_graph_probe_never_returns_raw_driver_errors",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_graph_readiness_rejects_retriever_incompatible_database_before_probe[ research ]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_graph_readiness_rejects_retriever_incompatible_database_before_probe[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_busy_probe_retains_slot_until_thread_finishes[False]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_busy_probe_retains_slot_until_thread_finishes[True]",
+    "isaaclab_arena_examples.tests.test_workbench_readiness::test_cancelled_request_does_not_release_running_probe_slot",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_protocol_model_and_transport_are_distinct_and_same_instance[None]",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_protocol_model_and_transport_are_distinct_and_same_instance[ping]",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_protocol_model_and_transport_are_distinct_and_same_instance[modalities]",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_protocol_model_and_transport_are_distinct_and_same_instance[checkpoint]",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_protocol_model_and_transport_are_distinct_and_same_instance[instance]",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_protocol_model_and_transport_are_distinct_and_same_instance[no_expectation]",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_protocol_model_and_transport_are_distinct_and_same_instance[no_metadata]",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_protocol_model_and_transport_are_distinct_and_same_instance[cleanup]",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_worker_policy_projection_rejects_conflicting_or_unbounded_evidence",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_native_codec_decoder_checks_small_wire_arrays_before_native_decode",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_probe_requires_default_native_codec_verification_before_transport_pass",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_native_codec_peer_calls_shared_verifier_with_fixed_bounded_transport",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_metadata_peer_only_allows_explicit_safe_rpc_and_closes_owned_context[False]",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_metadata_peer_only_allows_explicit_safe_rpc_and_closes_owned_context[True]",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_metadata_decoder_supports_bounded_modality_wrappers_without_json_ambiguity",
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness::test_metadata_decoder_is_plain_bounded_and_rejects_unsafe_or_ambiguous_maps",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_gr00t_evaluation_refuses_missing_operator_expectation_without_submission",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_gr00t_admission_refuses_worker_contract_failures[policy_model_mismatch]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_gr00t_admission_refuses_worker_contract_failures[policy_transport_unverified]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_gr00t_admission_refuses_worker_contract_failures[policy_instance_mismatch]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_fixed_profiles_route_freezes_and_replays_without_resolving_source",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_uses_local_only_harness_callback_and_actual_artifacts[False-Pick up the cube-gr00t-droid]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_uses_local_only_harness_callback_and_actual_artifacts[False-Pick up the cube-openpi-droid]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_uses_local_only_harness_callback_and_actual_artifacts[False---headless-gr00t-droid]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_uses_local_only_harness_callback_and_actual_artifacts[False---headless-openpi-droid]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_uses_local_only_harness_callback_and_actual_artifacts[True-Pick up the cube-gr00t-droid]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_uses_local_only_harness_callback_and_actual_artifacts[True-Pick up the cube-openpi-droid]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_uses_local_only_harness_callback_and_actual_artifacts[True---headless-gr00t-droid]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_uses_local_only_harness_callback_and_actual_artifacts[True---headless-openpi-droid]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_refuses_unpinned_or_changed_policy_before_writing_scene[missing-policy_metadata_unavailable]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_refuses_unpinned_or_changed_policy_before_writing_scene[instance-policy_instance_mismatch]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_refuses_unpinned_or_changed_policy_before_writing_scene[transport-policy_transport_unverified]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_dispatch_reaps_then_exposes_verified_authenticated_artifact",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_route_rejects_overrides_and_bad_instruction[change0]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_route_rejects_overrides_and_bad_instruction[change1]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_route_rejects_overrides_and_bad_instruction[change2]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_route_rejects_overrides_and_bad_instruction[change3]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_route_rejects_overrides_and_bad_instruction[change4]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_route_rejects_overrides_and_bad_instruction[change5]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_route_rejects_overrides_and_bad_instruction[change6]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_incompatible_source_is_rejected_before_dispatch[franka_ik-params0]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_incompatible_source_is_rejected_before_dispatch[droid_rel_joint_pos-params1]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_incompatible_source_is_rejected_before_dispatch[droid_abs_joint_pos-params2]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_incompatible_source_is_rejected_before_dispatch[droid_abs_joint_pos-params3]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_incompatible_source_is_rejected_before_dispatch[droid_abs_joint_pos-params4]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_incompatible_source_is_rejected_before_dispatch[droid_abs_joint_pos-params5]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[wrong_hash]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[wrong_profile]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[wrong_instruction]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[wrong_budget]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[bool_count]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[publication]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[nan]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[oversized_metrics]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[extra_path]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[false_episode_count]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[empty_episodes_with_positive_count]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[missing_report]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[digest]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[size]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[name]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[duplicate_artifact]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[leaf_symlink]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[ancestor_symlink]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[zero_receipts]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[two_receipts]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_parent_rejects_invalid_result_identity_and_artifacts[nonzero_exit]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_episode_counts_preserve_null_and_every_actual_row",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_zero_episode_run_completes_with_unknown_success_and_empty_artifact",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_evaluation_timeout_reaps_worker_without_changing_build_bound",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_cancellation_signals_owned_group_and_hides_artifacts",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_actual_artifact_bytes_are_screened_under_current_public_policy[before_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_actual_artifact_bytes_are_screened_under_current_public_policy[after_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download[html-u-before_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download[html-u-after_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download[html-U-before_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download[html-U-after_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download[html-x-before_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download[html-x-after_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download[html-folded-before_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download[html-folded-after_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download[html-entity-before_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download[html-entity-after_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download[jsonl-u-before_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_cross_chunk_escaped_credentials_rejected_at_acceptance_and_download[jsonl-u-after_acceptance]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_unverified_evaluation_cleanup_retains_dispatch_slot_and_lease",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_main_emits_only_bounded_completion_or_private_failure[before_callback]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_main_emits_only_bounded_completion_or_private_failure[missing_callback]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_main_emits_only_bounded_completion_or_private_failure[missing_report]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_main_emits_only_bounded_completion_or_private_failure[zero_episodes]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_main_emits_only_bounded_completion_or_private_failure[outside_output]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_main_emits_only_bounded_completion_or_private_failure[after_callback]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_main_emits_only_bounded_completion_or_private_failure[nonzero_return]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluate::test_worker_main_emits_only_bounded_completion_or_private_failure[duplicate_callback]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_local_telemetry_serializes_without_importing_graph_sync",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_completion_precedes_terminating_shutdown_with_effective_budget",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_missing_report_cannot_emit_completion",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_failure_before_report_cannot_emit_completion[enter]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_failure_before_report_cannot_emit_completion[rollout]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_failure_before_report_cannot_emit_completion[env_close]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_failure_before_report_cannot_emit_completion[report]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_completion_is_not_a_shutdown_success_claim[None]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_completion_is_not_a_shutdown_success_claim[0]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_completion_is_not_a_shutdown_success_claim[1]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_completion_is_not_a_shutdown_success_claim[error]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_effective_cli_budget_and_absent_metrics_are_not_fabricated[13-None]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_effective_cli_budget_and_absent_metrics_are_not_fabricated[None-3]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_caught_optional_failures_only_expose_static_warning_codes[telemetry-telemetry_recording_failed]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_caught_optional_failures_only_expose_static_warning_codes[lineage-lineage_update_failed]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_legacy_no_argument_entry_keeps_publication_lineage_and_serving",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_telemetry_identity_uses_fallback_only_when_not_provided[None]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_telemetry_identity_uses_fallback_only_when_not_provided[frozen_identity]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_telemetry_identity_uses_fallback_only_when_not_provided[]",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_nonzero_rank_does_not_report_or_complete",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_callback_failure_propagates_and_does_not_serve",
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness::test_telemetry_default_publication_reaches_only_a_fail_spy"
+  ],
+  "forbidden": {
+    "network": 0,
+    "provider": 0,
+    "graph": 0,
+    "render": 0,
+    "workload": 0,
+    "subprocess": 0
+  },
+  "cleanup_verified": true,
+  "remaining_owned": [],
+  "staged_source_unchanged": true,
+  "owned_source_sha256": {
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness.py": "68df7e62c945844ffaf30a532052c4d1cf31cd1f37b98fe16333872b6c44abb9",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/policy_readiness.py": "2360fc5b8df168ff0b8ad11a3497d97a157dc4eeda8deb8b6a66b81419ecb625",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness_worker.py": "c781becab3065c9161c6e3325d7bb9ba42a4d83fee30807dac249191834a2774",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness_process.py": "2a9a34da8e4321861d77ea50ff189313178c3349e6600a88177b26a5630723f7",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/evaluate.py": "46ea6283aa1adb4e43a15dad94864733b366e7db750848a0858d60889758e8d2",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/evaluation_worker.py": "54d1a9c50842e2e4e54e917844b6c6a0fd8d298e1f323385c4f8a686ab1504cf",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/evaluation_profiles.py": "1e987c800530e9cd27cade7741bb5d18ebe86240414a8756c1e0e56207bfc5d2",
+    "isaaclab_arena_examples/tests/test_workbench_readiness.py": "1e312ac907deeb4a3b7e45097ab9b1d09147a2f48ee596a164c0a84d5fca6b7b",
+    "isaaclab_arena_examples/tests/test_workbench_policy_readiness.py": "c4e54b42a1b17de28533993753b764dc1ce519140a9998784beedca7c58bd991",
+    "isaaclab_arena_examples/tests/test_workbench_evaluate.py": "fac83462a8df571d0b5cbc69a3b23bc165463b5750d730cb5a382f682129260a"
+  },
+  "artifact_sha256": {
+    "run-proof.json": "2fda01c9a13a6bbb28805283dc3a9ce97650a1d6286f05f24fbb2d701a0a0bb2",
+    "source-manifest.json": "89fb03f4f3bce76342118de7f89a654014639b6c2c6acd8487ae9461995c89d7",
+    "evidence/backend-proof.json": "08ce2271ed9d80f3c24438e2ed803e7e204c63110b5e80c12bc9fc64ec6be684",
+    "evidence/pytest.xml": "958ded212fdaad45a90170a5c61b02e205e4d75c6a56e09d05a080e29347aee0"
+  },
+  "public_constants": {
+    "READINESS_CODES": [
+      "not_required",
+      "not_checked",
+      "api_contract_available",
+      "api_contract_unavailable",
+      "runtime_not_checked",
+      "runtime_available",
+      "runtime_unavailable",
+      "resource_unknown",
+      "generation_not_configured",
+      "generation_configuration_only",
+      "graph_not_configured",
+      "graph_invalid_configuration",
+      "graph_not_checked",
+      "graph_retrieval_measured",
+      "graph_retrieval_structural",
+      "graph_retrieval_empty",
+      "graph_retrieval_unavailable",
+      "configuration_changed",
+      "check_timeout",
+      "policy_protocol_available",
+      "policy_protocol_unavailable",
+      "policy_modality_mismatch",
+      "policy_expectation_missing",
+      "policy_model_verified",
+      "policy_model_mismatch",
+      "policy_metadata_unavailable",
+      "policy_transport_unverified",
+      "policy_transport_verified",
+      "policy_instance_mismatch",
+      "openpi_verification_unsupported"
+    ],
+    "READINESS_CHECKS": [
+      "api_contract",
+      "runtime",
+      "generation_model",
+      "graph",
+      "policy_protocol",
+      "policy_model",
+      "policy_transport",
+      "gpu"
+    ],
+    "COMMON_ROUTES": [
+      [
+        "GET",
+        "/api/health"
+      ],
+      [
+        "GET",
+        "/api/editor"
+      ],
+      [
+        "GET",
+        "/api/editor/schema"
+      ],
+      [
+        "GET",
+        "/api/editor/catalogues"
+      ],
+      [
+        "POST",
+        "/api/sessions"
+      ],
+      [
+        "GET",
+        "/api/session"
+      ],
+      [
+        "POST",
+        "/api/session/activity"
+      ],
+      [
+        "POST",
+        "/api/editor/validate"
+      ],
+      [
+        "GET",
+        "/api/jobs/{job_id}"
+      ],
+      [
+        "GET",
+        "/api/jobs"
+      ],
+      [
+        "GET",
+        "/api/workspaces/default"
+      ]
+    ],
+    "WORKFLOW_ROUTES": {
+      "a2_gr00t": [
+        [
+          "GET",
+          "/api/editor/evaluation-profiles"
+        ],
+        [
+          "POST",
+          "/api/editor/evaluate"
+        ],
+        [
+          "GET",
+          "/api/editor/evaluations/{job_id}/artifacts/{name}"
+        ]
+      ],
+      "build": [
+        [
+          "POST",
+          "/api/editor/build"
+        ]
+      ],
+      "graph_generation": [
+        [
+          "GET",
+          "/api/model-settings"
+        ],
+        [
+          "POST",
+          "/api/editor/generate"
+        ],
+        [
+          "GET",
+          "/api/editor/generate/operations/{idempotency_key}"
+        ]
+      ]
+    }
+  },
+  "pending": [
+    "Parent policy review found actual N1.6 legacy NPY codec unsupported by current safe msgpack-numpy-only decode_codec_reply; integrate shared raw codec preflight from policy fix owner before native decoder allocation, then rerun actual wire fixtures.",
+    "GPU resource_unknown has no implemented PASS-evidence admission; build/a2 overall ready remains false.",
+    "generation_configuration_only is not live provider verification; graph_generation overall ready remains false; no bounded provider-result receipt admission implemented.",
+    "No policy-smoke endpoint/job implemented: current evaluate job is a 1000-step simulator rollout, not a separately bounded one-inference smoke. Requires reviewed reuse of existing job/lease/effect machinery.",
+    "Graph checks use actual legacy retriever with private explicit config; managed-selection grants/prior-consumption and graph writes not certified."
+  ]
+}

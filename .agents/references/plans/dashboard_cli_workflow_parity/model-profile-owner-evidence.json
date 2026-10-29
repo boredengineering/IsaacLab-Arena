@@ -1,0 +1,268 @@
+{
+  "schema_version": 1,
+  "status": "implemented_offline_verified",
+  "not_deployed": true,
+  "backend": [
+    {
+      "run": "arena-f0-backend-fefd0b8c3372",
+      "proof": "web/arena-workbench/tests/e2e/functional-v7/.runs/arena-f0-backend-fefd0b8c3372/run-proof.json",
+      "proof_sha256": "8c86f5539c958c0c94ce8855ea52ebf59d88a67b3d2ccd45b97ddd5ae624ed9a",
+      "tests": [
+        "isaaclab_arena/tests/test_inference_backend.py"
+      ],
+      "passed_cases": 60,
+      "per_file": {
+        "isaaclab_arena/tests/test_inference_backend.py": 60
+      },
+      "forbidden": {
+        "network": 0,
+        "provider": 0,
+        "graph": 0,
+        "render": 0,
+        "workload": 0,
+        "subprocess": 0
+      },
+      "cleanup_verified": true,
+      "owned_source_matches_current": {
+        "isaaclab_arena/agentic_environment_generation/inference_profiles.py": true,
+        "isaaclab_arena/agentic_environment_generation/inference_backend.py": true,
+        "isaaclab_arena/agentic_environment_generation/environment_generation_agent.py": true,
+        "isaaclab_arena/agentic_environment_generation/spec_inference.py": true,
+        "isaaclab_arena/agentic_environment_generation/workbench/model_profile_store.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/model_settings.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/application.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/provider_security.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/workflow_authorization.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/execution_grants.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/generation.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/generation_worker.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/provider_readiness.py": true,
+        "isaaclab_arena/tests/test_inference_backend.py": true
+      }
+    },
+    {
+      "run": "arena-f0-backend-c11f41c8c013",
+      "proof": "web/arena-workbench/tests/e2e/functional-v7/.runs/arena-f0-backend-c11f41c8c013/run-proof.json",
+      "proof_sha256": "720fc9329f78f3d1b4a6249501eeccf18cdb9e10f6e33782224d6694cced39f8",
+      "tests": [
+        "isaaclab_arena/tests/test_inference_profiles.py",
+        "isaaclab_arena/tests/test_spec_inference.py",
+        "isaaclab_arena/tests/test_spec_wire_adapter.py",
+        "isaaclab_arena_examples/tests/test_workbench_model_settings.py",
+        "isaaclab_arena_examples/tests/test_workbench_workflow_authorization.py",
+        "isaaclab_arena_examples/tests/test_workbench_execution_grants.py",
+        "isaaclab_arena_examples/tests/test_workbench_reauthorization.py"
+      ],
+      "passed_cases": 280,
+      "per_file": {
+        "isaaclab_arena/tests/test_inference_profiles.py": 26,
+        "isaaclab_arena/tests/test_spec_inference.py": 7,
+        "isaaclab_arena/tests/test_spec_wire_adapter.py": 49,
+        "isaaclab_arena_examples/tests/test_workbench_model_settings.py": 105,
+        "isaaclab_arena_examples/tests/test_workbench_workflow_authorization.py": 17,
+        "isaaclab_arena_examples/tests/test_workbench_execution_grants.py": 42,
+        "isaaclab_arena_examples/tests/test_workbench_reauthorization.py": 34
+      },
+      "forbidden": {
+        "network": 0,
+        "provider": 0,
+        "graph": 0,
+        "render": 0,
+        "workload": 0,
+        "subprocess": 0
+      },
+      "cleanup_verified": true,
+      "owned_source_matches_current": {
+        "isaaclab_arena/agentic_environment_generation/inference_profiles.py": true,
+        "isaaclab_arena/agentic_environment_generation/inference_backend.py": true,
+        "isaaclab_arena/agentic_environment_generation/environment_generation_agent.py": true,
+        "isaaclab_arena/agentic_environment_generation/spec_inference.py": true,
+        "isaaclab_arena/agentic_environment_generation/workbench/model_profile_store.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/model_settings.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/application.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/provider_security.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/workflow_authorization.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/execution_grants.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/generation.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/generation_worker.py": true,
+        "isaaclab_arena_examples/agentic_environment_generation/web_api/provider_readiness.py": true,
+        "isaaclab_arena/tests/test_spec_inference.py": true,
+        "isaaclab_arena_examples/tests/test_workbench_model_settings.py": true,
+        "isaaclab_arena_examples/tests/test_workbench_workflow_authorization.py": true,
+        "isaaclab_arena_examples/tests/test_workbench_reauthorization.py": true
+      }
+    }
+  ],
+  "frontend": {
+    "run": "arena-functional-frontend-198929d530fd",
+    "proof": "web/arena-workbench/tests/e2e/functional-v7/.runs/arena-functional-frontend-198929d530fd/proof.json",
+    "proof_sha256": "7651950f5c28733b6f9c915a75cb46c70471d9dadd909448a00f1d1020004636",
+    "per_file": {
+      "src/model-settings-contracts.test.ts": 40,
+      "src/model-settings.test.tsx": 66
+    },
+    "passed_cases": 106,
+    "cleanup_verification": {
+      "status": "passed",
+      "authoritative": true,
+      "label_ids": [],
+      "candidate_ids": {
+        "arena-functional-frontend-198929d530fd-unit": []
+      }
+    },
+    "remaining_owned": [],
+    "owned_source_matches_current": {
+      "web/arena-workbench/src/model-settings.tsx": true,
+      "web/arena-workbench/src/model-settings-contracts.ts": true,
+      "web/arena-workbench/src/model-settings.test.tsx": true,
+      "web/arena-workbench/src/model-settings-contracts.test.ts": true
+    },
+    "preimport": {
+      "egress_denied": true,
+      "before_repository_imports": true,
+      "dependency_entries": 11370,
+      "dependency_trust": "trusted mutable installed volume; confined links; not immutable provenance"
+    }
+  },
+  "verification": {
+    "typecheck": {
+      "run": "arena-f0-typecheck-ce7b3c0e8669",
+      "proof": "web/arena-workbench/tests/e2e/functional-v7/.runs/arena-f0-typecheck-ce7b3c0e8669/run-proof.json",
+      "proof_sha256": "8666d456a87d99429acd631fea026584cb86ea5495402fa316784284f1210122",
+      "cleanup_verified": true,
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "staged_source_unchanged": true
+    },
+    "build": {
+      "run": "arena-f0-build-ac35b6be4ec1",
+      "proof": "web/arena-workbench/tests/e2e/functional-v7/.runs/arena-f0-build-ac35b6be4ec1/run-proof.json",
+      "proof_sha256": "b98f598fb4634876221267dbe4f3117d41cc592c1512d2f0be5b3caeee0d8087",
+      "cleanup_verified": true,
+      "command": [
+        "npm",
+        "run",
+        "build",
+        "--",
+        "--outDir",
+        "/evidence/dist",
+        "--configLoader",
+        "runner"
+      ],
+      "staged_source_unchanged": true
+    },
+    "runner_units": {
+      "run": "arena-core-units-336b57447041",
+      "proof": "web/arena-workbench/tests/e2e/functional-v7/.runs/arena-core-units-336b57447041/run-proof.json",
+      "proof_sha256": "4293a7edbc711223536141832661968167aa22bf42d38a5a21520770f8de295e",
+      "cleanup_verified": true,
+      "units": {
+        "passed": true,
+        "tests": 95,
+        "failures": 0,
+        "errors": 0
+      }
+    },
+    "git_diff_check": "passed for owned tracked paths"
+  },
+  "source_sha256": {
+    "isaaclab_arena/agentic_environment_generation/inference_profiles.py": "2a0311e5f5db702825ee92cebb77efe322290366cf1e4ea186b53f2cc2eac357",
+    "isaaclab_arena/agentic_environment_generation/inference_backend.py": "c9e65ba51cbacf3c6fe3583dc11b6c968a42ad26e96d1cb8453215dea81029f2",
+    "isaaclab_arena/agentic_environment_generation/environment_generation_agent.py": "861a050e9c34cbe094cfb9efec6d1043b8a24ccf5274c469c3ba9403c117b123",
+    "isaaclab_arena/agentic_environment_generation/spec_inference.py": "57abf551b98efc57d8bb0259c22cf34a88631d5aa90c879cc97f54b1cc53b772",
+    "isaaclab_arena/agentic_environment_generation/workbench/model_profile_store.py": "cc7f3038d58b90b9d3494fa1208e18fc292ea92065994a48b0f8846babf4a87d",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/model_settings.py": "bd4f076859cd322ac4b8061a18bd1c3df2c5358eb207e4ed231cfc791bc61ad5",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/application.py": "b8a519bceab9e37f37d3fce5886b0a818c5f1f9c4aead46d003f827963cdbf2b",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/provider_security.py": "8c312f1ba2eb4616dbb59316d309ed17b59b37c919f9dbbf9efdb42c4590177f",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/workflow_authorization.py": "0ff06d233dfeeec0c74d5dff249fe9dc48b95dbc741f0c4148bc1457b761c66d",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/execution_grants.py": "208e3a7c9baa60a5b55f28f12e6dfe89e1ac0e28cc4fbe9b5c25644907d17aa8",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/generation.py": "804e75752cc2b6abda39f1ce1a6a1cd4efce73a31c00c166a31d795fa56443a9",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/generation_worker.py": "e2b8a62807b4a91be6049926e7f4908595feb4dc0a2c7b2b75fba363cd16b9b3",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/provider_readiness.py": "1d979e77be54ad4a832e38d22575c29d0c66e1217883f4531f87ffa39eb89a8e",
+    "isaaclab_arena/tests/test_inference_backend.py": "289ca83e90e89cf1ac5bcfe8a66d91dbca4d471690d1db30ffaaa5daead7d038",
+    "isaaclab_arena/tests/test_spec_inference.py": "d3544dd1e12f31d501707ce2693d3ca8b24de7a6ded4503a85c1ced4481c35c9",
+    "isaaclab_arena_examples/tests/test_workbench_model_settings.py": "bdee6534432a31c1aa06e56266a71c30440c0a2600404bc24d551f6d9c96c917",
+    "isaaclab_arena_examples/tests/test_workbench_workflow_authorization.py": "972c8cb5d122458da36051d83f88f7126184661b170e096295bb4a5c76b6c0d9",
+    "isaaclab_arena_examples/tests/test_workbench_reauthorization.py": "4fd304ac910905494e5415028056a4221e3ff8d9a967d8015fb5cd2e28d3bf71",
+    "web/arena-workbench/src/model-settings.tsx": "992b6c045f1acf2ce02425f092e907efdf1c600c18dd6fc2f9c85af3d3e6565d",
+    "web/arena-workbench/src/model-settings-contracts.ts": "10827a2e215a9b2128abba8d402565513ae1ec1a5c01bb4f909372a49a3c7d46",
+    "web/arena-workbench/src/model-settings.test.tsx": "aa69d547f8854d7a1e9dd855705dc428fcb8046703843c946a464d4b490a9dfa",
+    "web/arena-workbench/src/model-settings-contracts.test.ts": "259f863793ff27cb4367a33f28d7b4e89773b3808880ac59a4fbe9bfd10fa4a3",
+    "web/arena-workbench/tests/e2e/functional-v7/stage.py": "0c7f19e62d9ddc1567ce3cb58bcf1e6ebad7bba33965e5af238e0abf87958917",
+    "web/arena-workbench/tests/e2e/functional-v7/test_backend_checks.py": "f40422b6e2ae87525ff27943b61db6fba9c561cf261d75742a925322fe9ff598"
+  },
+  "limitations": [
+    "No live deployment, provider request, GPU or native browser acceptance.",
+    "SDK tests use the installed SDK with synthetic transport, socket denial and metadata-header fixture.",
+    "Worker framing uses synthetic generation and OS seams, not a real child-provider execution. EnvironmentGenerationAgent constructor remained denied by the existing harness; source keyword forwarding is implemented.",
+    "Frontend dependencies are trusted mutable installed-volume bytes, not immutable dependency attestation.",
+    "Ordinary build emitted existing large-chunk/outDir warnings; backend imports emit runtime deprecation warnings."
+  ],
+  "backend_total_unique_cases": 340,
+  "red_evidence": [
+    {
+      "slice": "authenticated persistent registration",
+      "run": "arena-f0-backend-a9858859dcc2"
+    },
+    {
+      "slice": "settings/grants snapshot",
+      "run": "arena-f0-backend-217dc283b3df"
+    },
+    {
+      "slice": "SDK literal policy dispatch",
+      "run": "arena-f0-backend-a9a5138599cc"
+    },
+    {
+      "slice": "strict spec modes",
+      "run": "arena-f0-backend-2a6306c6b9f9"
+    },
+    {
+      "slice": "worker admission and builtin freeze",
+      "run": "arena-f0-backend-d4afcba9c02e"
+    },
+    {
+      "slice": "v2 metadata and reserved identities",
+      "run": "arena-f0-backend-f280f7f7ea0b"
+    },
+    {
+      "slice": "v2 UI decoder",
+      "run": "arena-functional-frontend-9494bfa7c31d"
+    },
+    {
+      "slice": "Add/readback/select UI",
+      "run": "arena-functional-frontend-eb5a307a6fb8"
+    },
+    {
+      "slice": "strict raw user JSON/schema",
+      "run": "arena-f0-backend-26776ea5f04d"
+    },
+    {
+      "slice": "raw duplicate registration",
+      "run": "arena-f0-backend-9796ed8c2da9"
+    },
+    {
+      "slice": "retained unmount submit",
+      "run": "arena-functional-frontend-7767a7262c4d"
+    },
+    {
+      "slice": "documented-only readiness",
+      "run": "arena-f0-backend-4f5821b69f4a"
+    },
+    {
+      "slice": "bounded configured ping",
+      "run": "arena-f0-backend-45be9d8145cf"
+    },
+    {
+      "slice": "store exact nonsecret boundary",
+      "run": "arena-f0-backend-8ec6dd1302d6"
+    }
+  ],
+  "issues_resolved": [
+    "Parent fixed runtime-discovery ambiguity using RW simulator bind; final tests use standard runner. Temporary exact-ID wrapper used earlier without infrastructure edits.",
+    "Authorization/reauthorization fixtures now avoid renderer construction; no guard relaxed.",
+    "HEAD-owned implementation overlay reproduced stale replay-test expectation in arena-f0-backend-4229f0c1f61f; revised test requires current-secret screening while forbidding grant/credential resolution or issuance. Production replay semantics unchanged."
+  ]
+}

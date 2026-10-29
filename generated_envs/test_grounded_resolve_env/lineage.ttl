@@ -1,0 +1,14 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:test_grounded_resolve_env a arena:EnvironmentFamily ;
+    arena:currentVersion 1 .
+
+:test_grounded_resolve_env_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T01:35:47.647539+00:00"^^xsd:dateTime ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 1 .
+

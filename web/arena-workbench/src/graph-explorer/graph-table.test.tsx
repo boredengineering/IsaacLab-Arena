@@ -1,0 +1,30 @@
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { expect, it, vi } from 'vitest';
+import { normalizeGraph, createGraphFilters, projectGraph } from './graph-model';
+import { GraphTable } from './graph-table';
+it('paginates semantic entity tables without dropping filter membership and navigates exact identities', () => {
+  const graph = normalizeGraph({ nodes: Array.from({ length: 28 }, (_, i) => ({ id: `n${i}`, label: `Node ${i}`, role: 'object', properties: '[truncated]' })), edges: [{ id: 'e', source: 'n0', target: 'n0', label: 'self', properties: null }] });
+  const onSelect = vi.fn();
+  render(<GraphTable graph={graph} projection={projectGraph(graph, createGraphFilters(graph))} selection={null} onSelect={onSelect} />);
+  expect(screen.getAllByRole('row')).toHaveLength(26);
+  fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  expect(screen.getAllByRole('row')).toHaveLength(4);
+  fireEvent.click(screen.getAllByRole('button', { name: /^Inspect node/ })[0]);
+  expect(onSelect).toHaveBeenCalledWith({ kind: 'node', id: expect.any(String) });
+  fireEvent.click(screen.getByRole('tab', { name: 'Relationships' }));
+  expect(within(screen.getByRole('table')).getByText('self')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Inspect relationship e' }));
+  expect(onSelect).toHaveBeenLastCalledWith({ kind: 'edge', id: 'e' });
+  fireEvent.click(screen.getAllByRole('button', { name: 'Node 0 · n0' })[0]);
+  expect(onSelect).toHaveBeenLastCalledWith({ kind: 'node', id: 'n0' });
+});
+it('focuses a selected page once without trapping subsequent tab navigation', () => {
+  const graph = normalizeGraph({ nodes: Array.from({ length: 60 }, (_, i) => ({ id: String(i), label: String(i), role: 'object', properties: {} })), edges: [] });
+  const projection = projectGraph(graph, createGraphFilters(graph));
+  const { rerender } = render(<GraphTable graph={graph} projection={projection} selection={{ kind: 'node', id: '59' }} onSelect={vi.fn()} focusRequest={1} />);
+  expect(screen.getByText(/Page 3 of 3/)).toBeTruthy();
+  fireEvent.click(screen.getByRole('tab', { name: 'Relationships' }));
+  expect(screen.getByRole('tab', { name: 'Relationships' })).toHaveAttribute('aria-selected', 'true');
+  rerender(<GraphTable graph={graph} projection={projectGraph(graph, { ...createGraphFilters(graph), allowedRoles: new Set() })} selection={null} onSelect={vi.fn()} />);
+  expect(screen.getByText(/Page 1 of 1/)).toBeTruthy();
+});

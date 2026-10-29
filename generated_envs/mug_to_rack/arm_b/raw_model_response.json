@@ -1,0 +1,112 @@
+{
+  "env_name": "mug_to_tray_on_table",
+  "embodiment": {
+    "id": "franka_01",
+    "registry_name": "franka_ik",
+    "params": {
+      "initial_pose": {
+        "position_xyz": [
+          -0.55,
+          0.0,
+          0.0
+        ],
+        "rotation_xyzw": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    }
+  },
+  "background": {
+    "id": "maple_table_01",
+    "registry_name": "maple_table_robolab",
+    "params": {}
+  },
+  "objects": [
+    {
+      "id": "mug_01",
+      "registry_name": "mug_ycb_robolab",
+      "params": {}
+    },
+    {
+      "id": "tray_01",
+      "registry_name": "bin_b03_vomp_robolab",
+      "params": {}
+    }
+  ],
+  "relations": [
+    {
+      "kind": "is_anchor",
+      "subject": "maple_table_01",
+      "params": {}
+    },
+    {
+      "kind": "on",
+      "subject": "mug_01",
+      "reference": "maple_table_01",
+      "params": {
+        "surface_anchor": "table_top",
+        "surface_sector": "front_right"
+      }
+    },
+    {
+      "kind": "on",
+      "subject": "tray_01",
+      "reference": "maple_table_01",
+      "params": {
+        "surface_anchor": "table_top",
+        "surface_sector": "front_left"
+      }
+    }
+  ],
+  "reified_relations": [
+    {
+      "reifier_id": "reifier_mug_table",
+      "source_id": "mug_01",
+      "relation_type": "PLACED_ON",
+      "target_id": "maple_table_01",
+      "surface_anchor": "table_top",
+      "surface_sector": "front_right",
+      "required_headroom": 0.35,
+      "required_friction": 0.6,
+      "kinematic_manifold": "tabletop_stationary_reach",
+      "prior_entropy": 2.5,
+      "posterior_entropy": 0.05,
+      "evidence_sources": [
+        "tabletop_spatial_planner"
+      ]
+    },
+    {
+      "reifier_id": "reifier_tray_table",
+      "source_id": "tray_01",
+      "relation_type": "PLACED_ON",
+      "target_id": "maple_table_01",
+      "surface_anchor": "table_top",
+      "surface_sector": "front_left",
+      "required_headroom": 0.35,
+      "required_friction": 0.6,
+      "kinematic_manifold": "tabletop_stationary_reach",
+      "prior_entropy": 2.5,
+      "posterior_entropy": 0.05,
+      "evidence_sources": [
+        "tabletop_spatial_planner"
+      ]
+    }
+  ],
+  "task": {
+    "composition": "atomic",
+    "description": "Pick up the mug from the front right of the table and place it upright into the tray on the front left.",
+    "subtasks": [
+      {
+        "kind": "PickAndPlaceTask",
+        "params": {
+          "pick_up_object": "mug_01",
+          "destination_location": "tray_01",
+          "background_scene": "maple_table_01"
+        }
+      }
+    ]
+  }
+}

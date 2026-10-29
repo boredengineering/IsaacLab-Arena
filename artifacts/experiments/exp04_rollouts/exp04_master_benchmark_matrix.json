@@ -1,0 +1,1663 @@
+[
+  {
+    "scenario": "D1-C",
+    "scenario_name": "Sequential Microwave Open & Stow",
+    "domain": "Office Breakroom",
+    "ontology": "Type A (Placed Prop)",
+    "model_comb": "comb_2a",
+    "seed": 0,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 135.76,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_12-58-06/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_12-58-06/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_12-58-06/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_12-58-06/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_12-58-06/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_12-58-06/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_12-58-06/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_12-58-06/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_12-58-06/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_12-58-06/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_12-58-06/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_12-58-06/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_05-25-30/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_0/2026-10-27_05-25-30/rl-video-step-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D1-C",
+    "scenario_name": "Sequential Microwave Open & Stow",
+    "domain": "Office Breakroom",
+    "ontology": "Type A (Placed Prop)",
+    "model_comb": "comb_2a",
+    "seed": 1,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 135.81,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_1/2026-10-27_13-00-23/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_1/2026-10-27_13-00-23/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_1/2026-10-27_13-00-23/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_1/2026-10-27_13-00-23/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_1/2026-10-27_13-00-23/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_1/2026-10-27_13-00-23/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_1/2026-10-27_13-00-23/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_1/2026-10-27_13-00-23/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_1/2026-10-27_13-00-23/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_1/2026-10-27_13-00-23/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_1/2026-10-27_13-00-23/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_1/2026-10-27_13-00-23/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D1-C",
+    "scenario_name": "Sequential Microwave Open & Stow",
+    "domain": "Office Breakroom",
+    "ontology": "Type A (Placed Prop)",
+    "model_comb": "comb_2a",
+    "seed": 2,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 137.02,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_2/2026-10-27_13-02-39/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_2/2026-10-27_13-02-39/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_2/2026-10-27_13-02-39/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_2/2026-10-27_13-02-39/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_2/2026-10-27_13-02-39/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_2/2026-10-27_13-02-39/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_2/2026-10-27_13-02-39/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_2/2026-10-27_13-02-39/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_2/2026-10-27_13-02-39/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_2/2026-10-27_13-02-39/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_2/2026-10-27_13-02-39/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_2/2026-10-27_13-02-39/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D1-C",
+    "scenario_name": "Sequential Microwave Open & Stow",
+    "domain": "Office Breakroom",
+    "ontology": "Type A (Placed Prop)",
+    "model_comb": "comb_2a",
+    "seed": 3,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 147.71,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_3/2026-10-27_13-04-57/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_3/2026-10-27_13-04-57/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_3/2026-10-27_13-04-57/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_3/2026-10-27_13-04-57/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_3/2026-10-27_13-04-57/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_3/2026-10-27_13-04-57/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_3/2026-10-27_13-04-57/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_3/2026-10-27_13-04-57/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_3/2026-10-27_13-04-57/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_3/2026-10-27_13-04-57/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_3/2026-10-27_13-04-57/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_3/2026-10-27_13-04-57/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D1-C",
+    "scenario_name": "Sequential Microwave Open & Stow",
+    "domain": "Office Breakroom",
+    "ontology": "Type A (Placed Prop)",
+    "model_comb": "comb_2a",
+    "seed": 4,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 142.09,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_4/2026-10-27_13-07-26/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_4/2026-10-27_13-07-26/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_4/2026-10-27_13-07-26/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_4/2026-10-27_13-07-26/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_4/2026-10-27_13-07-26/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_4/2026-10-27_13-07-26/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_4/2026-10-27_13-07-26/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_4/2026-10-27_13-07-26/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_4/2026-10-27_13-07-26/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_4/2026-10-27_13-07-26/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_4/2026-10-27_13-07-26/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_4/2026-10-27_13-07-26/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D1-C",
+    "scenario_name": "Sequential Microwave Open & Stow",
+    "domain": "Office Breakroom",
+    "ontology": "Type A (Placed Prop)",
+    "model_comb": "comb_2a",
+    "seed": 5,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 132.47,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_5/2026-10-27_13-09-48/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_5/2026-10-27_13-09-48/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_5/2026-10-27_13-09-48/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_5/2026-10-27_13-09-48/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_5/2026-10-27_13-09-48/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_5/2026-10-27_13-09-48/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_5/2026-10-27_13-09-48/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_5/2026-10-27_13-09-48/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_5/2026-10-27_13-09-48/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_5/2026-10-27_13-09-48/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_5/2026-10-27_13-09-48/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_5/2026-10-27_13-09-48/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D1-C",
+    "scenario_name": "Sequential Microwave Open & Stow",
+    "domain": "Office Breakroom",
+    "ontology": "Type A (Placed Prop)",
+    "model_comb": "comb_2a",
+    "seed": 6,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 133.26,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_6/2026-10-27_13-12-02/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_6/2026-10-27_13-12-02/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_6/2026-10-27_13-12-02/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_6/2026-10-27_13-12-02/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_6/2026-10-27_13-12-02/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_6/2026-10-27_13-12-02/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_6/2026-10-27_13-12-02/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_6/2026-10-27_13-12-02/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_6/2026-10-27_13-12-02/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_6/2026-10-27_13-12-02/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_6/2026-10-27_13-12-02/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_6/2026-10-27_13-12-02/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D1-C",
+    "scenario_name": "Sequential Microwave Open & Stow",
+    "domain": "Office Breakroom",
+    "ontology": "Type A (Placed Prop)",
+    "model_comb": "comb_2a",
+    "seed": 7,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 132.97,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_7/2026-10-27_13-14-15/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_7/2026-10-27_13-14-15/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_7/2026-10-27_13-14-15/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_7/2026-10-27_13-14-15/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_7/2026-10-27_13-14-15/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_7/2026-10-27_13-14-15/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_7/2026-10-27_13-14-15/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_7/2026-10-27_13-14-15/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_7/2026-10-27_13-14-15/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_7/2026-10-27_13-14-15/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_7/2026-10-27_13-14-15/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_7/2026-10-27_13-14-15/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D1-C",
+    "scenario_name": "Sequential Microwave Open & Stow",
+    "domain": "Office Breakroom",
+    "ontology": "Type A (Placed Prop)",
+    "model_comb": "comb_2a",
+    "seed": 8,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 132.38,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_8/2026-10-27_13-16-29/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_8/2026-10-27_13-16-29/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_8/2026-10-27_13-16-29/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_8/2026-10-27_13-16-29/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_8/2026-10-27_13-16-29/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_8/2026-10-27_13-16-29/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_8/2026-10-27_13-16-29/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_8/2026-10-27_13-16-29/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_8/2026-10-27_13-16-29/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_8/2026-10-27_13-16-29/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_8/2026-10-27_13-16-29/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_8/2026-10-27_13-16-29/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D1-C",
+    "scenario_name": "Sequential Microwave Open & Stow",
+    "domain": "Office Breakroom",
+    "ontology": "Type A (Placed Prop)",
+    "model_comb": "comb_2a",
+    "seed": 9,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 135.51,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_9/2026-10-27_13-18-42/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_9/2026-10-27_13-18-42/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_9/2026-10-27_13-18-42/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_9/2026-10-27_13-18-42/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_9/2026-10-27_13-18-42/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_9/2026-10-27_13-18-42/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_9/2026-10-27_13-18-42/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_9/2026-10-27_13-18-42/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_9/2026-10-27_13-18-42/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_9/2026-10-27_13-18-42/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_9/2026-10-27_13-18-42/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d1-c/openpi/seed_9/2026-10-27_13-18-42/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-A",
+    "scenario_name": "Prismatic Kitchen Base Cabinet Drawer Stow",
+    "domain": "Residential / Kitchen",
+    "ontology": "Type B (Intrinsic Prismatic Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 0,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2a_cabinet/latest/exp04_d2a_cabinet.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 171.66,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_0/2026-10-27_13-20-58/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_0/2026-10-27_13-20-58/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_0/2026-10-27_13-20-58/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_0/2026-10-27_13-20-58/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_0/2026-10-27_13-20-58/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_0/2026-10-27_13-20-58/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_0/2026-10-27_13-20-58/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_0/2026-10-27_13-20-58/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_0/2026-10-27_13-20-58/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_0/2026-10-27_13-20-58/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_0/2026-10-27_13-20-58/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_0/2026-10-27_13-20-58/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-A",
+    "scenario_name": "Prismatic Kitchen Base Cabinet Drawer Stow",
+    "domain": "Residential / Kitchen",
+    "ontology": "Type B (Intrinsic Prismatic Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 1,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2a_cabinet/latest/exp04_d2a_cabinet.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 160.01,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_1/2026-10-27_13-23-50/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_1/2026-10-27_13-23-50/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_1/2026-10-27_13-23-50/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_1/2026-10-27_13-23-50/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_1/2026-10-27_13-23-50/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_1/2026-10-27_13-23-50/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_1/2026-10-27_13-23-50/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_1/2026-10-27_13-23-50/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_1/2026-10-27_13-23-50/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_1/2026-10-27_13-23-50/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_1/2026-10-27_13-23-50/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_1/2026-10-27_13-23-50/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-A",
+    "scenario_name": "Prismatic Kitchen Base Cabinet Drawer Stow",
+    "domain": "Residential / Kitchen",
+    "ontology": "Type B (Intrinsic Prismatic Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 2,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2a_cabinet/latest/exp04_d2a_cabinet.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 157.16,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_2/2026-10-27_13-26-31/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_2/2026-10-27_13-26-31/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_2/2026-10-27_13-26-31/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_2/2026-10-27_13-26-31/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_2/2026-10-27_13-26-31/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_2/2026-10-27_13-26-31/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_2/2026-10-27_13-26-31/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_2/2026-10-27_13-26-31/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_2/2026-10-27_13-26-31/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_2/2026-10-27_13-26-31/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_2/2026-10-27_13-26-31/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_2/2026-10-27_13-26-31/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-A",
+    "scenario_name": "Prismatic Kitchen Base Cabinet Drawer Stow",
+    "domain": "Residential / Kitchen",
+    "ontology": "Type B (Intrinsic Prismatic Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 3,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2a_cabinet/latest/exp04_d2a_cabinet.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 154.43,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_3/2026-10-27_13-29-09/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_3/2026-10-27_13-29-09/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_3/2026-10-27_13-29-09/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_3/2026-10-27_13-29-09/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_3/2026-10-27_13-29-09/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_3/2026-10-27_13-29-09/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_3/2026-10-27_13-29-09/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_3/2026-10-27_13-29-09/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_3/2026-10-27_13-29-09/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_3/2026-10-27_13-29-09/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_3/2026-10-27_13-29-09/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_3/2026-10-27_13-29-09/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-A",
+    "scenario_name": "Prismatic Kitchen Base Cabinet Drawer Stow",
+    "domain": "Residential / Kitchen",
+    "ontology": "Type B (Intrinsic Prismatic Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 4,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2a_cabinet/latest/exp04_d2a_cabinet.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 154.43,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_4/2026-10-27_13-31-44/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_4/2026-10-27_13-31-44/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_4/2026-10-27_13-31-44/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_4/2026-10-27_13-31-44/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_4/2026-10-27_13-31-44/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_4/2026-10-27_13-31-44/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_4/2026-10-27_13-31-44/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_4/2026-10-27_13-31-44/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_4/2026-10-27_13-31-44/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_4/2026-10-27_13-31-44/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_4/2026-10-27_13-31-44/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_4/2026-10-27_13-31-44/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-A",
+    "scenario_name": "Prismatic Kitchen Base Cabinet Drawer Stow",
+    "domain": "Residential / Kitchen",
+    "ontology": "Type B (Intrinsic Prismatic Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 5,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2a_cabinet/latest/exp04_d2a_cabinet.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 154.62,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_5/2026-10-27_13-34-19/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_5/2026-10-27_13-34-19/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_5/2026-10-27_13-34-19/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_5/2026-10-27_13-34-19/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_5/2026-10-27_13-34-19/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_5/2026-10-27_13-34-19/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_5/2026-10-27_13-34-19/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_5/2026-10-27_13-34-19/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_5/2026-10-27_13-34-19/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_5/2026-10-27_13-34-19/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_5/2026-10-27_13-34-19/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_5/2026-10-27_13-34-19/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-A",
+    "scenario_name": "Prismatic Kitchen Base Cabinet Drawer Stow",
+    "domain": "Residential / Kitchen",
+    "ontology": "Type B (Intrinsic Prismatic Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 6,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2a_cabinet/latest/exp04_d2a_cabinet.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 155.43,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_6/2026-10-27_13-36-55/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_6/2026-10-27_13-36-55/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_6/2026-10-27_13-36-55/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_6/2026-10-27_13-36-55/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_6/2026-10-27_13-36-55/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_6/2026-10-27_13-36-55/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_6/2026-10-27_13-36-55/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_6/2026-10-27_13-36-55/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_6/2026-10-27_13-36-55/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_6/2026-10-27_13-36-55/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_6/2026-10-27_13-36-55/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_6/2026-10-27_13-36-55/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-A",
+    "scenario_name": "Prismatic Kitchen Base Cabinet Drawer Stow",
+    "domain": "Residential / Kitchen",
+    "ontology": "Type B (Intrinsic Prismatic Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 7,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2a_cabinet/latest/exp04_d2a_cabinet.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 154.37,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_7/2026-10-27_13-39-31/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_7/2026-10-27_13-39-31/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_7/2026-10-27_13-39-31/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_7/2026-10-27_13-39-31/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_7/2026-10-27_13-39-31/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_7/2026-10-27_13-39-31/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_7/2026-10-27_13-39-31/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_7/2026-10-27_13-39-31/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_7/2026-10-27_13-39-31/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_7/2026-10-27_13-39-31/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_7/2026-10-27_13-39-31/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_7/2026-10-27_13-39-31/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-A",
+    "scenario_name": "Prismatic Kitchen Base Cabinet Drawer Stow",
+    "domain": "Residential / Kitchen",
+    "ontology": "Type B (Intrinsic Prismatic Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 8,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2a_cabinet/latest/exp04_d2a_cabinet.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 153.83,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_8/2026-10-27_13-42-06/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_8/2026-10-27_13-42-06/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_8/2026-10-27_13-42-06/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_8/2026-10-27_13-42-06/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_8/2026-10-27_13-42-06/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_8/2026-10-27_13-42-06/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_8/2026-10-27_13-42-06/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_8/2026-10-27_13-42-06/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_8/2026-10-27_13-42-06/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_8/2026-10-27_13-42-06/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_8/2026-10-27_13-42-06/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_8/2026-10-27_13-42-06/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-A",
+    "scenario_name": "Prismatic Kitchen Base Cabinet Drawer Stow",
+    "domain": "Residential / Kitchen",
+    "ontology": "Type B (Intrinsic Prismatic Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 9,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2a_cabinet/latest/exp04_d2a_cabinet.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 160.81,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_9/2026-10-27_13-44-41/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_9/2026-10-27_13-44-41/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_9/2026-10-27_13-44-41/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_9/2026-10-27_13-44-41/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_9/2026-10-27_13-44-41/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_9/2026-10-27_13-44-41/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_9/2026-10-27_13-44-41/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_9/2026-10-27_13-44-41/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_9/2026-10-27_13-44-41/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_9/2026-10-27_13-44-41/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_9/2026-10-27_13-44-41/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-a/openpi/seed_9/2026-10-27_13-44-41/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-B",
+    "scenario_name": "Sequential Counter Drawer Open, Stow & Close",
+    "domain": "Residential / Breakroom Counter",
+    "ontology": "Type B (Intrinsic Reversible Prismatic)",
+    "model_comb": "comb_2a",
+    "seed": 0,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2b_counter/latest/exp04_d2b_counter.yaml",
+    "exit_code": 1,
+    "elapsed_seconds": 26.28,
+    "episode_length_steps": 39,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_0/2026-10-27_13-47-22/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_0/2026-10-27_13-47-22/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_0/2026-10-27_13-47-22/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_0/2026-10-27_13-47-22/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_0/2026-10-27_13-47-22/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_0/2026-10-27_13-47-22/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-B",
+    "scenario_name": "Sequential Counter Drawer Open, Stow & Close",
+    "domain": "Residential / Breakroom Counter",
+    "ontology": "Type B (Intrinsic Reversible Prismatic)",
+    "model_comb": "comb_2a",
+    "seed": 1,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2b_counter/latest/exp04_d2b_counter.yaml",
+    "exit_code": 1,
+    "elapsed_seconds": 27.06,
+    "episode_length_steps": 41,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_1/2026-10-27_13-47-49/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_1/2026-10-27_13-47-49/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_1/2026-10-27_13-47-49/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_1/2026-10-27_13-47-49/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_1/2026-10-27_13-47-49/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_1/2026-10-27_13-47-49/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-B",
+    "scenario_name": "Sequential Counter Drawer Open, Stow & Close",
+    "domain": "Residential / Breakroom Counter",
+    "ontology": "Type B (Intrinsic Reversible Prismatic)",
+    "model_comb": "comb_2a",
+    "seed": 2,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2b_counter/latest/exp04_d2b_counter.yaml",
+    "exit_code": 1,
+    "elapsed_seconds": 27.77,
+    "episode_length_steps": 45,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_2/2026-10-27_13-48-17/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_2/2026-10-27_13-48-17/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_2/2026-10-27_13-48-17/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_2/2026-10-27_13-48-17/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_2/2026-10-27_13-48-17/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_2/2026-10-27_13-48-17/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-B",
+    "scenario_name": "Sequential Counter Drawer Open, Stow & Close",
+    "domain": "Residential / Breakroom Counter",
+    "ontology": "Type B (Intrinsic Reversible Prismatic)",
+    "model_comb": "comb_2a",
+    "seed": 3,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2b_counter/latest/exp04_d2b_counter.yaml",
+    "exit_code": 1,
+    "elapsed_seconds": 157.41,
+    "episode_length_steps": 40,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-external_camera_2_rgb-episode-1_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-external_camera_2_rgb-episode-1_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-wrist_camera_rgb-episode-1_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-wrist_camera_rgb-episode-1_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-external_camera_rgb-episode-1_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-external_camera_rgb-episode-1_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_3/2026-10-27_13-48-45/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-B",
+    "scenario_name": "Sequential Counter Drawer Open, Stow & Close",
+    "domain": "Residential / Breakroom Counter",
+    "ontology": "Type B (Intrinsic Reversible Prismatic)",
+    "model_comb": "comb_2a",
+    "seed": 4,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2b_counter/latest/exp04_d2b_counter.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 192.58,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_4/2026-10-27_13-51-24/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_4/2026-10-27_13-51-24/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_4/2026-10-27_13-51-24/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_4/2026-10-27_13-51-24/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_4/2026-10-27_13-51-24/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_4/2026-10-27_13-51-24/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_4/2026-10-27_13-51-24/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_4/2026-10-27_13-51-24/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_4/2026-10-27_13-51-24/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_4/2026-10-27_13-51-24/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_4/2026-10-27_13-51-24/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_4/2026-10-27_13-51-24/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-B",
+    "scenario_name": "Sequential Counter Drawer Open, Stow & Close",
+    "domain": "Residential / Breakroom Counter",
+    "ontology": "Type B (Intrinsic Reversible Prismatic)",
+    "model_comb": "comb_2a",
+    "seed": 5,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2b_counter/latest/exp04_d2b_counter.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 193.87,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_5/2026-10-27_13-54-37/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_5/2026-10-27_13-54-37/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_5/2026-10-27_13-54-37/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_5/2026-10-27_13-54-37/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_5/2026-10-27_13-54-37/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_5/2026-10-27_13-54-37/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_5/2026-10-27_13-54-37/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_5/2026-10-27_13-54-37/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_5/2026-10-27_13-54-37/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_5/2026-10-27_13-54-37/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_5/2026-10-27_13-54-37/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_5/2026-10-27_13-54-37/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-B",
+    "scenario_name": "Sequential Counter Drawer Open, Stow & Close",
+    "domain": "Residential / Breakroom Counter",
+    "ontology": "Type B (Intrinsic Reversible Prismatic)",
+    "model_comb": "comb_2a",
+    "seed": 6,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2b_counter/latest/exp04_d2b_counter.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 194.11,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_6/2026-10-27_13-57-52/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_6/2026-10-27_13-57-52/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_6/2026-10-27_13-57-52/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_6/2026-10-27_13-57-52/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_6/2026-10-27_13-57-52/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_6/2026-10-27_13-57-52/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_6/2026-10-27_13-57-52/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_6/2026-10-27_13-57-52/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_6/2026-10-27_13-57-52/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_6/2026-10-27_13-57-52/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_6/2026-10-27_13-57-52/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_6/2026-10-27_13-57-52/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-B",
+    "scenario_name": "Sequential Counter Drawer Open, Stow & Close",
+    "domain": "Residential / Breakroom Counter",
+    "ontology": "Type B (Intrinsic Reversible Prismatic)",
+    "model_comb": "comb_2a",
+    "seed": 7,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2b_counter/latest/exp04_d2b_counter.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 192.94,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_7/2026-10-27_14-01-07/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_7/2026-10-27_14-01-07/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_7/2026-10-27_14-01-07/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_7/2026-10-27_14-01-07/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_7/2026-10-27_14-01-07/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_7/2026-10-27_14-01-07/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_7/2026-10-27_14-01-07/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_7/2026-10-27_14-01-07/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_7/2026-10-27_14-01-07/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_7/2026-10-27_14-01-07/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_7/2026-10-27_14-01-07/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_7/2026-10-27_14-01-07/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-B",
+    "scenario_name": "Sequential Counter Drawer Open, Stow & Close",
+    "domain": "Residential / Breakroom Counter",
+    "ontology": "Type B (Intrinsic Reversible Prismatic)",
+    "model_comb": "comb_2a",
+    "seed": 8,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2b_counter/latest/exp04_d2b_counter.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 206.68,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_8/2026-10-27_14-04-20/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_8/2026-10-27_14-04-20/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_8/2026-10-27_14-04-20/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_8/2026-10-27_14-04-20/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_8/2026-10-27_14-04-20/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_8/2026-10-27_14-04-20/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_8/2026-10-27_14-04-20/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_8/2026-10-27_14-04-20/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_8/2026-10-27_14-04-20/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_8/2026-10-27_14-04-20/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_8/2026-10-27_14-04-20/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_8/2026-10-27_14-04-20/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-B",
+    "scenario_name": "Sequential Counter Drawer Open, Stow & Close",
+    "domain": "Residential / Breakroom Counter",
+    "ontology": "Type B (Intrinsic Reversible Prismatic)",
+    "model_comb": "comb_2a",
+    "seed": 9,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2b_counter/latest/exp04_d2b_counter.yaml",
+    "exit_code": 1,
+    "elapsed_seconds": 28.53,
+    "episode_length_steps": 37,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_9/2026-10-27_14-07-49/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_9/2026-10-27_14-07-49/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_9/2026-10-27_14-07-49/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_9/2026-10-27_14-07-49/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_9/2026-10-27_14-07-49/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-b/openpi/seed_9/2026-10-27_14-07-49/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-C",
+    "scenario_name": "Commercial Beverage Display Refrigerator Door Open & Beer Stow",
+    "domain": "Commercial / Facility / Breakroom",
+    "ontology": "Type B (Intrinsic Revolute Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 0,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2c_fridge/latest/exp04_d2c_fridge.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 214.36,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_0/2026-10-27_14-08-17/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_0/2026-10-27_14-08-17/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_0/2026-10-27_14-08-17/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_0/2026-10-27_14-08-17/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_0/2026-10-27_14-08-17/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_0/2026-10-27_14-08-17/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_0/2026-10-27_14-08-17/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_0/2026-10-27_14-08-17/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_0/2026-10-27_14-08-17/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_0/2026-10-27_14-08-17/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_0/2026-10-27_14-08-17/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_0/2026-10-27_14-08-17/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-C",
+    "scenario_name": "Commercial Beverage Display Refrigerator Door Open & Beer Stow",
+    "domain": "Commercial / Facility / Breakroom",
+    "ontology": "Type B (Intrinsic Revolute Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 1,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2c_fridge/latest/exp04_d2c_fridge.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 218.37,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_1/2026-10-27_14-11-52/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_1/2026-10-27_14-11-52/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_1/2026-10-27_14-11-52/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_1/2026-10-27_14-11-52/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_1/2026-10-27_14-11-52/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_1/2026-10-27_14-11-52/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_1/2026-10-27_14-11-52/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_1/2026-10-27_14-11-52/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_1/2026-10-27_14-11-52/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_1/2026-10-27_14-11-52/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_1/2026-10-27_14-11-52/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_1/2026-10-27_14-11-52/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-C",
+    "scenario_name": "Commercial Beverage Display Refrigerator Door Open & Beer Stow",
+    "domain": "Commercial / Facility / Breakroom",
+    "ontology": "Type B (Intrinsic Revolute Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 2,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2c_fridge/latest/exp04_d2c_fridge.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 196.69,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_2/2026-10-27_14-15-32/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_2/2026-10-27_14-15-32/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_2/2026-10-27_14-15-32/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_2/2026-10-27_14-15-32/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_2/2026-10-27_14-15-32/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_2/2026-10-27_14-15-32/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_2/2026-10-27_14-15-32/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_2/2026-10-27_14-15-32/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_2/2026-10-27_14-15-32/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_2/2026-10-27_14-15-32/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_2/2026-10-27_14-15-32/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_2/2026-10-27_14-15-32/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-C",
+    "scenario_name": "Commercial Beverage Display Refrigerator Door Open & Beer Stow",
+    "domain": "Commercial / Facility / Breakroom",
+    "ontology": "Type B (Intrinsic Revolute Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 3,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2c_fridge/latest/exp04_d2c_fridge.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 194.79,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_3/2026-10-27_14-18-48/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_3/2026-10-27_14-18-48/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_3/2026-10-27_14-18-48/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_3/2026-10-27_14-18-48/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_3/2026-10-27_14-18-48/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_3/2026-10-27_14-18-48/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_3/2026-10-27_14-18-48/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_3/2026-10-27_14-18-48/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_3/2026-10-27_14-18-48/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_3/2026-10-27_14-18-48/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_3/2026-10-27_14-18-48/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_3/2026-10-27_14-18-48/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-C",
+    "scenario_name": "Commercial Beverage Display Refrigerator Door Open & Beer Stow",
+    "domain": "Commercial / Facility / Breakroom",
+    "ontology": "Type B (Intrinsic Revolute Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 4,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2c_fridge/latest/exp04_d2c_fridge.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 194.89,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_4/2026-10-27_14-22-04/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_4/2026-10-27_14-22-04/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_4/2026-10-27_14-22-04/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_4/2026-10-27_14-22-04/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_4/2026-10-27_14-22-04/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_4/2026-10-27_14-22-04/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_4/2026-10-27_14-22-04/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_4/2026-10-27_14-22-04/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_4/2026-10-27_14-22-04/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_4/2026-10-27_14-22-04/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_4/2026-10-27_14-22-04/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_4/2026-10-27_14-22-04/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-C",
+    "scenario_name": "Commercial Beverage Display Refrigerator Door Open & Beer Stow",
+    "domain": "Commercial / Facility / Breakroom",
+    "ontology": "Type B (Intrinsic Revolute Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 5,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2c_fridge/latest/exp04_d2c_fridge.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 196.39,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_5/2026-10-27_14-25-20/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_5/2026-10-27_14-25-20/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_5/2026-10-27_14-25-20/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_5/2026-10-27_14-25-20/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_5/2026-10-27_14-25-20/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_5/2026-10-27_14-25-20/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_5/2026-10-27_14-25-20/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_5/2026-10-27_14-25-20/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_5/2026-10-27_14-25-20/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_5/2026-10-27_14-25-20/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_5/2026-10-27_14-25-20/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_5/2026-10-27_14-25-20/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-C",
+    "scenario_name": "Commercial Beverage Display Refrigerator Door Open & Beer Stow",
+    "domain": "Commercial / Facility / Breakroom",
+    "ontology": "Type B (Intrinsic Revolute Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 6,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2c_fridge/latest/exp04_d2c_fridge.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 197.21,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_6/2026-10-27_14-28-37/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_6/2026-10-27_14-28-37/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_6/2026-10-27_14-28-37/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_6/2026-10-27_14-28-37/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_6/2026-10-27_14-28-37/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_6/2026-10-27_14-28-37/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_6/2026-10-27_14-28-37/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_6/2026-10-27_14-28-37/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_6/2026-10-27_14-28-37/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_6/2026-10-27_14-28-37/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_6/2026-10-27_14-28-37/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_6/2026-10-27_14-28-37/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-C",
+    "scenario_name": "Commercial Beverage Display Refrigerator Door Open & Beer Stow",
+    "domain": "Commercial / Facility / Breakroom",
+    "ontology": "Type B (Intrinsic Revolute Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 7,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2c_fridge/latest/exp04_d2c_fridge.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 200.9,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_7/2026-10-27_14-31-55/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_7/2026-10-27_14-31-55/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_7/2026-10-27_14-31-55/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_7/2026-10-27_14-31-55/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_7/2026-10-27_14-31-55/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_7/2026-10-27_14-31-55/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_7/2026-10-27_14-31-55/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_7/2026-10-27_14-31-55/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_7/2026-10-27_14-31-55/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_7/2026-10-27_14-31-55/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_7/2026-10-27_14-31-55/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_7/2026-10-27_14-31-55/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-C",
+    "scenario_name": "Commercial Beverage Display Refrigerator Door Open & Beer Stow",
+    "domain": "Commercial / Facility / Breakroom",
+    "ontology": "Type B (Intrinsic Revolute Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 8,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2c_fridge/latest/exp04_d2c_fridge.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 198.52,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_8/2026-10-27_14-35-16/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_8/2026-10-27_14-35-16/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_8/2026-10-27_14-35-16/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_8/2026-10-27_14-35-16/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_8/2026-10-27_14-35-16/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_8/2026-10-27_14-35-16/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_8/2026-10-27_14-35-16/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_8/2026-10-27_14-35-16/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_8/2026-10-27_14-35-16/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_8/2026-10-27_14-35-16/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_8/2026-10-27_14-35-16/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_8/2026-10-27_14-35-16/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  },
+  {
+    "scenario": "D2-C",
+    "scenario_name": "Commercial Beverage Display Refrigerator Door Open & Beer Stow",
+    "domain": "Commercial / Facility / Breakroom",
+    "ontology": "Type B (Intrinsic Revolute Sub-Prim)",
+    "model_comb": "comb_2a",
+    "seed": 9,
+    "policy_type": "openpi",
+    "policy_port": 8008,
+    "spec_yaml": "generated_envs/exp04_d2c_fridge/latest/exp04_d2c_fridge.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 198.22,
+    "episode_length_steps": 1000,
+    "progress_score": 0.0,
+    "all_complete": false,
+    "objectives": {
+      "subtask_1/pick_and_place": {
+        "score": 0.0,
+        "is_complete": false,
+        "completed_groups": 0,
+        "total_groups": 1,
+        "active_predicates": {
+          "default_group": "objects_settled"
+        }
+      }
+    },
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_9/2026-10-27_14-38-36/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_9/2026-10-27_14-38-36/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_9/2026-10-27_14-38-36/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_9/2026-10-27_14-38-36/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_9/2026-10-27_14-38-36/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_9/2026-10-27_14-38-36/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_9/2026-10-27_14-38-36/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_9/2026-10-27_14-38-36/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_9/2026-10-27_14-38-36/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_9/2026-10-27_14-38-36/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_9/2026-10-27_14-38-36/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp04_rollouts/scenario_d2-c/openpi/seed_9/2026-10-27_14-38-36/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  }
+]

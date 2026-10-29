@@ -1,0 +1,26 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:eval_run_1788928970 a prov:Entity,
+        arena:EvaluationRun ;
+    prov:wasGeneratedBy :activity_eval_run_1788928970 ;
+    arena:blockingPredicate "object_on_destination(force_threshold=0.1, velocity_threshold=0.1)"^^xsd:string ;
+    arena:evaluatedGraph :droid_apple_to_wooden_bowl ;
+    arena:metric_all_complete_rate "0.0"^^xsd:float ;
+    arena:metric_mean_progress_score "0.5"^^xsd:float ;
+    arena:metric_num_episodes 2 ;
+    arena:metric_object_moved_rate "1.0"^^xsd:float ;
+    arena:metric_success_rate "0.0"^^xsd:float ;
+    arena:metricsPayload "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}"^^xsd:string ;
+    arena:semanticIntegrityVerified true .
+
+:activity_eval_run_1788928970 a prov:Activity ;
+    prov:endedAtTime "2026-09-09T04:42:50.655272+00:00"^^xsd:dateTime ;
+    prov:used :droid_apple_to_wooden_bowl,
+        :policy_isaaclab_arena_gr00t_policy_gr00t_remote_closedloop_policy_Gr00tRemoteClosedloopPolicy .
+
+:policy_isaaclab_arena_gr00t_policy_gr00t_remote_closedloop_policy_Gr00tRemoteClosedloopPolicy a prov:Entity ;
+    arena:modelWeightsPath "isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy"^^xsd:string .
+

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "scope": "Synthetic dependency-read PASS admission; no live GPU/provider/Neo4j/policy acceptance or inference",
+  "run": "web/arena-workbench/tests/e2e/functional-v7/.runs/arena-f0-backend-653bcee8b284",
+  "status": "passed",
+  "tests": {
+    "isaaclab_arena_examples/tests/test_workbench_readiness.py": 94,
+    "isaaclab_arena_examples/tests/test_workbench_policy_readiness.py": 16,
+    "isaaclab_arena_examples/tests/test_workbench_evaluate.py": 78,
+    "isaaclab_arena_examples/tests/test_workbench_evaluation_harness.py": 22
+  },
+  "total_tests": 210,
+  "failed_or_skipped": 0,
+  "junit_sha256": "924a59126151857065dd98f6bcb5c2cb696f7aa00e7dd6ed30445374171dbcf9",
+  "source_manifest_sha256": "246f01e1fca50d21ec14d48a7592f7099248b814157e10ef0af3aafbee179a1f",
+  "owned_sources_match_staged_manifest": true,
+  "source_sha256": {
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness.py": "9f54de864abb25e7e1f1b7745a5872e53c4516c13ea426217612eede3df6dd9e",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness_worker.py": "4af0866d4b0c7551fdc694d34af28c5735733ff697509eab1e1e2c10868ea578",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/readiness_process.py": "4240bba956b046fc991762c69f49c406afee5ac98cc78dd6e75df47f3617b1ee",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/resource_readiness.py": "3f1eb87a9531411f12b656dff6a37e3ad933e232a35dd17cd9910ae454f476bc",
+    "isaaclab_arena_examples/agentic_environment_generation/web_api/provider_readiness.py": "1a15cca8e9898baa49309cf3f6656ccb289ca9b549fa24f01ec430640b3efec4",
+    "isaaclab_arena_examples/tests/test_workbench_readiness.py": "235fc747dd4256529a86c0e5f0b16db4bbc1d667907b727ff03da9ab2e48c21d"
+  },
+  "forbidden": {"network": 0, "provider": 0, "graph": 0, "render": 0, "workload": 0, "subprocess": 0},
+  "cleanup_verified": true,
+  "remaining_owned": [],
+  "staged_source_unchanged": true,
+  "lint": "Offline cached black 24.3.0 --line-length 120 --unstable; isort 5.13.2 --profile black --filter-files; flake8 7.0.0; git diff --check passed on owned source",
+  "test_command": "python3 scripts/run-functional-checks.py --runtime-image sha256:e20b3cc8258b793aaf1fe47c130f54e677fa9c0a6427991cfc1045b743162da5 --provision-manifest web/arena-workbench/tests/e2e/functional-v7/.runs/arena-f0-backend-1353292277b9/provision-manifest.json backend isaaclab_arena_examples/tests/test_workbench_readiness.py isaaclab_arena_examples/tests/test_workbench_policy_readiness.py isaaclab_arena_examples/tests/test_workbench_evaluate.py isaaclab_arena_examples/tests/test_workbench_evaluation_harness.py",
+  "red_green_runs_prefix": "arena-f0-backend-",
+  "red_green": {
+    "a2_actual_graph_required": ["54d2033feb78", "9787dfd723dc"],
+    "gpu_build_pass": ["e3f3e89810ec", "5d0b555f394b"],
+    "private_worker_visibility": ["ccc56bfb94d1", "b80ebc39a7cf"],
+    "provider_explicit_optin_pass": ["405fe6664a48", "76a369217e08"],
+    "provider_duplicate_timeout_malformed": ["3e8ba2d9f334", "0196e64df345"],
+    "gpu_mig_and_deadline": ["33ef39083093", "a4c395b8a33e", "62f57991242c"],
+    "private_key_environment_screen": ["4c66c4c7a75d", "07ddd03ab892"],
+    "provider_missing_dependency": ["be7d89beba7e", "5a346cceddae"],
+    "early_block_retains_requested_dependency": ["cc7d17a4ce19", "653bcee8b284"],
+    "no_gpu_spawn_after_deadline": ["1ccb7b696130", "653bcee8b284"]
+  },
+  "remaining_parent_integration": [
+    "Provision new server-only GPU_MIN_FREE_MIB/GPU_UUID environment keys through approved helper; existing lease must already exist and be owned by non-root execution user",
+    "Synchronize frontend READINESS_CODES and explicitly opt-in provider consent; frontend execution was denied and was not attempted",
+    "Parent owns policy_readiness.decode_codec_reply / test_workbench_policy_wire.py N1.6 raw-safe integration; that new test file was not part of this exact four-suite run",
+    "Bounded policy-smoke job/effect/receipt contract remains unfinished, awaiting frontend approval; metadata PASS does not prove inference or physical success"
+  ]
+}

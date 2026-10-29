@@ -1,0 +1,33 @@
+[
+  {
+    "track": "Track-3B",
+    "arm": "Arm-B (QwQ-32B)",
+    "scenario": "D1-B",
+    "scenario_name": "Cavity Turntable Stowage Standalone (Door Pre-Opened 90 deg)",
+    "spec_yaml": "generated_envs/droid_microwave_articulation/arm_b/subtask_3b_cavity_stow.yaml",
+    "policy_type": "gr00t",
+    "policy_model": "nvidia/GR00T-N1.7-3B",
+    "receptacle": "microwave",
+    "exit_code": 0,
+    "elapsed_seconds": 142.39,
+    "episodes_completed": 1,
+    "episode_length_steps": 0,
+    "progress_score": 0.0,
+    "task_success": false,
+    "events_count": 0,
+    "snapshots": [
+      "artifacts/experiments/exp03_rollouts/track-3b/scenario_d1-b/arm-b/2026-10-21_13-42-53/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp03_rollouts/track-3b/scenario_d1-b/arm-b/2026-10-21_13-42-53/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp03_rollouts/track-3b/scenario_d1-b/arm-b/2026-10-21_13-42-53/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp03_rollouts/track-3b/scenario_d1-b/arm-b/2026-10-21_13-42-53/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp03_rollouts/track-3b/scenario_d1-b/arm-b/2026-10-21_13-42-53/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp03_rollouts/track-3b/scenario_d1-b/arm-b/2026-10-21_13-42-53/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp03_rollouts/track-3b/scenario_d1-b/arm-b/2026-10-21_13-42-53/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp03_rollouts/track-3b/scenario_d1-b/arm-b/2026-10-21_13-42-53/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp03_rollouts/track-3b/scenario_d1-b/arm-b/2026-10-21_13-42-53/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp03_rollouts/track-3b/scenario_d1-b/arm-b/2026-10-21_13-42-53/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp03_rollouts/track-3b/scenario_d1-b/arm-b/2026-10-21_13-42-53/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp03_rollouts/track-3b/scenario_d1-b/arm-b/2026-10-21_13-42-53/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  }
+]

@@ -199,6 +199,214 @@ class TestGenerateSpec:
         assert client.chat.completions.create.call_count == 2
         assert any("is not in the background prim tree" in line for line in agent_obj.traces)
 
+    def test_active_bayesian_repair_loop_on_shacl_violation(self, agent):
+        agent_obj, client = agent
+        # First response: invalid hierarchical placement (cube placed directly on background table instead of shelf)
+        invalid_pass1 = minimal_spec_dict()
+        invalid_pass1["objects"].append({
+            "id": "wireshelving",
+            "registry_name": "wireshelving_a01_vomp_robolab",
+            "params": {},
+        })
+        invalid_pass1["relations"] = [
+            {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "wireshelving", "reference": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "bowl_ycb_robolab", "reference": "maple_table_robolab", "params": {}},
+            # rubiks_cube placed on maple_table_robolab directly despite wireshelving presence (triggers SHACL violation)
+            {"kind": "on", "subject": "rubiks_cube_hot3d_robolab", "reference": "maple_table_robolab", "params": {}},
+        ]
+
+        # Repaired response: rubiks_cube and bowl placed on wireshelving
+        repaired_spec_dict = minimal_spec_dict()
+        repaired_spec_dict["objects"].append({
+            "id": "wireshelving",
+            "registry_name": "wireshelving_a01_vomp_robolab",
+            "params": {},
+        })
+        repaired_spec_dict["relations"] = [
+            {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "wireshelving", "reference": "maple_table_robolab", "params": {}},
+            {
+                "kind": "on",
+                "subject": "bowl_ycb_robolab",
+                "reference": "wireshelving",
+                "params": {"surface_anchor": "shelf_tier_2"},
+            },
+            {
+                "kind": "on",
+                "subject": "rubiks_cube_hot3d_robolab",
+                "reference": "wireshelving",
+                "params": {"surface_anchor": "shelf_tier_1"},
+            },
+        ]
+
+        client.chat.completions.create.side_effect = [
+            chat_response(content=json.dumps(invalid_pass1)),
+            chat_response(content=json.dumps(repaired_spec_dict)),
+        ]
+
+        spec, data = agent_obj.generate_spec(
+            "pick up cube from shelf on table",
+            asset_catalog=catalog("catalog"),
+            relation_catalog=relation_catalog("RELATIONS"),
+            task_catalog=make_task_catalog("TASKS"),
+        )
+        assert spec is not None
+        assert data is None
+        assert client.chat.completions.create.call_count == 2
+        assert any("SHACL constraint violation on iteration 1" in line for line in agent_obj.traces)
+        assert any("SHACL semantic validation passed on iteration 2" in line for line in agent_obj.traces)
+        assert spec.reified_relations is not None
+        assert len(spec.reified_relations) >= 1
+
+    def test_active_inference_stagnation_guard_triggers_deterministic_fallback(self, agent):
+        agent_obj, client = agent
+        # Spec with invalid hierarchical placement
+        invalid_spec = minimal_spec_dict()
+        invalid_spec["objects"].append({
+            "id": "wireshelving",
+            "registry_name": "wireshelving_a01_vomp_robolab",
+            "params": {},
+        })
+        invalid_spec["relations"] = [
+            {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "wireshelving", "reference": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "bowl_ycb_robolab", "reference": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "rubiks_cube_hot3d_robolab", "reference": "maple_table_robolab", "params": {}},
+        ]
+
+        # Return identical invalid spec on repair to simulate LLM stagnation/cycle
+        client.chat.completions.create.side_effect = [
+            chat_response(content=json.dumps(invalid_spec)),
+            chat_response(content=json.dumps(invalid_spec)),
+        ]
+
+        spec, data = agent_obj.generate_spec(
+            "pick up cube from shelf on table",
+            asset_catalog=catalog("catalog"),
+            relation_catalog=relation_catalog("RELATIONS"),
+            task_catalog=make_task_catalog("TASKS"),
+        )
+        assert spec is not None
+        assert data is None
+        # Verify stagnation guard triggered and halted LLM calls
+        assert any("Stagnation/cycle detected" in line for line in agent_obj.traces)
+        # Verify deterministic fallback resolved the relations to the wireshelving fixture
+        cube_rel = next(r for r in spec.relations if r.subject == "rubiks_cube_hot3d_robolab")
+        assert cube_rel.reference == "wireshelving"
+
+    def test_active_inference_repair_none_triggers_deterministic_fallback(self, agent):
+        agent_obj, client = agent
+        invalid_spec = minimal_spec_dict()
+        invalid_spec["objects"].append({
+            "id": "wireshelving",
+            "registry_name": "wireshelving_a01_vomp_robolab",
+            "params": {},
+        })
+        invalid_spec["relations"] = [
+            {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "wireshelving", "reference": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "rubiks_cube_hot3d_robolab", "reference": "maple_table_robolab", "params": {}},
+        ]
+
+        # LLM returns invalid JSON on repair
+        client.chat.completions.create.side_effect = [
+            chat_response(content=json.dumps(invalid_spec)),
+            chat_response(content="invalid json"),
+            chat_response(content="invalid json"),
+            chat_response(content="invalid json"),
+            chat_response(content="invalid json"),
+        ]
+
+        spec, data = agent_obj.generate_spec(
+            "pick up cube from shelf on table",
+            asset_catalog=catalog("catalog"),
+            relation_catalog=relation_catalog("RELATIONS"),
+            task_catalog=make_task_catalog("TASKS"),
+        )
+        assert spec is not None
+        assert data is None
+        assert any("Applying deterministic fallback" in line for line in agent_obj.traces)
+        cube_rel = next(r for r in spec.relations if r.subject == "rubiks_cube_hot3d_robolab")
+        assert cube_rel.reference == "wireshelving"
+
+    def test_active_inference_repair_on_spatial_geometric_violation(self, agent):
+        """Test that spatial geometric violations (e.g. ungrounded object / overhang) trigger active LLM repair."""
+        agent_obj, client = agent
+        # First response: ungrounded bowl with no support relation
+        invalid_spec = minimal_spec_dict()
+        invalid_spec["relations"] = [
+            {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "rubiks_cube_hot3d_robolab", "reference": "maple_table_robolab", "params": {}},
+            # bowl_ycb_robolab has no support relation (ungrounded)
+        ]
+
+        # Repaired response: bowl is grounded on table
+        repaired_spec = minimal_spec_dict()
+        repaired_spec["relations"] = [
+            {"kind": "is_anchor", "subject": "maple_table_robolab", "params": {}},
+            {"kind": "on", "subject": "rubiks_cube_hot3d_robolab", "reference": "maple_table_robolab", "params": {}},
+            {
+                "kind": "on",
+                "subject": "bowl_ycb_robolab",
+                "reference": "maple_table_robolab",
+                "params": {"surface_anchor": "table_top"},
+            },
+        ]
+
+        client.chat.completions.create.side_effect = [
+            chat_response(content=json.dumps(invalid_spec)),
+            chat_response(content=json.dumps(repaired_spec)),
+        ]
+
+        spec, data = agent_obj.generate_spec(
+            "pick up cube from table and place in bowl",
+            asset_catalog=catalog("catalog"),
+            relation_catalog=relation_catalog("RELATIONS"),
+            task_catalog=make_task_catalog("TASKS"),
+        )
+        assert spec is not None
+        assert data is None
+        assert client.chat.completions.create.call_count == 2
+        assert any("Spatial & Geometric Violations" in line for line in agent_obj.traces)
+        assert any("Spatial Geometric validation passed" in line for line in agent_obj.traces)
+        assert agent_obj.telemetry is not None
+        assert agent_obj.telemetry.repair_iterations == 1
+        assert agent_obj.telemetry.converged is True
+        summary_card = agent_obj.telemetry.render_summary_card()
+        assert "Active Bayesian Inference" in summary_card
+        assert "Repair Iterations:   1" in summary_card
+
+    def test_refine_spec_with_user_feedback(self, agent):
+        """Test that refine_spec successfully applies user modification feedback to an existing spec."""
+        agent_obj, client = agent
+        base_dict = minimal_spec_dict()
+        base_spec = ArenaEnvGraphSpec.model_validate(base_dict)
+
+        # Refined spec swaps bowl with wooden bowl and adds a banana
+        refined_dict = minimal_spec_dict()
+        refined_dict["objects"].append({"id": "banana", "registry_name": "banana_ycb_robolab", "role": "object"})
+        refined_dict["relations"].append({
+            "kind": "on",
+            "subject": "banana",
+            "reference": "maple_table_robolab",
+            "params": {"surface_anchor": "table_top"},
+        })
+
+        client.chat.completions.create.return_value = chat_response(content=json.dumps(refined_dict))
+
+        spec, data = agent_obj.refine_spec(
+            base_spec,
+            "Add a banana onto the maple table next to the cube",
+            asset_catalog=catalog("catalog"),
+            relation_catalog=relation_catalog("RELATIONS"),
+            task_catalog=make_task_catalog("TASKS"),
+        )
+        assert spec is not None
+        assert data is None
+        assert any(obj.id == "banana" for obj in spec.objects)
+        assert client.chat.completions.create.call_count == 1
+
     @staticmethod
     def _missing_objects_response(*phrases: str):
         """A canned reply from the pass that names what the asset catalog does not cover."""

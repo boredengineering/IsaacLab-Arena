@@ -1,0 +1,33 @@
+[
+  {
+    "seed": 0,
+    "spec_yaml": "generated_envs/exp04_d1c_microwave/remediated/arm_c_remediated.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 159.46,
+    "task_success": false,
+    "progress_score": 0.3333333432674408,
+    "events": [
+      {
+        "step": 17,
+        "objective": "subtask_1/pick_and_place",
+        "group": "default_group",
+        "predicate_index": 0,
+        "predicate_name": "objects_settled",
+        "score_delta": 0.3333333333333333
+      }
+    ],
+    "ee_drift_0_50_m": 0.0,
+    "d_min_handle_m": null,
+    "d_min_can_m": null,
+    "max_door_rot_rad": 1.0,
+    "max_door_rot_deg": 57.3,
+    "max_can_vel_mps": 1.962,
+    "max_can_lift_m": 0.2295,
+    "gates": {
+      "gate_1_zero_flail (<0.05m)": true,
+      "gate_2_handle_approach (<0.15m)": false,
+      "gate_3_door_rotation (>=45deg)": true,
+      "gate_4_subtask_exit (progress>=0.33)": true
+    }
+  }
+]

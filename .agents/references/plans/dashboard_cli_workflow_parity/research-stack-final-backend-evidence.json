@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "scope": "Isolated backend integration after parent-resolved review findings; not browser or live acceptance",
+  "run": "arena-f0-backend-159030c09861",
+  "tests": 382,
+  "unique_tests": 382,
+  "by_suite": {
+    "isaaclab_arena.tests.test_policy_contract": 29,
+    "isaaclab_arena_gr00t.tests.test_serving_metadata": 100,
+    "isaaclab_arena_gr00t.tests.test_gr00t_remote_closedloop_policy": 20,
+    "isaaclab_arena_examples.tests.test_workbench_readiness": 101,
+    "isaaclab_arena_examples.tests.test_workbench_policy_readiness": 16,
+    "isaaclab_arena_examples.tests.test_workbench_evaluate": 78,
+    "isaaclab_arena_examples.tests.test_workbench_evaluation_harness": 22,
+    "isaaclab_arena_examples.tests.test_workbench_policy_wire": 6,
+    "isaaclab_arena_examples.tests.test_workbench_paused_start": 10
+  },
+  "source_files_matched": 434,
+  "forbidden": {
+    "network": 0,
+    "provider": 0,
+    "graph": 0,
+    "render": 0,
+    "workload": 0,
+    "subprocess": 0
+  },
+  "cleanup_verified": true,
+  "remaining_owned": [],
+  "artifacts": {
+    "run-proof.json": "813e57f6a796238f139531af88d5b04240619fe7502e60fa0dbb566cd6909973",
+    "evidence/pytest.xml": "5a9483fc6eea979f1a010a5a1884210a38a89820ccc0b82224a85355be909668",
+    "source-manifest.json": "0cde616ae27b2fbb61a6b07d05e48d6dd5192c3e2b552bdc69349a0cd53ff36e"
+  },
+  "review_disposition": {
+    "byte_key_npy_bypass": "parent reproduced then fixed; poisoned decoder regressions pass",
+    "unicode_envelope_expansion": "delegate RED/GREEN; parent final integration passes; limits unchanged",
+    "fresh_independent_rereview_after_these_two_fixes": false
+  },
+  "not_delivered": [
+    "mounted frontend controls and consent",
+    "startup compatible with existing writable-root containers",
+    "complete backend mutation-contract acceptance",
+    "bounded policy-smoke job if required",
+    "live dependency/model/runtime and browser deployment acceptance"
+  ]
+}

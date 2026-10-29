@@ -57,8 +57,14 @@ class PrimPathInference:
         from isaaclab_arena.utils.usd.prim_tree import load_usd_prim_tree
 
         spec = _enforce_object_reference_types(spec)
-        usd_path = spec.background.resolve_usd_path()
-        prim_tree = load_usd_prim_tree(usd_path)
+        try:
+            usd_path = spec.background.resolve_usd_path()
+            prim_tree = load_usd_prim_tree(usd_path)
+        except Exception as exc:
+            traces.append(
+                f"Warning: Could not open USD prim tree for background {spec.background.registry_name}: {exc}"
+            )
+            return spec
         data = self._inference_backend.run_json(
             StructuredOutputRequest(
                 schema_name="ResolvedObjectReferences",

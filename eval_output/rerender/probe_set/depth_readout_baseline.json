@@ -1,0 +1,25 @@
+{
+  "model_path": "/models/isaaclab_arena/static_apple_tutorial/gn1x_tuned_static_apple",
+  "rerender_dir": "/workspaces/isaaclab_arena/eval_output/rerender/probe_set",
+  "train_episodes": [
+    0
+  ],
+  "test_episode": 1,
+  "train_pairs": 880,
+  "test_pairs": 880,
+  "embedding_dim": 2048,
+  "ridge_alpha": 100.0,
+  "probe": {
+    "median_abs_error_m": 0.013304363049305351,
+    "mean_abs_error_m": 0.01750872483728499,
+    "r2": 0.9965611260120569
+  },
+  "constant_predictor": {
+    "median_abs_error_m": 0.11057189771963241,
+    "mean_abs_error_m": 0.18824368858874513,
+    "r2": 0.0
+  },
+  "depth_std_m": 0.39999700146133244,
+  "improvement_over_constant_m": 0.09726753467032706,
+  "verdict": "READS DEPTH: the embedding predicts held-out depth better than the scene's mean."
+}

@@ -18,13 +18,89 @@ from isaaclab_arena.agentic_environment_generation.inference_backend import (
     build_strict_schema,
 )
 from isaaclab_arena.agentic_environment_generation.spec_validation import (
+    collect_agent_ready_task_validation_traces,
     collect_agent_ready_validation_trace,
     format_validation_error,
 )
+from isaaclab_arena.agentic_environment_generation.spec_wire_adapter import SpecWireAdapter
 from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
 MAX_SPEC_INFERENCE_CALLS = 3
 """Maximum generation calls, including critic retries after validation failures."""
+
+
+def _sanitize_spec_candidate(data: dict[str, Any]) -> dict[str, Any]:
+    """Sanitize LLM-generated spec dict before Pydantic domain validation."""
+    if not isinstance(data, dict):
+        return data
+
+    if "cli_override_specs" in data and isinstance(data["cli_override_specs"], list):
+        swappable_ids: set[str] = set()
+        emb = data.get("embodiment")
+        if isinstance(emb, dict) and isinstance(emb.get("id"), str):
+            swappable_ids.add(emb["id"])
+        bg = data.get("background")
+        if isinstance(bg, dict) and isinstance(bg.get("id"), str):
+            swappable_ids.add(bg["id"])
+        objs = data.get("objects")
+        if isinstance(objs, list):
+            for obj in objs:
+                if isinstance(obj, dict) and isinstance(obj.get("id"), str):
+                    swappable_ids.add(obj["id"])
+
+        valid_overrides = []
+        seen_args: set[str] = set()
+        for item in data["cli_override_specs"]:
+            if isinstance(item, dict):
+                arg = str(item.get("arg", "")).lstrip("-")
+                target = item.get("target_node_id")
+                if target in swappable_ids and arg and arg not in seen_args:
+                    seen_args.add(arg)
+                    valid_overrides.append({"arg": arg, "target_node_id": target})
+        data["cli_override_specs"] = valid_overrides
+
+    if "object_references" in data and isinstance(data["object_references"], list):
+        obj_ids = {obj.get("id") for obj in data.get("objects", []) if isinstance(obj, dict)}
+        valid_refs = []
+        for ref in data["object_references"]:
+            if isinstance(ref, dict):
+                parent_id = ref.get("parent_id")
+                if parent_id in obj_ids:
+                    ref_id = ref.get("id")
+                    tasks = data.get("task", {}).get("subtasks", [])
+                    if isinstance(tasks, list):
+                        for subtask in tasks:
+                            if isinstance(subtask, dict) and isinstance(subtask.get("params"), dict):
+                                if subtask["params"].get("destination_location") == ref_id:
+                                    subtask["params"]["destination_location"] = parent_id
+                    continue
+                valid_refs.append(ref)
+            else:
+                valid_refs.append(ref)
+        data["object_references"] = valid_refs
+
+    if "relations" in data and isinstance(data["relations"], list):
+        unary_kinds = {
+            "is_anchor",
+            "requires_reachability",
+            "random_around_solution",
+            "rotate_around_solution",
+            "at_position",
+            "position_limits",
+        }
+        for rel in data["relations"]:
+            if isinstance(rel, dict):
+                if rel.get("kind") in unary_kinds:
+                    rel["reference"] = None
+
+    if "placement_validators" in data and isinstance(data["placement_validators"], dict):
+        pv = data["placement_validators"]
+        req = pv.get("required_checks")
+        enb = pv.get("enabled_checks")
+        if isinstance(req, list) and isinstance(enb, list):
+            pv["enabled_checks"] = list(dict.fromkeys(enb + req))
+
+    return data
 
 
 class SpecInference:
@@ -32,7 +108,12 @@ class SpecInference:
 
     def __init__(self, inference_backend: InferenceBackend):
         self._inference_backend = inference_backend
-        self._schema = build_strict_schema(ArenaEnvGraphSpec)
+        profile = inference_backend.inference_profile
+        user_defined = profile is not None and profile.get("origin") == "user_defined"
+        wire = profile is not None and (profile["request_policy"]["structured_output"] == "json_schema")
+        self._wire_adapter = SpecWireAdapter() if wire else None
+        self._strict_domain_adapter = SpecWireAdapter() if user_defined and not wire else None
+        self._schema = self._wire_adapter.schema if self._wire_adapter else build_strict_schema(ArenaEnvGraphSpec)
 
     def infer(
         self,
@@ -56,9 +137,10 @@ class SpecInference:
             task_catalog: Task vocabulary for the user message.
 
         Returns:
-            A ``(spec, data)`` tuple. On success, ``spec`` is validated and ``data`` is the
-            parsed model JSON. On failure, ``spec`` is ``None`` and ``data`` is the raw
-            response object.
+            A ``(spec, data)`` tuple. ``data`` is parsed domain JSON, with wire maps
+            decoded for documented OpenAI profiles. On domain-validation failure,
+            ``spec`` is ``None`` and ``data`` retains that candidate's evidence.
+            Malformed wire data fails before domain validation, without coercion.
         """
         base_user_message = self._user_message(
             prompt,
@@ -68,16 +150,27 @@ class SpecInference:
         )
         user_message = base_user_message
         data: dict[str, Any] = {}
-        for call_index in range(MAX_SPEC_INFERENCE_CALLS):
+        strict_wire = bool(self._wire_adapter or self._strict_domain_adapter)
+        max_calls = 1 if strict_wire else MAX_SPEC_INFERENCE_CALLS
+
+        for call_index in range(max_calls):
             data = self._inference_backend.run_json(
                 StructuredOutputRequest(
                     schema_name="ArenaEnvGraphSpec",
                     schema=self._schema,
-                    system=self._system_prompt(),
+                    system=self._request_system_prompt(),
                     user=user_message,
                     retry_label="generate_spec",
+                    parse_json=SpecWireAdapter.parse_json if strict_wire else None,
                 )
             )
+            if self._wire_adapter:
+                data = self._wire_adapter.decode(data)
+            elif self._strict_domain_adapter:
+                data = self._strict_domain_adapter.decode(self._strict_domain_adapter.encode(data))
+            else:
+                data = _sanitize_spec_candidate(data)
+
             try:
                 spec = ArenaEnvGraphSpec.model_validate(data)
                 validation_traces = collect_agent_ready_validation_trace(
@@ -89,11 +182,13 @@ class SpecInference:
             except ValidationError as exc:
                 spec = None
                 validation_traces = format_validation_error(exc)
+
             if spec is not None and not validation_traces:
                 return spec, data
-            if call_index + 1 < MAX_SPEC_INFERENCE_CALLS:
+
+            if call_index + 1 < max_calls:
                 print(
-                    f"[generate_spec] critic retry {call_index + 1}/{MAX_SPEC_INFERENCE_CALLS - 1} "
+                    f"[generate_spec] critic retry {call_index + 1}/{max_calls - 1} "
                     f"after validation failed: {'; '.join(validation_traces)}",
                     flush=True,
                 )
@@ -101,6 +196,83 @@ class SpecInference:
                 continue
             traces.extend(validation_traces)
         return None, data
+
+    def repair_with_feedback(
+        self,
+        previous_spec: ArenaEnvGraphSpec | dict[str, Any],
+        feedback_report: str,
+        traces: list[str],
+        asset_catalog: Any = None,
+        relation_catalog: Any = None,
+        task_catalog: Any = None,
+        original_prompt: str = "",
+        available_affordances: list[str] | None = None,
+    ) -> tuple[ArenaEnvGraphSpec | None, dict[str, Any]]:
+        """Repair a failed ArenaEnvGraphSpec using structured diagnostic feedback.
+
+        Uses a lightweight focused repair prompt to conserve token budget and prevent
+        catalogue re-transmission bloat.
+
+        Args:
+            previous_spec: The failed spec or raw dict.
+            feedback_report: Detailed SHACL or physical constraint violation diagnostics.
+            traces: Diagnostic trace accumulator.
+            asset_catalog: Optional asset catalogue (omitted by default in repair to save tokens).
+            relation_catalog: Optional relation catalogue.
+            task_catalog: Optional task catalogue.
+            original_prompt: Original user goal description.
+            available_affordances: List of valid introspected USD affordance patches.
+
+        Returns:
+            A ``(spec, data)`` tuple with the repaired spec or raw dict on failure.
+        """
+        if isinstance(previous_spec, ArenaEnvGraphSpec):
+            prev_json = previous_spec.model_dump(mode="json") if self._wire_adapter else previous_spec.to_dict()
+        else:
+            prev_json = previous_spec
+        if self._wire_adapter:
+            prev_json = self._wire_adapter.encode(prev_json)
+        repair_user_msg = self._repair_user_message(
+            original_prompt=original_prompt,
+            previous_spec=prev_json,
+            feedback_report=feedback_report,
+            available_affordances=available_affordances,
+            asset_catalog=asset_catalog,
+        )
+        strict_wire = bool(self._wire_adapter or self._strict_domain_adapter)
+        data = self._inference_backend.run_json(
+            StructuredOutputRequest(
+                schema_name="ArenaEnvGraphSpec",
+                schema=self._schema,
+                system=self._request_system_prompt(),
+                user=repair_user_msg,
+                retry_label="repair_spec",
+                parse_json=SpecWireAdapter.parse_json if strict_wire else None,
+            )
+        )
+        if self._wire_adapter:
+            data = self._wire_adapter.decode(data)
+        elif self._strict_domain_adapter:
+            data = self._strict_domain_adapter.decode(self._strict_domain_adapter.encode(data))
+        else:
+            data = _sanitize_spec_candidate(data)
+        try:
+            spec = ArenaEnvGraphSpec.model_validate(data)
+        except ValidationError as exc:
+            traces.extend(format_validation_error(exc))
+            return None, data
+        if asset_catalog is not None or task_catalog is not None or relation_catalog is not None:
+            traces.extend(
+                collect_agent_ready_validation_trace(
+                    spec,
+                    asset_catalog=asset_catalog,
+                    task_catalog=task_catalog,
+                    relation_catalog=relation_catalog,
+                )
+            )
+        else:
+            traces.extend(collect_agent_ready_task_validation_traces(spec))
+        return spec, data
 
     @staticmethod
     def _critic_user_message(
@@ -125,6 +297,59 @@ REJECTED RESPONSE:
 {rejected}
 """
 
+    def _request_system_prompt(self) -> str:
+        prompt = self._system_prompt()
+        if not self._wire_adapter:
+            return prompt
+        return prompt.replace("OUTPUT SCHEMA STRUCTURE:", "DOMAIN EXAMPLE (not the wire output format):") + r"""
+STRICT WIRE FORMAT — arena-spec-params-entries/v1:
+The domain example and catalog describe semantics, not the response encoding.
+Keep the complete scene structure as JSON objects/arrays matching the response schema.
+ONLY each schema-declared freeform params map (assets, object references, tasks,
+spatial relations) is an array of unique {"key": string, "value_json": string} entries.
+Each value_json is valid JSON text for exactly ONE original parameter value,
+including nested objects, arrays, strings, numbers, booleans and null. Preserve
+nested keys and values; do not recursively convert dictionaries inside value_json.
+Example domain params {"surface_anchor":"table_top","initial_pose":{"position_xyz":[0,0,1]}}
+becomes params [{"key":"surface_anchor","value_json":"\"table_top\""},
+{"key":"initial_pose","value_json":"{\"position_xyz\":[0,0,1]}"}].
+An empty params map is []. Never encode the entire scene as a JSON string.
+Emit every schema property (use null only where the schema allows it), with no
+extra properties, duplicate keys, nonfinite numbers, markdown fences or comments.
+The previous repair candidate, when present, uses this same map encoding but may
+be incomplete or domain-invalid; preserve its valid data and fix the feedback.
+"""
+
+    @staticmethod
+    def _repair_user_message(
+        original_prompt: str,
+        previous_spec: dict[str, Any],
+        feedback_report: str,
+        available_affordances: list[str] | None = None,
+        asset_catalog: Any = None,
+    ) -> str:
+        affordance_sec = ""
+        if available_affordances:
+            affordance_sec = (
+                "\nAVAILABLE INTROSPECTED AFFORDANCE PATCHES (USD Ground Truth):\n"
+                f"{json.dumps(available_affordances, indent=2)}\n"
+            )
+        catalog_sec = ""
+        if asset_catalog is not None:
+            cat_str = (
+                asset_catalog.to_catalog_string() if hasattr(asset_catalog, "to_catalog_string") else str(asset_catalog)
+            )
+            catalog_sec = f"\nREGISTERED ASSET VOCABULARY:\n{cat_str}\n\n"
+        prompt_sec = f"TARGET GOAL / REFINEMENT REQUEST:\n{original_prompt}\n\n" if original_prompt else ""
+        return (
+            f"{catalog_sec}{prompt_sec}PREVIOUS CANDIDATE SPEC:\n{json.dumps(previous_spec, indent=2)}\n\nDIAGNOSTIC"
+            f" FEEDBACK & INSTRUCTIONS:\n{feedback_report}\n{affordance_sec}\nINSTRUCTION:\nPerform a targeted"
+            " modification on the candidate spec to satisfy all instructions and constraint feedback above.\n1. Update"
+            " objects, relations, surface anchors, or containment hierarchies so they conform to registered catalogue"
+            " names.\n2. Keep all valid unchanged objects, background, and embodiment configurations.\n3. Emit the"
+            " complete valid ArenaEnvGraphSpec JSON matching the schema."
+        )
+
     @staticmethod
     def _user_message(
         prompt: str,
@@ -137,13 +362,67 @@ REJECTED RESPONSE:
             f"{relation_catalog.to_catalog_string()}\n\n"
             f"{task_catalog.to_catalog_string()}"
         )
-        return f"{vocabulary}\n\nUSER PROMPT:\n{prompt}"
+        if prompt:
+            return f"{vocabulary}\n\nUSER PROMPT:\n{prompt}"
+        return vocabulary
 
     @staticmethod
     def _system_prompt() -> str:
         return """\
 You are an environment-generator for robot manipulation tasks.
-Convert a natural-language prompt into an ArenaEnvGraphSpec.
+Convert a natural-language prompt into an ArenaEnvGraphSpec with formal semantic reification.
+
+OUTPUT SCHEMA STRUCTURE:
+{
+  "env_name": "short_descriptive_snake_case_name",
+  "embodiment": {
+    "id": "robot_id",
+    "registry_name": "exact_embodiment_name_from_catalog",
+    "params": {"initial_pose": {"position_xyz": [-0.55, 0.0, 0.0], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}}
+  },
+  "background": {
+    "id": "background_id",
+    "registry_name": "exact_background_name_from_catalog",
+    "params": {}
+  },
+  "objects": [
+    {"id": "object_id", "registry_name": "exact_object_name_from_catalog", "params": {}}
+  ],
+  "relations": [
+    {"kind": "is_anchor", "subject": "background_id", "params": {}},
+    {"kind": "on", "subject": "object_id", "reference": "background_id", "params": {"surface_anchor": "table_top", "surface_sector": "front_center"}}
+  ],
+  "reified_relations": [
+    {
+      "reifier_id": "reifier_object_background",
+      "source_id": "object_id",
+      "relation_type": "PLACED_ON",
+      "target_id": "background_id",
+      "surface_anchor": "table_top",
+      "surface_sector": "front_center",
+      "required_headroom": 0.35,
+      "required_friction": 0.60,
+      "kinematic_manifold": "tabletop_stationary_reach",
+      "prior_entropy": 2.5,
+      "posterior_entropy": 0.05,
+      "evidence_sources": ["tabletop_spatial_planner"]
+    }
+  ],
+  "task": {
+    "composition": "atomic",
+    "description": "Natural language summary of the task.",
+    "subtasks": [
+      {
+        "kind": "PickAndPlaceTask",
+        "params": {
+          "pick_up_object": "object_id",
+          "destination_location": "destination_object_id",
+          "background_scene": "background_id"
+        }
+      }
+    ]
+  }
+}
 
 GUIDANCE:
 - Follow the per-field ``description`` strings in the schema.
@@ -154,8 +433,8 @@ GUIDANCE:
   If the prompt includes the exact registry name, use it.
   If no reasonable match can be found, return empty string.
   If multiple reasonable matches are found, return the closest match or the one with the most specific name.
-- For embodiment, if the prompt only mention the robot family (driod/franka) and there are multiple
-  variance of that family in EMBODIMENTS, pick the one with the default tag.
+- For embodiment, if the prompt only mentions the robot family (droid/franka/g1) and there are multiple
+  variations of that family in EMBODIMENTS, pick the one with the default tag.
 - For multiple instances of the same registry asset, use semantic (left/right) or numerical (1/2/3)
   suffixes in ``id``.
 - Use ``object_sets`` only when one object varies across environments; list its variants as ``members``.
@@ -174,7 +453,7 @@ GUIDANCE:
   subtask per object instance acted on, not one representative subtask. Exclude scenery-only objects.
 - REQUIRED: use ``atomic`` for one subtask; for multiple subtasks, use ``parallel`` unless the prompt
   or action dependencies require an order, then use ``sequential``. One robot does not imply an order.
-- Task parameters referring to an asest (object, background or object reference) must use the ID (NOT registry_name).
+- Task parameters referring to an asset (object, background or object reference) must use the ID (NOT registry_name).
 - Relation subject and references must use the asset ID (NOT registry_name).
 - REQUIRED: include an ``is_anchor`` relation on the resting surface. That is the
   ``object_reference`` for the surface the prompt names inside the background; use the background id
@@ -183,4 +462,10 @@ GUIDANCE:
 - For every relation, include all parameters marked ``required`` in the RELATIONS catalog in
   that relation's ``params``.
 - All objects need an ``on`` relation with that anchor as ``reference``.
+
+TELESCOPIC DOLLHOUSE SPATIAL PLACEMENT:
+- Robot Stance: Grounded in front of the table/workspace (e.g. [-0.55, 0.0, 0.0] facing +X, or [0.0, 0.35, floor_z] facing +Y), NOT inside the table volume.
+- Multi-Object & Receptacle Support: For pick-and-place tasks with receptacles (e.g. bin, bowl, tray), BOTH the pickable object(s) AND the destination receptacle must have explicit 'on' relations to the support fixture (e.g. table_top or shelf_tier).
+- Reachability Envelope: All task-relevant objects must be placed within reachable distance of the robot base (r in [0.30, 0.80]m for Franka/Droid, r in [0.45, 0.95]m for G1).
+- Non-Overlap & Headroom: Maintain at least 0.20m separation between objects on the same support surface.
 """

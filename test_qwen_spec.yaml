@@ -1,0 +1,126 @@
+background:
+  id: kitchen
+  params: {}
+  registry_name: kitchen
+cli_override_specs: []
+embodiment:
+  id: robot
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.55
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+  registry_name: droid_abs_joint_pos
+env_name: microwave_campbell_soup_placement
+object_references: []
+objects:
+- id: tomato_soup_can
+  params: {}
+  registry_name: tomato_soup_can_ycb_robolab
+- id: microwave
+  params: {}
+  registry_name: microwave
+placement_validators:
+  enabled_checks:
+  - non_overlap
+  - reachability
+  - headroom
+  required_checks:
+  - non_overlap
+  - reachability
+  - headroom
+reified_relations:
+- contact_normal:
+  - 0
+  - 0
+  - 1
+  delta_x:
+    max_val: 0.05
+    min_val: -0.05
+    nominal: 0.0
+  delta_y:
+    max_val: 0.05
+    min_val: -0.05
+    nominal: 0.0
+  delta_z:
+    max_val: 0.0
+    min_val: 0.0
+    nominal: 0.0
+  evidence_sources:
+  - tabletop_spatial_planner
+  kinematic_manifold: tabletop_stationary_reach
+  posterior_entropy: 0.05
+  prior_entropy: 2.5
+  reifier_id: reifier_tomato_soup_can_kitchen
+  relation_type: PLACED_ON
+  required_friction: 0.6
+  required_headroom: 0.35
+  source_id: tomato_soup_can
+  surface_anchor: counter_top
+  surface_sector: front_center
+  target_id: kitchen
+- contact_normal:
+  - 0
+  - 0
+  - 1
+  delta_x:
+    max_val: 0.05
+    min_val: -0.05
+    nominal: 0.0
+  delta_y:
+    max_val: 0.05
+    min_val: -0.05
+    nominal: 0.0
+  delta_z:
+    max_val: 0.0
+    min_val: 0.0
+    nominal: 0.0
+  evidence_sources:
+  - tabletop_spatial_planner
+  kinematic_manifold: tabletop_stationary_reach
+  posterior_entropy: 0.05
+  prior_entropy: 2.5
+  reifier_id: reifier_microwave_kitchen
+  relation_type: PLACED_ON
+  required_friction: 0.6
+  required_headroom: 0.35
+  source_id: microwave
+  surface_anchor: counter_top
+  surface_sector: front_right
+  target_id: kitchen
+relations:
+- kind: is_anchor
+  params: {}
+  reference: ''
+  subject: kitchen
+- kind: 'on'
+  params:
+    surface_anchor: counter_top
+    surface_sector: front_center
+  reference: kitchen
+  subject: tomato_soup_can
+- kind: 'on'
+  params:
+    surface_anchor: counter_top
+    surface_sector: front_right
+  reference: kitchen
+  subject: microwave
+task:
+  composition: atomic
+  description: Open the microwave, pick up the Campbell soup can from the counter,
+    and place it upright onto the microwave turntable.
+  subtasks:
+  - kind: OpenDoorTask
+    params:
+      openable_object: microwave
+  - kind: PickAndPlaceTask
+    params:
+      background_scene: kitchen
+      destination_location: microwave
+      pick_up_object: tomato_soup_can

@@ -1,0 +1,12 @@
+{
+  "event": "object_dropped",
+  "step": 22,
+  "dropped_object_id": "storage_drawer",
+  "drop_position": [
+    0.2727,
+    -1.8471,
+    0.6255
+  ],
+  "support_fixture_id": "background_table",
+  "failure_reason": "Scene terminated during settling at step 22 (details={'time_out': [False], 'object_dropped': [True], 'success': [False]})."
+}

@@ -11,6 +11,7 @@ import argparse
 from collections.abc import Collection
 from dataclasses import MISSING, Field, fields, is_dataclass
 from enum import Enum
+import json
 from typing import Any, Literal, TypeVar, get_args, get_origin, get_type_hints
 
 CfgT = TypeVar("CfgT")
@@ -112,6 +113,8 @@ def _get_argparse_options(config_field: Field[Any], field_type: Any) -> dict[str
         argument_options.update(type=cli_value_type, choices=[member.value for member in cli_value_type])
     elif cli_value_type is bool:
         argument_options["action"] = "store_true" if default is False else argparse.BooleanOptionalAction
+    elif get_origin(cli_value_type) is dict or cli_value_type is dict:
+        argument_options.update(type=json.loads)
     else:
         assert get_origin(cli_value_type) is None, f"{config_field.name}: unsupported field type {field_type!r}"
         argument_options["type"] = cli_value_type

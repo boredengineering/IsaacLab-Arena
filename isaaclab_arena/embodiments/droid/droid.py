@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import torch
 from abc import ABC
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 import isaaclab.envs.mdp as mdp_isaac_lab
@@ -230,6 +231,25 @@ class DroidEmbodimentBase(EmbodimentBase, ABC):
         robot = self.scene_config.robot
         assert robot is not None, "scene_config.robot must be populated before setting the joint pose"
         robot.init_state = robot.init_state.replace(joint_pos=dict(zip(_DROID_JOINT_NAMES, initial_joint_pose)))
+
+    def set_joint_initial_pos(self, joint_pos: Mapping[str, float]) -> None:
+        """Update both init_state.joint_pos and event_config default_pose by joint name."""
+        super().set_joint_initial_pos(joint_pos)
+        if self.event_config is not None and hasattr(self.event_config, "init_franka_arm_pose"):
+            arm_pose = list(self.event_config.init_franka_arm_pose.params.get("default_pose", []))
+            joint_order = [
+                "panda_joint1",
+                "panda_joint2",
+                "panda_joint3",
+                "panda_joint4",
+                "panda_joint5",
+                "panda_joint6",
+                "panda_joint7",
+            ]
+            for idx, jname in enumerate(joint_order):
+                if jname in joint_pos and idx < len(arm_pose):
+                    arm_pose[idx] = float(joint_pos[jname])
+            self.event_config.init_franka_arm_pose.params["default_pose"] = arm_pose
 
     def get_ee_frame_name(self, arm_mode: ArmMode) -> str:
         return "ee_frame"

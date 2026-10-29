@@ -1,0 +1,146 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary SimReady_Metadata = {
+            dictionary Variants = {
+                dictionary Physics = {
+                    dictionary MuJoCo = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "MuJoCo"
+                    }
+                    dictionary Newton = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "Newton"
+                    }
+                    dictionary PhysX = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "PhysX"
+                    }
+                }
+            }
+            string asset_location = "simready_content\\common_assets\\props_food\\food_beverage_beerBottle_o01\\simready_physx_usd\\sm_food_beverage_beerBottle_o01_01.usd"
+            string asset_type = "prop"
+            string uuid = "c658d8aa-b036-4dd2-8a59-e1a5281b4f98"
+            dictionary validation = {
+                string profile = "Robotics-Prop"
+                string profile_version = "3.1.0"
+                dictionary validated_features = {
+                    dictionary "2025-12-16" = {
+                        dictionary FET000_CORE = {
+                            string dependencies = "[]"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET001_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_NEUTRAL = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_PHYSX': {'version': '0.1.0'}}, {'FET004_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET005_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET006_BASE_MDL = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                    }
+                }
+            }
+            dictionary wikidata = {
+                string curated_path = "bottle/glass_bottle"
+                string full_path = "entity/object/container/container/bottle/glass bottle"
+                string qcode = "Q5567094"
+            }
+        }
+        string asset_dir = "simready_content/common_assets/props_food/food_beverage_beerBottle_o01"
+        string asset_name = "food_beverage_beerBottle_o01"
+        string asset_type = "prop"
+        string profile = "Prop-Robotics-Neutral"
+        string source_file = "../simready_usd/sm_food_beverage_beerBottle_o01_01.usd"
+        string usd_date_generated = "2025-12-15 11:52:02"
+        bool used_dsrs_exporter = 1
+    }
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Scope "Instances"
+{
+    def Xform "sm_food_beverage_beerBottle_o01_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/sm_food_beverage_beerBottle_o01_mesh_00>
+    )
+    {
+        over "sm_food_beverage_beerBottle_o01_mesh_00" (
+            apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/sm_food_beverage_beerBottle_o01_mesh_00/VisualMaterials/m_trans__glass__beerbottle_o01>
+            point3f physics:centerOfMass = (-4.314605e-7, -0.0000021779026, 0.17107989)
+            float3 physics:diagonalInertia = (0.017978156, 0.017978156, 0.0022423207)
+            float physics:mass = 1.7391415
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_trans__glass__beerbottle_o01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/sm_food_beverage_beerBottle_o01_mesh_00/VisualMaterials/m_trans__glass__beerbottle_o01>
+            }
+
+            over "m_opaque__plastic__beerbottle_o01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/sm_food_beverage_beerBottle_o01_mesh_00/VisualMaterials/m_opaque__plastic__beerbottle_o01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_trans__glass__beerbottle_o01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_trans__glass__beerbottle_o01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__beerbottle_o01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__beerbottle_o01>
+            )
+            {
+            }
+        }
+    }
+}
+

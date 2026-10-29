@@ -1,0 +1,413 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary SimReady_Metadata = {
+            float3 asset_extents = (0.0722, 0.0722, 0.09674)
+            string asset_license = "CC-BY-4.0"
+            string asset_name = "screw_top_jar"
+            string asset_type = "prop"
+            string author = "ForgeCAD"
+            string category = "household"
+            double mass = 0.23061169916763902
+            string qcode = "Q1207302"
+            int rigid_body_count = 3
+            string source = "ForgeCAD"
+            string source_file = "main.usda"
+            string usd_date_generated = "2026-10-17"
+        }
+        string asset_name = "screw_top_jar"
+        string asset_type = "prop"
+        string source_file = "main.usda"
+        string usd_date_generated = "2026-10-17"
+    }
+    defaultPrim = "Model"
+    endTimeCode = 192
+    metersPerUnit = 1
+    startTimeCode = 0
+    subLayers = [
+        @./forgecad/animation.usda@
+    ]
+    upAxis = "Z"
+)
+
+def Xform "Model" (
+    prepend apiSchemas = ["SemanticsLabelsAPI:class", "SemanticsLabelsAPI:wikidata_qcode"]
+    prepend references = @./forgecad/geometry.usda@</Model>
+    variants = {
+        string finish = "clear_glass_silver_lid"
+        string physics = "physics"
+    }
+    prepend variantSets = ["physics", "finish"]
+)
+{
+    token[] semantics:labels:class = ["jar"]
+    token[] semantics:labels:wikidata_qcode = ["Q1207302"]
+
+    over "Geometry"
+    {
+        over "Jar"
+        {
+            over "Label" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = </Model/Materials/PaperLabel>
+            }
+
+            over "Liner" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = </Model/Materials/FoamLiner>
+            }
+        }
+    }
+
+    def Scope "Materials"
+    {
+        def Material "ClearGlass" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:mdl:surface.connect = </Model/Materials/ClearGlass/GlassSurface.outputs:out>
+            token outputs:surface.connect = </Model/Materials/ClearGlass/Surface.outputs:surface>
+            token[] semantics:labels:material = ["glass"]
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.72, 0.84, 0.8)
+                float inputs:ior = 1.52
+                float inputs:metallic = 0
+                float inputs:opacity = 0.22
+                float inputs:roughness = 0.04
+                token outputs:surface
+            }
+
+            def Shader "GlassSurface"
+            {
+                uniform token info:implementationSource = "sourceAsset"
+                uniform token info:mdl:materialType = "forgecad_glass"
+                uniform asset info:mdl:sourceAsset = @./materials/forgecad_glass.mdl@
+                uniform token info:mdl:sourceAsset:subIdentifier = "forgecad_glass"
+                float inputs:clarity = 0.78
+                float inputs:ior = 1.52
+                float inputs:roughness = 0.04
+                color3f inputs:tint = (0.72, 0.84, 0.8)
+                token outputs:out
+            }
+        }
+
+        def Material "AmberGlass" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:mdl:surface.connect = </Model/Materials/AmberGlass/GlassSurface.outputs:out>
+            token outputs:surface.connect = </Model/Materials/AmberGlass/Surface.outputs:surface>
+            token[] semantics:labels:material = ["glass"]
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.42, 0.15, 0.02)
+                float inputs:ior = 1.52
+                float inputs:metallic = 0
+                float inputs:opacity = 0.55
+                float inputs:roughness = 0.05
+                token outputs:surface
+            }
+
+            def Shader "GlassSurface"
+            {
+                uniform token info:implementationSource = "sourceAsset"
+                uniform token info:mdl:materialType = "forgecad_glass"
+                uniform asset info:mdl:sourceAsset = @./materials/forgecad_glass.mdl@
+                uniform token info:mdl:sourceAsset:subIdentifier = "forgecad_glass"
+                float inputs:clarity = 0.45
+                float inputs:ior = 1.52
+                float inputs:roughness = 0.05
+                color3f inputs:tint = (0.42, 0.15, 0.02)
+                token outputs:out
+            }
+        }
+
+        def Material "Tinplate" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:surface.connect = </Model/Materials/Tinplate/Surface.outputs:surface>
+            token[] semantics:labels:material = ["metal"]
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.8, 0.81, 0.83)
+                float inputs:metallic = 1
+                float inputs:roughness = 0.22
+                token outputs:surface
+            }
+        }
+
+        def Material "GoldLacquer" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:surface.connect = </Model/Materials/GoldLacquer/Surface.outputs:surface>
+            token[] semantics:labels:material = ["metal"]
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.8, 0.58, 0.25)
+                float inputs:metallic = 1
+                float inputs:roughness = 0.28
+                token outputs:surface
+            }
+        }
+
+        def Material "BlackEnamel" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:surface.connect = </Model/Materials/BlackEnamel/Surface.outputs:surface>
+            token[] semantics:labels:material = ["metal"]
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                float inputs:clearcoat = 0.6
+                float inputs:clearcoatRoughness = 0.1
+                color3f inputs:diffuseColor = (0.011, 0.011, 0.012)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.35
+                token outputs:surface
+            }
+        }
+
+        def Material "LidPrint" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:surface.connect = </Model/Materials/LidPrint/Surface.outputs:surface>
+            token[] semantics:labels:material = ["paint"]
+
+            def Shader "St"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                string inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "Fit"
+            {
+                uniform token info:id = "UsdTransform2d"
+                float2 inputs:in.connect = </Model/Materials/LidPrint/St.outputs:result>
+                float2 inputs:scale = (9.615385, 9.615385)
+                float2 inputs:translation = (0.5, 0.5)
+                float2 outputs:result
+            }
+
+            def Shader "Albedo"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @./assets/lid-print.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </Model/Materials/LidPrint/Fit.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                float inputs:clearcoat = 0.5
+                float inputs:clearcoatRoughness = 0.08
+                color3f inputs:diffuseColor.connect = </Model/Materials/LidPrint/Albedo.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.3
+                token outputs:surface
+            }
+        }
+
+        def Material "PaperLabel" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:surface.connect = </Model/Materials/PaperLabel/Surface.outputs:surface>
+            token[] semantics:labels:material = ["paper"]
+
+            def Shader "St"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                string inputs:varname = "st"
+                float2 outputs:result
+            }
+
+            def Shader "Fit"
+            {
+                uniform token info:id = "UsdTransform2d"
+                float2 inputs:in.connect = </Model/Materials/PaperLabel/St.outputs:result>
+                float inputs:rotation = -90
+                float2 inputs:scale = (17.857143, 17.857143)
+                float2 inputs:translation = (0.5, -0.178571)
+                float2 outputs:result
+            }
+
+            def Shader "Albedo"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @./assets/jar-label.png@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = </Model/Materials/PaperLabel/Fit.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </Model/Materials/PaperLabel/Albedo.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:roughness = 0.65
+                token outputs:surface
+            }
+        }
+
+        def Material "FoamLiner" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token outputs:surface.connect = </Model/Materials/FoamLiner/Surface.outputs:surface>
+            token[] semantics:labels:material = ["foam"]
+
+            def Shader "Surface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.83, 0.79, 0.68)
+                float inputs:metallic = 0
+                float inputs:roughness = 0.85
+                token outputs:surface
+            }
+        }
+    }
+    variantSet "finish" = {
+        "amber_glass_gold_lid" {
+            over "Geometry"
+            {
+                over "Jar"
+                {
+                    over "Glass" (
+                        prepend apiSchemas = ["MaterialBindingAPI"]
+                    )
+                    {
+                        rel material:binding = </Model/Materials/AmberGlass>
+                    }
+
+                    over "Liner"
+                    {
+                        over "Lid"
+                        {
+                            over "Top" (
+                                prepend apiSchemas = ["MaterialBindingAPI"]
+                            )
+                            {
+                                rel material:binding = </Model/Materials/GoldLacquer>
+                            }
+
+                            over "Skirt" (
+                                prepend apiSchemas = ["MaterialBindingAPI"]
+                            )
+                            {
+                                rel material:binding = </Model/Materials/GoldLacquer>
+                            }
+                        }
+                    }
+                }
+            }
+
+        }
+        "clear_glass_black_lid" {
+            over "Geometry"
+            {
+                over "Jar"
+                {
+                    over "Glass" (
+                        prepend apiSchemas = ["MaterialBindingAPI"]
+                    )
+                    {
+                        rel material:binding = </Model/Materials/ClearGlass>
+                    }
+
+                    over "Liner"
+                    {
+                        over "Lid"
+                        {
+                            over "Top" (
+                                prepend apiSchemas = ["MaterialBindingAPI"]
+                            )
+                            {
+                                rel material:binding = </Model/Materials/BlackEnamel>
+                            }
+
+                            over "Skirt" (
+                                prepend apiSchemas = ["MaterialBindingAPI"]
+                            )
+                            {
+                                rel material:binding = </Model/Materials/BlackEnamel>
+                            }
+                        }
+                    }
+                }
+            }
+
+        }
+        "clear_glass_silver_lid" {
+            over "Geometry"
+            {
+                over "Jar"
+                {
+                    over "Glass" (
+                        prepend apiSchemas = ["MaterialBindingAPI"]
+                    )
+                    {
+                        rel material:binding = </Model/Materials/ClearGlass>
+                    }
+
+                    over "Liner"
+                    {
+                        over "Lid"
+                        {
+                            over "Top" (
+                                prepend apiSchemas = ["MaterialBindingAPI"]
+                            )
+                            {
+                                rel material:binding = </Model/Materials/LidPrint>
+                            }
+
+                            over "Skirt" (
+                                prepend apiSchemas = ["MaterialBindingAPI"]
+                            )
+                            {
+                                rel material:binding = </Model/Materials/Tinplate>
+                            }
+                        }
+                    }
+                }
+            }
+
+        }
+    }
+    variantSet "physics" = {
+        "none" {
+
+        }
+        "physics" (
+            prepend references = @./forgecad/physics.usda@</Model>
+        ) {
+
+        }
+    }
+}
+

@@ -14,12 +14,20 @@ from enum import Enum
 from typing import Any, get_args, get_type_hints
 
 from isaaclab_arena.assets.registries import AssetRegistry, ObjectRelationLibraryRegistry, TaskRegistry
+from isaaclab_arena.environment_spec.execution_catalogue import current_catalogue
 from isaaclab_arena.relations.relations import RelationBase
 
 # Constructor kwargs already expressed as top-level ArenaEnvGraphTypes fields (not as
 # TaskSpec.params / SpatialRelationSpec.params). Keep them out of the agent catalogues.
-_TASK_CATALOGUE_EXCLUDED_PARAMS = frozenset({"task_description"})  # CompositeTaskSpec.description
-_RELATION_CATALOGUE_EXCLUDED_PARAMS = frozenset({"parent"})  # SpatialRelationSpec.reference
+_TASK_CATALOGUE_EXCLUDED_PARAMS = frozenset({
+    "task_description",
+    "max_separation",
+    "require_lift_before_place",
+    "min_lift_height",
+    "min_airborne_steps",
+    "max_destination_xy_separation",
+})  # CompositeTaskSpec.description & internal tuning params
+_RELATION_CATALOGUE_EXCLUDED_PARAMS = frozenset({"parent", "surface_anchor", "surface_sector"})  # SpatialRelationSpec.reference
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +55,11 @@ class AssetCatalogue:
             f"- {b['name']}  tags={b['tags']}" for b in sorted(self.backgrounds, key=lambda b: b["name"])
         )
         object_lines = "\n".join(
-            f"- {o['name']}  type={o['object_type']}  tags={o['tags']}"
+            (
+                f"- {o['name']}  type={o['object_type']}  tags={o['tags']}"
+                if "object_type" in o
+                else f"- {o['name']}  tags={o['tags']}"
+            )
             for o in sorted(self.objects, key=lambda o: o["name"])
         )
         return (
@@ -59,6 +71,9 @@ class AssetCatalogue:
 
 def build_asset_catalogue(registry: AssetRegistry | None = None) -> AssetCatalogue:
     """Collect registered embodiments, backgrounds, and pick-up objects from ``AssetRegistry``."""
+    supplied = current_catalogue()
+    if registry is None and supplied is not None:
+        return supplied.catalogues()[0]
     registry = registry or AssetRegistry()
     catalogue = AssetCatalogue()
     # TODO(qianl): handle optional lights and hdr images.
@@ -98,10 +113,10 @@ class RelationCatalogueEntry:
 
     name: str
     unary: bool
-    required_params: list[str]
-    optional_params: list[str]
-    enum_options: dict[str, list[str]]
-    summary: str
+    required_params: list[str] = field(default_factory=list)
+    optional_params: list[str] = field(default_factory=list)
+    enum_options: dict[str, list[str]] = field(default_factory=dict)
+    summary: str = ""
 
 
 @dataclass
@@ -131,6 +146,9 @@ def build_relation_catalogue(
     registry: ObjectRelationLibraryRegistry | None = None,
 ) -> RelationCatalogue:
     """Collect agent-ready object relations from ``ObjectRelationLibraryRegistry``."""
+    supplied = current_catalogue()
+    if registry is None and supplied is not None:
+        return supplied.catalogues()[1]
     registry = registry or ObjectRelationLibraryRegistry()
     catalogue = RelationCatalogue()
     for name in registry.get_all_keys():
@@ -165,10 +183,10 @@ class TaskCatalogueEntry:
     """One agent_ready task exposed to the agent."""
 
     name: str
-    required_params: list[str]
-    optional_params: list[str]
-    enum_options: dict[str, list[str]]
-    summary: str
+    required_params: list[str] = field(default_factory=list)
+    optional_params: list[str] = field(default_factory=list)
+    enum_options: dict[str, list[str]] = field(default_factory=dict)
+    summary: str = ""
 
 
 @dataclass
@@ -195,6 +213,9 @@ class TaskCatalogue:
 
 def agent_ready_task_names(registry: TaskRegistry | None = None) -> frozenset[str]:
     """Return ``TaskRegistry`` keys for tasks marked with ``@agent_ready``."""
+    supplied = current_catalogue()
+    if registry is None and supplied is not None:
+        return frozenset(supplied.task_parameters)
     registry = registry or TaskRegistry()
     return frozenset(
         name for name in registry.get_all_keys() if getattr(registry.get_task_by_name(name), "agent_ready", False)
@@ -203,6 +224,9 @@ def agent_ready_task_names(registry: TaskRegistry | None = None) -> frozenset[st
 
 def build_task_catalogue(registry: TaskRegistry | None = None) -> TaskCatalogue:
     """Collect agent_ready tasks from ``TaskRegistry``."""
+    supplied = current_catalogue()
+    if registry is None and supplied is not None:
+        return supplied.catalogues()[2]
     registry = registry or TaskRegistry()
     catalogue = TaskCatalogue()
     for name in sorted(agent_ready_task_names(registry)):

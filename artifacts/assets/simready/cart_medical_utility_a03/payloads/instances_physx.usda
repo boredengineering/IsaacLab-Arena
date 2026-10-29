@@ -1,0 +1,1244 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary SimReady_Metadata = {
+            dictionary Variants = {
+                dictionary Physics = {
+                    dictionary MuJoCo = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "MuJoCo"
+                    }
+                    dictionary Newton = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "Newton"
+                    }
+                    dictionary PhysX = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "PhysX"
+                    }
+                }
+            }
+            string asset_location = "simready_content\\common_assets\\props_hospital\\cart_medical_utility_a03\\simready_physx_usd\\sm_cart_medical_utility_a03_01.usd"
+            string asset_type = "prop"
+            string uuid = "ccdecfb2-dc51-417b-b773-79d837b1db48"
+            dictionary validation = {
+                string profile = "Robotics-Prop"
+                string profile_version = "3.1.0"
+                dictionary validated_features = {
+                    dictionary "2026-03-30" = {
+                        dictionary FET000_CORE = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET001_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['AA.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_NEUTRAL = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_PHYSX': {'version': '0.1.0'}}, {'FET004_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET005_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['GSP.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET006_BASE_MDL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['VM.MDL.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                    }
+                }
+            }
+        }
+        string asset_dir = "simready_content/common_assets/props_hospital/cart_medical_utility_a03"
+        string asset_name = "cart_medical_utility_a03"
+        string asset_type = "prop"
+        string profile = "Prop-Robotics-Neutral"
+        string source_file = "../simready_usd/sm_cart_medical_utility_a03_01.usd"
+        string usd_date_generated = "2026-03-30 21:50:39"
+        bool used_dsrs_exporter = 1
+    }
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Scope "Instances"
+{
+    def Xform "wheel_01_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/wheel_01_mesh_00>
+    )
+    {
+        over "wheel_01_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/wheel_01_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (-0.04141162, 0.0002280199, -0.057323575)
+            float3 physics:diagonalInertia = (0.00008967826, 0.00019508346, 0.000109616114)
+            float physics:mass = 3
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/wheel_01_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+
+            over "m_opaque__metal__glossy_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/wheel_01_mesh_00/VisualMaterials/m_opaque__metal__glossy_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__glossy_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__glossy_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "drawer_01_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/drawer_01_mesh_00>
+    )
+    {
+        over "drawer_01_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/drawer_01_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (-0.13173446, -0.024664497, 0.0024425653)
+            float3 physics:diagonalInertia = (0.044993453, 0.018839663, 0.06354742)
+            float physics:mass = 1.5117916
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/drawer_01_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+
+            over "m_opaque__metal__steel_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/drawer_01_mesh_00/VisualMaterials/m_opaque__metal__steel_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__steel_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__steel_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "arm_01_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/arm_01_mesh_00>
+    )
+    {
+        over "arm_01_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/arm_01_mesh_00/VisualMaterials/m_opaque__metal__chrome_clean_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (0.08082876, -0.0017418376, 0.08799469)
+            float3 physics:diagonalInertia = (0.06600872, 0.1047188, 0.108966105)
+            float physics:mass = 2.970223
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__metal__chrome_clean_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/arm_01_mesh_00/VisualMaterials/m_opaque__metal__chrome_clean_a01>
+            }
+
+            over "m_opaque__plastic__emissive_blue_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/arm_01_mesh_00/VisualMaterials/m_opaque__plastic__emissive_blue_a01>
+            }
+
+            over "m_opaque__plastic__black_c01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/arm_01_mesh_00/VisualMaterials/m_opaque__plastic__black_c01>
+            }
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/arm_01_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+
+            over "m_opaque__metal__steel_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/arm_01_mesh_00/VisualMaterials/m_opaque__metal__steel_a01>
+            }
+
+            over "m_opaque__metal__steel_b01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/arm_01_mesh_00/VisualMaterials/m_opaque__metal__steel_b01>
+            }
+
+            over "m_opaque__rubber__black_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/arm_01_mesh_00/VisualMaterials/m_opaque__rubber__black_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__metal__chrome_clean_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__chrome_clean_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__emissive_blue_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__emissive_blue_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__black_c01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__black_c01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__steel_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__steel_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__steel_b01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__steel_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__rubber__black_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__rubber__black_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "wheel_02_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/wheel_02_mesh_00>
+    )
+    {
+        over "wheel_02_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/wheel_02_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (-0.041411538, 0.00022805751, -0.057324473)
+            float3 physics:diagonalInertia = (0.00008968146, 0.00019508637, 0.000109615816)
+            float physics:mass = 3
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/wheel_02_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+
+            over "m_opaque__metal__glossy_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/wheel_02_mesh_00/VisualMaterials/m_opaque__metal__glossy_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__glossy_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__glossy_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "drawer_02_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/drawer_02_mesh_00>
+    )
+    {
+        over "drawer_02_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/drawer_02_mesh_00/VisualMaterials/m_opaque__plastic__gray_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (0.000115313574, -0.03581276, -0.0010045978)
+            float3 physics:diagonalInertia = (0.016295973, 0.024590654, 0.04077658)
+            float physics:mass = 1.2591125
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__gray_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/drawer_02_mesh_00/VisualMaterials/m_opaque__plastic__gray_a01>
+            }
+
+            over "m_opaque__metal__steel_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/drawer_02_mesh_00/VisualMaterials/m_opaque__metal__steel_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__gray_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__gray_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__steel_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__steel_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "tire_03_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/tire_03_mesh_00>
+    )
+    {
+        over "tire_03_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/tire_03_mesh_00/VisualMaterials/m_opaque__plastic__gray_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (5.233909e-7, -2.9386882e-8, -0.000006105132)
+            float3 physics:diagonalInertia = (0.00008417765, 0.00009975487, 0.000084177635)
+            float physics:mass = 2
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__gray_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/tire_03_mesh_00/VisualMaterials/m_opaque__plastic__gray_a01>
+            }
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/tire_03_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__gray_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__gray_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "tire_01_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/tire_01_mesh_00>
+    )
+    {
+        over "tire_01_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/tire_01_mesh_00/VisualMaterials/m_opaque__plastic__gray_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (-5.233063e-7, 2.596791e-8, -0.000006104928)
+            float3 physics:diagonalInertia = (0.00008417764, 0.00009975484, 0.00008417763)
+            float physics:mass = 2
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__gray_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/tire_01_mesh_00/VisualMaterials/m_opaque__plastic__gray_a01>
+            }
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/tire_01_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__gray_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__gray_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "wheel_04_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/wheel_04_mesh_00>
+    )
+    {
+        over "wheel_04_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/wheel_04_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (0.041411553, -0.00022805158, -0.057324465)
+            float3 physics:diagonalInertia = (0.00008968144, 0.00019508638, 0.00010961586)
+            float physics:mass = 3
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/wheel_04_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+
+            over "m_opaque__metal__glossy_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/wheel_04_mesh_00/VisualMaterials/m_opaque__metal__glossy_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__glossy_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__glossy_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "smallLid_01_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/smallLid_01_mesh_00>
+    )
+    {
+        over "smallLid_01_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/smallLid_01_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (-0.041000884, -0.000048180613, -0.0014108381)
+            float3 physics:diagonalInertia = (0.000024200472, 0.00026156666, 0.00028568768)
+            float physics:mass = 0.08981391
+            quatf physics:principalAxes = (1, 0, 0, 0)
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+        }
+
+        over "smallLid_02_mesh_00" (
+            prepend apiSchemas = ["PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            uniform token physics:approximation = "convexDecomposition"
+        }
+    }
+
+    def Xform "tire_04_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/tire_04_mesh_00>
+    )
+    {
+        over "tire_04_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/tire_04_mesh_00/VisualMaterials/m_opaque__plastic__gray_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (5.296622e-7, -2.252985e-8, -0.0000061073597)
+            float3 physics:diagonalInertia = (0.00008417769, 0.000099754885, 0.00008417767)
+            float physics:mass = 2
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__gray_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/tire_04_mesh_00/VisualMaterials/m_opaque__plastic__gray_a01>
+            }
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/tire_04_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__gray_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__gray_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "tire_02_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/tire_02_mesh_00>
+    )
+    {
+        over "tire_02_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/tire_02_mesh_00/VisualMaterials/m_opaque__plastic__gray_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (-5.2387077e-7, -7.880968e-8, -0.000006102552)
+            float3 physics:diagonalInertia = (0.00008417766, 0.00009975488, 0.000084177635)
+            float physics:mass = 2
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__gray_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/tire_02_mesh_00/VisualMaterials/m_opaque__plastic__gray_a01>
+            }
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/tire_02_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__gray_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__gray_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "drawer_05_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/drawer_05_mesh_00>
+    )
+    {
+        over "drawer_05_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/drawer_05_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (-0.0038067107, 0.110729545, 0.05316298)
+            float3 physics:diagonalInertia = (0.19759533, 0.1492414, 0.24949786)
+            float physics:mass = 4.618091
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/drawer_05_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+
+            over "m_opaque__metal__steel_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/drawer_05_mesh_00/VisualMaterials/m_opaque__metal__steel_a01>
+            }
+
+            over "m_opaque__metal__chrome_clean_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/drawer_05_mesh_00/VisualMaterials/m_opaque__metal__chrome_clean_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__steel_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__steel_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__chrome_clean_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__chrome_clean_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "bigLid_02_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/bigLid_02_mesh_00>
+    )
+    {
+        over "bigLid_02_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/bigLid_02_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (-0.04620069, 0.00028462932, 0.0068748407)
+            float3 physics:diagonalInertia = (0.00033755656, 0.000639018, 0.00096573506)
+            float physics:mass = 0.095898785
+            quatf physics:principalAxes = (1, 0, 0, 0)
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+        }
+
+        over "bigLid_01_mesh_00" (
+            prepend apiSchemas = ["PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            uniform token physics:approximation = "convexDecomposition"
+        }
+    }
+
+    def Xform "drawer_03_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/drawer_03_mesh_00>
+    )
+    {
+        over "drawer_03_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/drawer_03_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (0.008247708, 0.11572099, 0.036328662)
+            float3 physics:diagonalInertia = (0.1429188, 0.10744901, 0.22571924)
+            float physics:mass = 4.052515
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/drawer_03_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+
+            over "m_opaque__metal__steel_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/drawer_03_mesh_00/VisualMaterials/m_opaque__metal__steel_a01>
+            }
+
+            over "m_opaque__metal__chrome_clean_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/drawer_03_mesh_00/VisualMaterials/m_opaque__metal__chrome_clean_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__steel_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__steel_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__chrome_clean_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__chrome_clean_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "trashCan_02_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/trashCan_02_mesh_00>
+    )
+    {
+        over "trashCan_02_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            uniform token physics:approximation = "convexDecomposition"
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-1.9434846620924873e-8, 2.0029338188010115e-9, 1.2929896797686524e-7)
+            custom double3 pxr:usd:physics_inertia = (0.01179030476689957, 0.015193634543646108, 0.006737214752631262)
+            custom double pxr:usd:physics_mass = 4
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+            custom bool userProperties:_renamed = 1
+            custom string userProperties:blender:data_name = "trashCan_02_mesh_00.002"
+            custom string userProperties:blender:object_name = "trashCan_02_mesh_00.001"
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/trashCan_02_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+
+            over "m_opaque__plastic__black_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/trashCan_02_mesh_00/VisualMaterials/m_opaque__plastic__black_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__black_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__black_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "drawer_04_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/drawer_04_mesh_00>
+    )
+    {
+        over "drawer_04_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/drawer_04_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (0.00005961939, 0.11236336, 0.0550194)
+            float3 physics:diagonalInertia = (0.19857062, 0.1494026, 0.25111076)
+            float physics:mass = 4.631703
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/drawer_04_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+
+            over "m_opaque__metal__steel_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/drawer_04_mesh_00/VisualMaterials/m_opaque__metal__steel_a01>
+            }
+
+            over "m_opaque__metal__chrome_clean_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/drawer_04_mesh_00/VisualMaterials/m_opaque__metal__chrome_clean_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__steel_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__steel_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__chrome_clean_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__chrome_clean_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "trashCan_01_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/trashCan_01_mesh_00>
+    )
+    {
+        over "trashCan_01_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            uniform token physics:approximation = "convexDecomposition"
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-0.002582389861345291, -0.000013595903510577045, 0.012954882346093655)
+            custom double3 pxr:usd:physics_inertia = (0.011981288039273607, 0.015420342978871137, 0.006790259203194552)
+            custom double pxr:usd:physics_mass = 4
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+            custom bool userProperties:_renamed = 1
+            custom string userProperties:blender:data_name = "trashCan_01_mesh_00.001"
+            custom string userProperties:blender:object_name = "trashCan_01_mesh_00"
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/trashCan_01_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+
+            over "m_opaque__plastic__black_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/trashCan_01_mesh_00/VisualMaterials/m_opaque__plastic__black_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__black_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__black_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "wheel_03_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/wheel_03_mesh_00>
+    )
+    {
+        over "wheel_03_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/wheel_03_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (0.04141158, -0.00022807326, -0.057324465)
+            float3 physics:diagonalInertia = (0.00008968143, 0.00019508645, 0.00010961594)
+            float physics:mass = 3
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/wheel_03_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+
+            over "m_opaque__metal__glossy_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/wheel_03_mesh_00/VisualMaterials/m_opaque__metal__glossy_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__glossy_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__glossy_a01>
+            )
+            {
+            }
+        }
+    }
+
+    def Xform "body_01_mesh_00" (
+        prepend references = @./geometries.usd@</Geometries/body_01_mesh_00>
+    )
+    {
+        over "body_01_mesh_00" (
+            prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMassAPI", "PhysxCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysicsMeshCollisionAPI"]
+        )
+        {
+            custom rel material:binding
+            prepend rel material:binding = </Instances/body_01_mesh_00/VisualMaterials/m_opaque__plastic__gray_a01>
+            uniform token physics:approximation = "convexDecomposition"
+            point3f physics:centerOfMass = (0.04108148, 0.02137968, 0.6403354)
+            float3 physics:diagonalInertia = (10.607061, 12.021104, 6.2017117)
+            float physics:mass = 15
+            quatf physics:principalAxes = (1, 0, 0, 0)
+            token subsetFamily:materialBind:familyType = "nonOverlapping"
+
+            over "m_opaque__plastic__gray_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/body_01_mesh_00/VisualMaterials/m_opaque__plastic__gray_a01>
+            }
+
+            over "m_opaque__plastic__orange_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/body_01_mesh_00/VisualMaterials/m_opaque__plastic__orange_a01>
+            }
+
+            over "m_opaque__plastic__red_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/body_01_mesh_00/VisualMaterials/m_opaque__plastic__red_a01>
+            }
+
+            over "m_opaque__plastic__white_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/body_01_mesh_00/VisualMaterials/m_opaque__plastic__white_a01>
+            }
+
+            over "m_opaque__metal__steel_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/body_01_mesh_00/VisualMaterials/m_opaque__metal__steel_a01>
+            }
+
+            over "m_opaque__plastic__black_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/body_01_mesh_00/VisualMaterials/m_opaque__plastic__black_a01>
+            }
+
+            over "m_opaque__metal__chrome_clean_a01" (
+                apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                custom rel material:binding
+                prepend rel material:binding = </Instances/body_01_mesh_00/VisualMaterials/m_opaque__metal__chrome_clean_a01>
+            }
+        }
+
+        def Scope "VisualMaterials"
+        {
+            def Material "m_opaque__plastic__gray_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__gray_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__orange_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__orange_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__red_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__red_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__white_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__white_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__steel_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__steel_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__plastic__black_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__plastic__black_a01>
+            )
+            {
+            }
+
+            def Material "m_opaque__metal__chrome_clean_a01" (
+                instanceable = true
+                prepend references = @./materials.usda@</Materials/m_opaque__metal__chrome_clean_a01>
+            )
+            {
+            }
+        }
+    }
+}
+

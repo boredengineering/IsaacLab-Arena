@@ -1,0 +1,24 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:eval_run_1792983116 a prov:Entity,
+        arena:EvaluationRun ;
+    prov:wasGeneratedBy :activity_eval_run_1792983116 ;
+    arena:evaluatedGraph :exp04_d2a_cabinet ;
+    arena:metric_num_episodes 0 ;
+    arena:metric_object_moved_rate_subtask_1 "NaN"^^xsd:float ;
+    arena:metric_revolute_joint_moved_rate_subtask_0 "0.0"^^xsd:float ;
+    arena:metric_success_rate "0.0"^^xsd:float ;
+    arena:metricsPayload "{\"num_episodes\": 0, \"success_rate\": 0.0, \"revolute_joint_moved_rate_subtask_0\": 0.0, \"object_moved_rate_subtask_1\": NaN, \"subtask_success_rate\": [0.0]}"^^xsd:string ;
+    arena:semanticIntegrityVerified true .
+
+:activity_eval_run_1792983116 a prov:Activity ;
+    prov:endedAtTime "2026-10-26T02:51:56.491741+00:00"^^xsd:dateTime ;
+    prov:used :exp04_d2a_cabinet,
+        :policy_isaaclab_arena_policy_zero_action_policy_ZeroActionPolicy .
+
+:policy_isaaclab_arena_policy_zero_action_policy_ZeroActionPolicy a prov:Entity ;
+    arena:modelWeightsPath "isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy"^^xsd:string .
+

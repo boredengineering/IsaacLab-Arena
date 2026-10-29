@@ -5,7 +5,7 @@
 
 import torch
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import warp as wp
 from isaaclab.assets import ArticulationCfg, RigidObjectCfg

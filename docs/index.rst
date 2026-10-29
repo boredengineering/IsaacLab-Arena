@@ -1100,6 +1100,8 @@ Isaac Lab-Arena was built in collaboration with the authors of Robolab (`website
 
    pages/concepts/environment/index
    pages/concepts/agentic_environment_generation/index
+   pages/concepts/dcrg
+   pages/concepts/agentic_workbench
    pages/concepts/scene/index
    pages/concepts/task/index
    pages/concepts/embodiment/index

@@ -1,0 +1,28 @@
+{
+  "spec_path": "generated_envs/droid_microwave_articulation/arm_b_qwq/droid_microwave_subtask_3c_open_and_stow.yaml",
+  "timestamp_utc": "2026-10-21T06:06:28.604044+00:00",
+  "conforms": false,
+  "passes": {
+    "pass1_schema": true,
+    "pass2_kinematics": true,
+    "pass3_swept_sector": false,
+    "pass4_handoff": false
+  },
+  "defects": [
+    {
+      "code": "SWEPT_VOLUME_COLLISION",
+      "object": "tomato_soup_can",
+      "clearance_m": -0.21972243622680052,
+      "message": "Revolute door swing arc (R=0.35m) collides with object at (0.00, 0.00). Clearance -0.220m < required 0.10m margin.",
+      "remediation": "Shift 'tomato_soup_can' Y-coordinate to <= -0.25m or place outside door arc."
+    },
+    {
+      "code": "TASK_DECOMPOSITION_MISSING",
+      "message": "Articulated task requiring access to 'microwave' cavity must be decomposed into 'composition: sequential' with [OpenDoorTask, PickAndPlaceTask], but got 'composition: atomic' with atomic subtask."
+    }
+  ],
+  "diagnostics": [
+    "Pass 1: Schema integrity verified (2 objects registered).",
+    "Pass 2: USD kinematics verified for 'microwave' (type: revolute, joint: 'microjoint', limits: (0.0, 1.5708), axis: [0, 0, 1])."
+  ]
+}

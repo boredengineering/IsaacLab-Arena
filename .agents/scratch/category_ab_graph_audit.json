@@ -1,0 +1,3256 @@
+{
+  "evaluation_property_keys": [
+    {
+      "key": "all_complete_rate",
+      "count": 10
+    },
+    {
+      "key": "artifact_paths",
+      "count": 13
+    },
+    {
+      "key": "artifact_sha256",
+      "count": 13
+    },
+    {
+      "key": "blocking_predicate",
+      "count": 10
+    },
+    {
+      "key": "cartesian_dx_mean",
+      "count": 4
+    },
+    {
+      "key": "cartesian_dy_mean",
+      "count": 4
+    },
+    {
+      "key": "cartesian_dz_mean",
+      "count": 4
+    },
+    {
+      "key": "checkpoint",
+      "count": 2
+    },
+    {
+      "key": "drop_rate",
+      "count": 1
+    },
+    {
+      "key": "endedAtTime",
+      "count": 1
+    },
+    {
+      "key": "ended_at",
+      "count": 134
+    },
+    {
+      "key": "env_name",
+      "count": 13
+    },
+    {
+      "key": "env_version",
+      "count": 13
+    },
+    {
+      "key": "episode_length",
+      "count": 1
+    },
+    {
+      "key": "episode_results_json",
+      "count": 13
+    },
+    {
+      "key": "failure_mode",
+      "count": 1
+    },
+    {
+      "key": "fall_rate",
+      "count": 1
+    },
+    {
+      "key": "harness",
+      "count": 4
+    },
+    {
+      "key": "id",
+      "count": 152
+    },
+    {
+      "key": "lift_rate",
+      "count": 4
+    },
+    {
+      "key": "max_contact_force",
+      "count": 4
+    },
+    {
+      "key": "mean_progress_score",
+      "count": 11
+    },
+    {
+      "key": "metric_forward_reach_m",
+      "count": 1
+    },
+    {
+      "key": "metric_min_lateral_error_m",
+      "count": 1
+    },
+    {
+      "key": "metric_num_episodes",
+      "count": 1
+    },
+    {
+      "key": "metric_object_moved_rate",
+      "count": 1
+    },
+    {
+      "key": "metric_success_rate",
+      "count": 1
+    },
+    {
+      "key": "metric_vertical_error_m",
+      "count": 1
+    },
+    {
+      "key": "metricsPayload",
+      "count": 1
+    },
+    {
+      "key": "metrics_payload",
+      "count": 133
+    },
+    {
+      "key": "name",
+      "count": 1
+    },
+    {
+      "key": "num_episodes",
+      "count": 148
+    },
+    {
+      "key": "num_successes",
+      "count": 13
+    },
+    {
+      "key": "object_moved_rate",
+      "count": 2
+    },
+    {
+      "key": "policy_identity",
+      "count": 13
+    },
+    {
+      "key": "report_path",
+      "count": 1
+    },
+    {
+      "key": "seeds",
+      "count": 13
+    },
+    {
+      "key": "semantic_integrity_verified",
+      "count": 12
+    },
+    {
+      "key": "settle_hold_action",
+      "count": 2
+    },
+    {
+      "key": "settle_steps",
+      "count": 3
+    },
+    {
+      "key": "settle_verified",
+      "count": 3
+    },
+    {
+      "key": "standing_pelvis_height",
+      "count": 2
+    },
+    {
+      "key": "standing_stability",
+      "count": 1
+    },
+    {
+      "key": "success_rate",
+      "count": 147
+    },
+    {
+      "key": "timestamp",
+      "count": 1
+    },
+    {
+      "key": "uri",
+      "count": 1
+    },
+    {
+      "key": "version",
+      "count": 1
+    },
+    {
+      "key": "video_path",
+      "count": 1
+    }
+  ],
+  "evaluations": [
+    {
+      "id": "eval_run_play_failure_20260908",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"success_rate\": 0.0, \"failure_mode\": \"robot_falls_backwards\", \"settle_steps\": 0}",
+      "ended_at": "2026-09-08T18:03:14.475000000+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_model_149_20260908",
+      "evaluation_id": null,
+      "num_episodes": 3,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": "2026-09-08T20:37:35.051000000+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_s4_griptest_20260907",
+      "evaluation_id": null,
+      "num_episodes": 20,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"success_rate\": 0.0, \"num_episodes\": 20, \"lateral_median_m\": 0.122475, \"vertical_median_m\": 0.05333, \"dist_median_m\": 0.14064}",
+      "ended_at": "",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "gn1x_static_apple_griptest"
+      ]
+    },
+    {
+      "id": "eval_run_1787877576",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-08-28T00:39:36.325799+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1787877840",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-08-28T00:44:00.740999+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_pick_and_place_brown_box"
+      ],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1787989093",
+      "evaluation_id": null,
+      "num_episodes": 5,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 5, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-08-29T07:38:13.324457+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "pick_brown_box_from_wireshelving_into_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1787989498",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-08-29T07:44:58.173566+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "zero_action"
+      ]
+    },
+    {
+      "id": "eval_run_1788040065",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-08-29T21:47:45.112928+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "droid_pick_mustard_to_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788107386",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-08-30T16:29:46.113137+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "droid_pick_mustard_to_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788204057",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-08-31T19:20:57.134232+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "droid_pick_rubiks_cube_to_blue_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788204194",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-08-31T19:23:14.709061+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "droid_pick_rubiks_cube_to_blue_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788206247",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-08-31T19:57:27.686763+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "droid_rubiks_cube_to_blue_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788208303",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-08-31T20:31:43.238234+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "droid_rubiks_cube_to_blue_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788209772",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-08-31T20:56:12.450994+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "droid_rubiks_cube_to_blue_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788210967",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-08-31T21:16:07.809232+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "droid_rubiks_cube_to_blue_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788212367",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-08-31T21:39:27.881557+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "droid_rubiks_cube_to_blue_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788213345",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.5}",
+      "ended_at": "2026-08-31T21:55:45.892809+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "droid_rubiks_cube_to_blue_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788214454",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-08-31T22:14:14.972218+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "droid_rubiks_cube_to_blue_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788215061",
+      "evaluation_id": null,
+      "num_episodes": 4,
+      "success_rate": 1.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 4, \"success_rate\": 1.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-08-31T22:24:21.534448+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "droid_rubiks_cube_to_blue_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788217010",
+      "evaluation_id": null,
+      "num_episodes": 3,
+      "success_rate": 0.6666666666666666,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 3, \"success_rate\": 0.6666666666666666, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-08-31T22:56:50.660796+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "droid_rubiks_cube_to_blue_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788228443",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.5,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.5, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-01T02:07:23.879208+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788228778",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-01T02:12:58.917147+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788229172",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.5}",
+      "ended_at": "2026-09-01T02:19:32.110687+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788229990",
+      "evaluation_id": null,
+      "num_episodes": 8,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 8, \"success_rate\": 0.0, \"object_moved_rate\": 0.875}",
+      "ended_at": "2026-09-01T02:33:10.302534+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788230454",
+      "evaluation_id": null,
+      "num_episodes": 65,
+      "success_rate": 0.12307692307692308,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 65, \"success_rate\": 0.12307692307692308, \"object_moved_rate\": 0.7692307692307693}",
+      "ended_at": "2026-09-01T02:40:54.048940+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788236009",
+      "evaluation_id": null,
+      "num_episodes": 16,
+      "success_rate": 0.0625,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 16, \"success_rate\": 0.0625, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-01T04:13:29.450282+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788236501",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-01T04:21:41.414306+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788238238",
+      "evaluation_id": null,
+      "num_episodes": 20,
+      "success_rate": 0.05,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 20, \"success_rate\": 0.05, \"object_moved_rate\": 0.95}",
+      "ended_at": "2026-09-01T04:50:38.831430+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788238722",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-01T04:58:42.951526+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788279490",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 1.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 1.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-01T16:18:10.471543+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788281565",
+      "evaluation_id": null,
+      "num_episodes": 50,
+      "success_rate": 0.46,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 50, \"success_rate\": 0.46, \"object_moved_rate\": 0.98}",
+      "ended_at": "2026-09-01T16:52:45.752601+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788284877",
+      "evaluation_id": null,
+      "num_episodes": 52,
+      "success_rate": 0.4807692307692308,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 52, \"success_rate\": 0.4807692307692308, \"object_moved_rate\": 0.9807692307692307}",
+      "ended_at": "2026-09-01T17:47:57.147665+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788287246",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-01T18:27:26.944134+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788289371",
+      "evaluation_id": null,
+      "num_episodes": 42,
+      "success_rate": 0.14285714285714285,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 42, \"success_rate\": 0.14285714285714285, \"object_moved_rate\": 0.9761904761904762}",
+      "ended_at": "2026-09-01T19:02:51.154444+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788290861",
+      "evaluation_id": null,
+      "num_episodes": 70,
+      "success_rate": 0.2571428571428571,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 70, \"success_rate\": 0.2571428571428571, \"object_moved_rate\": 0.9428571428571428}",
+      "ended_at": "2026-09-01T19:27:41.721886+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788292259",
+      "evaluation_id": null,
+      "num_episodes": 67,
+      "success_rate": 0.19402985074626866,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 67, \"success_rate\": 0.19402985074626866, \"object_moved_rate\": 0.5970149253731343}",
+      "ended_at": "2026-09-01T19:50:59.877746+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788292607",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.5}",
+      "ended_at": "2026-09-01T19:56:47.968149+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788299464",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-01T21:51:04.220693+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788299556",
+      "evaluation_id": null,
+      "num_episodes": 6,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 6, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-01T21:52:36.301935+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788299763",
+      "evaluation_id": null,
+      "num_episodes": 7,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 7, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-01T21:56:03.536493+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788299874",
+      "evaluation_id": null,
+      "num_episodes": 14,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 14, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-01T21:57:54.492891+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788306404",
+      "evaluation_id": null,
+      "num_episodes": 8,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 8, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-01T23:46:44.210608+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788316905",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 1.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"mean_latency_ms\": 18.2, \"completed_steps\": 1200, \"success_rate\": 1.0}",
+      "ended_at": "2026-09-02T02:41:45.622907+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "gr00t_checkpoint_20000"
+      ]
+    },
+    {
+      "id": "eval_run_1788316960",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 1.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"mean_latency_ms\": 18.2, \"completed_steps\": 1200, \"success_rate\": 1.0}",
+      "ended_at": "2026-09-02T02:42:40.803572+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "gr00t_checkpoint_20000"
+      ]
+    },
+    {
+      "id": "eval_run_1788317266",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T02:47:46.703228+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788317607",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-02T02:53:27.337937+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788318758",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-02T03:12:38.166120+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788321325",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-02T03:55:25.132137+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788362819",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T15:26:59.705086+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788363122",
+      "evaluation_id": null,
+      "num_episodes": 8,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 8, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-02T15:32:02.460138+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788363179",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T15:32:59.920320+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788363683",
+      "evaluation_id": null,
+      "num_episodes": 8,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 8, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-02T15:41:23.072618+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788365100",
+      "evaluation_id": null,
+      "num_episodes": 8,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 8, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-02T16:05:00.574348+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788366192",
+      "evaluation_id": null,
+      "num_episodes": 8,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 8, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-02T16:23:12.322984+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788366774",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T16:32:54.087262+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788366915",
+      "evaluation_id": null,
+      "num_episodes": 8,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 8, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-02T16:35:15.564661+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788367465",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-02T16:44:25.357801+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788381070",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-02T20:31:10.811075+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788383236",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T21:07:16.480945+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788383348",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-02T21:09:08.431341+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788385130",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-02T21:38:50.131274+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788385197",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-02T21:39:57.830500+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788385416",
+      "evaluation_id": null,
+      "num_episodes": 4,
+      "success_rate": 0.25,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 4, \"success_rate\": 0.25, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-02T21:43:36.371658+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788386516",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T22:01:56.946597+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788387923",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T22:25:23.805561+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788387975",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T22:26:15.320383+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788388086",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T22:28:06.577985+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788388212",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T22:30:12.026254+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788388259",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T22:30:59.785918+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788388299",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T22:31:39.374773+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_zero_action_ZeroActionPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788390526",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T23:08:46.179613+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788390648",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-02T23:10:48.576865+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788390861",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 1.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 1.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-02T23:14:21.714966+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788488863",
+      "evaluation_id": null,
+      "num_episodes": 4,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 4, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-04T02:27:43.622655+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788489449",
+      "evaluation_id": null,
+      "num_episodes": 6,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 6, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-04T02:37:29.968725+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788489730",
+      "evaluation_id": null,
+      "num_episodes": 12,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 12, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-04T02:42:10.414914+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788490556",
+      "evaluation_id": null,
+      "num_episodes": 10,
+      "success_rate": 0.1,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 10, \"success_rate\": 0.1, \"object_moved_rate\": 0.1}",
+      "ended_at": "2026-09-04T02:55:56.416931+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788491009",
+      "evaluation_id": null,
+      "num_episodes": 10,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 10, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-04T03:03:29.124951+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788491421",
+      "evaluation_id": null,
+      "num_episodes": 6,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 6, \"success_rate\": 0.0, \"object_moved_rate\": 0.16666666666666666}",
+      "ended_at": "2026-09-04T03:10:21.723428+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788491492",
+      "evaluation_id": null,
+      "num_episodes": 10,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 10, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-04T03:11:32.128630+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788492406",
+      "evaluation_id": null,
+      "num_episodes": 10,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 10, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-04T03:26:46.091999+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788535590",
+      "evaluation_id": null,
+      "num_episodes": 10,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 10, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-04T15:26:30.338096+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788536442",
+      "evaluation_id": null,
+      "num_episodes": 10,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 10, \"success_rate\": 0.0, \"object_moved_rate\": 0.1}",
+      "ended_at": "2026-09-04T15:40:42.644874+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788568278",
+      "evaluation_id": null,
+      "num_episodes": 20,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 20, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-05T00:31:18.035414+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788568817",
+      "evaluation_id": null,
+      "num_episodes": 6,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 6, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-05T00:40:17.115405+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788569640",
+      "evaluation_id": null,
+      "num_episodes": 6,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 6, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-05T00:54:00.619452+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788570498",
+      "evaluation_id": null,
+      "num_episodes": 6,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 6, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-05T01:08:18.620477+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788574767",
+      "evaluation_id": null,
+      "num_episodes": 6,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 6, \"success_rate\": 0.0, \"object_moved_rate\": 0.6666666666666666}",
+      "ended_at": "2026-09-05T02:19:27.299055+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_s4_align_20260907",
+      "evaluation_id": null,
+      "num_episodes": 20,
+      "success_rate": 0.05,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"success_rate\": 0.05, \"num_episodes\": 20.0, \"object_moved_rate\": 0.9, \"hand_lateral_to_obj_at_closest\": 0.09242, \"hand_z_minus_obj_at_closest\": 0.08922}",
+      "ended_at": "2026-09-07T01:30:00+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "gn1x_static_apple_align"
+      ]
+    },
+    {
+      "id": "eval_run_s4_base_20260907",
+      "evaluation_id": null,
+      "num_episodes": 20,
+      "success_rate": 0.05,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"success_rate\": 0.05, \"num_episodes\": 20.0, \"object_moved_rate\": 0.75, \"hand_lateral_to_obj_at_closest\": 0.10225999999999999, \"hand_z_minus_obj_at_closest\": 0.06975}",
+      "ended_at": "2026-09-07T01:30:00+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "gn1x_static_apple_base"
+      ]
+    },
+    {
+      "id": "eval_run_s4_baseline_20260907",
+      "evaluation_id": null,
+      "num_episodes": 20,
+      "success_rate": 0.05,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"success_rate\": 0.05, \"num_episodes\": 20.0, \"object_moved_rate\": 0.95, \"hand_lateral_to_obj_at_closest\": 0.08291000000000001, \"hand_z_minus_obj_at_closest\": 0.09401999999999999}",
+      "ended_at": "2026-09-07T01:30:00+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "gn1x_static_apple_baseline"
+      ]
+    },
+    {
+      "id": "eval_run_v31_aligned_20260907",
+      "evaluation_id": null,
+      "num_episodes": 20,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"success_rate\": 0.0, \"num_episodes\": 20, \"lateral_median_m\": 0.0518, \"vertical_median_m\": 0.0477, \"dist_median_m\": 0.0751, \"lift_rate\": 0.25, \"contact_rate\": 0.10, \"max_lift_m\": 0.0258, \"max_contact_n\": 3.078}",
+      "ended_at": "2026-09-07T03:08:31+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "gn1x_static_apple_baseline"
+      ]
+    },
+    {
+      "id": "eval_run_1788783196",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-07T12:13:16.233866+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_v32_aligned_20260907",
+      "evaluation_id": null,
+      "num_episodes": 20,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"success_rate\": 0.0, \"num_episodes\": 20, \"lateral_median_m\": 0.0385, \"vertical_median_m\": 0.0480, \"dist_median_m\": 0.0590, \"lift_rate\": 0.35, \"contact_rate\": 0.10, \"max_lift_m\": 0.0268, \"max_contact_n\": 2.0894}",
+      "ended_at": "2026-09-07T12:20:58+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "gn1x_static_apple_baseline"
+      ]
+    },
+    {
+      "id": "eval_run_1788783658",
+      "evaluation_id": null,
+      "num_episodes": 20,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 20, \"success_rate\": 0.0, \"object_moved_rate\": 0.15}",
+      "ended_at": "2026-09-07T12:20:58.062746+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788788378",
+      "evaluation_id": null,
+      "num_episodes": 20,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 20, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-07T13:39:38.294443+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788792940",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-07T14:55:40.768063+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788795559",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-07T15:39:19.151362+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788799008",
+      "evaluation_id": null,
+      "num_episodes": 20,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 20, \"success_rate\": 0.0, \"object_moved_rate\": 0.05}",
+      "ended_at": "2026-09-07T16:36:48.882639+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788804197",
+      "evaluation_id": null,
+      "num_episodes": 20,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 20, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-07T18:03:17.695623+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788822558",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 1.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"mean_latency_ms\": 18.2, \"completed_steps\": 1200, \"success_rate\": 1.0}",
+      "ended_at": "2026-09-07T23:09:18.314766+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "gr00t_checkpoint_20000"
+      ]
+    },
+    {
+      "id": "eval_run_1788822625",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 1.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"mean_latency_ms\": 18.2, \"completed_steps\": 1200, \"success_rate\": 1.0}",
+      "ended_at": "2026-09-07T23:10:25.379776+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "gr00t_checkpoint_20000"
+      ]
+    },
+    {
+      "id": "eval_run_1788822657",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 1.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"mean_latency_ms\": 18.2, \"completed_steps\": 1200, \"success_rate\": 1.0}",
+      "ended_at": "2026-09-07T23:10:57.875351+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "gr00t_checkpoint_20000"
+      ]
+    },
+    {
+      "id": "eval_run_1788823150",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-07T23:19:10.919429+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788823469",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-07T23:24:29.949502+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788823528",
+      "evaluation_id": null,
+      "num_episodes": 4,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 4, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-07T23:25:28.424641+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788824087",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-07T23:34:47.782460+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788824134",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-07T23:35:34.350231+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788824426",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 1.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"mean_latency_ms\": 18.2, \"completed_steps\": 1200, \"success_rate\": 1.0}",
+      "ended_at": "2026-09-07T23:40:26.762938+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "gr00t_checkpoint_20000"
+      ]
+    },
+    {
+      "id": "eval_run_1788824941",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 1.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"mean_latency_ms\": 18.2, \"completed_steps\": 1200, \"success_rate\": 1.0}",
+      "ended_at": "2026-09-07T23:49:01.035197+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "gr00t_checkpoint_20000"
+      ]
+    },
+    {
+      "id": "eval_run_1788830101",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-08T01:15:01.621619+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_assisted_Gr00tAssistedPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788830254",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-08T01:17:34.734995+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_assisted_Gr00tAssistedPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788830352",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-08T01:19:12.737536+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_assisted_Gr00tAssistedPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788830508",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-08T01:21:48.122758+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_assisted_Gr00tAssistedPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788830635",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-08T01:23:55.600390+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_assisted_Gr00tAssistedPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788830763",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-08T01:26:03.487414+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_assisted_Gr00tAssistedPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788837337",
+      "evaluation_id": null,
+      "num_episodes": 5,
+      "success_rate": 0.4,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 5, \"success_rate\": 0.4, \"object_moved_rate\": 0.6}",
+      "ended_at": "2026-09-08T03:15:37.367422+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_assisted_Gr00tAssistedPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788855345",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-08T08:15:45.920641+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788883949",
+      "evaluation_id": null,
+      "num_episodes": 5,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 5, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-08T16:12:29.146710+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788889700",
+      "evaluation_id": null,
+      "num_episodes": 10,
+      "success_rate": 0.7,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 10, \"success_rate\": 0.7, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-08T17:48:20.240037+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788890442",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 1.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 1.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-08T18:00:42.420090+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788890909",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 1.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 1.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-08T18:08:29.066149+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788892011",
+      "evaluation_id": null,
+      "num_episodes": 5,
+      "success_rate": 0.8,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 5, \"success_rate\": 0.8, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-08T18:26:51.184614+00:00",
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788892946",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": 0.0,
+      "mean_progress_score": 0.6666666865348816,
+      "blocking_predicate": "object_on_destination(force_threshold=0.1, velocity_threshold=0.1, max_xy_separation=0.075)",
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-08T18:42:26.499532+00:00",
+      "semantic_integrity_verified": true,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788893424",
+      "evaluation_id": null,
+      "num_episodes": 5,
+      "success_rate": 0.0,
+      "all_complete_rate": 0.0,
+      "mean_progress_score": 0.3333333432674408,
+      "blocking_predicate": "object_lifted_above_resting_min(object_name='apple_01_objaverse_robolab', distance=0.03, min_airborne_steps=1)",
+      "metrics_payload": "{\"num_episodes\": 5, \"success_rate\": 0.0, \"object_moved_rate\": 0.2}",
+      "ended_at": "2026-09-08T18:50:24.585262+00:00",
+      "semantic_integrity_verified": true,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788894696",
+      "evaluation_id": null,
+      "num_episodes": 5,
+      "success_rate": 0.0,
+      "all_complete_rate": 0.0,
+      "mean_progress_score": 0.3333333432674408,
+      "blocking_predicate": "object_lifted_above_resting_min(object_name='apple_01_objaverse_robolab', distance=0.03, min_airborne_steps=1)",
+      "metrics_payload": "{\"num_episodes\": 5, \"success_rate\": 0.0, \"object_moved_rate\": 0.2}",
+      "ended_at": "2026-09-08T19:11:36.986450+00:00",
+      "semantic_integrity_verified": true,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788899843",
+      "evaluation_id": null,
+      "num_episodes": 3,
+      "success_rate": 0.0,
+      "all_complete_rate": 0.0,
+      "mean_progress_score": 0.22222222884496054,
+      "blocking_predicate": "object_on_destination(force_threshold=0.1, velocity_threshold=0.1, max_xy_separation=0.075)",
+      "metrics_payload": "{\"num_episodes\": 3, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-08T20:37:23.370787+00:00",
+      "semantic_integrity_verified": true,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788902736",
+      "evaluation_id": null,
+      "num_episodes": 3,
+      "success_rate": 0.0,
+      "all_complete_rate": 0.0,
+      "mean_progress_score": 0.22222222884496054,
+      "blocking_predicate": "object_lifted_above_resting_min(object_name='apple_01_objaverse_robolab', distance=0.03, min_airborne_steps=1)",
+      "metrics_payload": "{\"num_episodes\": 3, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-08T21:25:36.684021+00:00",
+      "semantic_integrity_verified": true,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788907631",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": 0.0,
+      "mean_progress_score": 0.3333333432674408,
+      "blocking_predicate": "object_lifted_above_resting_min(object_name='apple_01_objaverse_robolab', distance=0.03, min_airborne_steps=1)",
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-08T22:47:11.378125+00:00",
+      "semantic_integrity_verified": true,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788917098",
+      "evaluation_id": null,
+      "num_episodes": 3,
+      "success_rate": 0.0,
+      "all_complete_rate": 0.0,
+      "mean_progress_score": 0.3333333432674408,
+      "blocking_predicate": "object_lifted_above_resting_min(object_name='apple_01_objaverse_robolab', distance=0.03, min_airborne_steps=1)",
+      "metrics_payload": "{\"num_episodes\": 3, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-09T01:24:58.550513+00:00",
+      "semantic_integrity_verified": true,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788917151",
+      "evaluation_id": null,
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "all_complete_rate": 0.0,
+      "mean_progress_score": 0.3333333432674408,
+      "blocking_predicate": "object_lifted_above_resting_min(object_name='apple_01_objaverse_robolab', distance=0.03, min_airborne_steps=1)",
+      "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-09T01:25:51.181812+00:00",
+      "semantic_integrity_verified": true,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788917966",
+      "evaluation_id": null,
+      "num_episodes": 3,
+      "success_rate": 0.0,
+      "all_complete_rate": 0.0,
+      "mean_progress_score": 0.3333333432674408,
+      "blocking_predicate": "object_lifted_above_resting_min(object_name='apple_01_objaverse_robolab', distance=0.03, min_airborne_steps=1)",
+      "metrics_payload": "{\"num_episodes\": 3, \"success_rate\": 0.0, \"object_moved_rate\": 0.0}",
+      "ended_at": "2026-09-09T01:39:26.982810+00:00",
+      "semantic_integrity_verified": true,
+      "integrity_violation": null,
+      "environments": [
+        "g1_apple_to_plate_rl"
+      ],
+      "policies": [
+        "rsl_rl"
+      ]
+    },
+    {
+      "id": "eval_run_1788925764",
+      "evaluation_id": null,
+      "num_episodes": 0,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": "{\"num_episodes\": 0, \"success_rate\": 0.0, \"object_moved_rate\": NaN}",
+      "ended_at": "2026-09-09T03:49:24.372314+00:00",
+      "semantic_integrity_verified": true,
+      "integrity_violation": null,
+      "environments": [
+        "droid_rubiks_cube_to_blue_bin"
+      ],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "eval_run_1788928970",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": 0.0,
+      "mean_progress_score": 0.5,
+      "blocking_predicate": "object_on_destination(force_threshold=0.1, velocity_threshold=0.1)",
+      "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+      "ended_at": "2026-09-09T04:42:50.655272+00:00",
+      "semantic_integrity_verified": true,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": [
+        "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+      ]
+    },
+    {
+      "id": "c1_align_assistance_20260908:combined10_seed42",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate__3442a766d74fdfe1"
+      ],
+      "policies": [
+        "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/align/checkpoint-5000#controller:a916f0bd202e472f784f35d7bfb70f4783727901dac5981ff11cef90ba048a06"
+      ]
+    },
+    {
+      "id": "c1_align_assistance_20260908:gate400_seed42",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate__3442a766d74fdfe1"
+      ],
+      "policies": [
+        "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/align/checkpoint-5000#controller:46ea1a4219ce401f8e1eb86bd9327294658dafcac84584e38ee093975a8da0e9"
+      ]
+    },
+    {
+      "id": "c1_align_assistance_20260908:gate400_seed7",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate__3442a766d74fdfe1"
+      ],
+      "policies": [
+        "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/align/checkpoint-5000#controller:46ea1a4219ce401f8e1eb86bd9327294658dafcac84584e38ee093975a8da0e9"
+      ]
+    },
+    {
+      "id": "c1_align_assistance_20260908:observe_fixed_seed42",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate__3442a766d74fdfe1"
+      ],
+      "policies": [
+        "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/align/checkpoint-5000#controller:4386d6e6125acea4f09e3c8b35278856070a12df26b53641f9d6b1ae340efcac"
+      ]
+    },
+    {
+      "id": "c1_align_assistance_20260908:observe_seed7",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate__3442a766d74fdfe1"
+      ],
+      "policies": [
+        "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/align/checkpoint-5000#controller:4386d6e6125acea4f09e3c8b35278856070a12df26b53641f9d6b1ae340efcac"
+      ]
+    },
+    {
+      "id": "c1_align_assistance_20260908:offset10_seed42",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate__3442a766d74fdfe1"
+      ],
+      "policies": [
+        "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/align/checkpoint-5000#controller:37e155a306e17b711ef7a0a792e88583db922560b2a0ce5c9f53fbafb0e3c1f6"
+      ]
+    },
+    {
+      "id": "dcrg_2095d019862bb762f9888c97f118faeb978d8fc6fc48135957cbf54c60ddc7e4",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate__826df6ebab6011c1"
+      ],
+      "policies": [
+        "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/baseline"
+      ]
+    },
+    {
+      "id": "dcrg_b263ed902c9c9db8fb787830acdcdd77bdd80178a3230637e1026072c93a8b0a",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate__3442a766d74fdfe1"
+      ],
+      "policies": [
+        "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/baseline"
+      ]
+    },
+    {
+      "id": "dcrg_batch_3b0a9e908c507d593ed5d3293a14f87b06f6bb8545a7ff507aa87a87b1f0c203",
+      "evaluation_id": null,
+      "num_episodes": 4,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate__826df6ebab6011c1"
+      ],
+      "policies": [
+        "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/baseline"
+      ]
+    },
+    {
+      "id": "dcrg_batch_dd3e0bf132c6bb3b8dcb04936b2251e2096b94202c47dff336475e8b18d41bd5",
+      "evaluation_id": null,
+      "num_episodes": 4,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate__3442a766d74fdfe1"
+      ],
+      "policies": [
+        "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/baseline"
+      ]
+    },
+    {
+      "id": "dcrg_c1_baseline_seed42_20260907",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate__3442a766d74fdfe1"
+      ],
+      "policies": [
+        "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/baseline"
+      ]
+    },
+    {
+      "id": "dcrg_cc835dc07d8d926b97c98b099313120cd9b09681e8e0826f79792fd5cd29679d",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate__826df6ebab6011c1"
+      ],
+      "policies": [
+        "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/baseline"
+      ]
+    },
+    {
+      "id": "dcrg_d05b30450bb2df8ae45384ee0beb1d6a0936ec4ecfc1a01446ccbff044d72453",
+      "evaluation_id": null,
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate__3442a766d74fdfe1"
+      ],
+      "policies": [
+        "/models/isaaclab_arena/static_apple_tutorial/geometry_arms/baseline"
+      ]
+    },
+    {
+      "id": "eval_run_model_249_20260909_013831",
+      "evaluation_id": null,
+      "num_episodes": 3,
+      "success_rate": null,
+      "all_complete_rate": null,
+      "mean_progress_score": 0.3333,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": true,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": []
+    },
+    {
+      "id": "eval_run_v32_20ep",
+      "evaluation_id": null,
+      "num_episodes": null,
+      "success_rate": null,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": []
+    },
+    {
+      "id": "eval_run_v33_20ep",
+      "evaluation_id": null,
+      "num_episodes": null,
+      "success_rate": null,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": []
+    },
+    {
+      "id": "eval_run_v34_20ep",
+      "evaluation_id": null,
+      "num_episodes": null,
+      "success_rate": null,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": []
+    },
+    {
+      "id": "eval_run_v35_20ep",
+      "evaluation_id": null,
+      "num_episodes": null,
+      "success_rate": null,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [
+        "g1_tabletop_apple_to_plate"
+      ],
+      "policies": []
+    },
+    {
+      "id": null,
+      "evaluation_id": null,
+      "num_episodes": null,
+      "success_rate": null,
+      "all_complete_rate": null,
+      "mean_progress_score": null,
+      "blocking_predicate": null,
+      "metrics_payload": null,
+      "ended_at": null,
+      "semantic_integrity_verified": null,
+      "integrity_violation": null,
+      "environments": [],
+      "policies": []
+    }
+  ],
+  "candidate_environment_graphs": [
+    {
+      "name": "droid_avocado_to_bowl",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "converged",
+        "model_used",
+        "prompt_tokens",
+        "completion_tokens",
+        "generation_time_s",
+        "total_tokens",
+        "updated_at",
+        "task_composition",
+        "llm_call_count",
+        "repair_iterations",
+        "name",
+        "task_description"
+      ]
+    },
+    {
+      "name": "droid_mustard_bottle_into_grey_bin",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "updated_at",
+        "task_composition",
+        "task_description",
+        "name"
+      ]
+    },
+    {
+      "name": "droid_pick_apple_to_bowl",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "updated_at",
+        "task_composition",
+        "name",
+        "task_description"
+      ]
+    },
+    {
+      "name": "droid_pick_mustard_to_bin",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "updated_at",
+        "task_composition",
+        "name",
+        "task_description"
+      ]
+    },
+    {
+      "name": "droid_pick_rubiks_cube_to_blue_bin",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "model_used",
+        "generation_time_s",
+        "converged",
+        "total_tokens",
+        "prompt_tokens",
+        "completion_tokens",
+        "repair_iterations",
+        "updated_at",
+        "task_composition",
+        "llm_call_count",
+        "task_description",
+        "name"
+      ]
+    },
+    {
+      "name": "droid_pick_rubiks_cube_to_wooden_bowl",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "model_used",
+        "generation_time_s",
+        "total_tokens",
+        "prompt_tokens",
+        "completion_tokens",
+        "converged",
+        "repair_iterations",
+        "updated_at",
+        "task_composition",
+        "task_description",
+        "llm_call_count",
+        "name"
+      ]
+    },
+    {
+      "name": "droid_rubiks_cube_to_bin",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "converged",
+        "model_used",
+        "prompt_tokens",
+        "completion_tokens",
+        "generation_time_s",
+        "total_tokens",
+        "updated_at",
+        "task_composition",
+        "llm_call_count",
+        "repair_iterations",
+        "name",
+        "task_description"
+      ]
+    },
+    {
+      "name": "droid_rubiks_cube_to_blue_bin",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "converged",
+        "model_used",
+        "prompt_tokens",
+        "completion_tokens",
+        "generation_time_s",
+        "total_tokens",
+        "updated_at",
+        "task_composition",
+        "repair_iterations",
+        "llm_call_count",
+        "name",
+        "task_description"
+      ]
+    },
+    {
+      "name": "franka_droid_apple_to_bowl_maple_table",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "model_used",
+        "generation_time_s",
+        "converged",
+        "total_tokens",
+        "prompt_tokens",
+        "completion_tokens",
+        "repair_iterations",
+        "updated_at",
+        "task_composition",
+        "task_description",
+        "llm_call_count",
+        "name"
+      ]
+    },
+    {
+      "name": "franka_droid_spam_can_to_grey_bin",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "generation_time_s",
+        "converged",
+        "total_tokens",
+        "prompt_tokens",
+        "completion_tokens",
+        "model_used",
+        "updated_at",
+        "repair_iterations",
+        "task_composition",
+        "task_description",
+        "llm_call_count",
+        "name"
+      ]
+    },
+    {
+      "name": "franka_droid_tomato_soup_to_bin",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "model_used",
+        "generation_time_s",
+        "converged",
+        "total_tokens",
+        "prompt_tokens",
+        "completion_tokens",
+        "repair_iterations",
+        "updated_at",
+        "task_composition",
+        "task_description",
+        "llm_call_count",
+        "name"
+      ]
+    },
+    {
+      "name": "g1_apple_to_plate_rl",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "teacher_obs_dimension",
+        "student_recurrent_architecture",
+        "standing_settled_root_pos",
+        "lift_curriculum_ratio",
+        "standing_settled_pelvis_z",
+        "reverse_curriculum_active",
+        "arm_curriculum_ratio",
+        "raptor_distillation_architecture_active",
+        "embodiment_name",
+        "multi_keypoint_guidance_active",
+        "action_space_dimension",
+        "action_space_type",
+        "mean_episode_length",
+        "converged",
+        "geometric_guidance_active",
+        "rl_policy",
+        "rl_training_reward_improvement",
+        "rl_algorithm",
+        "updated_at",
+        "task_composition",
+        "rl_training_iterations",
+        "rl_interaction_steps",
+        "name",
+        "task_description"
+      ]
+    },
+    {
+      "name": "g1_kitchen_apple_to_plate",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "converged",
+        "model_used",
+        "prompt_tokens",
+        "completion_tokens",
+        "generation_time_s",
+        "total_tokens",
+        "updated_at",
+        "task_composition",
+        "llm_call_count",
+        "repair_iterations",
+        "name",
+        "task_description"
+      ]
+    },
+    {
+      "name": "g1_maple_table_apple_to_plate",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "model_used",
+        "generation_time_s",
+        "completion_tokens",
+        "total_tokens",
+        "prompt_tokens",
+        "converged",
+        "updated_at",
+        "repair_iterations",
+        "task_composition",
+        "task_description",
+        "llm_call_count",
+        "name"
+      ]
+    },
+    {
+      "name": "g1_tabletop_apple_to_plate",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "task_description",
+        "generation_time_s",
+        "converged",
+        "total_tokens",
+        "prompt_tokens",
+        "completion_tokens",
+        "model_used",
+        "repair_iterations",
+        "updated_at",
+        "task_composition",
+        "llm_call_count",
+        "name"
+      ]
+    },
+    {
+      "name": "g1_tabletop_apple_to_plate__3442a766d74fdfe1",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "source_env_name",
+        "spec_sha256",
+        "spec_json",
+        "name",
+        "version"
+      ]
+    },
+    {
+      "name": "g1_tabletop_apple_to_plate__826df6ebab6011c1",
+      "id": null,
+      "env_name": null,
+      "property_keys": [
+        "source_env_name",
+        "spec_sha256",
+        "spec_json",
+        "name",
+        "version"
+      ]
+    }
+  ]
+}

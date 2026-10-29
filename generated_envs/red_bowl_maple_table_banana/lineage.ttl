@@ -1,0 +1,14 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:red_bowl_maple_table_banana a arena:EnvironmentFamily ;
+    arena:currentVersion 1 .
+
+:red_bowl_maple_table_banana_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T00:22:14.231024+00:00"^^xsd:dateTime ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 1 .
+

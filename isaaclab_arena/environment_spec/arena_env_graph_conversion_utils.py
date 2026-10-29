@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from isaaclab_arena.assets.asset import Asset
@@ -20,7 +19,9 @@ from isaaclab_arena.assets.object_type import ObjectType
 from isaaclab_arena.assets.registries import AssetRegistry, ObjectRelationLibraryRegistry
 from isaaclab_arena.environment_spec.arena_env_graph_task_conversion_utils import build_task_from_spec
 from isaaclab_arena.environment_spec.arena_env_graph_types import ObjectReferenceSpec, SpatialRelationSpec
+from isaaclab_arena.relations.object_placer_params import ObjectPlacerParams
 from isaaclab_arena.relations.placement_asset import PlaceableAsset
+from isaaclab_arena.relations.relation_solver import RelationSolverParams
 from isaaclab_arena.utils.physics_backend import PhysicsBackend
 from isaaclab_arena.utils.pose import Pose
 from isaaclab_arena.utils.usd.helpers import has_light, open_stage
@@ -65,18 +66,46 @@ def build_arena_env_from_graph_spec(graph_spec: ArenaEnvGraphSpec, enable_camera
     _attach_spatial_relations_to_assets(graph_spec.relations, assets_by_node_id)
     scene_assets = [asset for node_id, asset in assets_by_node_id.items() if node_id != graph_spec.embodiment.id]
     override = graph_spec.env_cfg_override
-    env_cfg_callback = partial(apply_env_cfg_override, override=override) if override is not None else None
+
+    def _env_cfg_callback(env_cfg):
+        """Force one RTX re-render after reset and apply optional env_cfg_override."""
+        if getattr(env_cfg, "num_rerenders_on_reset", 0) < 1:
+            env_cfg.num_rerenders_on_reset = 1
+        if override is not None:
+            env_cfg = apply_env_cfg_override(env_cfg, override=override)
+        return env_cfg
+
     default_physics_backend = (
         graph_spec.default_physics_backend if graph_spec.default_physics_backend is not None else PhysicsBackend.PHYSX
     )
+    if graph_spec.placer_params is not None:
+        placer_params = build_placer_params_from_override(graph_spec.placer_params)
+    elif graph_spec.placement_validators is not None:
+        placer_params = build_checks_for_placer_params(graph_spec)
+    else:
+        placer_params = build_placer_params_from_override(None)
+
     return IsaacLabArenaEnvironment(
         name=graph_spec.env_name,
         scene=Scene(assets=scene_assets),
         embodiment=assets_by_node_id[graph_spec.embodiment.id],
         task=build_task_from_spec(graph_spec.task, assets_by_node_id),
-        placer_params=build_placer_params_from_override(graph_spec.placer_params),
-        env_cfg_callback=env_cfg_callback,
+        placer_params=placer_params,
+        env_cfg_callback=_env_cfg_callback,
         default_physics_backend=default_physics_backend,
+    )
+
+
+def build_checks_for_placer_params(graph_spec: ArenaEnvGraphSpec) -> ObjectPlacerParams:
+    """Build placement params defining what checks to run during layout validation for this env."""
+    placement_validators = graph_spec.placement_validators
+    enabled_checks = placement_validators.enabled_checks if placement_validators is not None else None
+    required_checks = placement_validators.required_checks if placement_validators is not None else None
+
+    return ObjectPlacerParams(
+        enabled_checks=set(enabled_checks) if enabled_checks is not None else None,
+        required_checks=set(required_checks) if required_checks is not None else None,
+        solver_params=RelationSolverParams(verbose=False, save_position_history=False),
     )
 
 
@@ -136,7 +165,21 @@ def _prim_path_for_relative(parent_prim_path: str, prim_path: str) -> str:
     """Expand a relative prim suffix to the Isaac Lab runtime prim path."""
     if prim_path.startswith("{ENV_REGEX_NS}/"):
         return prim_path
-    return f"{parent_prim_path}/{prim_path.lstrip('/')}"
+    stripped = prim_path.lstrip("/")
+    if not stripped:
+        return parent_prim_path
+    return f"{parent_prim_path}/{stripped}"
+
+
+def _parse_pose_data(pose_data: Any) -> Pose | None:
+    """Parse raw dictionary or Pose object into a typed Pose."""
+    if isinstance(pose_data, dict):
+        pos = tuple(pose_data.get("position_xyz", [0.0, 0.0, 0.0]))
+        rot = tuple(pose_data.get("rotation_xyzw", [0.0, 0.0, 0.0, 1.0]))
+        return Pose(position_xyz=pos, rotation_xyzw=rot)
+    elif isinstance(pose_data, Pose):
+        return pose_data
+    return None
 
 
 def _instantiate_object_reference(
@@ -174,18 +217,40 @@ def instantiate_assets_from_spec(
     embodiment_params = parse_asset_params(graph_spec.embodiment.params)
     if enable_cameras:
         embodiment_params.setdefault("enable_cameras", True)
-    assets_by_node_id[graph_spec.embodiment.id] = asset_registry.get_asset_by_name(graph_spec.embodiment.registry_name)(
-        **embodiment_params
-    )
+    emb_pose_data = embodiment_params.pop("initial_pose", None)
+    if emb_pose_data is not None:
+        parsed_emb_pose = _parse_pose_data(emb_pose_data)
+        if parsed_emb_pose is not None:
+            embodiment_params["initial_pose"] = parsed_emb_pose
+    initial_joint_pos = embodiment_params.pop("initial_joint_pos", None)
+    finger_friction_params = embodiment_params.pop("finger_contact_friction", None)
+    embodiment_instance = asset_registry.get_asset_by_name(graph_spec.embodiment.registry_name)(**embodiment_params)
+    if initial_joint_pos is not None and hasattr(embodiment_instance, "set_joint_initial_pos"):
+        embodiment_instance.set_joint_initial_pos(initial_joint_pos)
+    if finger_friction_params is not None and hasattr(embodiment_instance, "set_finger_contact_friction"):
+        embodiment_instance.set_finger_contact_friction(**finger_friction_params)
+    assets_by_node_id[graph_spec.embodiment.id] = embodiment_instance
 
+    bg_params = parse_asset_params(graph_spec.background.params)
     assets_by_node_id[graph_spec.background.id] = asset_registry.get_asset_by_name(graph_spec.background.registry_name)(
-        **parse_asset_params(graph_spec.background.params)
+        **bg_params
     )
 
     for obj in graph_spec.objects:
         params = parse_asset_params(obj.params)
         params.setdefault("instance_name", obj.id)
-        assets_by_node_id[obj.id] = asset_registry.get_asset_by_name(obj.registry_name)(**params)
+        initial_pose_data = params.pop("initial_pose", None)
+        asset_instance = asset_registry.get_asset_by_name(obj.registry_name)(**params)
+        parsed_obj_pose = _parse_pose_data(initial_pose_data)
+        is_anchor_obj = any(r.kind == "is_anchor" and r.subject == obj.id for r in graph_spec.relations)
+        has_relations = any(r.subject == obj.id and r.kind != "is_anchor" for r in graph_spec.relations)
+        if (
+            parsed_obj_pose is not None
+            and (is_anchor_obj or not has_relations)
+            and hasattr(asset_instance, "set_initial_pose")
+        ):
+            asset_instance.set_initial_pose(parsed_obj_pose)
+        assets_by_node_id[obj.id] = asset_instance
 
     for object_set in graph_spec.object_sets or []:
         assets_by_node_id[object_set.id] = RigidObjectSet(
@@ -208,13 +273,36 @@ def _attach_spatial_relations_to_assets(
     relations: list[SpatialRelationSpec], assets_by_node_id: dict[str, PlaceableAsset]
 ) -> None:
     """Attach one Relation per spatial relation to the asset(s) it targets, in place."""
+    import inspect
+
     for relation in relations:
         subject_asset = assets_by_node_id[relation.subject]
         relation_class = ObjectRelationLibraryRegistry().get_object_relation_by_name(relation.kind)
+        params = dict(relation.params or {})
+
+        # Unpack vector position parameters (e.g. pos: [x, y, z]) into x, y, z kwargs for AtPosition
+        for pos_key in ("pos", "position", "xyz", "position_xyz"):
+            if pos_key in params and isinstance(params[pos_key], (list, tuple)) and len(params[pos_key]) >= 3:
+                coords = params[pos_key]
+                if "x" not in params:
+                    params["x"] = float(coords[0])
+                if "y" not in params:
+                    params["y"] = float(coords[1])
+                if "z" not in params:
+                    params["z"] = float(coords[2])
+                break
+
+        sig = inspect.signature(relation_class.__init__)
+        valid_kwargs = {k: v for k, v in params.items() if k in sig.parameters}
         if relation_class.is_unary():
-            subject_asset.add_relation(relation_class(**relation.params))
+            subject_asset.add_relation(relation_class(**valid_kwargs))
             if relation.kind == "is_anchor" and subject_asset.get_initial_pose() is None:
                 subject_asset.set_initial_pose(Pose.identity())
         else:
             reference_asset = assets_by_node_id[relation.reference]
-            subject_asset.add_relation(relation_class(reference_asset, **relation.params))
+            subject_asset.add_relation(relation_class(reference_asset, **valid_kwargs))
+            if "surface_sector" in valid_kwargs or "surface_anchor" in valid_kwargs:
+                from isaaclab_arena.relations.relations import RandomAroundSolution, get_relation
+
+                if get_relation(subject_asset, RandomAroundSolution) is None:
+                    subject_asset.add_relation(RandomAroundSolution(x_half_m=0.03, y_half_m=0.03))

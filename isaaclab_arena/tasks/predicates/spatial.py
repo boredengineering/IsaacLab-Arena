@@ -11,11 +11,16 @@ import math
 import torch
 from typing import TYPE_CHECKING
 
+import warp as wp
+from isaaclab.assets import RigidObject
+from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors.contact_sensor.contact_sensor import ContactSensor
 from isaaclab.utils.math import quat_apply, quat_apply_inverse
 
+from isaaclab_arena.tasks.predicates.episode_state import get_episode_scoped_state
 from isaaclab_arena.tasks.predicates.object_settling import get_object_initial_rest_state
+from isaaclab_arena.tasks.predicates.predicate_utils import get_env, get_root_lin_vel_w, get_root_pos_w, select
 from isaaclab_arena.utils.bounding_box import AxisAlignedBoundingBox
 
 if TYPE_CHECKING:
@@ -180,20 +185,7 @@ def lateral_in_proximity(
     subject_offset_xyz: tuple[float, float, float] = (0.0, 0.0, 0.0),
     receiver_axis: tuple[float, float, float] = (0.0, 0.0, 1.0),
 ) -> torch.Tensor:
-    """Check point proximity perpendicular to a receiver-local axis.
-
-    Args:
-        env: Environment providing asset poses.
-        subject_name: Subject asset name.
-        receiver_name: Receiver asset name.
-        target_offset_xyz: Target point in the receiver frame.
-        tolerance_lateral: Maximum perpendicular distance from the target axis.
-        subject_offset_xyz: Point in the subject frame; defaults to its origin.
-        receiver_axis: Plane normal in the receiver frame; defaults to +Z.
-
-    Returns:
-        One Boolean result per environment.
-    """
+    """Check point proximity perpendicular to a receiver-local axis."""
     _, lateral = _relative_axial_distances(
         env, subject_name, receiver_name, target_offset_xyz, subject_offset_xyz, receiver_axis
     )
@@ -211,21 +203,7 @@ def depth_in_range(
     subject_offset_xyz: tuple[float, float, float] = (0.0, 0.0, 0.0),
     receiver_axis: tuple[float, float, float] = (0.0, 0.0, 1.0),
 ) -> torch.Tensor:
-    """Check point depth relative to a receiver-local target along its configured axis.
-
-    Args:
-        env: Environment providing asset poses.
-        subject_name: Subject asset name.
-        receiver_name: Receiver asset name.
-        target_offset_xyz: Target point in the receiver frame.
-        depth_min: Inclusive minimum signed depth.
-        depth_max: Inclusive maximum signed depth, or None for no upper limit.
-        subject_offset_xyz: Point in the subject frame; defaults to its origin.
-        receiver_axis: Depth axis in the receiver frame; defaults to +Z.
-
-    Returns:
-        One Boolean result per environment.
-    """
+    """Check point depth relative to a receiver-local target along its configured axis."""
     assert (
         depth_max is None or depth_min <= depth_max
     ), f"depth_min ({depth_min}) must not exceed depth_max ({depth_max})."
@@ -285,27 +263,47 @@ def object_is_above_height(
     surface_height: float | None = None,
     use_settled_state: bool = False,
     distance: float = 1e-2,
+    env_id: int | None = None,
 ) -> torch.Tensor:
-    """Checks if an object is above a certain height.
-
-    The reference height is either a fixed ``surface_height`` or, when ``use_settled_state`` is set, the
-    object's recorded resting height (see ``objects_settled``). For envs where no settled state
-    has been recorded, the result is always False.
-
-    Returns True when ``object_name`` is at least ``distance`` m above a height reference.
-    """
-
+    """Checks if an object is above a certain height."""
     assert (
         surface_height is not None
     ) != use_settled_state, "object_is_above_height requires exactly one of surface_height or use_settled_state"
 
-    object_z = env.arena_world.get_position_w(object_name)[:, 2]
+    if hasattr(env, "arena_world"):
+        object_z = env.arena_world.get_position_w(object_name)[:, 2]
+    else:
+        object_z = get_root_pos_w(env, object_name)[:, 2]
     if use_settled_state:
         settled_pos, has_settled = get_object_initial_rest_state(env, object_name)
         result = has_settled & (object_z > (settled_pos[:, 2] + distance))
     else:
         result = object_z > (surface_height + distance)
-    return result
+    return select(result, env_id) if env_id is not None else result
+
+
+def object_lifted_above_resting_min(
+    env: ManagerBasedRLEnv,
+    object_name: str,
+    distance: float = 5e-2,
+    rest_speed_threshold: float = 5e-2,
+    rest_steps_required: int = 3,
+    min_airborne_steps: int = 1,
+    env_id: int | None = None,
+) -> torch.Tensor:
+    """Checks if an object has been held ``distance`` m above its resting height, for a duration."""
+    state = get_episode_scoped_state(env)
+    speed = torch.linalg.vector_norm(get_root_lin_vel_w(env, object_name), dim=-1)
+    rest_run = state.run_length(f"rest_run::{object_name}", speed < rest_speed_threshold)
+    has_rested = state.latch(f"has_rested::{object_name}", 1, 0, rest_run >= rest_steps_required)
+
+    object_z = get_root_pos_w(env, object_name)[:, 2]
+    reference_z = state.running_min(
+        f"resting_min_z::{object_name}", torch.where(has_rested, object_z, torch.full_like(object_z, float("inf")))
+    )
+    above_threshold = has_rested & (object_z > (reference_z + distance))
+    airborne_run = state.run_length(f"airborne_run::{object_name}", above_threshold)
+    return select(airborne_run >= min_airborne_steps, env_id)
 
 
 def object_moving(
@@ -313,11 +311,7 @@ def object_moving(
     object_name: str,
     velocity_threshold: float = 1e-2,
 ) -> torch.Tensor:
-    """Check whether an object is moving above a velocity threshold.
-
-    Returns True when object_name's linear speed exceeds velocity_threshold (m/s).
-    """
-
+    """Check whether an object is moving above a velocity threshold."""
     arena_world = env.arena_world
     object_mean_linear_velocity_w = arena_world.get_mean_linear_velocity_w(object_name)
     speed = torch.linalg.vector_norm(object_mean_linear_velocity_w, dim=-1)
@@ -332,16 +326,15 @@ def objects_in_proximity(
     max_x_separation: float,
     max_z_separation: float,
 ) -> torch.Tensor:
-    """Determine if two objects are within a certain proximity of each other.
+    """Determine if two objects are within a certain proximity of each other."""
+    if hasattr(env, "arena_world"):
+        arena_world = env.arena_world
+        object_position_w = arena_world.get_position_w(object_cfg.name)
+        target_object_position_w = arena_world.get_position_w(target_object_cfg.name)
+    else:
+        object_position_w = get_root_pos_w(env, object_cfg.name)
+        target_object_position_w = get_root_pos_w(env, target_object_cfg.name)
 
-    Returns True when the object is within a certain proximity of the target object.
-    """
-
-    arena_world = env.arena_world
-    object_position_w = arena_world.get_position_w(object_cfg.name)
-    target_object_position_w = arena_world.get_position_w(target_object_cfg.name)
-
-    # object to target object
     x_separation = torch.abs(object_position_w[:, 0] - target_object_position_w[:, 0])
     y_separation = torch.abs(object_position_w[:, 1] - target_object_position_w[:, 1])
     z_separation = torch.abs(object_position_w[:, 2] - target_object_position_w[:, 2])
@@ -360,29 +353,9 @@ def object_supported_by(
     low_point_tolerance: float = 0.01,
     minimum_support_fraction: float = 0.5,
 ) -> torch.Tensor:
-    """Check whether a large fraction of object's lowest vertices are close to the destination's top surface.
-
-    This is a geometric-only implementation to replace contact-sensor based contact_force_is_upward_support.
-    Use this for deformable objects which don't have contact sensor support yet, see
-    https://github.com/isaac-sim/IsaacLab/issues/4410
-
-    Args:
-        object_vertices_pos_w: Object vertices in world frame ``W``.
-            Shape is ``(num_envs, num_vertices, 3)``.
-        destination_bound: Axis-aligned bounds of the destination object in ``W``.
-        support_tolerance: Maximum vertical distance in meters between a object vertex
-            and the destination top surface to count as supported.
-        low_point_tolerance: Band above the lowest node height used to select
-            bottom nodes for the support-fraction denominator.
-        minimum_support_fraction: Minimum fraction of low nodes that must lie
-            on the destination footprint near the top surface.
-
-    Returns:
-        One Boolean result per environment.
-    """
+    """Check whether a large fraction of object's lowest vertices are close to the destination's top surface."""
     low_z = object_vertices_pos_w[..., 2].amin(dim=1, keepdim=True)
     low_mask = object_vertices_pos_w[..., 2] <= low_z + low_point_tolerance
-    # TODO(qianl, 2026-09-15): use destination's vertices instead of AABB top surface/footprint for closeness check.
     near_top = torch.abs(object_vertices_pos_w[..., 2] - destination_bound.top_surface_z[:, None]) <= support_tolerance
     inside_footprint = (
         (object_vertices_pos_w[..., :2] >= destination_bound.min_point[:, None, :2])
@@ -395,33 +368,41 @@ def object_supported_by(
 
 def object_on_destination(
     env: IsaacLabArenaManagerBasedRLEnv,
-    object_cfg: SceneEntityCfg,
-    destination_cfg: SceneEntityCfg,
-    contact_sensor_cfg: SceneEntityCfg | None,
-    force_threshold: float,
-    velocity_threshold: float,
+    object_cfg: SceneEntityCfg = SceneEntityCfg("pick_up_object"),
+    destination_cfg: SceneEntityCfg | None = None,
+    contact_sensor_cfg: SceneEntityCfg | None = SceneEntityCfg("pick_up_object_contact_sensor"),
+    force_threshold: float = 1.0,
+    velocity_threshold: float = 0.5,
     support_cone_half_angle_rad: float = math.pi / 4,
+    max_xy_separation: float | None = None,
 ) -> torch.Tensor:
-    """Check whether an object is stably placed on its destination.
+    """Check whether an object is stably placed on its destination."""
+    if not hasattr(env, "arena_world") or max_xy_separation is not None:
+        unwrapped_env = get_env(env)
+        object: RigidObject = unwrapped_env.scene[object_cfg.name]
+        assert contact_sensor_cfg is not None
+        sensor: ContactSensor = unwrapped_env.scene[contact_sensor_cfg.name]
+        assert sensor.data.force_matrix_w.shape[1] == 1
+        force_matrix_norm = torch.norm(wp.to_torch(sensor.data.force_matrix_w), dim=-1).max(dim=-1).values.reshape(-1)
+        force_above_threshold = force_matrix_norm > force_threshold
 
-    The object's spawned-bounds center must be over the destination footprint
-    and above its bottom, and the object's linear speed must be below the configured threshold.
-    Rigid objects must also have upward support force. Deformable objects must have enough
-    low nodal points near the destination's top surface. Destinations must be rooted objects.
+        velocity_w = wp.to_torch(object.data.root_lin_vel_w)
+        velocity_w_norm = torch.norm(velocity_w, dim=-1)
+        vel_ok = velocity_w_norm < velocity_threshold
 
-    Args:
-        env: The live Arena manager-based environment.
-        object_cfg: The object being placed.
-        destination_cfg: The rooted object or scene entry receiving the object.
-        contact_sensor_cfg: The object's contact sensor filtered to the destination. None for a deformable object.
-        force_threshold: Minimum upward support force in newtons.
-        velocity_threshold: Maximum object linear speed in meters per second.
-        support_cone_half_angle_rad: Maximum angle in radians from world ``+Z`` for the support force.
+        condition_met = torch.logical_and(force_above_threshold, vel_ok)
 
-    Returns:
-        One Boolean result per environment.
-    """
+        if max_xy_separation is not None:
+            assert destination_cfg is not None, "max_xy_separation requires destination_cfg"
+            destination: RigidObject = unwrapped_env.scene[destination_cfg.name]
+            object_xy = wp.to_torch(object.data.root_pos_w)[:, :2]
+            destination_xy = wp.to_torch(destination.data.root_pos_w)[:, :2]
+            xy_separation = torch.linalg.vector_norm(object_xy - destination_xy, dim=-1)
+            condition_met = torch.logical_and(condition_met, xy_separation < max_xy_separation)
 
+        return condition_met
+
+    assert destination_cfg is not None, "object_on_destination requires destination_cfg"
     arena_world = env.arena_world
     assert (
         destination_cfg.name not in env.scene.deformable_objects
@@ -434,7 +415,6 @@ def object_on_destination(
     )
 
     if object_cfg.name in env.scene.deformable_objects:
-        # Use geometric support for deformable objects.
         object_vertices_w = arena_world.get_vertices_w(object_cfg.name)
         destination_vertices_w = arena_world.get_vertices_w(destination_cfg.name)
         destination_bound = AxisAlignedBoundingBox(
@@ -446,17 +426,15 @@ def object_on_destination(
             destination_bound=destination_bound,
         )
     else:
-        # Use contact sensor for rigid objects.
         assert contact_sensor_cfg is not None, "object_on_destination requires a contact sensor for rigid objects"
         contact_sensor: ContactSensor = env.scene[contact_sensor_cfg.name]
         force_matrix_w = contact_sensor.data.force_matrix_w
         assert force_matrix_w is not None, f"Contact sensor '{contact_sensor_cfg.name}' has no filtered force matrix."
-        force_matrix_w = force_matrix_w.torch
+        force_matrix_w = force_matrix_w.torch if hasattr(force_matrix_w, "torch") else wp.to_torch(force_matrix_w)
         assert force_matrix_w.shape == (env.num_envs, 1, 1, 3), (
             f"Contact sensor '{contact_sensor_cfg.name}' must provide one sensed body and one filtered body; "
             f"got force shape {tuple(force_matrix_w.shape)}."
         )
-        # The two zeros select the sensor's single sensed body and single filtered destination body.
         support_force_on_object_w = force_matrix_w[:, 0, 0, :]
         destination_provides_upward_support = contact_force_is_upward_support(
             contact_force_w=support_force_on_object_w,
@@ -469,24 +447,40 @@ def object_on_destination(
     return object_center_over_destination & destination_provides_upward_support & object_moves_slowly
 
 
+def objects_on_destinations(
+    env: ManagerBasedRLEnv,
+    object_cfg_list: list[SceneEntityCfg] = [SceneEntityCfg("pick_up_object")],
+    contact_sensor_cfg_list: list[SceneEntityCfg] = [SceneEntityCfg("pick_up_object_contact_sensor")],
+    force_threshold: float = 1.0,
+    velocity_threshold: float = 0.5,
+) -> torch.Tensor:
+    """Multi-object version of `object_on_destination`."""
+    assert len(object_cfg_list) == len(contact_sensor_cfg_list), (
+        "object_cfg_list and contact_sensor_cfg_list must have equal length, got "
+        f"{len(object_cfg_list)} objects and {len(contact_sensor_cfg_list)} sensors"
+    )
+
+    unwrapped_env = get_env(env)
+    condition_met = torch.ones((unwrapped_env.num_envs), device=unwrapped_env.device, dtype=torch.bool)
+    for object_cfg, contact_sensor_cfg in zip(object_cfg_list, contact_sensor_cfg_list):
+        single_condition = object_on_destination(
+            env=env,
+            object_cfg=object_cfg,
+            contact_sensor_cfg=contact_sensor_cfg,
+            force_threshold=force_threshold,
+            velocity_threshold=velocity_threshold,
+        )
+        condition_met = torch.logical_and(condition_met, single_condition)
+    return condition_met
+
+
 def object_in_target_aabb(
     env: IsaacLabArenaManagerBasedRLEnv,
     object_name: str,
     target_name: str,
     minimum_contained_fraction: float = 1.0,
 ) -> torch.Tensor:
-    """Check the fraction of object AABB volume within the target world-frame AABB.
-
-    Args:
-        env: Environment supplying live geometry through ArenaWorld.
-        object_name: Deposited object's scene key.
-        target_name: Container object's scene key.
-        minimum_contained_fraction: Required volume fraction in (0, 1]; 1 requires full containment.
-
-    Returns:
-        One Boolean result per environment. This measures bounding-box volume,
-        not mesh volume.
-    """
+    """Check the fraction of object AABB volume within the target world-frame AABB."""
     assert math.isfinite(minimum_contained_fraction) and 0 < minimum_contained_fraction <= 1
     object_aabb_W = env.arena_world.get_aabb_w(object_name)
     target_aabb_W = env.arena_world.get_aabb_w(target_name)
@@ -498,22 +492,13 @@ def object_in_contact_with_target(
     contact_sensor_cfg: SceneEntityCfg,
     force_threshold: float,
 ) -> torch.Tensor:
-    """Check contact with a destination using an object sensor filtered to that destination.
-
-    Args:
-        env: Environment providing the contact sensor.
-        contact_sensor_cfg: Sensor observing only contacts with the destination.
-        force_threshold: Minimum contact force magnitude in newtons.
-
-    Returns:
-        One Boolean result per environment; contact in any direction qualifies.
-    """
+    """Check contact with a destination using an object sensor filtered to that destination."""
     assert (
         math.isfinite(force_threshold) and force_threshold > 0
     ), "Contact force threshold must be positive and finite."
     force_matrix = env.scene[contact_sensor_cfg.name].data.force_matrix_w
     assert force_matrix is not None, "Destination contact requires a filtered contact sensor."
-    forces_W = force_matrix.torch
+    forces_W = force_matrix.torch if hasattr(force_matrix, "torch") else wp.to_torch(force_matrix)
     return (torch.linalg.vector_norm(forces_W, dim=-1) >= force_threshold).flatten(start_dim=1).any(dim=-1)
 
 
@@ -527,21 +512,7 @@ def object_settled_in_target_aabb(
     linear_velocity_threshold: float,
     angular_velocity_threshold: float,
 ) -> torch.Tensor:
-    """Check world-AABB volume containment, target contact, and low velocity for the current step.
-
-    Args:
-        env: Environment supplying geometry, contact forces, and velocities.
-        object_name: Deposited object's scene key.
-        target_name: Container object's scene key.
-        contact_sensor_cfg: Object contact sensor filtered to the target.
-        minimum_contained_fraction: Required object AABB volume fraction in (0, 1].
-        contact_force_threshold: Minimum target contact force in newtons.
-        linear_velocity_threshold: Maximum linear speed in meters per second.
-        angular_velocity_threshold: Maximum angular speed in radians per second.
-
-    Returns:
-        One Boolean result per environment.
-    """
+    """Check world-AABB volume containment, target contact, and low velocity for the current step."""
     contained = object_in_target_aabb(env, object_name, target_name, minimum_contained_fraction)
     touching = object_in_contact_with_target(env, contact_sensor_cfg, contact_force_threshold)
     settled = velocity_below_threshold(env, object_name, linear_velocity_threshold, angular_velocity_threshold)

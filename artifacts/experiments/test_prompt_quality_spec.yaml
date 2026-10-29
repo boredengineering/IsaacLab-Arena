@@ -1,0 +1,135 @@
+env_name: franka_office_table_microwave_stow_task
+embodiment:
+  id: franka_robot
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.8
+      - 0.0
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: office_table
+  registry_name: office_table_background
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.0
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - -0.7071068
+      - 0.7071068
+objects:
+- id: microwave
+  registry_name: microwave
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.2
+      - -0.35
+      - 0.531
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: tomato_soup_can
+  registry_name: tomato_soup_can_ycb_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.2
+      - 0.25
+      - 0.531
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: office_table
+  params: {}
+- kind: 'on'
+  subject: microwave
+  reference: office_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_right
+- kind: 'on'
+  subject: tomato_soup_can
+  reference: office_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_left
+- kind: rotate_around_solution
+  subject: microwave
+  params:
+    yaw_rad: -1.5707963267948966
+reified_relations:
+- reifier_id: reifier_microwave_office_table
+  source_id: microwave
+  relation_type: PLACED_ON
+  target_id: office_table
+  surface_anchor: table_top
+  surface_sector: front_right
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    nominal: 0.25
+    min_val: 0.1
+    max_val: 0.4
+  delta_y:
+    nominal: -0.35
+    min_val: -0.45
+    max_val: -0.2
+  delta_z:
+    nominal: 0.531
+    min_val: 0.531
+    max_val: 0.531
+- reifier_id: reifier_tomato_soup_can_office_table
+  source_id: tomato_soup_can
+  relation_type: PLACED_ON
+  target_id: office_table
+  surface_anchor: table_top
+  surface_sector: front_left
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    nominal: 0.25
+    min_val: 0.1
+    max_val: 0.4
+  delta_y:
+    nominal: 0.25
+    min_val: 0.15
+    max_val: 0.4
+  delta_z:
+    nominal: 0.531
+    min_val: 0.531
+    max_val: 0.531
+task:
+  composition: sequential
+  description: Open microwave door to at least 75 degrees and stow tomato soup can
+    inside turntable cavity.
+  subtasks:
+  - kind: OpenDoorTask
+    params:
+      openable_object: microwave
+      openness_threshold: 0.75
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: tomato_soup_can
+      destination_location: microwave
+      background_scene: office_table

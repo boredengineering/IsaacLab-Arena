@@ -1,0 +1,39 @@
+# Copyright (c) 2026, The Isaac Lab-Arena Project Developers.
+# SPDX-License-Identifier: Apache-2.0
+# Registry-verified Node 22.23.2 / nginx 1.30.4, immutable multiarch digests.
+FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS node_base
+ARG FRONTEND_UID=1000
+ARG FRONTEND_GID=1000
+RUN test "$FRONTEND_UID" -gt 0 && test "$FRONTEND_GID" -gt 0 \
+    && mkdir -p /app/node_modules && chown -R "$FRONTEND_UID:$FRONTEND_GID" /app
+WORKDIR /app
+
+FROM node_base AS build
+ARG FRONTEND_UID=1000
+ARG FRONTEND_GID=1000
+COPY --chown=${FRONTEND_UID}:${FRONTEND_GID} web/arena-workbench/package.json web/arena-workbench/package-lock.json ./
+USER ${FRONTEND_UID}:${FRONTEND_GID}
+RUN npm ci --cache /tmp/npm-cache
+COPY --chown=${FRONTEND_UID}:${FRONTEND_GID} web/arena-workbench/ ./
+RUN npm run build
+
+FROM node_base AS development
+RUN apk add --no-cache nginx=1.30.4-r1
+COPY docker/workbench/nginx.dev.conf /etc/nginx/nginx.conf
+COPY docker/workbench/dev-supervisor.mjs /opt/workbench/dev-supervisor.mjs
+ARG FRONTEND_UID=1000
+ARG FRONTEND_GID=1000
+USER ${FRONTEND_UID}:${FRONTEND_GID}
+ENV HOME=/tmp NPM_CONFIG_CACHE=/tmp/npm-cache
+EXPOSE 3000
+ENTRYPOINT ["node", "/opt/workbench/dev-supervisor.mjs"]
+
+FROM nginxinc/nginx-unprivileged:stable-alpine@sha256:442753882674b49ae2c1de83ed67896131c0777f56df5005e356e62bc3f7e7ce AS production
+COPY docker/workbench/nginx.prod.conf /etc/nginx/nginx.conf
+COPY --from=build /app/dist/ /usr/share/nginx/html/
+ARG FRONTEND_UID=1000
+ARG FRONTEND_GID=1000
+USER ${FRONTEND_UID}:${FRONTEND_GID}
+EXPOSE 3000
+ENTRYPOINT ["nginx"]
+CMD ["-g", "daemon off;"]

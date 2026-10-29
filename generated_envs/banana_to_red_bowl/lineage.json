@@ -1,0 +1,20 @@
+{
+  "env_name": "banana_to_red_bowl",
+  "created_at": "2026-10-18T06:34:20.184663+00:00",
+  "versions": [
+    {
+      "version": 1,
+      "created_at": "2026-10-18T06:34:20.184663+00:00",
+      "trigger": "initial_generation",
+      "prompt": "Grasp the yellow banana from the table and place it into the red bowl on the left side of the table, removing the grey bin from the scene",
+      "parent_version": null,
+      "remediations": [],
+      "diagnostics": [],
+      "spec_file": "banana_to_red_bowl/v1/banana_to_red_bowl.yaml",
+      "policy_file": "banana_to_red_bowl/v1/policy_config.yaml",
+      "evaluation": null
+    }
+  ],
+  "current_version": 1,
+  "updated_at": "2026-10-18T06:34:20.184663+00:00"
+}

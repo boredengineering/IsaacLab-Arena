@@ -1,0 +1,1017 @@
+{
+  "original_topology": {
+    "query": "MATCH (g:EnvironmentGraph)\nWHERE g.name CONTAINS 'apple_to_wooden_bowl'\nOPTIONAL MATCH (g)-[r]-(n)\nRETURN g, r, n",
+    "rows": [],
+    "row_count": 0,
+    "notifications": [],
+    "contains_updates": false
+  },
+  "original_factors": {
+    "query": "MATCH (g:EnvironmentGraph)-[:HAS_REIFIER]->(rf:ReifiedRelation)\nWHERE g.name CONTAINS 'apple'\nMATCH (rf)-[:REIFIES_SUBJECT]->(s), (rf)-[:REIFIES_OBJECT]->(t)\nRETURN g.name, rf.relation_type, s.name, t.name, rf.clearance_radius, rf.nominal_height",
+    "rows": [
+      {
+        "g.name": "droid_pick_apple_to_bowl",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "droid_pick_apple_to_bowl",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "franka_droid_apple_to_bowl_maple_table",
+        "rf.relation_type": "REACHABLE_BY",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "franka_droid_apple_to_bowl_maple_table",
+        "rf.relation_type": "REACHABLE_BY",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "franka_droid_apple_to_bowl_maple_table",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "franka_droid_apple_to_bowl_maple_table",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_apple_to_plate_rl",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_apple_to_plate_rl",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_kitchen_apple_to_plate",
+        "rf.relation_type": "DESTINATION_FOR",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_kitchen_apple_to_plate",
+        "rf.relation_type": "TRANSFER_TO",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_kitchen_apple_to_plate",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_kitchen_apple_to_plate",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_kitchen_apple_to_plate",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_maple_table_apple_to_plate",
+        "rf.relation_type": "DESTINATION_FOR",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_maple_table_apple_to_plate",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_maple_table_apple_to_plate",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_tabletop_apple_to_plate",
+        "rf.relation_type": "RECEPTACLE_FOR",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_tabletop_apple_to_plate",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_tabletop_apple_to_plate",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_tabletop_apple_to_plate__3442a766d74fdfe1",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      },
+      {
+        "g.name": "g1_tabletop_apple_to_plate__826df6ebab6011c1",
+        "rf.relation_type": "PLACED_ON",
+        "s.name": null,
+        "t.name": null,
+        "rf.clearance_radius": null,
+        "rf.nominal_height": null
+      }
+    ],
+    "row_count": 21,
+    "notifications": [
+      {
+        "title": "The provided property key is not in the database",
+        "code": "Neo.ClientNotification.Statement.UnknownPropertyKeyWarning",
+        "description": "One of the property names in your query is not available in the database, make sure you didn't misspell it or that the label is available when you run this statement in your application (the missing property name is: clearance_radius)",
+        "severity": "WARNING",
+        "category": "UNRECOGNIZED",
+        "position": {
+          "offset": 210,
+          "line": 4,
+          "column": 53
+        }
+      }
+    ],
+    "contains_updates": false
+  },
+  "apple_names": {
+    "query": "MATCH (g:EnvironmentGraph) WHERE g.name CONTAINS 'apple'\nRETURN g.name AS name, keys(g) AS property_keys ORDER BY name",
+    "rows": [
+      {
+        "name": "droid_pick_apple_to_bowl",
+        "property_keys": [
+          "updated_at",
+          "task_composition",
+          "name",
+          "task_description"
+        ]
+      },
+      {
+        "name": "franka_droid_apple_to_bowl_maple_table",
+        "property_keys": [
+          "model_used",
+          "generation_time_s",
+          "converged",
+          "total_tokens",
+          "prompt_tokens",
+          "completion_tokens",
+          "repair_iterations",
+          "updated_at",
+          "task_composition",
+          "task_description",
+          "llm_call_count",
+          "name"
+        ]
+      },
+      {
+        "name": "g1_apple_to_plate_rl",
+        "property_keys": [
+          "teacher_obs_dimension",
+          "student_recurrent_architecture",
+          "standing_settled_root_pos",
+          "lift_curriculum_ratio",
+          "standing_settled_pelvis_z",
+          "reverse_curriculum_active",
+          "arm_curriculum_ratio",
+          "raptor_distillation_architecture_active",
+          "embodiment_name",
+          "multi_keypoint_guidance_active",
+          "action_space_dimension",
+          "action_space_type",
+          "mean_episode_length",
+          "converged",
+          "geometric_guidance_active",
+          "rl_policy",
+          "rl_training_reward_improvement",
+          "rl_algorithm",
+          "updated_at",
+          "task_composition",
+          "rl_training_iterations",
+          "rl_interaction_steps",
+          "name",
+          "task_description"
+        ]
+      },
+      {
+        "name": "g1_kitchen_apple_to_plate",
+        "property_keys": [
+          "converged",
+          "model_used",
+          "prompt_tokens",
+          "completion_tokens",
+          "generation_time_s",
+          "total_tokens",
+          "updated_at",
+          "task_composition",
+          "llm_call_count",
+          "repair_iterations",
+          "name",
+          "task_description"
+        ]
+      },
+      {
+        "name": "g1_maple_table_apple_to_plate",
+        "property_keys": [
+          "model_used",
+          "generation_time_s",
+          "completion_tokens",
+          "total_tokens",
+          "prompt_tokens",
+          "converged",
+          "updated_at",
+          "repair_iterations",
+          "task_composition",
+          "task_description",
+          "llm_call_count",
+          "name"
+        ]
+      },
+      {
+        "name": "g1_tabletop_apple_to_plate",
+        "property_keys": [
+          "task_description",
+          "generation_time_s",
+          "converged",
+          "total_tokens",
+          "prompt_tokens",
+          "completion_tokens",
+          "model_used",
+          "repair_iterations",
+          "updated_at",
+          "task_composition",
+          "llm_call_count",
+          "name"
+        ]
+      },
+      {
+        "name": "g1_tabletop_apple_to_plate__3442a766d74fdfe1",
+        "property_keys": [
+          "source_env_name",
+          "spec_sha256",
+          "spec_json",
+          "name",
+          "version"
+        ]
+      },
+      {
+        "name": "g1_tabletop_apple_to_plate__826df6ebab6011c1",
+        "property_keys": [
+          "source_env_name",
+          "spec_sha256",
+          "spec_json",
+          "name",
+          "version"
+        ]
+      }
+    ],
+    "row_count": 8,
+    "notifications": [],
+    "contains_updates": false
+  },
+  "root_properties": {
+    "query": "MATCH (g:EnvironmentGraph {name:$name}) RETURN properties(g) AS properties",
+    "rows": [
+      {
+        "properties": {
+          "task_description": "Pick up the red apple from the front right of the maple table and place it into the wooden bowl on the front left.",
+          "repair_iterations": 0,
+          "llm_call_count": 0,
+          "converged": true,
+          "completion_tokens": 0,
+          "prompt_tokens": 0,
+          "updated_at": "2026-09-01T04:03:50.800000000+00:00",
+          "name": "franka_droid_apple_to_bowl_maple_table",
+          "generation_time_s": 0.0,
+          "total_tokens": 0,
+          "model_used": "",
+          "task_composition": "atomic"
+        }
+      }
+    ],
+    "row_count": 1,
+    "notifications": [],
+    "contains_updates": false
+  },
+  "members": {
+    "query": "MATCH (g:EnvironmentGraph {name:$name})-[r]-(n)\nRETURN type(r) AS relationship, labels(n) AS labels, properties(n) AS properties ORDER BY relationship",
+    "rows": [
+      {
+        "relationship": "CONTAINS_OBJECT",
+        "labels": [
+          "RigidObject"
+        ],
+        "properties": {
+          "env_name": "franka_droid_apple_to_bowl_maple_table",
+          "registry_name": "wooden_bowl_hot3d_robolab",
+          "id": "wooden_bowl",
+          "params": "{'initial_pose': {'position_xyz': [-0.1263, 0.1985, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+        }
+      },
+      {
+        "relationship": "CONTAINS_OBJECT",
+        "labels": [
+          "RigidObject"
+        ],
+        "properties": {
+          "env_name": "franka_droid_apple_to_bowl_maple_table",
+          "registry_name": "apple_01_objaverse_robolab",
+          "id": "red_apple",
+          "params": "{'initial_pose': {'position_xyz': [-0.1263, -0.0699, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+        }
+      },
+      {
+        "relationship": "HAS_CAMERA",
+        "labels": [
+          "Camera"
+        ],
+        "properties": {
+          "eye_offset": [
+            -1.5,
+            -1.5,
+            1.5
+          ],
+          "env_name": "franka_droid_apple_to_bowl_maple_table",
+          "id": "franka_droid_apple_to_bowl_maple_table_viewer_cam",
+          "fov": 65.0
+        }
+      },
+      {
+        "relationship": "HAS_EMBODIMENT",
+        "labels": [
+          "Embodiment"
+        ],
+        "properties": {
+          "env_name": "franka_droid_apple_to_bowl_maple_table",
+          "registry_name": "droid_abs_joint_pos",
+          "id": "droid_robot",
+          "params": "{'initial_pose': {'position_xyz': [-0.55, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+        }
+      },
+      {
+        "relationship": "HAS_REIFIER",
+        "labels": [
+          "ReifiedRelation"
+        ],
+        "properties": {
+          "delta_y_min": -0.05,
+          "delta_x_max": 0.05,
+          "prior_entropy": 3.2,
+          "required_headroom": 0.4,
+          "reifier_id": "reifier_bowl_reachability",
+          "delta_z_nominal": 0.01,
+          "relation_type": "REACHABLE_BY",
+          "posterior_entropy": 0.15,
+          "delta_y_max": 0.05,
+          "contact_normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "env_name": "franka_droid_apple_to_bowl_maple_table",
+          "kinematic_manifold": "droid_manipulation_workspace",
+          "evidence_sources": [
+            "robot_kinematics",
+            "workspace_envelope"
+          ],
+          "delta_x_min": -0.05,
+          "surface_anchor": "",
+          "required_friction": 0.6
+        }
+      },
+      {
+        "relationship": "HAS_REIFIER",
+        "labels": [
+          "ReifiedRelation"
+        ],
+        "properties": {
+          "delta_y_min": -0.05,
+          "delta_x_max": 0.05,
+          "prior_entropy": 3.2,
+          "required_headroom": 0.4,
+          "reifier_id": "reifier_apple_reachability",
+          "delta_z_nominal": 0.01,
+          "relation_type": "REACHABLE_BY",
+          "posterior_entropy": 0.15,
+          "delta_y_max": 0.05,
+          "contact_normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "env_name": "franka_droid_apple_to_bowl_maple_table",
+          "kinematic_manifold": "droid_manipulation_workspace",
+          "evidence_sources": [
+            "robot_kinematics",
+            "workspace_envelope"
+          ],
+          "delta_x_min": -0.05,
+          "surface_anchor": "",
+          "required_friction": 0.6
+        }
+      },
+      {
+        "relationship": "HAS_REIFIER",
+        "labels": [
+          "ReifiedRelation"
+        ],
+        "properties": {
+          "delta_y_min": -0.05,
+          "delta_x_max": 0.05,
+          "prior_entropy": 2.8,
+          "required_headroom": 0.35,
+          "reifier_id": "reifier_bowl_table",
+          "delta_z_nominal": 0.01,
+          "relation_type": "PLACED_ON",
+          "posterior_entropy": 0.08,
+          "delta_y_max": 0.05,
+          "contact_normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "env_name": "franka_droid_apple_to_bowl_maple_table",
+          "kinematic_manifold": "tabletop_stationary_reach",
+          "evidence_sources": [
+            "tabletop_spatial_planner",
+            "front_left_sector_constraint"
+          ],
+          "delta_x_min": -0.05,
+          "surface_anchor": "table_top",
+          "required_friction": 0.6
+        }
+      },
+      {
+        "relationship": "HAS_REIFIER",
+        "labels": [
+          "ReifiedRelation"
+        ],
+        "properties": {
+          "delta_y_min": -0.05,
+          "delta_x_max": 0.05,
+          "prior_entropy": 2.8,
+          "required_headroom": 0.3,
+          "reifier_id": "reifier_apple_table",
+          "delta_z_nominal": 0.01,
+          "relation_type": "PLACED_ON",
+          "posterior_entropy": 0.08,
+          "delta_y_max": 0.05,
+          "contact_normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "env_name": "franka_droid_apple_to_bowl_maple_table",
+          "kinematic_manifold": "tabletop_stationary_reach",
+          "evidence_sources": [
+            "tabletop_spatial_planner",
+            "front_right_sector_constraint"
+          ],
+          "delta_x_min": -0.05,
+          "surface_anchor": "table_top",
+          "required_friction": 0.65
+        }
+      },
+      {
+        "relationship": "HAS_TERRAIN",
+        "labels": [
+          "Fixture",
+          "Terrain"
+        ],
+        "properties": {
+          "env_name": "franka_droid_apple_to_bowl_maple_table",
+          "is_terrain": true,
+          "registry_name": "maple_table_robolab",
+          "id": "maple_table_bg",
+          "params": "{'initial_pose': {'position_xyz': [-0.15, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+        }
+      }
+    ],
+    "row_count": 9,
+    "notifications": [],
+    "contains_updates": false
+  },
+  "reifiers": {
+    "query": "MATCH (g:EnvironmentGraph {name:$name})-[:HAS_REIFIER]->(rf:ReifiedRelation)\nOPTIONAL MATCH (rf)-[r]->(n)\nRETURN properties(rf) AS reifier, collect({relationship:type(r), labels:labels(n), properties:properties(n)}) AS neighbors",
+    "rows": [
+      {
+        "reifier": {
+          "delta_y_min": -0.05,
+          "delta_x_max": 0.05,
+          "prior_entropy": 3.2,
+          "required_headroom": 0.4,
+          "reifier_id": "reifier_bowl_reachability",
+          "delta_z_nominal": 0.01,
+          "relation_type": "REACHABLE_BY",
+          "posterior_entropy": 0.15,
+          "delta_y_max": 0.05,
+          "contact_normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "env_name": "franka_droid_apple_to_bowl_maple_table",
+          "kinematic_manifold": "droid_manipulation_workspace",
+          "evidence_sources": [
+            "robot_kinematics",
+            "workspace_envelope"
+          ],
+          "delta_x_min": -0.05,
+          "surface_anchor": "",
+          "required_friction": 0.6
+        },
+        "neighbors": [
+          {
+            "relationship": "REIFIES_SUBJECT",
+            "properties": {
+              "env_name": "franka_droid_apple_to_bowl_maple_table",
+              "registry_name": "wooden_bowl_hot3d_robolab",
+              "id": "wooden_bowl",
+              "params": "{'initial_pose': {'position_xyz': [-0.1263, 0.1985, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+            },
+            "labels": [
+              "RigidObject"
+            ]
+          },
+          {
+            "relationship": "REIFIES_OBJECT",
+            "properties": {
+              "env_name": "franka_droid_apple_to_bowl_maple_table",
+              "registry_name": "droid_abs_joint_pos",
+              "id": "droid_robot",
+              "params": "{'initial_pose': {'position_xyz': [-0.55, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+            },
+            "labels": [
+              "Embodiment"
+            ]
+          }
+        ]
+      },
+      {
+        "reifier": {
+          "delta_y_min": -0.05,
+          "delta_x_max": 0.05,
+          "prior_entropy": 3.2,
+          "required_headroom": 0.4,
+          "reifier_id": "reifier_apple_reachability",
+          "delta_z_nominal": 0.01,
+          "relation_type": "REACHABLE_BY",
+          "posterior_entropy": 0.15,
+          "delta_y_max": 0.05,
+          "contact_normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "env_name": "franka_droid_apple_to_bowl_maple_table",
+          "kinematic_manifold": "droid_manipulation_workspace",
+          "evidence_sources": [
+            "robot_kinematics",
+            "workspace_envelope"
+          ],
+          "delta_x_min": -0.05,
+          "surface_anchor": "",
+          "required_friction": 0.6
+        },
+        "neighbors": [
+          {
+            "relationship": "REIFIES_OBJECT",
+            "properties": {
+              "env_name": "franka_droid_apple_to_bowl_maple_table",
+              "registry_name": "droid_abs_joint_pos",
+              "id": "droid_robot",
+              "params": "{'initial_pose': {'position_xyz': [-0.55, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+            },
+            "labels": [
+              "Embodiment"
+            ]
+          },
+          {
+            "relationship": "REIFIES_SUBJECT",
+            "properties": {
+              "env_name": "franka_droid_apple_to_bowl_maple_table",
+              "registry_name": "apple_01_objaverse_robolab",
+              "id": "red_apple",
+              "params": "{'initial_pose': {'position_xyz': [-0.1263, -0.0699, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+            },
+            "labels": [
+              "RigidObject"
+            ]
+          }
+        ]
+      },
+      {
+        "reifier": {
+          "delta_y_min": -0.05,
+          "delta_x_max": 0.05,
+          "prior_entropy": 2.8,
+          "required_headroom": 0.35,
+          "reifier_id": "reifier_bowl_table",
+          "delta_z_nominal": 0.01,
+          "relation_type": "PLACED_ON",
+          "posterior_entropy": 0.08,
+          "delta_y_max": 0.05,
+          "contact_normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "env_name": "franka_droid_apple_to_bowl_maple_table",
+          "kinematic_manifold": "tabletop_stationary_reach",
+          "evidence_sources": [
+            "tabletop_spatial_planner",
+            "front_left_sector_constraint"
+          ],
+          "delta_x_min": -0.05,
+          "surface_anchor": "table_top",
+          "required_friction": 0.6
+        },
+        "neighbors": [
+          {
+            "relationship": "REIFIES_SUBJECT",
+            "properties": {
+              "env_name": "franka_droid_apple_to_bowl_maple_table",
+              "registry_name": "wooden_bowl_hot3d_robolab",
+              "id": "wooden_bowl",
+              "params": "{'initial_pose': {'position_xyz': [-0.1263, 0.1985, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+            },
+            "labels": [
+              "RigidObject"
+            ]
+          },
+          {
+            "relationship": "REIFIES_OBJECT",
+            "properties": {
+              "env_name": "franka_droid_apple_to_bowl_maple_table",
+              "is_terrain": true,
+              "registry_name": "maple_table_robolab",
+              "id": "maple_table_bg",
+              "params": "{'initial_pose': {'position_xyz': [-0.15, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+            },
+            "labels": [
+              "Fixture",
+              "Terrain"
+            ]
+          }
+        ]
+      },
+      {
+        "reifier": {
+          "delta_y_min": -0.05,
+          "delta_x_max": 0.05,
+          "prior_entropy": 2.8,
+          "required_headroom": 0.3,
+          "reifier_id": "reifier_apple_table",
+          "delta_z_nominal": 0.01,
+          "relation_type": "PLACED_ON",
+          "posterior_entropy": 0.08,
+          "delta_y_max": 0.05,
+          "contact_normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "env_name": "franka_droid_apple_to_bowl_maple_table",
+          "kinematic_manifold": "tabletop_stationary_reach",
+          "evidence_sources": [
+            "tabletop_spatial_planner",
+            "front_right_sector_constraint"
+          ],
+          "delta_x_min": -0.05,
+          "surface_anchor": "table_top",
+          "required_friction": 0.65
+        },
+        "neighbors": [
+          {
+            "relationship": "REIFIES_OBJECT",
+            "properties": {
+              "env_name": "franka_droid_apple_to_bowl_maple_table",
+              "is_terrain": true,
+              "registry_name": "maple_table_robolab",
+              "id": "maple_table_bg",
+              "params": "{'initial_pose': {'position_xyz': [-0.15, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+            },
+            "labels": [
+              "Fixture",
+              "Terrain"
+            ]
+          },
+          {
+            "relationship": "REIFIES_SUBJECT",
+            "properties": {
+              "env_name": "franka_droid_apple_to_bowl_maple_table",
+              "registry_name": "apple_01_objaverse_robolab",
+              "id": "red_apple",
+              "params": "{'initial_pose': {'position_xyz': [-0.1263, -0.0699, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+            },
+            "labels": [
+              "RigidObject"
+            ]
+          }
+        ]
+      }
+    ],
+    "row_count": 4,
+    "notifications": [],
+    "contains_updates": false
+  },
+  "local_edges": {
+    "query": "MATCH (s)-[r]->(t) WHERE s.env_name=$name AND t.env_name=$name\nRETURN s.id AS source_id, labels(s) AS source_labels, type(r) AS relationship,\n       t.id AS target_id, labels(t) AS target_labels, properties(r) AS properties",
+    "rows": [
+      {
+        "source_id": "droid_robot",
+        "source_labels": [
+          "Embodiment"
+        ],
+        "relationship": "STANDS_AT_AFFORDANCE",
+        "target_id": "maple_table_bg",
+        "target_labels": [
+          "Fixture",
+          "Terrain"
+        ],
+        "properties": {
+          "relative_heading": "front_facing",
+          "standoff_distance": 0.85
+        }
+      },
+      {
+        "source_id": "maple_table_bg",
+        "source_labels": [
+          "Fixture",
+          "Terrain"
+        ],
+        "relationship": "HAS_SUB_SURFACE",
+        "target_id": "maple_table_bg_table_top",
+        "target_labels": [
+          "SurfaceAnchor"
+        ],
+        "properties": {}
+      },
+      {
+        "source_id": "red_apple",
+        "source_labels": [
+          "RigidObject"
+        ],
+        "relationship": "PLACED_ON_SUB_SURFACE",
+        "target_id": "maple_table_bg_table_top",
+        "target_labels": [
+          "SurfaceAnchor"
+        ],
+        "properties": {}
+      },
+      {
+        "source_id": "red_apple",
+        "source_labels": [
+          "RigidObject"
+        ],
+        "relationship": "PLACED_ON",
+        "target_id": "maple_table_bg",
+        "target_labels": [
+          "Fixture",
+          "Terrain"
+        ],
+        "properties": {
+          "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_center'}",
+          "surface_anchor": "table_top",
+          "bound_x": [],
+          "bound_y": [],
+          "clearance": 0.05,
+          "nominal_height": 0.0
+        }
+      },
+      {
+        "source_id": "wooden_bowl",
+        "source_labels": [
+          "RigidObject"
+        ],
+        "relationship": "PLACED_ON_SUB_SURFACE",
+        "target_id": "maple_table_bg_table_top",
+        "target_labels": [
+          "SurfaceAnchor"
+        ],
+        "properties": {}
+      },
+      {
+        "source_id": "wooden_bowl",
+        "source_labels": [
+          "RigidObject"
+        ],
+        "relationship": "PLACED_ON",
+        "target_id": "maple_table_bg",
+        "target_labels": [
+          "Fixture",
+          "Terrain"
+        ],
+        "properties": {
+          "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_left'}",
+          "surface_anchor": "table_top",
+          "bound_x": [],
+          "bound_y": [],
+          "clearance": 0.05,
+          "nominal_height": 0.0
+        }
+      },
+      {
+        "source_id": null,
+        "source_labels": [
+          "ReifiedRelation"
+        ],
+        "relationship": "REIFIES_OBJECT",
+        "target_id": "maple_table_bg",
+        "target_labels": [
+          "Fixture",
+          "Terrain"
+        ],
+        "properties": {}
+      },
+      {
+        "source_id": null,
+        "source_labels": [
+          "ReifiedRelation"
+        ],
+        "relationship": "REIFIES_SUBJECT",
+        "target_id": "red_apple",
+        "target_labels": [
+          "RigidObject"
+        ],
+        "properties": {}
+      },
+      {
+        "source_id": null,
+        "source_labels": [
+          "ReifiedRelation"
+        ],
+        "relationship": "REIFIES_SUBJECT",
+        "target_id": "wooden_bowl",
+        "target_labels": [
+          "RigidObject"
+        ],
+        "properties": {}
+      },
+      {
+        "source_id": null,
+        "source_labels": [
+          "ReifiedRelation"
+        ],
+        "relationship": "REIFIES_OBJECT",
+        "target_id": "maple_table_bg",
+        "target_labels": [
+          "Fixture",
+          "Terrain"
+        ],
+        "properties": {}
+      },
+      {
+        "source_id": null,
+        "source_labels": [
+          "ReifiedRelation"
+        ],
+        "relationship": "REIFIES_OBJECT",
+        "target_id": "droid_robot",
+        "target_labels": [
+          "Embodiment"
+        ],
+        "properties": {}
+      },
+      {
+        "source_id": null,
+        "source_labels": [
+          "ReifiedRelation"
+        ],
+        "relationship": "REIFIES_SUBJECT",
+        "target_id": "red_apple",
+        "target_labels": [
+          "RigidObject"
+        ],
+        "properties": {}
+      },
+      {
+        "source_id": null,
+        "source_labels": [
+          "ReifiedRelation"
+        ],
+        "relationship": "REIFIES_SUBJECT",
+        "target_id": "wooden_bowl",
+        "target_labels": [
+          "RigidObject"
+        ],
+        "properties": {}
+      },
+      {
+        "source_id": null,
+        "source_labels": [
+          "ReifiedRelation"
+        ],
+        "relationship": "REIFIES_OBJECT",
+        "target_id": "droid_robot",
+        "target_labels": [
+          "Embodiment"
+        ],
+        "properties": {}
+      },
+      {
+        "source_id": "franka_droid_apple_to_bowl_maple_table_viewer_cam",
+        "source_labels": [
+          "Camera"
+        ],
+        "relationship": "OBSERVES_INTERACTION_ZONE",
+        "target_id": "red_apple",
+        "target_labels": [
+          "RigidObject"
+        ],
+        "properties": {}
+      }
+    ],
+    "row_count": 15,
+    "notifications": [],
+    "contains_updates": false
+  },
+  "current_run": {
+    "query": "MATCH (ev:EvaluationRun {id:'eval_run_1788928970'})\nOPTIONAL MATCH (ev)-[r]-(n)\nRETURN properties(ev) AS evaluation, type(r) AS relationship, labels(n) AS labels, properties(n) AS neighbor",
+    "rows": [
+      {
+        "evaluation": {
+          "blocking_predicate": "object_on_destination(force_threshold=0.1, velocity_threshold=0.1)",
+          "all_complete_rate": 0.0,
+          "semantic_integrity_verified": true,
+          "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+          "num_episodes": 2,
+          "id": "eval_run_1788928970",
+          "success_rate": 0.0,
+          "ended_at": "2026-09-09T04:42:50.655272+00:00",
+          "mean_progress_score": 0.5
+        },
+        "relationship": "USED_POLICY",
+        "labels": [
+          "Policy"
+        ],
+        "neighbor": {
+          "name": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+        }
+      }
+    ],
+    "row_count": 1,
+    "notifications": [],
+    "contains_updates": false
+  }
+}

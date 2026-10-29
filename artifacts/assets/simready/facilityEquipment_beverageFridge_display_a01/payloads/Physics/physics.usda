@@ -1,0 +1,453 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary SimReady_Metadata = {
+            dictionary Variants = {
+                dictionary Physics = {
+                    dictionary MuJoCo = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "MuJoCo"
+                    }
+                    dictionary Newton = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "Newton"
+                    }
+                    dictionary PhysX = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "PhysX"
+                    }
+                }
+            }
+            string asset_location = "simready_content\\common_assets\\props_automotive_workshop_tools\\facilityEquipment_beverageFridge_display_a01\\simready_physx_usd\\sm_facilityEquipment_beverageFridge_display_a01_01.usd"
+            string asset_type = "prop"
+            dictionary validation = {
+                string profile = "Robotics-Prop"
+                string profile_version = "3.1.0"
+                dictionary validated_features = {
+                    dictionary "2026-06-01" = {
+                        dictionary FET000_CORE = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET001_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['AA.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_NEUTRAL = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_PHYSX': {'version': '0.1.0'}}, {'FET004_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET005_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['GSP.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET006_BASE_MDL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['VM.MDL.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                    }
+                    dictionary "2026-06-04" = {
+                        dictionary FET000_CORE = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET001_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['AA.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_NEUTRAL = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_PHYSX': {'version': '0.1.0'}}, {'FET004_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET005_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['GSP.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET006_BASE_MDL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['VM.MDL.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                    }
+                }
+            }
+        }
+        string asset_dir = "simready_content/common_assets/props_automotive_workshop_tools/facilityEquipment_beverageFridge_display_a01"
+        string asset_name = "facilityEquipment_beverageFridge_display_a01"
+        string asset_type = "prop"
+        string profile = "Prop-Robotics-Neutral"
+        string source_file = "../simready_usd/sm_facilityEquipment_beverageFridge_display_a01_01.usd"
+        string usd_date_generated = "2026-06-01 20:32:59"
+        bool used_dsrs_exporter = 1
+    }
+    defaultPrim = "RootNode"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+over "RootNode" (
+    prepend apiSchemas = ["PhysicsArticulationRootAPI"]
+)
+{
+    over "Geometry"
+    {
+        over "shelfGlass_03_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+
+        over "shelfGlass_01_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+
+        over "body_01_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+
+        over "shelfGlass_02_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+
+        over "shelf_03_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+
+        over "doorGlass_01_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+
+        over "shelf_01_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+
+        over "shelf_02_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+
+        over "door_01_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+    }
+
+    over "PhysicsMaterials"
+    {
+        over "physics_mat_m_trans__glass__clean_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 2500
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0.05
+            float physics:staticFriction = 0.4
+        }
+
+        over "physics_mat_m_opaque__metal__steel_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 7850
+            float physics:dynamicFriction = 0.3
+            float physics:restitution = 0.1
+            float physics:staticFriction = 0.3
+        }
+
+        over "physics_mat_m_opaque__metal__painted_gray_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 7800
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0.15
+            float physics:staticFriction = 0.5
+        }
+
+        over "physics_mat_m_opaque__plastic__gray_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 950
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0.4
+            float physics:staticFriction = 0.4
+        }
+
+        over "physics_mat_m_opaque__metal__steelStainless_clean_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 7850
+            float physics:dynamicFriction = 0.3
+            float physics:restitution = 0.1
+            float physics:staticFriction = 0.3
+        }
+
+        over "physics_mat_m_opaque__plastic__glossy_white_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 950
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0.4
+            float physics:staticFriction = 0.4
+        }
+
+        over "physics_mat_m_opaque__metal__chrome_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 7850
+            float physics:dynamicFriction = 0.3
+            float physics:restitution = 0.1
+            float physics:staticFriction = 0.3
+        }
+
+        over "physics_mat_m_opaque__rubber__new_black_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 1200
+            float physics:dynamicFriction = 0.8
+            float physics:restitution = 0.8
+            float physics:staticFriction = 0.8
+        }
+
+        over "physics_mat_m_opaque__metal__painted_black_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 7800
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0.15
+            float physics:staticFriction = 0.5
+        }
+
+        over "physics_mat_m_opaque__plastic__black_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 950
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0.4
+            float physics:staticFriction = 0.4
+        }
+
+        over "physics_mat_m_opaque__metal__bronzePolished_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 8800
+            float physics:dynamicFriction = 0.35
+            float physics:restitution = 0.15
+            float physics:staticFriction = 0.4
+        }
+
+        over "physics_mat_m_opaque__plastic__yellow_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 950
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0.4
+            float physics:staticFriction = 0.4
+        }
+
+        over "physics_mat_m_opaque__rubber__smooth_black_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 1200
+            float physics:dynamicFriction = 0.8
+            float physics:restitution = 0.8
+            float physics:staticFriction = 0.8
+        }
+    }
+
+    over "Joints"
+    {
+        def PhysicsFixedJoint "joint_body_01_fixed_base"
+        {
+            rel physics:body0 = </RootNode/Geometry>
+            rel physics:body1 = </RootNode/Geometry/body_01_obj_00>
+            point3f physics:localPos0 = (0, 0, 0)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+        }
+
+        def PhysicsRevoluteJoint "joint_door_01_joint_00" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+            float drive:angular:physics:damping = 0.1
+            uniform token physics:axis = "Z"
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/body_01_obj_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/door_01_obj_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (0.2100296, 0.23001768, 0.005432119)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 179
+        }
+
+        def PhysicsFixedJoint "joint_shelfGlass_02_joint_00"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/shelf_02_obj_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelfGlass_02_obj_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (-0.005739978, -7.898834e-9, -0.0000029206276)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "joint_shelf_01_joint_00"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/body_01_obj_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelf_01_obj_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (0.0057399888, 5.570527e-9, 0.62011766)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "joint_doorGlass_01_joint_00"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/door_01_obj_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/doorGlass_01_obj_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (-0.2100296, -0.23001768, -0.005432119)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "joint_shelf_03_joint_00"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/body_01_obj_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelf_03_obj_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (0.0057399888, 5.570527e-9, 0.450118)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "joint_shelfGlass_01_joint_00"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/shelf_01_obj_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelfGlass_01_obj_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (-0.005739978, -7.898834e-9, -0.0000029206276)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "joint_shelfGlass_03_joint_00"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/shelf_03_obj_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelfGlass_03_obj_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (-0.005739978, -7.898834e-9, -0.0000029206276)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+        }
+
+        def PhysicsFixedJoint "joint_shelf_02_joint_00"
+        {
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/body_01_obj_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelf_02_obj_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (0.0057399888, 5.570527e-9, 0.2801138)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+        }
+    }
+}
+

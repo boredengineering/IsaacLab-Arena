@@ -8,7 +8,7 @@ import trimesh
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
 from isaaclab.managers import EventTermCfg, SceneEntityCfg
 from isaaclab.sensors.contact_sensor.contact_sensor_cfg import ContactSensorCfg
-from pxr import Usd
+from pxr import Usd, UsdPhysics
 
 from isaaclab_arena.affordances.openable import Openable
 from isaaclab_arena.affordances.pressable import Pressable
@@ -158,6 +158,42 @@ class ObjectReference(RootedObjectBase):
         # Just call out to the parent class method.
         return super().get_contact_sensor_cfg(contact_against_object)
 
+    def get_contact_filter_prim_paths(self) -> list[str]:
+        """Resolve the rigid-body prim path(s) in the parent asset for PhysX contact filtering."""
+        with open_stage(self.parent_asset.usd_path) as parent_stage:
+            prim_path_in_usd = self.isaaclab_prim_path_to_original_prim_path(
+                self.prim_path, self.parent_asset, parent_stage
+            )
+            prim = parent_stage.GetPrimAtPath(prim_path_in_usd)
+            if prim and prim.IsValid():
+                if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                    return [self.prim_path]
+                default_prim_path = str(parent_stage.GetDefaultPrim().GetPath())
+                curr = prim.GetParent()
+                while curr and curr.IsValid():
+                    if curr.HasAPI(UsdPhysics.RigidBodyAPI):
+                        curr_path = str(curr.GetPath())
+                        rel_suffix = (
+                            curr_path[len(default_prim_path) :]
+                            if curr_path.startswith(default_prim_path)
+                            else ""
+                        )
+                        return [f"{{ENV_REGEX_NS}}/{self.parent_asset.name}{rel_suffix}"]
+                    curr = curr.GetParent()
+                descendant_rb_paths = []
+                for p in Usd.PrimRange(prim, Usd.TraverseInstanceProxies()):
+                    if p.HasAPI(UsdPhysics.RigidBodyAPI):
+                        p_path = str(p.GetPath())
+                        rel_suffix = (
+                            p_path[len(default_prim_path) :]
+                            if p_path.startswith(default_prim_path)
+                            else ""
+                        )
+                        descendant_rb_paths.append(f"{{ENV_REGEX_NS}}/{self.parent_asset.name}{rel_suffix}")
+                if descendant_rb_paths:
+                    return descendant_rb_paths
+        return [self.prim_path]
+
     def _generate_rigid_cfg(self) -> RigidObjectCfg:
         assert self.object_type == ObjectType.RIGID
         initial_pose = self.get_initial_pose()
@@ -172,9 +208,45 @@ class ObjectReference(RootedObjectBase):
 
     def _generate_articulation_cfg(self) -> ArticulationCfg:
         assert self.object_type == ObjectType.ARTICULATION
+        articulation_prim_path = self.prim_path
         initial_pose = self.get_initial_pose()
+        with open_stage(self.parent_asset.usd_path) as parent_stage:
+            prim_path_in_usd = self.isaaclab_prim_path_to_original_prim_path(
+                self.prim_path, self.parent_asset, parent_stage
+            )
+            prim = parent_stage.GetPrimAtPath(prim_path_in_usd)
+            if prim and prim.IsValid():
+                has_descendant_art_root = any(
+                    p.HasAPI(UsdPhysics.ArticulationRootAPI) for p in Usd.PrimRange(prim)
+                )
+                if not has_descendant_art_root:
+                    curr = prim.GetParent()
+                    while curr and curr.IsValid():
+                        if curr.HasAPI(UsdPhysics.ArticulationRootAPI):
+                            default_prim_path = str(parent_stage.GetDefaultPrim().GetPath())
+                            curr_path = str(curr.GetPath())
+                            rel_suffix = (
+                                curr_path[len(default_prim_path) :]
+                                if curr_path.startswith(default_prim_path)
+                                else ""
+                            )
+                            articulation_prim_path = f"{{ENV_REGEX_NS}}/{self.parent_asset.name}{rel_suffix}"
+                            prim_pose = get_prim_pose_in_default_prim_frame(curr, parent_stage)
+                            scaled_pos = (
+                                prim_pose.position_xyz[0] * self._parent_scale[0],
+                                prim_pose.position_xyz[1] * self._parent_scale[1],
+                                prim_pose.position_xyz[2] * self._parent_scale[2],
+                            )
+                            T_P_O = Pose(position_xyz=scaled_pos, rotation_xyzw=prim_pose.rotation_xyzw)
+                            initial_pose = (
+                                T_P_O
+                                if self.parent_asset.initial_pose is None
+                                else self.parent_asset.initial_pose.multiply(T_P_O)
+                            )
+                            break
+                        curr = curr.GetParent()
         object_cfg = ArticulationCfg(
-            prim_path=self.prim_path,
+            prim_path=articulation_prim_path,
             actuators={},
             init_state=ArticulationCfg.InitialStateCfg(
                 pos=initial_pose.position_xyz,
@@ -203,6 +275,8 @@ class ObjectReference(RootedObjectBase):
         with open_stage(parent_asset.usd_path) as parent_stage:
             prim_path_in_usd = self.isaaclab_prim_path_to_original_prim_path(self.prim_path, parent_asset, parent_stage)
             prim = parent_stage.GetPrimAtPath(prim_path_in_usd)
+            if (not prim or not prim.GetTypeName()) and "/" in prim_path_in_usd.lstrip("/"):
+                prim = parent_stage.GetPrimAtPath(prim_path_in_usd.rsplit("/", 1)[0])
             if not prim:
                 raise ValueError(f"No prim found with path {prim_path_in_usd} in {parent_asset.usd_path}")
             prim_pose = get_prim_pose_in_default_prim_frame(prim, parent_stage)
@@ -242,6 +316,7 @@ class OpenableObjectReference(ObjectReference, Openable):
     """An object which *refers* to an existing element in the scene and is openable."""
 
     def __init__(self, openable_joint_name: str, openable_threshold: float = 0.5, **kwargs):
+        kwargs.pop("object_type", None)
         super().__init__(
             openable_joint_name=openable_joint_name,
             openable_threshold=openable_threshold,

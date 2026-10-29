@@ -158,7 +158,7 @@ def add_example_environments_cli_args(args_parser: argparse.ArgumentParser) -> a
 
     # A graph spec YAML may declare its own swappable flags under `cli_override_specs`. Register them
     # here, before parsing, so they appear in --help and parse like any other flag.
-    env_spec = getattr(args, "env_spec", None)
+    env_spec = getattr(args, "env_spec", None) or getattr(args, "env_graph_spec_yaml", None)
     if env_spec is not None:
         # The env comes from the graph spec, so don't register the example-environment subparsers.
         cli_override_specs_from_yaml = ArenaEnvGraphSpec.read_cli_override_specs(env_spec)
@@ -208,7 +208,7 @@ def get_arena_builder_from_cli(
 
     # The env comes from exactly one source: a graph spec YAML (--env_spec) or a
     # registered example-environment name (subcommand).
-    env_spec = getattr(args_cli, "env_spec", None)
+    env_spec = getattr(args_cli, "env_spec", None) or getattr(args_cli, "env_graph_spec_yaml", None)
     example_environment = getattr(args_cli, "example_environment", None)
     assert (env_spec is None) != (example_environment is None), (
         "Specify exactly one environment source: an example-environment name or --env_spec"

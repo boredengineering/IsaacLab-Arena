@@ -72,6 +72,11 @@ class PickAndPlaceTask(TaskBase):
         task_description: str | None = None,
         force_threshold: float = 0.1,
         velocity_threshold: float = 0.003,
+        max_separation: tuple[float, float, float] | None = None,
+        require_lift_before_place: bool = True,
+        min_lift_height: float = 0.05,
+        min_airborne_steps: int = 1,
+        max_destination_xy_separation: float | None = None,
         mimic_env_cfg_factory: Callable[[ArmMode], MimicEnvCfg] | None = None,
         support_cone_half_angle_rad: float = math.pi / 4,
         placement_consecutive_steps: int = 1,
@@ -92,6 +97,13 @@ class PickAndPlaceTask(TaskBase):
         self.force_threshold = force_threshold
         assert velocity_threshold >= 0.0, f"velocity_threshold must be non-negative, got {velocity_threshold}"
         self.velocity_threshold = velocity_threshold
+        self.require_lift_before_place = require_lift_before_place
+        self.min_lift_height = min_lift_height
+        self.min_airborne_steps = min_airborne_steps
+        self.max_destination_xy_separation = max_destination_xy_separation
+        if max_separation is not None:
+            assert len(max_separation) == 3, f"max_separation must be (x, y, z), got {max_separation!r}"
+        self.max_separation = max_separation
         assert (
             0.0 <= support_cone_half_angle_rad < math.pi / 2
         ), f"support_cone_half_angle_rad must be in [0, pi / 2), got {support_cone_half_angle_rad}"
@@ -158,36 +170,42 @@ class PickAndPlaceTask(TaskBase):
                 "asset_cfg": SceneEntityCfg(self.pick_up_object.name),
             },
         )
+        predicate_sequence = [
+            # TODO(cvolk): Record initial rest poses independently of task success before
+            # removing objects_settled; object_is_above_height still needs that reference.
+            partial(
+                objects_settled,
+                object_names=[self.pick_up_object.name],
+            ),
+        ]
+        if self.require_lift_before_place:
+            predicate_sequence.append(
+                partial(
+                    object_is_above_height,
+                    object_name=self.pick_up_object.name,
+                    use_settled_state=True,
+                )
+            )
+        predicate_sequence.append(
+            TrueForConsecutiveStepsCfg(
+                predicate=partial(
+                    object_on_destination,
+                    object_cfg=SceneEntityCfg(self.pick_up_object.name),
+                    destination_cfg=SceneEntityCfg(self.destination_location.name),
+                    contact_sensor_cfg=self.contact_sensor_cfg,
+                    force_threshold=self.force_threshold,
+                    velocity_threshold=self.velocity_threshold,
+                    support_cone_half_angle_rad=self.support_cone_half_angle_rad,
+                ),
+                required_steps=self.placement_consecutive_steps,
+            )
+        )
         return TaskTerminationCfg(
             timeout_s=self.episode_length_s,
             success=[
                 CompletionCriteria(
                     name="pick_and_place",
-                    predicate_sequence=[
-                        # TODO(cvolk): Record initial rest poses independently of task success before
-                        # removing objects_settled; object_is_above_height still needs that reference.
-                        partial(
-                            objects_settled,
-                            object_names=[self.pick_up_object.name],
-                        ),
-                        partial(
-                            object_is_above_height,
-                            object_name=self.pick_up_object.name,
-                            use_settled_state=True,
-                        ),
-                        TrueForConsecutiveStepsCfg(
-                            predicate=partial(
-                                object_on_destination,
-                                object_cfg=SceneEntityCfg(self.pick_up_object.name),
-                                destination_cfg=SceneEntityCfg(self.destination_location.name),
-                                contact_sensor_cfg=self.contact_sensor_cfg,
-                                force_threshold=self.force_threshold,
-                                velocity_threshold=self.velocity_threshold,
-                                support_cone_half_angle_rad=self.support_cone_half_angle_rad,
-                            ),
-                            required_steps=self.placement_consecutive_steps,
-                        ),
-                    ],
+                    predicate_sequence=predicate_sequence,
                 ),
             ],
             failures={"object_dropped": object_dropped},

@@ -3,14 +3,19 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg
-from pxr import Usd
 
 from isaaclab_arena.assets.object_type import ObjectType
 from isaaclab_arena.utils.usd.helpers import get_prim_depth, is_articulation_root, is_rigid_body
 from isaaclab_arena.utils.usd.rigid_bodies import apply_usd_variant_selections
+
+if TYPE_CHECKING:
+    from pxr import Usd
 
 
 def detect_object_type(
@@ -35,6 +40,8 @@ def detect_object_type(
     Returns:
         The object type of the asset.
     """
+    from pxr import Usd
+
     assert usd_path is not None or stage is not None, "Either usd_path or stage must be provided"
     assert usd_path is None or stage is None, "Either usd_path or stage must be provided"
     if usd_path is not None:

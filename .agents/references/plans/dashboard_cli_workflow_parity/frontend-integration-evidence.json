@@ -1,0 +1,143 @@
+{
+  "scope": "all production src TS/TSX unit files; preview excluded",
+  "files": 72,
+  "tests_passed": 1989,
+  "current_source_matches_all_staged_runs": true,
+  "all_cleanup_verified": true,
+  "per_file": {
+    "src/api-ownership.test.ts": 5,
+    "src/api.test.ts": 8,
+    "src/automatic-preview.test.tsx": 12,
+    "src/authored-yaml-edit.test.ts": 151,
+    "src/authored-inspector.test.tsx": 42,
+    "src/app.test.tsx": 14,
+    "src/control-api.test.ts": 28,
+    "src/contracts-status.test.ts": 1,
+    "src/draft-controller.test.ts": 16,
+    "src/draft-storage.test.ts": 23,
+    "src/editor-contracts.test.ts": 2,
+    "src/build-environment.test.tsx": 29,
+    "src/editor-form-layout.test.ts": 3,
+    "src/editor-revision-contracts.test.ts": 11,
+    "src/editor-job-ownership.test.tsx": 15,
+    "src/editor-jobs.test.tsx": 2,
+    "src/editor-revision-save.test.tsx": 67,
+    "src/editor-library.integration.test.tsx": 189,
+    "src/generation-evidence.test.tsx": 3,
+    "src/generation-diagnostic.test.tsx": 16,
+    "src/environment-library.test.tsx": 72,
+    "src/generation-mode.test.tsx": 14,
+    "src/evaluate-policy.test.tsx": 83,
+    "src/editor.test.tsx": 110,
+    "src/graph-explorer/explorer-state.test.ts": 13,
+    "src/graph-explorer/graph-explorer-loading.test.tsx": 1,
+    "src/graph-explorer/graph-explorer-lazy-error.test.tsx": 1,
+    "src/graph-explorer/graph-inspector.test.tsx": 2,
+    "src/generation-reauthorization.test.tsx": 57,
+    "src/graph-explorer/graph-explorer.test.tsx": 17,
+    "src/graph-explorer/presentation-equality.test.ts": 2,
+    "src/graph-explorer/renderer-labels.test.ts": 1,
+    "src/graph-explorer/graph-model.test.ts": 21,
+    "src/graph-explorer/graph-table.test.tsx": 2,
+    "src/graph-explorer/property-tree.test.tsx": 6,
+    "src/graph-explorer/renderer-adapters.test.tsx": 5,
+    "src/graph-explorer/renderer-state.test.ts": 4,
+    "src/graph-explorer/renderer-navigation.test.ts": 4,
+    "src/graph-explorer/renderer-react.test.tsx": 1,
+    "src/graph-explorer/renderer-resources.test.ts": 2,
+    "src/graph-host.test.tsx": 4,
+    "src/graph-rollout.test.tsx": 2,
+    "src/library-preferences-native.test.ts": 10,
+    "src/library-preferences.test.ts": 29,
+    "src/graph-view.test.tsx": 1,
+    "src/metadata-browser.test.tsx": 10,
+    "src/job-cancellation.test.tsx": 31,
+    "src/graph-session.test.tsx": 9,
+    "src/model-settings-contracts.test.ts": 40,
+    "src/observation.test.ts": 9,
+    "src/position-edit-eligibility.test.ts": 29,
+    "src/optional-workbench-chrome.test.tsx": 13,
+    "src/neo4j-lifetime.test.tsx": 27,
+    "src/model-settings.test.tsx": 66,
+    "src/research-source.test.ts": 2,
+    "src/reconcile.test.ts": 3,
+    "src/readiness-contract.test.ts": 97,
+    "src/publication-controls.test.tsx": 94,
+    "src/refinement-scope.test.tsx": 9,
+    "src/research-services.test.tsx": 15,
+    "src/snapshot-model.test.ts": 5,
+    "src/runtime.test.tsx": 17,
+    "src/snapshots.test.tsx": 8,
+    "src/reviewed-position-edit.test.tsx": 37,
+    "src/research-versions.test.tsx": 174,
+    "src/snapshots-authority.test.tsx": 97,
+    "src/workflow-contracts.test.ts": 6,
+    "src/stream-hub.test.ts": 6,
+    "src/workbench-chrome.test.tsx": 8,
+    "src/workflow-readiness.editor.test.tsx": 4,
+    "src/workbench-layout.test.tsx": 6,
+    "src/workflow-readiness.test.tsx": 66
+  },
+  "runs": [
+    {
+      "run": "arena-functional-frontend-54551e40c4b8",
+      "cases": 232,
+      "proof_sha256": "9228723918a24a6fd5e65193a266a65867db48aae305a1256d8b8a9eb1ee36ba"
+    },
+    {
+      "run": "arena-functional-frontend-3158ef28174a",
+      "cases": 99,
+      "proof_sha256": "74e5f24f4f300ac43315f3c532be0b92c17c5ae21b02d482dfbc4dcbb9b64134"
+    },
+    {
+      "run": "arena-functional-frontend-5b8bbe6d64bd",
+      "cases": 287,
+      "proof_sha256": "f30c947f13c59a5721aafc62aa98ee84b1953e4d8edd92f5ccf06f7945093f67"
+    },
+    {
+      "run": "arena-functional-frontend-36926baa5fca",
+      "cases": 298,
+      "proof_sha256": "f240a4d4bfa0af01156ba662e0de881189bade9bcb143dbf9da6f5f33462dd4a"
+    },
+    {
+      "run": "arena-functional-frontend-abbe09a005c4",
+      "cases": 91,
+      "proof_sha256": "9c4d93a2d6bc9d20de5bf49829ef99853f607df19939694bc9884f2802b226ee"
+    },
+    {
+      "run": "arena-functional-frontend-1ff6dacfad32",
+      "cases": 37,
+      "proof_sha256": "e16165ba99c8b926ebe0588d3c44466332ee642842b5ac1a97c500b33dc345b4"
+    },
+    {
+      "run": "arena-functional-frontend-192bad3ed784",
+      "cases": 17,
+      "proof_sha256": "3be573dd14cf3f9831b339887cf69cc9f0492e66cac732b5108b9d06fda1357c"
+    },
+    {
+      "run": "arena-functional-frontend-8d02f849a8fb",
+      "cases": 90,
+      "proof_sha256": "28e6e3b11b7c99e17350031cd2b754fa52c264d2078e74c2abde68d52d4b08cc"
+    },
+    {
+      "run": "arena-functional-frontend-0c1ef1fd8e48",
+      "cases": 184,
+      "proof_sha256": "d95d850fcfa7ab95d47086475100c884d05cdd370a8efcad6249652095c2424f"
+    },
+    {
+      "run": "arena-functional-frontend-a5ab34fc8136",
+      "cases": 220,
+      "proof_sha256": "b9a5bdaef27872ed113066e245c358bf19b52a2b50f51133d3eba6e1b7a9f558"
+    },
+    {
+      "run": "arena-functional-frontend-a7cf228ac6a5",
+      "cases": 338,
+      "proof_sha256": "fcb58cf87d2fc86419a9788ab6b8bf9c372788205866179e6baec59992f1a5b8"
+    },
+    {
+      "run": "arena-functional-frontend-42082a742fe5",
+      "cases": 96,
+      "proof_sha256": "ebcf576e7967f4a7d7c849a6312b40f7c351b4e9f9cdd3dbd4c5487ca093620b"
+    }
+  ]
+}

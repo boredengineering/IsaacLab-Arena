@@ -1,0 +1,140 @@
+env_name: droid_lemon_to_clay_plate
+embodiment:
+  id: droid
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.2925
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: maple_table
+  registry_name: maple_table_robolab
+  params: {}
+objects:
+- id: lemon
+  registry_name: lemon_01_fruits_veggies_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.3891
+      - -0.1568
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: clay_plate
+  registry_name: clay_plates_hot3d_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.3891
+      - 0.1568
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: maple_table
+  params: {}
+- kind: 'on'
+  subject: lemon
+  reference: maple_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_right
+- kind: 'on'
+  subject: clay_plate
+  reference: maple_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_left
+reified_relations:
+- reifier_id: reifier_lemon_table
+  source_id: lemon
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_top
+  surface_sector: front_right
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.2
+    max_val: 0.2
+    nominal: 0.0
+  delta_y:
+    min_val: -0.2
+    max_val: 0.2
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.0
+    nominal: 0.0
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+- reifier_id: reifier_clay_plate_table
+  source_id: clay_plate
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_top
+  surface_sector: front_left
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.2
+    max_val: 0.2
+    nominal: 0.0
+  delta_y:
+    min_val: -0.2
+    max_val: 0.2
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.0
+    nominal: 0.0
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+placement_validators:
+  enabled_checks:
+  - non_overlap
+  - reachability
+  - headroom
+  required_checks:
+  - non_overlap
+  - reachability
+  - headroom
+task:
+  composition: atomic
+  description: Pick up the fresh lemon from the front right of the maple table and
+    place it on the clay plate at the front left.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: lemon
+      destination_location: clay_plate
+      background_scene: maple_table

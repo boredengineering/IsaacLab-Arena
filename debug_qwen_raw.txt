@@ -1,0 +1,87 @@
+{
+  "env_name": "microwave_campbell_soup_placement",
+  "embodiment": {
+    "id": "robot",
+    "registry_name": "droid_abs_joint_pos",
+    "params": {"initial_pose": {"position_xyz": [-0.55, 0.0, 0.0], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}}
+  },
+  "background": {
+    "id": "kitchen",
+    "registry_name": "kitchen",
+    "params": {}
+  },
+  "objects": [
+    {"id": "tomato_soup_can", "registry_name": "tomato_soup_can_ycb_robolab", "params": {}},
+    {"id": "microwave", "registry_name": "microwave", "params": {}}
+  ],
+  "object_references": [],
+  "relations": [
+    {"kind": "is_anchor", "subject": "kitchen", "reference": "", "params": {}},
+    {"kind": "on", "subject": "tomato_soup_can", "reference": "kitchen", "params": {"surface_anchor": "counter_top", "surface_sector": "front_center"}},
+    {"kind": "on", "subject": "microwave", "reference": "kitchen", "params": {"surface_anchor": "counter_top", "surface_sector": "front_right"}}
+  ],
+  "reified_relations": [
+    {
+      "reifier_id": "reifier_tomato_soup_can_kitchen",
+      "source_id": "tomato_soup_can",
+      "relation_type": "PLACED_ON",
+      "target_id": "kitchen",
+      "surface_anchor": "counter_top",
+      "surface_sector": "front_center",
+      "contact_normal": [0, 0, 1],
+      "delta_x":   															{ "min_val": -0.05, "max_val": 0.05, "nominal": 0.0 },
+      "delta_y":  { "min_val": -0.05, "max_val": 0.05, "nominal": 0.0 },
+      "delta_z":  { "min_val": 0.0, "max_val": 0.0, "nominal": 0.0 },
+      "required_headroom": 0.35,
+      "required_friction": 0.60,
+      "kinematic_manifold": "tabletop_stationary_reach",
+      "prior_entropy": 2.5,
+      "posterior_entropy": 0.05,
+      "evidence_sources": ["tabletop_spatial_planner"]
+    },
+    {
+      "reifier_id": "reifier_microwave_kitchen",
+      "source_id": "microwave",
+      "relation_type": "PLACED_ON",
+      "target_id": "kitchen",
+      "surface_anchor": "counter_top",
+      "surface_sector": "front_right",
+      "contact_normal": [0, 0, 1],
+      "delta_x":  { "min_val": -0.05, "max_val": 0.05, "nominal": 0.0 },
+      "delta_y":  { "min_val": -0.05, "max_val": 0.05, "nominal": 0.0 },
+      "delta_z":  { "min_val": 0.0, "max_val": 0.0, "nominal": 0.0 },
+      "required_headroom": 0.35,
+      "required_friction": 0.60,
+      "kinematic_manifold": "tabletop_stationary_reach",
+      "prior_entropy": 2.5,
+      "posterior_entropy": 0.05,
+      "evidence_sources": ["tabletop_spatial_planner"]
+    }
+  ],
+  "placement_validators": {
+    "enabled_checks": ["non_overlap", "reachability", "headroom"],
+    "required_checks": ["non_overlap", "reachability", "headroom"]
+  },
+  "task": {
+    "composition": "atomic",
+    "description": "Open the microwave, pick up the Campbell soup can from the counter, and place it upright onto the microwave turntable.",
+    "subtasks": [
+      {
+        "kind": "OpenDoorTask",
+        "params": {
+          "openable_object": "microwave"
+        }
+      },
+      {
+        "kind": "PickAndPlaceTask",
+        "params": {
+          "pick_up_object": "tomato_soup_can",
+          "destination_location": "microwave",
+          "background_scene": "kitchen"
+        }
+      }
+    ]
+  }
+  ,
+  "cli_override_specs": []
+}

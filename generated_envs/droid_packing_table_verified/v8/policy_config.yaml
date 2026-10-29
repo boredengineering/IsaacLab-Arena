@@ -1,0 +1,36 @@
+action_horizon: 32
+action_chunk_length: 16
+embodiment_tag: OXE_DROID
+video_backend: decord
+policy_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/gr00t_8dof_joint_space.yaml
+action_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/8dof_joint_space.yaml
+state_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/13dof_joint_space.yaml
+task_mode_name: droid_manipulation
+pov_cam_name_sim:
+- external_camera_rgb
+- wrist_camera_rgb
+original_image_size:
+- 720
+- 1280
+- 3
+target_image_size:
+- 180
+- 320
+- 3
+language_instruction: 'PHYSX SETTLE FAILURES:
+
+  Object ''yellow_banana'' unstable during 30-step PhysX settle: displaced 0.102m
+  from [0.554, -0.204, 0.189] to [0.554, -0.204, 0.087].
+
+  Object ''red_bowl'' unstable during 30-step PhysX settle: displaced 0.102m from
+  [0.457, 0.124, 0.198] to [0.457, 0.124, 0.096].
+
+
+  STEP-0 VLM VISUAL CRITIC (tier_2_local_vlm):
+
+  robot arm obstructs view
+
+  banana is not in the red bowl
+
+  The robot arm is obstructing the view of the banana and the red bowl. The banana
+  should be placed in the red bowl.'

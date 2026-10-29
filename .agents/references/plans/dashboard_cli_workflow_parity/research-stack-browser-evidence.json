@@ -1,0 +1,21 @@
+{
+  "scope": "Real isolated Chromium, synthetic helper/API/dependency HTTP responses; no live acceptance",
+  "run": "arena-research-browser-28da71c88dd2",
+  "parent_build": "arena-f0-build-5280dc5f9b3c",
+  "assertion_groups": 25,
+  "matched_browser_and_http_requests": 49,
+  "verified_source_hashes": 220,
+  "verified_bundle_hashes": 14,
+  "verified_artifact_hashes": 45,
+  "cleanup_verified": true,
+  "remaining_owned": [],
+  "artifact_index_sha256": "6444be7004b1bf905f200767c5d2c94fbb47688ed2dc81ae40bcbfa18dd5dd07",
+  "browser_proof_sha256": "c4eb0fcc2322baccf0e4f475c3ea3695347bf593ba748f90021dfdd890629ceb",
+  "screenshot": "evidence/09-cleanup-restored-start-disabled.png",
+  "limits": [
+    "Synthetic helper/API/dependency responses, not real service starts or loaded policy",
+    "SharedWorker disabled: production polling fallback tested",
+    "Full browser reload retains ordinary Arena-session connection attempt",
+    "Historical pre-header close yielded three identical wire POSTs for one application request; helper idempotency required, no transport-exactly-once claim"
+  ]
+}

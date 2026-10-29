@@ -1,13 +1,19 @@
 ---
 name: dev-container
-description: Bootstraps and maintains the Docker environment used when contributing to Isaac Lab-Arena. Use when preparing a checkout for development, installing contributor hooks, rebuilding the Arena image with or without cache, inspecting the clone-specific container, or running development commands inside it. For installing or using Arena without contribution work, use setup-arena instead.
-allowed-tools: Read Grep Glob Skill Bash(git rev-parse *) Bash(git submodule *) Bash(head *) Bash(id -un) Bash(pre-commit install) Bash(test -x *) Bash(./docker/run_docker.sh *) Bash(docker exec *) Bash(docker images *) Bash(docker inspect *) Bash(docker ps *)
+description: Bootstraps and maintains the Docker environment used when contributing to Isaac Lab-Arena. Use when preparing a checkout for development, installing contributor hooks, rebuilding the Arena image with or without cache, inspecting the clone-specific container, restoring the simulator/policy/Neo4j stack, or running development commands inside it. For installing or using Arena without contribution work, use setup-arena instead.
+allowed-tools: Read Grep Glob Skill Bash(git rev-parse *) Bash(git submodule *) Bash(head *) Bash(id -un) Bash(pre-commit install) Bash(test -x *) Bash(./docker/run_docker.sh *) Bash(docker exec *) Bash(docker images *) Bash(docker inspect *) Bash(docker ps *) Bash(docker start *)
 ---
 
 # Dev Container
 
-Keep this skill limited to contributor setup and Docker image maintenance. Use `setup-arena` for
-ordinary installation, runtime selection, container startup, data mounts, and readiness checks.
+Keep this skill limited to contributor setup, Docker image maintenance, and restoring the existing
+simulator/policy/database stack. Use `setup-arena` for ordinary installation, runtime selection,
+container startup, data mounts, and readiness checks.
+
+Arena package execution uses the simulation container. This checkout also supports a separate
+editor/agent devcontainer, a GR00T policy server, and Neo4j. Do not mistake a running editor
+container for a working simulator. The current DCRG runtime procedure is documented in
+`docs/pages/example_workflows/agentic_env_gen/dcrg.rst`.
 
 If an explicit `/dev-container` request is only about running Arena, hand it off to `setup-arena` and
 do not install contributor tooling.
@@ -40,7 +46,36 @@ Never hardcode the container name. Resolve the running container that mounts thi
 ARENA_CONTAINER=$(docker ps --filter "volume=$(git rev-parse --show-toplevel)" --format '{{.Names}}' | head -1)
 ```
 
+Inside an editor devcontainer, `git rev-parse --show-toplevel` is a container path, not necessarily
+the host source path used by Docker. List running and stopped candidates (`docker ps -a`), inspect
+their mounts, and select the simulator container with the same-clone RW bind at
+`/workspaces/isaaclab_arena`.
+
 Keep discovery and subsequent commands in the same shell, or substitute the resolved literal name.
+
+## Restore the existing simulator, policy and database stack
+
+- Treat an explicit request to start the existing stack as startup authority;
+  do not ask the user to perform the same documented restart manually. Keep a
+  genuinely narrower no-shared-service scope separate from stack restoration.
+- For an existing verified stopped container, prefer `docker start "$ARENA_CONTAINER"`
+  when startup is authorized, as `./docker/run_docker.sh` removes exited containers
+  before recreating them.
+- Inspect only projected state, image, mounts, ports, user, device requests and
+  restart policy; never dump `Config.Env` or credentials. Correlate stop times
+  with host boot. Exit 137 alone does not prove OOM; check `OOMKilled` and do not
+  invent a stop cause when historical Docker events are unavailable.
+- Discover GR00T and Neo4j by their existing mounts, images and ports. Follow
+  `docs/pages/example_workflows/agentic_env_gen/dcrg.rst` and
+  `docs/pages/example_workflows/agentic_env_gen/eval_with_gr00t.rst`; preserve the
+  deployed GR00T model/embodiment and Neo4j volumes. Start exact verified IDs
+  without rebuilding, replacing data, changing restart policies or replaying jobs.
+- Verify GR00T's actual deployed port using `PolicyClient`'s `ping` endpoint and
+  `get_modality_config()`. Modality configs are dataclasses, not Pydantic models;
+  report `delta_indices`/`modality_keys`, not `model_dump()` or arbitrary nested
+  `vars()` JSON. Ping/schema readiness is not an inference acceptance result.
+- Verify Neo4j's mapped HTTP discovery endpoint and Bolt connectivity without
+  reading credentials or writing graph data.
 
 ## Rebuild the image
 
@@ -71,6 +106,17 @@ docker exec "$ARENA_CONTAINER" su $(id -un) -c \
 
 Use `/isaac-sim/python.sh` explicitly for non-interactive Python commands; do not rely on the
 interactive `python` alias.
+
+## Nested-container discovery and non-root runtime
+
+- Inspect `/isaac-sim` permissions and use the image's read group with the non-root
+  user when necessary. An inaccessible directory can make extension discovery report
+  `SimulationApp=None` even though the extension is installed.
+- Give non-root runs a user-owned `TMPDIR` for public USD downloads. A root-owned
+  cached USD may otherwise be reused and fail as an apparently missing rigid body.
+- Use Kit's documented `--portable --portable-root <writable-directory>` through
+  `--kit_args` for writable runtime caches. If Hub startup fails, the documented
+  per-process `OMNICLIENT_HUB_MODE=disabled` setting is an alternative.
 
 ## Hand off
 

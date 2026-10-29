@@ -15,6 +15,8 @@ from isaaclab.envs.mdp.terminations import root_height_below_minimum
 from isaaclab.managers import SceneEntityCfg, TerminationTermCfg
 from isaaclab.utils.math import combine_frame_transforms
 
+from isaaclab_arena.tasks.predicates.episode_state import get_episode_scoped_state
+
 if TYPE_CHECKING:
     from isaaclab_arena.environments.isaaclab_arena_manager_based_env import IsaacLabArenaManagerBasedRLEnv
 
@@ -30,6 +32,9 @@ class SuccessMode(str, Enum):
 
     CHOOSE = "CHOOSE"
     """Success needs at least k predicates to be True."""
+
+    SEQUENCE = "SEQUENCE"
+    """Success needs every predicate to have become True in the listed order."""
 
 
 def task_success_from_progress(env: IsaacLabArenaManagerBasedRLEnv) -> torch.Tensor:
@@ -52,6 +57,7 @@ def check_success(
     predicates: list[TerminationTermCfg],
     mode: SuccessMode | str = SuccessMode.ALL,
     k: int | None = None,
+    gate_id: str = "default",
 ) -> torch.Tensor:
     """Compose multiple termination predicates into a single success signal.
 
@@ -61,12 +67,14 @@ def check_success(
     - ALL: True where every predicate is True (logical AND).
     - ANY: True where at least one predicate is True (logical OR).
     - CHOOSE: True where at least k predicates are True.
+    - SEQUENCE: True where every predicate has latched True in order.
 
     Args:
         env: The RL environment instance.
         predicates: Termination term configs to evaluate and combine.
         mode: How to combine the predicate results (SuccessMode or string).
         k: Number of predicates that must be True when `mode` is SuccessMode.CHOOSE.
+        gate_id: Names the latch state when `mode` is SuccessMode.SEQUENCE.
 
     Returns:
         A boolean tensor of shape (num_envs,) indicating success.
@@ -76,13 +84,15 @@ def check_success(
         raise ValueError("check_success requires at least one predicate.")
     results = torch.stack([predicate.func(env, **predicate.params) for predicate in predicates], dim=0)
 
-    return combine_success_results(results, mode=mode, k=k)
+    return combine_success_results(results, mode=mode, k=k, env=env, gate_id=gate_id)
 
 
 def combine_success_results(
     results: torch.Tensor,
     mode: SuccessMode | str = SuccessMode.ALL,
     k: int | None = None,
+    env: ManagerBasedRLEnv | None = None,
+    gate_id: str = "default",
 ) -> torch.Tensor:
     """Combine an already evaluated predicate tensor along its first dimension."""
     assert results.ndim >= 1 and results.shape[0] > 0, "results must contain at least one predicate."
@@ -95,6 +105,14 @@ def combine_success_results(
         return results.all(dim=0)
     if mode is SuccessMode.ANY:
         return results.any(dim=0)
+    if mode is SuccessMode.SEQUENCE:
+        assert env is not None, "mode SuccessMode.SEQUENCE requires 'env' to be provided."
+        state = get_episode_scoped_state(env)
+        num_stages = results.shape[0]
+        reached = torch.ones_like(results[0])
+        for stage in range(num_stages):
+            reached = state.latch(gate_id, num_stages, stage, reached & results[stage])
+        return reached
 
     if k is None:
         raise ValueError("mode SuccessMode.CHOOSE requires 'k' to be provided.")

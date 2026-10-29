@@ -1,0 +1,70 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:g1_apple_to_plate_rl a arena:EnvironmentGraph, prov:Entity ;
+    arena:taskDescription "Pick up the apple_01_objaverse_robolab, and place it into the clay_plates_hot3d_robolab"^^xsd:string ;
+    arena:taskComposition "atomic"^^xsd:string ;
+    arena:hasEmbodiment :robot_g1_wbc_agile_joint ;
+    arena:hasTerrain :maple_table_robolab ;
+    arena:hasObject :apple_01_objaverse_robolab, :clay_plates_hot3d_robolab ;
+    arena:rlAlgorithm "PPO"^^xsd:string ;
+    arena:rlPolicy "rsl_rl"^^xsd:string ;
+    arena:trainingIterations 1000 ;
+    arena:interactionSteps 6144000 .
+
+:robot_g1_wbc_agile_joint a arena:Embodiment ;
+    arena:registryName "g1_wbc_agile_joint"^^xsd:string ;
+    arena:standingPelvisHeight 0.75 .
+
+:maple_table_robolab a arena:Fixture, arena:Terrain ;
+    arena:registryName "maple_table_robolab"^^xsd:string .
+
+:apple_01_objaverse_robolab a arena:RigidObject ;
+    arena:registryName "apple_01_objaverse_robolab"^^xsd:string .
+
+:clay_plates_hot3d_robolab a arena:RigidObject, arena:Receptacle ;
+    arena:registryName "clay_plates_hot3d_robolab"^^xsd:string .
+
+# RDF-star Reified Spatial Factor Graph
+<< :apple_01_objaverse_robolab arena:placedOn :maple_table_robolab >>
+    arena:surfaceAnchor "table_deck"^^xsd:string ;
+    arena:surfaceSector "front_right"^^xsd:string ;
+    arena:nominalPositionXYZ "[-0.1730, 0.1900, 0.0975]"^^xsd:string ;
+    arena:kinematicManifold "unitree_g1_left_arm_tabletop_reach"^^xsd:string .
+
+<< :clay_plates_hot3d_robolab arena:placedOn :maple_table_robolab >>
+    arena:surfaceAnchor "table_deck"^^xsd:string ;
+    arena:surfaceSector "front_left"^^xsd:string ;
+    arena:nominalPositionXYZ "[-0.1730, -0.0200, 0.0780]"^^xsd:string .
+
+# Evaluation Runs & DCRG Recurrent Loopback Feedback
+:eval_run_1788889700 a arena:EvaluationRun, prov:Entity ;
+    arena:evaluatedGraph :g1_apple_to_plate_rl ;
+    arena:executionHarness "isaaclab_arena/evaluation/policy_runner.py"^^xsd:string ;
+    arena:metric_num_episodes 10 ;
+    arena:metric_success_rate 0.70 ;
+    arena:metric_object_moved_rate 1.00 ;
+    arena:settleSteps 40 ;
+    arena:settleHoldAction "build_neutral_hold_action"^^xsd:string ;
+    arena:standingPelvisHeight 0.75 ;
+    arena:settleVerified true .
+
+:eval_run_play_failure_20260908 a arena:EvaluationRun, prov:Entity ;
+    arena:evaluatedGraph :g1_apple_to_plate_rl ;
+    arena:executionHarness "submodules/IsaacLab/scripts/reinforcement_learning/rsl_rl/play.py"^^xsd:string ;
+    arena:metric_num_episodes 1 ;
+    arena:metric_success_rate 0.0 ;
+    arena:failureMode "robot_falls_backwards"^^xsd:string ;
+    arena:settleSteps 0 ;
+    arena:settleVerified false .
+
+# RDF-star Reified DCRG Feedback Mutations
+<< :eval_run_play_failure_20260908 arena:feedbackMutation :g1_apple_to_plate_rl >>
+    arena:defectMode "WBCStartupContactDepenetrationTransient"^^xsd:string ;
+    arena:failureSymptom "G1 humanoid topples backwards upon spawn/reset without picking object"^^xsd:string ;
+    arena:rootCause "Raw play.py queries policy immediately at t=0 with zero settle steps; initial PhysX foot contact depenetration normal force impulse combined with dynamic arm reach shifts CoM outside biped support polygon"^^xsd:string ;
+    arena:remediationAction "Enforce 40 settle steps commanding neutral hold posture (pelvis height 0.75m) prior to policy inference loop (implemented in policy_runner.py)"^^xsd:string ;
+    arena:verifiedByEval :eval_run_1788889700 ;
+    arena:verifiedSuccessRate 0.70 .

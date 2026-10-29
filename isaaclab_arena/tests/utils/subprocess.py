@@ -73,3 +73,15 @@ def run_subprocess(
     if capture_output:
         return result
     return None
+
+
+def run_simulation_app_function(function, headless: bool = True, enable_cameras: bool = False, **kwargs) -> bool:
+    """Backward-compatible wrapper delegating to ``run_function_with_persistent_simulation_app``."""
+    from isaaclab_arena.tests.utils.persistent_simulation_app import run_function_with_persistent_simulation_app
+
+    return run_function_with_persistent_simulation_app(
+        function,
+        headless=headless,
+        enable_cameras=enable_cameras,
+        **kwargs,
+    )

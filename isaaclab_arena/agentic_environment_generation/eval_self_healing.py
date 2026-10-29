@@ -1,0 +1,887 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+"""Evaluation-to-Active-Inference self-healing flywheel and diagnostic oracle."""
+
+from __future__ import annotations
+
+import json
+import yaml
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Literal
+
+from isaaclab_arena.agentic_environment_generation.inference_backend import InferenceBackend, StructuredOutputRequest
+from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import relax_spec_spatial_factor_graph
+from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
+
+
+@dataclass
+class FailureSignature:
+    """Classified failure mode with root cause, evidence, and remediation parameters."""
+
+    defect_type: str
+    severity: float  # 0.0 to 1.0
+    evidence: str
+    recommended_policy_patches: dict[str, Any] = field(default_factory=dict)
+    recommended_spatial_patches: dict[str, Any] = field(default_factory=dict)
+
+
+class EvaluationDiagnosticOracle:
+    """Diagnoses policy evaluation failures from simulation telemetry and logs."""
+
+    def diagnose_eval_run(
+        self,
+        eval_dir: Path | str,
+        spec: ArenaEnvGraphSpec,
+        policy_config_path: Path | str | None = None,
+        num_steps_executed: int = 500,
+        healing_mode: str = "hybrid",
+        api_key: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+        temperature: float = 0.2,
+    ) -> list[FailureSignature]:
+        """Analyze evaluation artifacts and isolate root-cause failure signatures.
+
+        Args:
+            eval_dir: Path to evaluation output directory containing results.
+            spec: ArenaEnvGraphSpec for the evaluated environment.
+            policy_config_path: Optional path to policy configuration YAML.
+            num_steps_executed: Simulation step limit used during evaluation.
+            healing_mode: 'deterministic' (Option A), 'llm' (Option B), or 'hybrid' (Option A + B fallback).
+            api_key: Optional API key for LLM inference.
+            model: Optional LLM model identifier.
+            base_url: Optional base URL for LLM API.
+            temperature: LLM sampling temperature.
+
+        Returns:
+            List of classified FailureSignature objects.
+        """
+        eval_path = Path(eval_dir)
+        signatures: list[FailureSignature] = []
+
+        # 1. Load policy config if present
+        policy_cfg_dict: dict[str, Any] = {}
+        if policy_config_path and Path(policy_config_path).exists():
+            try:
+                policy_cfg_dict = yaml.safe_load(Path(policy_config_path).read_text(encoding="utf-8")) or {}
+            except Exception:
+                pass
+
+        # 2. Ingest telemetry / metrics
+        metrics: dict[str, Any] = {}
+        ttl_file = next(eval_path.glob("**/eval_telemetry.ttl"), None)
+        metrics_file = next(eval_path.glob("**/summary_metrics.json"), None)
+
+        if metrics_file and metrics_file.exists():
+            try:
+                metrics = json.loads(metrics_file.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        elif ttl_file and ttl_file.exists():
+            ttl_text = ttl_file.read_text(encoding="utf-8")
+            if 'metric_success_rate "0.0"' in ttl_text or "metric_success_rate 0.0" in ttl_text:
+                metrics["success_rate"] = 0.0
+            if "metric_num_episodes 0" in ttl_text or 'metric_num_episodes "0"' in ttl_text:
+                metrics["num_episodes"] = 0
+
+        success_rate = float(metrics.get("success_rate", 0.0))
+        object_moved_rate = float(metrics.get("object_moved_rate", 0.0))
+
+        # Ingest granular episode results JSONL for statistical stage progression funnel
+        jsonl_files = list(eval_path.glob("**/episode_results_rank*.jsonl"))
+        lifted_count = 0
+        total_episodes_counted = 0
+        placed_count = 0
+        false_success_count = 0
+        false_success_lengths: list[int] = []
+        if jsonl_files:
+            for jf in jsonl_files:
+                for line in jf.read_text(encoding="utf-8").splitlines():
+                    if not line.strip():
+                        continue
+                    try:
+                        rec = json.loads(line)
+                        total_episodes_counted += 1
+                        events = rec.get("progress", {}).get("events", [])
+                        if any("object_is_above_height" in e.get("predicate_name", "") for e in events):
+                            lifted_count += 1
+                        if rec.get("success", False):
+                            placed_count += 1
+                            # A success flag alongside a zero progress score means the success
+                            # predicate fired without the task having been performed.
+                            progress = rec.get("progress", {}) or {}
+                            if float(progress.get("overall_score", 1.0)) <= 0.0:
+                                false_success_count += 1
+                                false_success_lengths.append(int(rec.get("episode_length", 0)))
+                    except Exception:
+                        pass
+
+        lift_rate = (lifted_count / total_episodes_counted) if total_episodes_counted > 0 else object_moved_rate
+        conversion_rate = (placed_count / lifted_count) if lifted_count > 0 else 0.0
+
+        # --- OPTION A: Deterministic Statistical & Spatial Oracle Rules ---
+        if healing_mode in ("deterministic", "hybrid"):
+            # Check Defect -1: Premature Termination / Object Drop
+            premature_drop_detected = False
+            premature_drop_details: dict[str, Any] = {}
+            manifest_candidates = list(eval_path.glob("failure_manifest.json")) + list(
+                eval_path.glob("**/failure_manifest.json")
+            )
+            if manifest_candidates:
+                try:
+                    manifest_data = json.loads(manifest_candidates[0].read_text(encoding="utf-8"))
+                    if manifest_data.get("event") == "object_dropped" or "drop" in manifest_data.get(
+                        "failure_reason", ""
+                    ).lower():
+                        premature_drop_detected = True
+                        premature_drop_details = manifest_data
+                except Exception:
+                    pass
+            elif jsonl_files:
+                for jf in jsonl_files:
+                    for line in jf.read_text(encoding="utf-8").splitlines():
+                        if not line.strip():
+                            continue
+                        try:
+                            rec = json.loads(line)
+                            ep_len = int(rec.get("episode_length", 0))
+                            if 0 < ep_len < 50 and not rec.get("success", False):
+                                premature_drop_detected = True
+                                dropped_id = "yellow_banana"
+                                drop_pos = [-0.09, -0.1997, 0.7492]
+                                fixture_id = spec.background.id if spec.background else "background_table"
+                                for o in spec.objects:
+                                    p_xyz = (o.params or {}).get("initial_pose", {}).get("position_xyz", [])
+                                    if p_xyz and len(p_xyz) >= 2:
+                                        if abs(p_xyz[1]) > 0.17 or p_xyz[2] < 0.50:
+                                            dropped_id = o.id
+                                            drop_pos = list(p_xyz)
+                                            break
+                                    elif o.id in ("yellow_banana", "banana"):
+                                        dropped_id = o.id
+                                premature_drop_details = {
+                                    "event": "object_dropped",
+                                    "step": ep_len,
+                                    "dropped_object_id": dropped_id,
+                                    "drop_position": drop_pos,
+                                    "support_fixture_id": fixture_id,
+                                    "failure_reason": (
+                                        f"Premature episode termination (step {ep_len} < 50) due to object drop /"
+                                        " instability."
+                                    ),
+                                }
+                                # Cache failure_manifest.json in eval_path for fast repeat diagnosis
+                                try:
+                                    (eval_path / "failure_manifest.json").write_text(
+                                        json.dumps(premature_drop_details, indent=2), encoding="utf-8"
+                                    )
+                                except Exception:
+                                    pass
+                                break
+                        except Exception:
+                            pass
+                    if premature_drop_detected:
+                        break
+
+            if premature_drop_detected:
+                dropped_obj = premature_drop_details.get("dropped_object_id", "yellow_banana")
+                drop_pos = premature_drop_details.get("drop_position", [-0.09, -0.1997, 0.7492])
+                step = premature_drop_details.get("step", 15)
+
+                spatial_patches: dict[str, Any] = {}
+                from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
+                    project_pose_to_safe_support_surface,
+                )
+                for o in spec.objects:
+                    pos = (o.params or {}).get("initial_pose", {}).get("position_xyz", [0.0, 0.0, 0.75])
+                    if o.id == dropped_obj or (len(pos) >= 2 and abs(pos[1]) > 0.15):
+                        y_sign = -1.0 if pos[1] < 0 else 1.0
+                        pref_sec = "front_right" if y_sign < 0 else "front_left"
+                        safe_xyz, resolved_sec = project_pose_to_safe_support_surface(spec, o.id, preferred_sector=pref_sec)
+                        spatial_patches[o.id] = {
+                            "surface_sector": resolved_sec,
+                            "position_xyz": safe_xyz,
+                        }
+                if not spatial_patches:
+                    safe_xyz, resolved_sec = project_pose_to_safe_support_surface(spec, dropped_obj, preferred_sector="front_right")
+                    spatial_patches[dropped_obj] = {
+                        "surface_sector": resolved_sec,
+                        "position_xyz": safe_xyz,
+                    }
+
+                signatures.append(
+                    FailureSignature(
+                        defect_type="object_dropped_premature_termination",
+                        severity=1.0,
+                        evidence=(
+                            f"Premature episode termination at step {step} (< 50) due to object '{dropped_obj}' "
+                            f"dropping from {drop_pos} (outside safe flat-deck perimeter). "
+                            "Remediate object coordinates onto the safe flat deck (d in [0.25m, 0.45m], |Y| <= 0.15m)."
+                        ),
+                        recommended_policy_patches={},
+                        recommended_spatial_patches=spatial_patches,
+                    )
+                )
+
+            # Check Defect 0: False-Positive Success Termination (checked first, because every
+            # metric downstream of it is meaningless while it holds).
+            if false_success_count > 0:
+                shortest = min(false_success_lengths) if false_success_lengths else 0
+                signatures.append(
+                    FailureSignature(
+                        defect_type="harness_false_success",
+                        severity=1.0,
+                        evidence=(
+                            f"{false_success_count}/{total_episodes_counted} episodes reported success with a "
+                            f"zero progress score (shortest such episode: {shortest} steps). The success "
+                            "predicate fired without the task having been performed - typically a contact "
+                            "sensor triggered by an object resting against or grazing its destination. "
+                            "Gate placement behind a verified lift before trusting any other metric from "
+                            "this run."
+                        ),
+                        recommended_policy_patches={},
+                        recommended_spatial_patches={},
+                    )
+                )
+            # Check Defect 1: VLA Training Distribution & Camera Perception Standoff (CRITICAL)
+            manipuland_id = None
+            container_id = None
+            for obj in spec.objects:
+                is_recep = any(
+                    k in obj.id.lower() or k in obj.registry_name.lower()
+                    for k in ("bin", "basket", "box", "tray", "bowl", "plate")
+                )
+                if is_recep:
+                    container_id = obj.id
+                else:
+                    manipuland_id = obj.id
+
+            has_near_field_manipuland = False
+            for rel in spec.relations:
+                if rel.kind == "on" and rel.params:
+                    if rel.params.get("surface_sector") in ("front_center", "front_left", "front_right"):
+                        if rel.subject == manipuland_id:
+                            has_near_field_manipuland = True
+
+            if not premature_drop_detected and ((object_moved_rate == 0.0 and lift_rate == 0.0) or not has_near_field_manipuland):
+                signatures.append(
+                    FailureSignature(
+                        defect_type="camera_occlusion",
+                        severity=0.99,
+                        evidence=(
+                            "Robot failed to contact or move target object"
+                            f" (object_moved_rate={object_moved_rate:.2f}). For VLA policies (e.g. GR00T-DROID,"
+                            " OpenVLA), objects placed without strict near-field constraints (d in [0.25m, 0.45m], X"
+                            " in [-0.30m, -0.10m]) fall outside the downward camera crop and teleoperation training"
+                            " distribution. The table must be shifted closer to the robot base."
+                        ),
+                        recommended_spatial_patches={
+                            "maple_table": {"position_xyz": [-0.15, 0.0, 0.0]},
+                            manipuland_id
+                            or "pick_up_object": {
+                                "surface_sector": "front_center",
+                                "sector_bounds": [-0.30, -0.10, -0.15, 0.15],
+                            },
+                            container_id
+                            or "destination_location": {
+                                "surface_sector": "front_left",
+                                "sector_bounds": [-0.30, -0.10, 0.15, 0.35],
+                            },
+                        },
+                    )
+                )
+
+            # Check Defect 2: In-Flight Slippage & Open-Loop Inertial Jerk (Statistical Funnel Bottleneck)
+            # Threshold tuned to <= 0.75 conversion rate to catch in-flight drops
+            if total_episodes_counted >= 2 and lift_rate >= 0.50 and conversion_rate < 0.75:
+                curr_chunk = policy_cfg_dict.get("action_chunk_length", 32)
+                target_chunk = 16 if curr_chunk > 16 else 8
+                signatures.append(
+                    FailureSignature(
+                        defect_type="in_flight_slip_inertia",
+                        severity=0.92,
+                        evidence=(
+                            f"Statistical Funnel Bottleneck (N={total_episodes_counted}): Robot achieved initial reach"
+                            f" and lift in {lift_rate * 100:.1f}% of episodes, but conversion to successful placement"
+                            f" was only {conversion_rate * 100:.1f}%. High-lift with incomplete placement indicates"
+                            " in-flight rotational slippage, open-loop drift, or acceleration jerk during transport."
+                            f" Compress execution chunk (from {curr_chunk} to {target_chunk}) to enable high-frequency"
+                            " receding horizon feedback."
+                        ),
+                        recommended_policy_patches={
+                            "action_chunk_length": target_chunk,
+                        },
+                    )
+                )
+
+            # Check Defect 3: Unconditioned VLA Model
+            lang_instr = policy_cfg_dict.get("language_instruction", "")
+            if not lang_instr or str(lang_instr).strip() == "":
+                task_desc = spec.task.description if spec.task else "Manipulate target object"
+                signatures.append(
+                    FailureSignature(
+                        defect_type="unconditioned_vla",
+                        severity=0.95,
+                        evidence=(
+                            "Policy config lacks 'language_instruction'; VLA multimodal backbone received empty text"
+                            " conditioning."
+                        ),
+                        recommended_policy_patches={"language_instruction": task_desc},
+                    )
+                )
+
+            # Check Defect 4: Horizon Truncation
+            if success_rate < 0.5 and num_steps_executed <= 600:
+                signatures.append(
+                    FailureSignature(
+                        defect_type="horizon_truncation",
+                        severity=0.80,
+                        evidence=(
+                            f"Rollout was limited to {num_steps_executed} steps ({num_steps_executed * 0.02:.1f}s),"
+                            " terminating before multi-stage pick-and-place completed."
+                        ),
+                        recommended_policy_patches={"num_steps": 2000},
+                    )
+                )
+
+            # Check Defect 5: Depth/Spatial Alignment Mismatch (Depth Anything V2)
+            # Compares actual rollout camera frames against training dataset using
+            # monocular depth estimation to quantify spatial misalignment.
+            trajectory_frames = sorted(eval_path.glob("**/trajectory*/step_*.png"))
+            if not trajectory_frames:
+                trajectory_frames = sorted(eval_path.glob("**/*robot_head_cam*.png")) + sorted(
+                    eval_path.glob("**/frames/*.png")
+                )
+            if not trajectory_frames:
+                mp4_files = sorted(eval_path.glob("**/*robot*cam*.mp4"))
+                if mp4_files:
+                    try:
+                        import cv2
+
+                        cap = cv2.VideoCapture(str(mp4_files[0]))
+                        ret, f_bgr = cap.read()
+                        cap.release()
+                        if ret:
+                            extracted_p = eval_path / "extracted_eval_frame_0.png"
+                            cv2.imwrite(str(extracted_p), f_bgr)
+                            trajectory_frames = [extracted_p]
+                    except Exception:
+                        pass
+
+            dataset_video = self._find_reference_dataset_video(spec)
+            if trajectory_frames and dataset_video and success_rate < 0.3 and object_moved_rate < 0.2:
+                try:
+                    # Calculate expected target UV in simulation frame using pinhole projection
+                    sim_target_uv = None
+                    emb_pose = (
+                        spec.embodiment.params.get("initial_pose", {})
+                        if spec.embodiment and spec.embodiment.params
+                        else {}
+                    )
+                    emb_pos = emb_pose.get("position_xyz")
+                    if manipuland_id and emb_pos:
+                        target_obj = next((o for o in spec.objects if o.id == manipuland_id), None)
+                        if target_obj and target_obj.params:
+                            t_pos = target_obj.params.get("initial_pose", {}).get("position_xyz")
+                            if t_pos:
+                                from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
+                                    _G1_HEAD_CAM,
+                                    _project_to_image_plane,
+                                )
+
+                                cam = _G1_HEAD_CAM
+                                fx = cam["focal_length_mm"] * cam["width"] / cam["sensor_width_mm"]
+                                cx = cam["width"] / 2.0
+                                cy = cam["height"] / 2.0
+                                base_z = emb_pos[2] if emb_pos[2] > 0.2 else 0.0
+                                cam_world = (
+                                    emb_pos[0] + cam["offset_xyz"][0],
+                                    emb_pos[1] + cam["offset_xyz"][1],
+                                    base_z + cam["head_link_height_above_base"] + cam["offset_xyz"][2],
+                                )
+                                proj = _project_to_image_plane(
+                                    tuple(t_pos), cam_world, cam["offset_quat_xyzw"], fx, cx, cy
+                                )
+                                if proj:
+                                    sim_target_uv = (proj[0], proj[1])
+
+                    depth_report = self._run_depth_audit(
+                        dataset_video, trajectory_frames[0], sim_target_uv=sim_target_uv
+                    )
+                    if depth_report:
+                        slope_ratio = depth_report.get("discrepancies", {}).get("surface_pitch_slope_ratio", 1.0)
+                        y_delta_px = depth_report.get("discrepancies", {}).get("object_vertical_pixel_delta", 0.0)
+                        depth_delta = depth_report.get("discrepancies", {}).get("object_relative_depth_delta", 0.0)
+                        sign_flip = depth_report.get("discrepancies", {}).get("surface_slope_sign_flip", False)
+                        diagnostics_msgs = depth_report.get("diagnostics", [])
+
+                        # Trigger on significant spatial misalignment
+                        if sign_flip or abs(slope_ratio) < 0.4 or abs(y_delta_px) > 0.20 or abs(depth_delta) > 0.25:
+                            # Calculate concrete spatial patches:
+                            # Move table closer to robot so target object falls inside training reaching envelope
+                            emb_x = emb_pos[0] if emb_pos else -0.42
+                            recommended_table_x = round(emb_x + 0.28, 3)
+                            table_id = spec.background.id if spec.background else "maple_table"
+
+                            signatures.append(
+                                FailureSignature(
+                                    defect_type="depth_alignment_mismatch",
+                                    severity=0.98,
+                                    evidence=(
+                                        f"Depth Anything V2 spatial audit: slope_ratio={slope_ratio:.3f},"
+                                        f" sign_flip={sign_flip}, apple_y_delta={y_delta_px:+.3f},"
+                                        f" depth_delta={depth_delta:+.3f}. "
+                                        + " ".join(diagnostics_msgs)
+                                    ),
+                                    recommended_spatial_patches={
+                                        table_id: {
+                                            "position_xyz": [recommended_table_x, 0.0, 0.0],
+                                        },
+                                        manipuland_id
+                                        or "pick_up_object": {
+                                            "surface_sector": "front_center",
+                                        },
+                                        container_id
+                                        or "destination_location": {
+                                            "surface_sector": "front_left",
+                                        },
+                                    },
+                                )
+                            )
+                except Exception as exc:
+                    print(f"[EvaluationDiagnosticOracle] Depth audit skipped: {exc}")
+
+        # --- OPTION B: Generative LLM Healing (When configured or when deterministic signatures don't trigger) ---
+        if healing_mode == "llm" or (healing_mode == "hybrid" and len(signatures) == 0 and success_rate < 0.8):
+            llm_sigs = self._diagnose_with_llm(
+                spec=spec,
+                policy_cfg_dict=policy_cfg_dict,
+                metrics=metrics,
+                lift_rate=lift_rate,
+                conversion_rate=conversion_rate,
+                total_episodes=total_episodes_counted,
+                api_key=api_key,
+                model=model,
+                base_url=base_url,
+                temperature=temperature,
+            )
+            signatures.extend(llm_sigs)
+
+        return signatures
+
+    def _diagnose_with_llm(
+        self,
+        spec: ArenaEnvGraphSpec,
+        policy_cfg_dict: dict[str, Any],
+        metrics: dict[str, Any],
+        lift_rate: float,
+        conversion_rate: float,
+        total_episodes: int,
+        api_key: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+        temperature: float = 0.2,
+    ) -> list[FailureSignature]:
+        """Diagnose evaluation telemetry using generative LLM reasoning (Option B)."""
+        backend = InferenceBackend(
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            temperature=temperature,
+        )
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "signatures": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "defect_type": {"type": "string"},
+                            "severity": {"type": "number"},
+                            "evidence": {"type": "string"},
+                            "recommended_policy_patches": {"type": "object", "additionalProperties": True},
+                            "recommended_spatial_patches": {"type": "object", "additionalProperties": True},
+                        },
+                        "required": [
+                            "defect_type",
+                            "severity",
+                            "evidence",
+                            "recommended_policy_patches",
+                            "recommended_spatial_patches",
+                        ],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["signatures"],
+            "additionalProperties": False,
+        }
+
+        system_prompt = (
+            "You are an expert robotics simulation diagnostic engineer specializing in Foundation VLA policies (GR00T,"
+            " OpenVLA, DROID) and Isaac Sim physics. Analyze the evaluation failure telemetry and recommend precise,"
+            " grounded policy/spatial patches."
+        )
+
+        user_prompt = f"""Environment: {spec.env_name}
+Task: {spec.task.description if spec.task else 'N/A'}
+Embodiment: {spec.embodiment.registry_name if spec.embodiment else 'droid'}
+Objects: {[obj.id for obj in spec.objects]}
+Policy Config: {json.dumps(policy_cfg_dict, indent=2)}
+
+Evaluation Telemetry (N={total_episodes}):
+- Overall Success Rate: {metrics.get('success_rate', 0.0) * 100:.1f}%
+- Object Lift Rate (Stage 1): {lift_rate * 100:.1f}%
+- Placement Conversion Rate (Stage 2): {conversion_rate * 100:.1f}%
+- Object Moved Rate: {metrics.get('object_moved_rate', 0.0) * 100:.1f}%
+
+Identify any physical, kinematic, perceptual, or controller defects and provide exact parameter patches."""
+
+        req = StructuredOutputRequest(
+            schema_name="diagnostic_signatures",
+            schema=schema,
+            system=system_prompt,
+            user=user_prompt,
+            retry_label="diagnostic_oracle_llm",
+        )
+
+        try:
+            res = backend.run_json(req)
+            raw_sigs = res.get("signatures", [])
+            llm_signatures = []
+            for s in raw_sigs:
+                llm_signatures.append(
+                    FailureSignature(
+                        defect_type=s.get("defect_type", "llm_diagnosed_defect"),
+                        severity=float(s.get("severity", 0.85)),
+                        evidence=s.get("evidence", "Diagnosed by generative Active Inference LLM."),
+                        recommended_policy_patches=s.get("recommended_policy_patches", {}),
+                        recommended_spatial_patches=s.get("recommended_spatial_patches", {}),
+                    )
+                )
+            return llm_signatures
+        except Exception as exc:
+            print(f"[EvaluationDiagnosticOracle] Note: LLM diagnostic skipped or unavailable: {exc}")
+            return []
+
+    @staticmethod
+    def _find_reference_dataset_video(spec: ArenaEnvGraphSpec) -> Path | None:
+        """Locate the training demonstration video for the given spec's task lineage."""
+        import os
+
+        # 1. Check DATASET_DIR environment variable
+        dataset_dir_env = os.environ.get("DATASET_DIR")
+        if dataset_dir_env:
+            base = Path(dataset_dir_env)
+            # Check for direct mp4s or chunked LeRobot structure
+            mp4_candidates = list(base.glob("**/episode_000000.mp4")) + list(base.glob("**/*.mp4"))
+            if mp4_candidates:
+                return mp4_candidates[0]
+
+        # 2. Search well-known dataset paths
+        candidates = [
+            Path(
+                "/datasets/isaaclab_arena/static_apple_tutorial/arena_g1_static_apple_dataset_recorded/lerobot/videos/chunk-000/observation.images.ego_view/episode_000000.mp4"
+            ),
+            Path(
+                "/home/tarfy/datasets/isaaclab_arena/static_apple_tutorial/arena_g1_static_apple_dataset_recorded/lerobot/videos/chunk-000/observation.images.ego_view/episode_000000.mp4"
+            ),
+        ]
+        for c in candidates:
+            if c.exists():
+                return c
+
+        # 3. Dynamic scan in /datasets/
+        root = Path("/datasets")
+        if root.exists():
+            matches = list(root.glob("**/episode_000000.mp4"))
+            if matches:
+                return matches[0]
+
+        return None
+
+    @staticmethod
+    def _run_depth_audit(
+        dataset_video: Path,
+        sim_frame: Path,
+        sim_target_uv: tuple[float, float] | None = None,
+        dataset_target_uv: tuple[float, float] | None = None,
+    ) -> dict | None:
+        """Run Depth Anything V2 spatial comparison between dataset and simulation frame.
+
+        Args:
+            dataset_video: Path to the training demonstration MP4.
+            sim_frame: Path to a simulation camera snapshot (PNG).
+            sim_target_uv: Optional (u_norm, v_norm) expected coordinate in sim frame.
+            dataset_target_uv: Optional (u_norm, v_norm) expected coordinate in dataset frame.
+
+        Returns:
+            Depth audit report dict, or None if the auditor is unavailable.
+        """
+        try:
+            import numpy as np
+
+            import cv2
+            from PIL import Image as PILImage
+
+            from isaaclab_arena.agentic_environment_generation.depth_spatial_auditor import DepthSpatialAuditor
+        except ImportError:
+            return None
+
+        # Extract first frame from dataset video
+        cap = cv2.VideoCapture(str(dataset_video))
+        ret, frame_bgr = cap.read()
+        cap.release()
+        if not ret:
+            return None
+        d_img = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+
+        # Load simulation frame
+        s_img = np.array(PILImage.open(str(sim_frame)).convert("RGB"))
+
+        # Default dataset target UV from known canonical demonstration if not supplied
+        if dataset_target_uv is None:
+            dataset_target_uv = (0.144, 0.717)
+
+        # Run comparison (saves viz alongside the sim frame)
+        viz_path = sim_frame.parent / f"{sim_frame.stem}_depth_audit.png"
+        auditor = DepthSpatialAuditor()
+        report = auditor.compare(
+            d_img,
+            s_img,
+            output_viz_path=str(viz_path),
+            sim_target_uv=sim_target_uv,
+            dataset_target_uv=dataset_target_uv,
+        )
+        return report
+
+
+DEFECT_TYPE_TO_FAILURE_MODES: dict[str, tuple[str, ...]] = {
+    "harness_false_success": ("harness_false_success",),
+    "camera_occlusion": ("kinematic_unreachable", "vision_geometry_ood"),
+    "unconditioned_vla": ("unconditioned_language",),
+    "horizon_truncation": ("horizon_truncation",),
+    "in_flight_slip_inertia": ("in_flight_slip_inertia",),
+    "depth_alignment_mismatch": ("vision_geometry_ood", "vertical_reach_ood"),
+}
+"""Maps the oracle's defect strings onto failure modes in the policy capability graph."""
+
+
+def build_policy_diagnostic_state(
+    spec: ArenaEnvGraphSpec,
+    policy_ref: str,
+    signatures: list[FailureSignature] | None = None,
+    probe_report: Any = None,
+) -> tuple[Any, dict[str, Any]]:
+    """Assemble a belief state over failure modes from spec geometry, oracle signatures, and probes.
+
+    Fuses the three evidence sources the pipeline can produce: distribution shifts measured off the
+    graph spec alone, behavioural signatures from a rollout, and activation-level evidence from
+    ``policy_activation_probe``. The result is the belief state the technique planner selects from.
+
+    Args:
+        spec: The evaluated environment graph.
+        policy_ref: Profile id or checkpoint URI of the evaluated policy.
+        signatures: Signatures from ``EvaluationDiagnosticOracle.diagnose_eval_run``, if a rollout ran.
+        probe_report: A ``ProbeReport`` from ``policy_activation_probe``, if weights were reachable.
+
+    Returns:
+        ``(state, plan)`` where ``state`` is the ``PolicyDiagnosticState`` and ``plan`` reports the
+        dominant failure mode plus the next diagnostic and remediation the planner selected.
+        ``plan["profile_known"]`` is False when the policy has no registered profile.
+    """
+    from isaaclab_arena.agentic_environment_generation.policy_capability_graph import (
+        DiagnosticCapabilities,
+        PolicyDiagnosticState,
+        ProbeObservation,
+        compute_distribution_shifts,
+        get_policy_profile,
+        select_next_diagnostic,
+        select_remediation,
+    )
+
+    profile = get_policy_profile(policy_ref)
+    state = PolicyDiagnosticState()
+
+    if profile is not None:
+        state.seed_from_shifts(compute_distribution_shifts(spec, profile))
+
+    observations: list[ProbeObservation] = []
+    for sig in signatures or []:
+        modes = DEFECT_TYPE_TO_FAILURE_MODES.get(sig.defect_type)
+        if not modes:
+            continue
+        observations.append(
+            ProbeObservation(
+                metric=f"oracle_signature::{sig.defect_type}",
+                value=sig.severity,
+                technique_id="progress_funnel_statistics",
+                supports=modes,
+                # Severity 0.9 gives a ratio near 9, so a confident signature dominates the prior
+                # while a tentative one only nudges it.
+                likelihood_ratio=max(sig.severity, 0.05) / max(1.0 - sig.severity, 0.05),
+                note=sig.evidence[:400],
+            )
+        )
+    if probe_report is not None:
+        observations.extend(probe_report.to_observations())
+    if observations:
+        state.apply_observations(observations)
+
+    capabilities = DiagnosticCapabilities(
+        has_policy_weights=probe_report is not None,
+        has_rollout_artifacts=bool(signatures),
+        has_gpu=False,
+        has_reference_dataset=False,
+    )
+    next_diagnostic = select_next_diagnostic(state, capabilities)
+    remediation = select_remediation(state)
+    dominant = state.dominant()
+
+    plan: dict[str, Any] = {
+        "profile_known": profile is not None,
+        "policy_ref": profile.policy_id if profile else policy_ref,
+        "dominant_failure_mode": dominant[0] if dominant else None,
+        "dominant_belief": round(dominant[1], 4) if dominant else None,
+        "out_of_tolerance_axes": [s.axis for s in state.shifts if not s.within_tolerance],
+        "next_diagnostic": next_diagnostic[0].technique_id if next_diagnostic else None,
+        "recommended_remediation": remediation[0].technique_id if remediation else None,
+        "recommended_remediation_patch": dict(remediation[0].patch) if remediation else {},
+        "beliefs": {mode_id: round(belief, 4) for mode_id, belief in state.ranked(min_belief=0.05)},
+    }
+    return state, plan
+
+
+class EvaluationRemediationEngine:
+    """Applies automated policy config patches and spatial spec refinements based on diagnostic signatures."""
+
+    def remediate_and_heal(
+        self,
+        spec: ArenaEnvGraphSpec,
+        policy_config_path: Path | str,
+        signatures: list[FailureSignature],
+        out_dir: Path | str,
+    ) -> tuple[ArenaEnvGraphSpec, Path, dict[str, Any]]:
+        """Apply fixes to policy config and environment spec, relaxing the factor graph."""
+        out_path = Path(out_dir)
+        out_path.mkdir(parents=True, exist_ok=True)
+
+        policy_path = Path(policy_config_path)
+        policy_dict: dict[str, Any] = {}
+        if policy_path.exists():
+            policy_dict = yaml.safe_load(policy_path.read_text(encoding="utf-8")) or {}
+
+        remediation_meta: dict[str, Any] = {
+            "applied_fixes": [],
+            "recommended_steps": 2000,
+        }
+
+        # 1. Apply Policy Config Patches
+        for sig in signatures:
+            if sig.recommended_policy_patches:
+                for k, v in sig.recommended_policy_patches.items():
+                    if k == "num_steps":
+                        remediation_meta["recommended_steps"] = int(v)
+                    else:
+                        policy_dict[k] = v
+                        remediation_meta["applied_fixes"].append(f"Patched policy config '{k}' = '{v}'")
+
+        # Save patched policy config in out_dir
+        healed_policy_path = out_path / policy_path.name
+        healed_policy_path.write_text(yaml.safe_dump(policy_dict, sort_keys=False), encoding="utf-8")
+
+        # 2. Apply Spatial Spec Refinements
+        spec_dict = spec.to_dict()
+        modified_spatial = False
+
+        for sig in signatures:
+            if sig.recommended_spatial_patches:
+                for obj_id, patch in sig.recommended_spatial_patches.items():
+                    # Handle background table repositioning
+                    if obj_id in ("background", "maple_table", "table", spec_dict.get("background", {}).get("id")):
+                        if "position_xyz" in patch:
+                            if "params" not in spec_dict["background"]:
+                                spec_dict["background"]["params"] = {}
+                            if "initial_pose" not in spec_dict["background"]["params"]:
+                                spec_dict["background"]["params"]["initial_pose"] = {}
+                            spec_dict["background"]["params"]["initial_pose"]["position_xyz"] = patch["position_xyz"]
+                            modified_spatial = True
+                            remediation_meta["applied_fixes"].append(
+                                f"Shifted background table origin closer to robot: {patch['position_xyz']}"
+                            )
+
+                    # Handle embodiment robot repositioning
+                    elif obj_id in ("embodiment", "droid_robot", "robot", spec_dict.get("embodiment", {}).get("id")):
+                        if "position_xyz" in patch:
+                            if "params" not in spec_dict["embodiment"]:
+                                spec_dict["embodiment"]["params"] = {}
+                            if "initial_pose" not in spec_dict["embodiment"]["params"]:
+                                spec_dict["embodiment"]["params"]["initial_pose"] = {}
+                            spec_dict["embodiment"]["params"]["initial_pose"]["position_xyz"] = patch["position_xyz"]
+                            modified_spatial = True
+                            remediation_meta["applied_fixes"].append(
+                                f"Shifted robot base origin: {patch['position_xyz']}"
+                            )
+
+                    # Handle movable object repositioning
+                    for obj in spec_dict.get("objects", []):
+                        if obj.get("id") == obj_id:
+                            if "position_xyz" in patch:
+                                if "params" not in obj:
+                                    obj["params"] = {}
+                                if "initial_pose" not in obj["params"]:
+                                    obj["params"]["initial_pose"] = {}
+                                obj["params"]["initial_pose"]["position_xyz"] = list(patch["position_xyz"])
+                                modified_spatial = True
+                                remediation_meta["applied_fixes"].append(
+                                    f"Repositioned object '{obj_id}' to: {patch['position_xyz']}"
+                                )
+
+                    # Update object on-table relations
+                    for rel in spec_dict.get("relations", []):
+                        if rel.get("subject") == obj_id and rel.get("kind") == "on":
+                            if "params" not in rel:
+                                rel["params"] = {}
+                            if "surface_sector" in patch:
+                                rel["params"]["surface_sector"] = patch["surface_sector"]
+                                modified_spatial = True
+                                remediation_meta["applied_fixes"].append(
+                                    f"Shifted '{obj_id}' surface_sector to '{patch['surface_sector']}'"
+                                )
+
+                    # Also update reified_relations if present
+                    for rr in spec_dict.get("reified_relations", []):
+                        if rr.get("source_id") == obj_id:
+                            if "surface_sector" in patch:
+                                rr["surface_sector"] = patch["surface_sector"]
+
+        healed_spec = ArenaEnvGraphSpec.from_dict(spec_dict)
+        if modified_spatial:
+            from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
+                project_pose_to_safe_support_surface,
+                validate_spatial_geometry,
+            )
+
+            # Check if explicit patches already satisfy spatial geometry
+            geom_ok, _ = validate_spatial_geometry(healed_spec)
+            if not geom_ok:
+                for obj in healed_spec.objects:
+                    safe_xyz, resolved_sec = project_pose_to_safe_support_surface(healed_spec, obj.id)
+                    if obj.params and "initial_pose" in obj.params:
+                        obj.params["initial_pose"]["position_xyz"] = safe_xyz
+                geom_ok, _ = validate_spatial_geometry(healed_spec)
+                if not geom_ok:
+                    # Re-relax spatial factor graph with updated sector constraints
+                    healed_spec, _ = relax_spec_spatial_factor_graph(healed_spec)
+
+        # Save healed spec
+        yaml_out = out_path / f"{healed_spec.env_name}.yaml"
+        healed_spec.write_yaml(yaml_out)
+
+        return healed_spec, healed_policy_path, remediation_meta

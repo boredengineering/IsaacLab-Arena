@@ -1,0 +1,404 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary SimReady_Metadata = {
+            dictionary Variants = {
+                dictionary Physics = {
+                    dictionary MuJoCo = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "MuJoCo"
+                    }
+                    dictionary Newton = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "Newton"
+                    }
+                    dictionary PhysX = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "PhysX"
+                    }
+                }
+            }
+            string asset_location = "simready_content\\common_assets\\props_endeavor_kitchen\\fixture_counter_a01\\simready_physx_usd\\sm_fixture_counter_a01_01.usd"
+            string asset_type = "prop"
+            string uuid = "dc84762e-f7de-4952-a31a-2ab5abff716f"
+            dictionary validation = {
+                string profile = "Robotics-Prop"
+                string profile_version = "3.1.0"
+                dictionary validated_features = {
+                    dictionary "2026-02-20" = {
+                        dictionary FET000_CORE = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET001_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['AA.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_NEUTRAL = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_PHYSX': {'version': '0.1.0'}}, {'FET004_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET005_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET006_BASE_MDL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['VM.MDL.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                    }
+                }
+            }
+        }
+        string asset_dir = "simready_content/common_assets/props_endeavor_kitchen/fixture_counter_a01"
+        string asset_name = "fixture_counter_a01"
+        string asset_type = "prop"
+        string profile = "Prop-Robotics-Neutral"
+        string source_file = "../simready_usd/sm_fixture_counter_a01_01.usd"
+        string usd_date_generated = "2026-02-20 17:05:57"
+        bool used_dsrs_exporter = 1
+    }
+    defaultPrim = "RootNode"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+over "RootNode" (
+    prepend apiSchemas = ["PhysicsArticulationRootAPI"]
+)
+{
+    over "Geometry"
+    {
+        over "shelf_03_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+
+        over "body_01_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        )
+        {
+            point3f physics:centerOfMass = (0.23541318, 0.03996521, 0.03430478)
+            float3 physics:diagonalInertia = (143.23137, 19.0062, 133.22533)
+            float physics:mass = 129.8479
+            quatf physics:principalAxes = (1, 0, 0, 0)
+        }
+
+        over "shelf_08_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        )
+        {
+            point3f physics:centerOfMass = (-0.4849613, 0.00453, -0.21218616)
+            float3 physics:diagonalInertia = (6.1021, 2.1909401, 7.9835005)
+            float physics:mass = 32.97645
+            quatf physics:principalAxes = (1, 0, 0, 0)
+        }
+
+        over "shelf_02_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+
+        over "shelf_01_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+
+        over "shelf_04_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+
+        over "shelf_06_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        )
+        {
+            point3f physics:centerOfMass = (-0.40453097, 0.000029999997, -0.15099694)
+            float3 physics:diagonalInertia = (9.04788, 2.36825, 10.20055)
+            float physics:mass = 35.20102
+            quatf physics:principalAxes = (1, 0, 0, 0)
+        }
+
+        over "shelf_05_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+        )
+        {
+        }
+
+        over "shelf_07_obj_00" (
+            prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        )
+        {
+            point3f physics:centerOfMass = (-0.4849613, 0.0037131347, -0.29809153)
+            float3 physics:diagonalInertia = (6.1021, 2.1909401, 7.9835005)
+            float physics:mass = 32.97645
+            quatf physics:principalAxes = (1, 0, 0, 0)
+        }
+    }
+
+    over "PhysicsMaterials"
+    {
+        over "physics_mat_m_opaque__plastic__black_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 950
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0.4
+            float physics:staticFriction = 0.4
+        }
+
+        over "physics_mat_m_opaque__metal__white_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 8000
+            float physics:dynamicFriction = 0.3
+            float physics:restitution = 0.1
+            float physics:staticFriction = 0.3
+        }
+
+        over "physics_mat_m_opaque__plastic__white_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 950
+            float physics:dynamicFriction = 0.4
+            float physics:restitution = 0.4
+            float physics:staticFriction = 0.4
+        }
+
+        over "physics_mat_m_opaque__metal__chrome_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 8000
+            float physics:dynamicFriction = 0.3
+            float physics:restitution = 0.1
+            float physics:staticFriction = 0.3
+        }
+
+        over "physics_mat_m_opaque__metal__glossy_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 8000
+            float physics:dynamicFriction = 0.3
+            float physics:restitution = 0.1
+            float physics:staticFriction = 0.3
+        }
+
+        over "physics_mat_m_opaque__wood__counter_a01" (
+            prepend apiSchemas = ["PhysicsMaterialAPI"]
+        )
+        {
+            float physics:density = 700
+            float physics:dynamicFriction = 0.5
+            float physics:restitution = 0.4
+            float physics:staticFriction = 0.5
+        }
+    }
+
+    over "Joints"
+    {
+        def PhysicsPrismaticJoint "joint_shelf_01_joint_00" (
+            active = true
+            prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+            float drive:linear:physics:damping = 5
+            float drive:linear:physics:targetPosition = 0.46068
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/body_01_obj_00/body_01_mesh_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelf_01_obj_00/shelf_01_mesh_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (0.60959595, -1.3587809, 0.63927984)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0.460681
+        }
+
+        def PhysicsPrismaticJoint "joint_shelf_06_joint_00" (
+            active = true
+            prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+            float drive:linear:physics:damping = 10
+            float drive:linear:physics:targetPosition = 0.4
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/body_01_obj_00/body_01_mesh_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelf_06_obj_00/shelf_06_mesh_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (0.67298526, -0.30480286, 0.45084804)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+            float physics:lowerLimit = -0.0001
+            float physics:upperLimit = 0.4
+        }
+
+        def PhysicsPrismaticJoint "joint_shelf_07_joint_00" (
+            active = true
+            prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+            float drive:linear:physics:damping = 10
+            float drive:linear:physics:targetPosition = 0.4
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/body_01_obj_00/body_01_mesh_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelf_07_obj_00/shelf_07_obj_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (0.6732308, 1.1303067, 0.83594173)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0.4
+        }
+
+        def PhysicsPrismaticJoint "joint_shelf_08_joint_00" (
+            prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+            float drive:linear:physics:damping = 10
+            float drive:linear:physics:targetPosition = 0.4
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/body_01_obj_00/body_01_mesh_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelf_08_obj_00/shelf_08_mesh_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (0.6728176, 1.1303067, 0.45567235)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0.4
+        }
+
+        def PhysicsPrismaticJoint "joint_shelf_04_joint_00" (
+            prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+            float drive:linear:physics:damping = 2
+            float drive:linear:physics:targetPosition = 0.4
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/body_01_obj_00/body_01_mesh_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelf_04_obj_00/shelf_04_mesh_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (0.59868765, -0.9778999, 0.29738852)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0.4
+        }
+
+        def PhysicsPrismaticJoint "joint_shelf_02_joint_00" (
+            prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+            float drive:linear:physics:damping = 2
+            float drive:linear:physics:targetPosition = 0.4
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/body_01_obj_00/body_01_mesh_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelf_02_obj_00/shelf_02_mesh_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (0.59868217, -0.9778999, 0.70325893)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0.4
+        }
+
+        def PhysicsPrismaticJoint "joint_shelf_03_joint_00" (
+            prepend apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+            float drive:linear:physics:damping = 2
+            float drive:linear:physics:targetPosition = 0.4
+            uniform token physics:axis = "X"
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/body_01_obj_00/body_01_mesh_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelf_03_obj_00/shelf_03_mesh_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (0.5986857, -0.9778999, 0.50032467)
+            point3f physics:localPos1 = (0, 0, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 0.4
+        }
+
+        def PhysicsRevoluteJoint "joint_shelf_05_joint_00" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+            float drive:angular:physics:damping = 0.5
+            float drive:angular:physics:targetPosition = -90
+            uniform token physics:axis = "Z"
+            custom rel physics:body0
+            prepend rel physics:body0 = </RootNode/Geometry/body_01_obj_00/body_01_mesh_00>
+            custom rel physics:body1
+            prepend rel physics:body1 = </RootNode/Geometry/shelf_05_obj_00/shelf_05_mesh_00>
+            float physics:breakForce = inf
+            float physics:breakTorque = inf
+            point3f physics:localPos0 = (0.63618886, -1.2041821, 0.49975047)
+            point3f physics:localPos1 = (-5.994469e-9, -0.00096795283, 0)
+            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 0, 0)
+            float physics:lowerLimit = -90
+            float physics:upperLimit = 0
+        }
+    }
+}
+

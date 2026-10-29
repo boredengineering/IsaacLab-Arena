@@ -21,7 +21,11 @@ if TYPE_CHECKING:
 def _match_isaac_lab_lift_cfg(env_cfg):
     """Match Isaac Lab's Kuka-Allegro control rate and Newton configuration."""
     from isaaclab_newton.physics import NewtonCfg
-    from isaaclab_tasks.core.lift import lift_env_cfg as lift
+
+    try:
+        from isaaclab_tasks.core.lift import lift_env_cfg as lift
+    except ImportError:
+        from isaaclab_tasks.manager_based.manipulation.dexsuite import dexsuite_env_cfg as lift
 
     env_cfg.sim.dt = 1 / 120
     env_cfg.sim.render_interval = 4
@@ -43,7 +47,10 @@ class DexsuiteLiftEnvironment(ArenaEnvironmentFactory[ArenaEnvironmentCfg]):
 
     def build(self, cfg: ArenaEnvironmentCfg) -> IsaacLabArenaEnvironment:
         """Build the environment from its typed configuration."""
-        import isaaclab_tasks.core.lift  # noqa: F401
+        try:
+            import isaaclab_tasks.core.lift  # noqa: F401
+        except ImportError:
+            import isaaclab_tasks.manager_based.manipulation.dexsuite  # noqa: F401
 
         from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
         from isaaclab_arena.scene.scene import Scene

@@ -1,0 +1,146 @@
+[
+  {
+    "tests": [
+      "src/api-ownership.test.ts",
+      "src/api.test.ts",
+      "src/app.test.tsx",
+      "src/authored-inspector.test.tsx",
+      "src/authored-yaml-edit.test.ts",
+      "src/automatic-preview.test.tsx"
+    ],
+    "exit_code": 0,
+    "run": "/workspaces/IsaacLab-Arena/web/arena-workbench/tests/e2e/functional-v7/.runs/arena-functional-frontend-54551e40c4b8"
+  },
+  {
+    "tests": [
+      "src/build-environment.test.tsx",
+      "src/contracts-status.test.ts",
+      "src/control-api.test.ts",
+      "src/draft-controller.test.ts",
+      "src/draft-storage.test.ts",
+      "src/editor-contracts.test.ts"
+    ],
+    "exit_code": 0,
+    "run": "/workspaces/IsaacLab-Arena/web/arena-workbench/tests/e2e/functional-v7/.runs/arena-functional-frontend-3158ef28174a"
+  },
+  {
+    "tests": [
+      "src/editor-form-layout.test.ts",
+      "src/editor-job-ownership.test.tsx",
+      "src/editor-jobs.test.tsx",
+      "src/editor-library.integration.test.tsx",
+      "src/editor-revision-contracts.test.ts",
+      "src/editor-revision-save.test.tsx"
+    ],
+    "exit_code": 0,
+    "run": "/workspaces/IsaacLab-Arena/web/arena-workbench/tests/e2e/functional-v7/.runs/arena-functional-frontend-5b8bbe6d64bd"
+  },
+  {
+    "tests": [
+      "src/editor.test.tsx",
+      "src/environment-library.test.tsx",
+      "src/evaluate-policy.test.tsx",
+      "src/generation-diagnostic.test.tsx",
+      "src/generation-evidence.test.tsx",
+      "src/generation-mode.test.tsx"
+    ],
+    "exit_code": 0,
+    "run": "/workspaces/IsaacLab-Arena/web/arena-workbench/tests/e2e/functional-v7/.runs/arena-functional-frontend-36926baa5fca"
+  },
+  {
+    "tests": [
+      "src/generation-reauthorization.test.tsx",
+      "src/graph-explorer/explorer-state.test.ts",
+      "src/graph-explorer/graph-explorer-lazy-error.test.tsx",
+      "src/graph-explorer/graph-explorer-loading.test.tsx",
+      "src/graph-explorer/graph-explorer.test.tsx",
+      "src/graph-explorer/graph-inspector.test.tsx"
+    ],
+    "exit_code": 0,
+    "run": "/workspaces/IsaacLab-Arena/web/arena-workbench/tests/e2e/functional-v7/.runs/arena-functional-frontend-abbe09a005c4"
+  },
+  {
+    "tests": [
+      "src/graph-explorer/graph-model.test.ts",
+      "src/graph-explorer/graph-table.test.tsx",
+      "src/graph-explorer/presentation-equality.test.ts",
+      "src/graph-explorer/property-tree.test.tsx",
+      "src/graph-explorer/renderer-adapters.test.tsx",
+      "src/graph-explorer/renderer-labels.test.ts"
+    ],
+    "exit_code": 0,
+    "run": "/workspaces/IsaacLab-Arena/web/arena-workbench/tests/e2e/functional-v7/.runs/arena-functional-frontend-1ff6dacfad32"
+  },
+  {
+    "tests": [
+      "src/graph-explorer/renderer-navigation.test.ts",
+      "src/graph-explorer/renderer-react.test.tsx",
+      "src/graph-explorer/renderer-resources.test.ts",
+      "src/graph-explorer/renderer-state.test.ts",
+      "src/graph-host.test.tsx",
+      "src/graph-rollout.test.tsx"
+    ],
+    "exit_code": 0,
+    "run": "/workspaces/IsaacLab-Arena/web/arena-workbench/tests/e2e/functional-v7/.runs/arena-functional-frontend-192bad3ed784"
+  },
+  {
+    "tests": [
+      "src/graph-session.test.tsx",
+      "src/graph-view.test.tsx",
+      "src/job-cancellation.test.tsx",
+      "src/library-preferences-native.test.ts",
+      "src/library-preferences.test.ts",
+      "src/metadata-browser.test.tsx"
+    ],
+    "exit_code": 0,
+    "run": "/workspaces/IsaacLab-Arena/web/arena-workbench/tests/e2e/functional-v7/.runs/arena-functional-frontend-8d02f849a8fb"
+  },
+  {
+    "tests": [
+      "src/model-settings-contracts.test.ts",
+      "src/model-settings.test.tsx",
+      "src/neo4j-lifetime.test.tsx",
+      "src/observation.test.ts",
+      "src/optional-workbench-chrome.test.tsx",
+      "src/position-edit-eligibility.test.ts"
+    ],
+    "exit_code": 0,
+    "run": "/workspaces/IsaacLab-Arena/web/arena-workbench/tests/e2e/functional-v7/.runs/arena-functional-frontend-0c1ef1fd8e48"
+  },
+  {
+    "tests": [
+      "src/publication-controls.test.tsx",
+      "src/readiness-contract.test.ts",
+      "src/reconcile.test.ts",
+      "src/refinement-scope.test.tsx",
+      "src/research-services.test.tsx",
+      "src/research-source.test.ts"
+    ],
+    "exit_code": 0,
+    "run": "/workspaces/IsaacLab-Arena/web/arena-workbench/tests/e2e/functional-v7/.runs/arena-functional-frontend-a5ab34fc8136"
+  },
+  {
+    "tests": [
+      "src/research-versions.test.tsx",
+      "src/reviewed-position-edit.test.tsx",
+      "src/runtime.test.tsx",
+      "src/snapshot-model.test.ts",
+      "src/snapshots-authority.test.tsx",
+      "src/snapshots.test.tsx"
+    ],
+    "exit_code": 0,
+    "run": "/workspaces/IsaacLab-Arena/web/arena-workbench/tests/e2e/functional-v7/.runs/arena-functional-frontend-a7cf228ac6a5"
+  },
+  {
+    "tests": [
+      "src/stream-hub.test.ts",
+      "src/workbench-chrome.test.tsx",
+      "src/workbench-layout.test.tsx",
+      "src/workflow-contracts.test.ts",
+      "src/workflow-readiness.editor.test.tsx",
+      "src/workflow-readiness.test.tsx"
+    ],
+    "exit_code": 0,
+    "run": "/workspaces/IsaacLab-Arena/web/arena-workbench/tests/e2e/functional-v7/.runs/arena-functional-frontend-42082a742fe5"
+  }
+]

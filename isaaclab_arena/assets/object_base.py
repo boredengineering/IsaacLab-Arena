@@ -7,12 +7,11 @@ from __future__ import annotations
 
 import torch
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
-from isaaclab.envs import ManagerBasedEnv
 from isaaclab.managers import EventTermCfg, SceneEntityCfg
 from isaaclab.sensors.contact_sensor.contact_sensor_cfg import ContactSensorCfg
-from isaaclab_tasks.contrib.stack.mdp.franka_stack_events import randomize_object_pose
 
 from isaaclab_arena.assets.object_type import ObjectType
 from isaaclab_arena.relations.placement_asset import PlaceableAsset
@@ -21,6 +20,15 @@ from isaaclab_arena.utils.pose import Pose, PosePerEnv, PoseRange
 from isaaclab_arena.utils.velocity import Velocity
 from isaaclab_arena.variations.object_disappear_variation import ObjectDisappearVariation
 from isaaclab_arena.variations.object_mass_variation import ObjectMassVariation
+
+if TYPE_CHECKING:
+    from isaaclab.envs import ManagerBasedEnv
+
+__all__ = [
+    "ObjectBase",
+    "ObjectType",
+    "RootedObjectBase",
+]
 
 
 class ObjectBase(PlaceableAsset, ABC):
@@ -130,6 +138,13 @@ class RootedObjectBase(ObjectBase):
                 },
             )
         elif isinstance(initial_pose, PoseRange):
+            try:
+                from isaaclab_tasks.contrib.stack.mdp.franka_stack_events import randomize_object_pose
+            except ImportError:
+                from isaaclab_tasks.manager_based.manipulation.stack.mdp.franka_stack_events import (
+                    randomize_object_pose,
+                )
+
             return EventTermCfg(
                 func=randomize_object_pose,
                 mode="reset",

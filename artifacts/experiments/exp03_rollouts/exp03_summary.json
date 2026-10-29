@@ -1,0 +1,32 @@
+[
+  {
+    "track": "Track-1",
+    "arm": "Arm-B (QwQ-32B)",
+    "scenario": "B1",
+    "scenario_name": "Tomato Soup Can to Grounded Container",
+    "spec_yaml": "generated_envs/droid_tomato_soup_to_blue_bin/arm_b/droid_tomato_soup_to_blue_bin.yaml",
+    "policy_model": "nvidia/GR00T-N1.7-3B",
+    "receptacle": "bin_b03_vomp_robolab",
+    "exit_code": 0,
+    "elapsed_seconds": 141.61,
+    "episodes_completed": 1,
+    "episode_length_steps": 1000,
+    "progress_score": 0.3333333432674408,
+    "task_success": false,
+    "events_count": 1,
+    "snapshots": [
+      "artifacts/experiments/exp03_rollouts/track-1/scenario_b1/arm-b/2026-10-19_22-37-09/robot-cam-env0-external_camera_2_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp03_rollouts/track-1/scenario_b1/arm-b/2026-10-19_22-37-09/robot-cam-env0-external_camera_2_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp03_rollouts/track-1/scenario_b1/arm-b/2026-10-19_22-37-09/robot-cam-env0-external_camera_2_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp03_rollouts/track-1/scenario_b1/arm-b/2026-10-19_22-37-09/robot-cam-env0-wrist_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp03_rollouts/track-1/scenario_b1/arm-b/2026-10-19_22-37-09/robot-cam-env0-wrist_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp03_rollouts/track-1/scenario_b1/arm-b/2026-10-19_22-37-09/robot-cam-env0-wrist_camera_rgb-episode-0_tfinal.png",
+      "artifacts/experiments/exp03_rollouts/track-1/scenario_b1/arm-b/2026-10-19_22-37-09/rl-video-step-0_t0.png",
+      "artifacts/experiments/exp03_rollouts/track-1/scenario_b1/arm-b/2026-10-19_22-37-09/rl-video-step-0_mid.png",
+      "artifacts/experiments/exp03_rollouts/track-1/scenario_b1/arm-b/2026-10-19_22-37-09/rl-video-step-0_tfinal.png",
+      "artifacts/experiments/exp03_rollouts/track-1/scenario_b1/arm-b/2026-10-19_22-37-09/robot-cam-env0-external_camera_rgb-episode-0_t0.png",
+      "artifacts/experiments/exp03_rollouts/track-1/scenario_b1/arm-b/2026-10-19_22-37-09/robot-cam-env0-external_camera_rgb-episode-0_mid.png",
+      "artifacts/experiments/exp03_rollouts/track-1/scenario_b1/arm-b/2026-10-19_22-37-09/robot-cam-env0-external_camera_rgb-episode-0_tfinal.png"
+    ]
+  }
+]

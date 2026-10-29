@@ -1,0 +1,98 @@
+env_name: exp04_d1c_microwave_arm_b_remediated
+embodiment:
+  id: droid
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.81
+      - 0.0
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+    initial_joint_pos:
+      panda_joint1: 0.0
+      panda_joint2: -0.785398
+      panda_joint3: 0.0
+      panda_joint4: -2.356194
+      panda_joint5: 0.0
+      panda_joint6: 1.570796
+      panda_joint7: 0.785398
+background:
+  id: office_table
+  registry_name: office_table_background
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.0
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - -0.7071068
+      - 0.7071068
+objects:
+- id: microwave
+  registry_name: microwave
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.18
+      - -0.10
+      - 0.531
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - -0.7071068
+      - 0.7071068
+- id: tomato_soup_can
+  registry_name: tomato_soup_can_ycb_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.22
+      - 0.25
+      - 0.531
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: office_table
+  params: {}
+- kind: 'on'
+  subject: microwave
+  reference: office_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_right
+- kind: rotate_around_solution
+  subject: microwave
+  params:
+    yaw_rad: -1.5708
+- kind: 'on'
+  subject: tomato_soup_can
+  reference: office_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_left
+task:
+  composition: sequential
+  description: Grasp the microwave handle and pull the door open.
+  subtasks:
+  - kind: OpenDoorTask
+    params:
+      openable_object: microwave
+      openness_threshold: 0.80
+      reset_openness: 0.0
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: tomato_soup_can
+      destination_location: microwave
+      background_scene: office_table

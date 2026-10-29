@@ -213,6 +213,12 @@ def solve_and_place_objects(
                 "Warning: Writing best-loss fallback placement for "
                 f"env {cur_env}; failed checks: {result.validation_results.get_failed_validation_check_names}."
             )
+            # If the solver fails validation, fallback to explicit authored initial pose if present
+            for asset in result.positions:
+                if asset not in anchor_assets and hasattr(asset, "get_initial_pose"):
+                    init_p = asset.get_initial_pose()
+                    if init_p is not None and hasattr(init_p, "position_xyz") and init_p.position_xyz is not None:
+                        result.positions[asset] = tuple(float(v) for v in init_p.position_xyz)
         # Only write non-anchor assets to the sim.
         write_layout_to_sim(env, cur_env, result, anchor_assets, base_rotations)
 

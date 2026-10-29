@@ -1,0 +1,182 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+"""Unit tests for Neo4j Labeled Property Graph (LPG) synchronization and spatial queries."""
+
+import pytest
+
+from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import (
+    get_neo4j_driver,
+    query_spatial_hierarchy,
+    sync_spec_to_neo4j,
+)
+from isaaclab_arena.environment_spec.arena_env_graph_spec import (
+    ArenaEnvGraphSpec,
+    AssetSpec,
+    CompositeTaskSpec,
+    SpatialRelationSpec,
+    TaskSpec,
+)
+
+
+def _is_neo4j_reachable() -> bool:
+    try:
+        driver = get_neo4j_driver()
+        driver.verify_connectivity()
+        driver.close()
+        return True
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _is_neo4j_reachable(), reason="Neo4j instance not reachable at bolt://172.17.0.2:7687")
+def test_sync_spec_to_neo4j_and_query():
+    spec = ArenaEnvGraphSpec(
+        env_name="test_g1_shelf_pnp_lpg",
+        embodiment=AssetSpec(id="g1_robot", registry_name="g1_wbc_pink"),
+        background=AssetSpec(id="galileo_room", registry_name="galileo"),
+        objects=[
+            AssetSpec(id="wireshelving", registry_name="wireshelving_a01_vomp_robolab"),
+            AssetSpec(id="brown_box", registry_name="brown_box"),
+            AssetSpec(id="blue_sorting_bin", registry_name="blue_sorting_bin"),
+        ],
+        relations=[
+            SpatialRelationSpec(
+                kind="on",
+                subject="wireshelving",
+                reference="galileo_room",
+                params={"surface_anchor": "room_storage_bay", "nominal_height": 0.0},
+            ),
+            SpatialRelationSpec(
+                kind="on",
+                subject="brown_box",
+                reference="wireshelving",
+                params={"surface_anchor": "shelf_tier_1", "nominal_height": 0.75, "clearance": 0.08},
+            ),
+            SpatialRelationSpec(
+                kind="on",
+                subject="blue_sorting_bin",
+                reference="galileo_room",
+                params={"surface_anchor": "floor_deposit_zone", "nominal_height": 0.0},
+            ),
+        ],
+        task=CompositeTaskSpec(
+            composition="atomic",
+            description="Pick up the brown box from the wireshelving and place it in the blue sorting bin.",
+            subtasks=[
+                TaskSpec(
+                    kind="PickAndPlaceTask",
+                    params={
+                        "pick_up_object": "brown_box",
+                        "destination_location": "blue_sorting_bin",
+                        "background_scene": "galileo_room",
+                    },
+                )
+            ],
+        ),
+    )
+
+    summary = sync_spec_to_neo4j(spec)
+    assert summary["env_name"] == "test_g1_shelf_pnp_lpg"
+    assert summary["node_count"] >= 4
+
+    hierarchy = query_spatial_hierarchy("test_g1_shelf_pnp_lpg")
+    assert len(hierarchy) >= 3
+
+    # Verify that brown_box is child of wireshelving with surface_anchor
+    box_rel = next((h for h in hierarchy if h["subject"] == "brown_box" and h["relation"] == "PLACED_ON"), None)
+    assert box_rel is not None
+    assert box_rel["parent_id"] == "wireshelving"
+    assert box_rel["surface_anchor"] == "shelf_tier_1"
+    assert box_rel["nominal_height"] == 0.75
+
+    # Verify telescopic PLACED_ON_SUB_SURFACE relation exists
+    sub_surface_rel = next(
+        (h for h in hierarchy if h["subject"] == "brown_box" and h["relation"] == "PLACED_ON_SUB_SURFACE"), None
+    )
+    assert sub_surface_rel is not None
+    assert sub_surface_rel["parent_id"] == "wireshelving_shelf_tier_1"
+
+    # Verify that Camera and SurfaceAnchor nodes exist in Neo4j
+    driver = get_neo4j_driver()
+    with driver.session() as session:
+        sa_res = session.run(
+            "MATCH (sa:SurfaceAnchor {env_name: 'test_g1_shelf_pnp_lpg'}) RETURN count(sa) AS count"
+        ).single()
+        assert sa_res["count"] >= 1
+
+        cam_res = session.run("MATCH (c:Camera {env_name: 'test_g1_shelf_pnp_lpg'}) RETURN count(c) AS count").single()
+        assert cam_res["count"] >= 1
+    driver.close()
+
+
+@pytest.mark.skipif(not _is_neo4j_reachable(), reason="Neo4j instance not reachable at bolt://172.17.0.2:7687")
+def test_sync_reified_relation_factor_nodes_to_neo4j():
+    from isaaclab_arena.agentic_environment_generation.lpg_neo4j_sync import query_reified_relations
+    from isaaclab_arena.environment_spec.arena_env_graph_types import ContinuousIntervalSpec, ReifiedRelationSpec
+
+    spec = ArenaEnvGraphSpec(
+        env_name="test_g1_reified_factor_graph",
+        embodiment=AssetSpec(id="g1_robot", registry_name="g1_wbc_pink"),
+        background=AssetSpec(id="galileo_room", registry_name="galileo"),
+        objects=[
+            AssetSpec(id="wireshelving", registry_name="wireshelving_a01_vomp_robolab"),
+            AssetSpec(id="brown_box", registry_name="brown_box"),
+        ],
+        relations=[
+            SpatialRelationSpec(
+                kind="on", subject="brown_box", reference="wireshelving", params={"surface_anchor": "shelf_tier_2"}
+            ),
+        ],
+        reified_relations=[
+            ReifiedRelationSpec(
+                reifier_id="reifier_box_shelf_tier2",
+                source_id="brown_box",
+                relation_type="PLACED_ON",
+                target_id="wireshelving",
+                surface_anchor="shelf_tier_2",
+                contact_normal=(0.0, 0.0, 1.0),
+                delta_x=ContinuousIntervalSpec(min_val=-0.04, max_val=0.04, nominal=0.0),
+                delta_y=ContinuousIntervalSpec(min_val=-0.04, max_val=0.04, nominal=0.0),
+                delta_z=ContinuousIntervalSpec(min_val=0.0, max_val=0.02, nominal=0.01),
+                required_headroom=0.38,
+                required_friction=0.65,
+                kinematic_manifold="unitree_g1_bimanual_chest_height",
+                prior_entropy=2.8,
+                posterior_entropy=0.04,
+                evidence_sources=["test_reification_proof"],
+            )
+        ],
+        task=CompositeTaskSpec(
+            composition="atomic",
+            description="Pick brown box from shelf",
+            subtasks=[
+                TaskSpec(
+                    kind="PickAndPlaceTask",
+                    params={
+                        "pick_up_object": "brown_box",
+                        "destination_location": "wireshelving",
+                        "background_scene": "galileo_room",
+                    },
+                )
+            ],
+        ),
+    )
+
+    summary = sync_spec_to_neo4j(spec)
+    assert summary["env_name"] == "test_g1_reified_factor_graph"
+
+    reifiers = query_reified_relations("test_g1_reified_factor_graph")
+    assert len(reifiers) == 1
+    r = reifiers[0]
+    assert r["reifier_id"] == "reifier_box_shelf_tier2"
+    assert r["source_id"] == "brown_box"
+    assert r["target_id"] == "wireshelving"
+    assert r["surface_anchor"] == "shelf_tier_2"
+    assert r["required_headroom"] == 0.38
+    assert r["required_friction"] == 0.65
+    assert r["kinematic_manifold"] == "unitree_g1_bimanual_chest_height"
+    assert r["prior_entropy"] == 2.8
+    assert r["posterior_entropy"] == 0.04

@@ -1,0 +1,17 @@
+{
+  "name": "simready_get_manifest",
+  "description": "Retrieve the SimReady package BOM, license, and metadata manifest (com.nvidia.simready.packaging.json) for a given asset URL or package ID.",
+  "parameters": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "manifest_url": {
+        "type": "string",
+        "description": "HTTPS URL pointing to the com.nvidia.simready.packaging.json file."
+      }
+    },
+    "required": [
+      "manifest_url"
+    ]
+  }
+}

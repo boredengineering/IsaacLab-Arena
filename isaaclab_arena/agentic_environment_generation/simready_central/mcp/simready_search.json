@@ -1,0 +1,26 @@
+{
+  "name": "simready_search",
+  "description": "Search NVIDIA SimReady Central via DeepSearch hybrid text + SigLIP2 vectors or OEM submission catalogs for production robotics USD assets (e.g., 'desk drawer', 'microwave', 'fr3', 'gripper').",
+  "parameters": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Natural language search prompt or asset keywords."
+      },
+      "category": {
+        "type": "string",
+        "description": "Optional category filter (e.g. 'furniture', 'appliance', 'tool')."
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Maximum number of asset results to return (default: 5).",
+        "default": 5
+      }
+    },
+    "required": [
+      "query"
+    ]
+  }
+}

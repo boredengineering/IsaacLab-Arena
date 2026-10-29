@@ -1,0 +1,6 @@
+query Receipts($id: ID!, $operation: ID!) {
+  workflow(id: $id) { __typename ... on Workflow { decisions(first: 10) { __typename ... on DecisionConnection { coverage semantics floor ceiling hasMore endCursor nodes { runId decisionId recordKind detailSupported } } ... on DecisionCoverageUnavailable { reason floor ceiling } } } }
+  submit: workflowCommand(kind: SUBMIT, operationId: $operation) { __typename ... on SubmissionReceipt { kind operationId runId requestDigest acceptedContractDigest digestCodec admittedAt disposition provenance receiptVersion causeId } }
+  cancel: workflowCommand(kind: CANCEL, operationId: $operation) { __typename ... on CancellationReceipt { kind operationId runId codecVersion receiptVersion digestCodec disposition reason payloadDigest receiptDigest beforeVersion afterVersion firstLocalStop { delivery remoteEffects durableCancellation } events { sequence kind sourceId } } }
+  resume: workflowCommand(kind: RESUME, operationId: $operation) { __typename ... on ResumeReceipt { kind operationId runId codecVersion receiptVersion digestCodec disposition reason payloadDigest receiptDigest beforeVersion afterVersion authorizationAction expectedVersion renewAuthorization contractDigest selection { branch intentId version contractDigest fence { runId intentId attemptId generation ownerId ownerEpoch } } events { sequence kind sourceId } } }
+}

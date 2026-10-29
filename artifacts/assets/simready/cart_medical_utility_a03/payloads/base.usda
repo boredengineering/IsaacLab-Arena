@@ -1,0 +1,1059 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary SimReady_Metadata = {
+            dictionary Variants = {
+                dictionary Physics = {
+                    dictionary MuJoCo = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "MuJoCo"
+                    }
+                    dictionary Newton = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "Newton"
+                    }
+                    dictionary PhysX = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "PhysX"
+                    }
+                }
+            }
+            string asset_location = "simready_content\\common_assets\\props_hospital\\cart_medical_utility_a03\\simready_physx_usd\\sm_cart_medical_utility_a03_01.usd"
+            string asset_type = "prop"
+            string uuid = "ccdecfb2-dc51-417b-b773-79d837b1db48"
+            dictionary validation = {
+                string profile = "Robotics-Prop"
+                string profile_version = "3.1.0"
+                dictionary validated_features = {
+                    dictionary "2026-03-30" = {
+                        dictionary FET000_CORE = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET001_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['AA.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_NEUTRAL = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_PHYSX': {'version': '0.1.0'}}, {'FET004_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET005_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['GSP.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET006_BASE_MDL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['VM.MDL.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                    }
+                }
+            }
+        }
+        string asset_dir = "simready_content/common_assets/props_hospital/cart_medical_utility_a03"
+        string asset_name = "cart_medical_utility_a03"
+        string asset_type = "prop"
+        string profile = "Prop-Robotics-Neutral"
+        string source_file = "../simready_usd/sm_cart_medical_utility_a03_01.usd"
+        string usd_date_generated = "2026-03-30 21:50:39"
+        bool used_dsrs_exporter = 1
+    }
+    defaultPrim = "RootNode"
+    metersPerUnit = 1
+    subLayers = [
+        @./Physics/physics.usda@
+    ]
+    upAxis = "Z"
+)
+
+def Xform "RootNode" (
+    prepend apiSchemas = ["SemanticsLabelsAPI:wikidata_class", "SemanticsAPI:wikidata_class", "SemanticsLabelsAPI:wikidata_qcode", "SemanticsAPI:wikidata_qcode"]
+    assetInfo = {
+        asset identifier = @../sm_cart_medical_utility_a03_01.usd@
+        string name = "sm_cart_medical_utility_a03_01"
+    }
+    customData = {
+        dictionary Blender = {
+            bool generated = 1
+        }
+        dictionary omni = {
+            dictionary cip = {
+                string timestamp = "2026-03-30 21:52:02"
+                string type = "prop"
+                dictionary validator = {
+                    string[] rules = []
+                    string version = "1.1.6"
+                }
+            }
+        }
+    }
+    kind = "component"
+)
+{
+    custom string omni:simready:documentation = "type of cart"
+    string semantic:wikidata_class:params:semanticData = "medical cart"
+    string semantic:wikidata_class:params:semanticType = "wikidata_class"
+    string semantic:wikidata_qcode:params:semanticData = "Q115633891"
+    string semantic:wikidata_qcode:params:semanticType = "wikidata_qcode"
+    token[] semantics:labels:wikidata_class = ["medical cart"]
+    token[] semantics:labels:wikidata_qcode = ["Q115633891"]
+
+    def Scope "Materials"
+    {
+    }
+
+    def Scope "Geometry"
+    {
+        def Xform "wheel_01_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/wheel_01_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__white_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-0.0414116196334362, 0.00022801989689469337, -0.057323575019836426)
+            custom double3 pxr:usd:physics_inertia = (0.00008967825872666454, 0.00019508346023265039, 0.00010961611279950066)
+            custom double pxr:usd:physics_mass = 3
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.3013329506, 0.1845572889, 0.1045989394)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "drawer_01_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/drawer_01_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__white_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-0.1317344605922699, -0.02466449700295925, 0.002442565280944109)
+            custom double3 pxr:usd:physics_inertia = (0.04499345234155847, 0.018839662898133484, 0.06354741463870682)
+            custom double pxr:usd:physics_mass = 1.5117915419441519
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2803460062, 0.03655422479, 0.8865337968)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "arm_01_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/arm_01_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__metal__chrome_clean_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (0.08082876354455948, -0.0017418375937268138, 0.08799468725919724)
+            custom double3 pxr:usd:physics_inertia = (0.06600871606882319, 0.10471879387349278, 0.10896610349713821)
+            custom double pxr:usd:physics_mass = 2.9702230510867174
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.2134432644, -0.2080367059, 0.9897616506)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "wheel_02_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/wheel_02_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__white_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-0.04141153767704964, 0.0002280575135955587, -0.057324472814798355)
+            custom double3 pxr:usd:physics_inertia = (0.00008968145858500838, 0.00019508636027892493, 0.00010961581605111165)
+            custom double pxr:usd:physics_mass = 3
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.301332891, -0.1845960468, 0.1045989543)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "drawer_02_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/drawer_02_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__gray_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (0.00011531357449712232, -0.03581276163458824, -0.0010045977542176843)
+            custom double3 pxr:usd:physics_inertia = (0.016295973154171084, 0.024590653547676825, 0.040776579050008685)
+            custom double pxr:usd:physics_mass = 1.259112475557697
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.08058369905, 0.1434500068, 0.8539497852)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "tire_03_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/tire_03_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__gray_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (5.233908950685873e-7, -2.9386882260951097e-8, -0.000006105131888034521)
+            custom double3 pxr:usd:physics_inertia = (0.00008417765130587001, 0.00009975487052492968, 0.00008417763490502741)
+            custom double pxr:usd:physics_mass = 2
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2910525203, 0.2186642885, 0.03644304723)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "tire_01_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/tire_01_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__gray_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-5.233063120613224e-7, 2.596791048858904e-8, -0.0000061049281612213235)
+            custom double3 pxr:usd:physics_inertia = (0.00008417764518309969, 0.00009975484152279887, 0.0000841776258584509)
+            custom double pxr:usd:physics_mass = 2
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.3205021024, 0.1845702678, 0.03644304723)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "wheel_04_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/wheel_04_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__white_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (0.04141155257821083, -0.00022805157641414553, -0.05732446536421776)
+            custom double3 pxr:usd:physics_inertia = (0.00008968143568499582, 0.0001950863780544648, 0.00010961585665330369)
+            custom double pxr:usd:physics_mass = 3
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2718774676, -0.2186716348, 0.1045989469)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "smallLid_01_obj_00" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/smallLid_01_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__white_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-0.041000884026288986, -0.00004818061279365793, -0.0014108381001278758)
+            custom double3 pxr:usd:physics_inertia = (0.000024200471355702986, 0.0002615666536410977, 0.00028568767553283883)
+            custom double pxr:usd:physics_mass = 0.08981391102270712
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.1712132543, 0.07614959031, 0.3471463919)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "tire_04_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/tire_04_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__gray_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (5.296622020978248e-7, -2.252984998563079e-8, -0.0000061073596953065135)
+            custom double3 pxr:usd:physics_inertia = (0.000084177696397743, 0.00009975488684399952, 0.00008417767206686909)
+            custom double pxr:usd:physics_mass = 2
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2910465896, -0.2186846286, 0.03644304723)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "tire_02_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/tire_02_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__gray_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-5.238707672106102e-7, -7.880967700657493e-8, -0.000006102552106312942)
+            custom double3 pxr:usd:physics_inertia = (0.00008417765750239487, 0.00009975487760888982, 0.0000841776380764278)
+            custom double pxr:usd:physics_mass = 2
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.320502013, -0.184583053, 0.03644304723)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "drawer_05_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/drawer_05_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__white_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-0.003806710708886385, 0.11072954535484314, 0.05316298082470894)
+            custom double3 pxr:usd:physics_inertia = (0.19759533257750883, 0.14924139978809123, 0.24949786025598458)
+            custom double pxr:usd:physics_mass = 4.618090970750483
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.08575595915, 0.003408819437, 0.2628149986)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "bigLid_02_obj_00" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/bigLid_02_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__white_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-0.04620068892836571, 0.00028462932095862925, 0.006874840706586838)
+            custom double3 pxr:usd:physics_inertia = (0.000337556551477844, 0.0006390179966238268, 0.0009657350724091797)
+            custom double pxr:usd:physics_mass = 0.09589878736184089
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.1580980718, -0.07781410962, 0.3271591067)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "drawer_03_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/drawer_03_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__white_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (0.008247707970440388, 0.11572098731994629, 0.03632866218686104)
+            custom double3 pxr:usd:physics_inertia = (0.14291879227492246, 0.10744901123014372, 0.2257192492725089)
+            custom double pxr:usd:physics_mass = 4.052515168663743
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.08575776219, 0.003386999946, 0.7114162445)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "trashCan_02_obj_00" (
+            active = true
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/trashCan_02_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-1.9434846620924873e-8, 2.0029338188010115e-9, 1.2929896797686524e-7)
+            custom double3 pxr:usd:physics_inertia = (0.01179030476689957, 0.015193634543646108, 0.006737214752631262)
+            custom double pxr:usd:physics_mass = 4
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.2492007911, -0.07738710195, 0.2449957132)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "drawer_04_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/drawer_04_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__white_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (0.00005961938950349577, 0.11236336082220078, 0.055019401013851166)
+            custom double3 pxr:usd:physics_inertia = (0.1985706235024398, 0.14940260895101512, 0.251110752107126)
+            custom double pxr:usd:physics_mass = 4.631702820088588
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.08575504273, 0.003386999946, 0.4902250767)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "bigLid_01_obj_00" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/bigLid_02_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__white_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-0.04620068892836571, 0.00028462932095862925, 0.006874840706586838)
+            custom double3 pxr:usd:physics_inertia = (0.000337556551477844, 0.0006390179966238268, 0.0009657350724091797)
+            custom double pxr:usd:physics_mass = 0.09589878736184089
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.1580980718, 0.07571005076, 0.3271591067)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "trashCan_01_obj_00" (
+            active = true
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/trashCan_01_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-0.002582389861345291, -0.000013595903510577045, 0.012954882346093655)
+            custom double3 pxr:usd:physics_inertia = (0.011981288039273607, 0.015420342978871137, 0.006790259203194552)
+            custom double pxr:usd:physics_mass = 4
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.2466202527, 0.0761506483, 0.2320368439)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "wheel_03_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/wheel_03_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__white_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (0.04141157865524292, -0.0002280732587678358, -0.05732446536421776)
+            custom double3 pxr:usd:physics_inertia = (0.00008968143280897727, 0.00019508645959891957, 0.0001096159417247112)
+            custom double pxr:usd:physics_mass = 3
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2718833685, 0.2186772823, 0.1045989469)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "body_01_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/body_01_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__gray_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (0.04108148068189621, 0.021379679441452026, 0.6403353810310364)
+            custom double3 pxr:usd:physics_inertia = (10.607061742382061, 12.021103788084082, 6.201711766707637)
+            custom double pxr:usd:physics_mass = 30
+        }
+
+        def Xform "smallLid_02_obj_00" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/smallLid_01_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__white_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom double3 pxr:usd:physics_centerofmass = (-0.041000884026288986, -0.00004818061279365793, -0.0014108381001278758)
+            custom double3 pxr:usd:physics_inertia = (0.000024200471355702986, 0.0002615666536410977, 0.00028568767553283883)
+            custom double pxr:usd:physics_mass = 0.08981391102270712
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.1712132543, -0.07737457007, 0.3471463919)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+    }
+
+    def Scope "ReferencePrims"
+    {
+        def Xform "trashCan_02_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:trashCan_02_joint_00"]
+        )
+        {
+            rel collection:trashCan_02_joint_00:includes = </RootNode/Geometry/trashCan_02_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "trashCan_02_obj_00"
+            custom string pxr:usd:physics:joint:type = "fixed"
+            custom double3 pxr:usd:physics:localPos0 = (-0.24920079112052917, -0.07738710194826126, 0.24499571323394775)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.24920079112052917, -0.07738710194826126, 0.24499571323394775)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "smallLid_02_joint_00"
+        {
+            custom bool _renamed = 1
+            custom string _renamed_as = "smallLid_02_joint_00"
+            custom float3 jw_rotation_default = (0, 0, 0)
+            custom float jw_rotation_limit_max_rna = 1.5707964
+            custom float jw_rotation_limit_min_rna = 0
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Y"
+            custom string pxr:usd:physics:joint:body0 = "bigLid_02_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "smallLid_02_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom double pxr:usd:physics:joint:upperLimit = 90.00000250447816
+            custom double3 pxr:usd:physics:localPos0 = (-0.013115182518959045, 0.0004395395517349243, 0.019987285137176514)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.17121325433254242, -0.07737457007169724, 0.3471463918685913)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "smallLid_01_joint_00"
+        {
+            custom bool _renamed = 1
+            custom string _renamed_as = "smallLid_01_joint_00"
+            custom float3 jw_rotation_default = (0, 0, 0)
+            custom float jw_rotation_limit_max_rna = 1.5707964
+            custom float jw_rotation_limit_min_rna = 0
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Y"
+            custom string pxr:usd:physics:joint:body0 = "bigLid_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "smallLid_01_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom double pxr:usd:physics:joint:upperLimit = 90.00000250447816
+            custom double3 pxr:usd:physics:localPos0 = (-0.013115182518959045, 0.0004395395517349243, 0.019987285137176514)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.17121325433254242, 0.0761495903134346, 0.3471463918685913)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "drawer_05_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:drawer_05_joint_00"]
+        )
+        {
+            rel collection:drawer_05_joint_00:includes = </RootNode/Geometry/drawer_05_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Y"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "drawer_05_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = -0.00002181949093937874
+            custom string pxr:usd:physics:joint:type = "prismatic"
+            custom double pxr:usd:physics:joint:upperLimit = 0.37659117579460144
+            custom double3 pxr:usd:physics:localPos0 = (0.08575595915317535, 0.0034088194370269775, 0.262814998626709)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.08575595915317535, 0.0034088194370269775, 0.262814998626709)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "tire_04_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:tire_04_joint_00"]
+        )
+        {
+            rel collection:tire_04_joint_00:includes = </RootNode/Geometry/tire_04_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Y"
+            custom string pxr:usd:physics:joint:body0 = "wheel_04_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "tire_04_obj_00"
+            custom string pxr:usd:physics:joint:lowerLimit = "-inf"
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom string pxr:usd:physics:joint:upperLimit = "inf"
+            custom double3 pxr:usd:physics:localPos0 = (0.019169121980667114, -0.000012993812561035156, -0.06815589964389801)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2910465896129608, -0.2186846286058426, 0.03644304722547531)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "trashCan_01_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:trashCan_01_joint_00"]
+        )
+        {
+            rel collection:trashCan_01_joint_00:includes = </RootNode/Geometry/trashCan_01_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "trashCan_01_obj_00"
+            custom string pxr:usd:physics:joint:type = "fixed"
+            custom double3 pxr:usd:physics:localPos0 = (-0.24662025272846222, 0.07615064829587936, 0.23203684389591217)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.24662025272846222, 0.07615064829587936, 0.23203684389591217)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "bigLid_01_joint_00"
+        {
+            custom bool _renamed = 1
+            custom string _renamed_as = "bigLid_01_joint_00"
+            custom float3 jw_rotation_default = (0, 0, 0)
+            custom float jw_rotation_limit_max_rna = 1.5707964
+            custom float jw_rotation_limit_min_rna = 0
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Y"
+            custom string pxr:usd:physics:joint:body0 = "trashCan_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "bigLid_01_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom double pxr:usd:physics:joint:upperLimit = 90.00000250447816
+            custom double3 pxr:usd:physics:localPos0 = (0.08852218091487885, -0.0004405975341796875, 0.09512226283550262)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.15809807181358337, 0.07571005076169968, 0.3271591067314148)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "drawer_04_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:drawer_04_joint_00"]
+        )
+        {
+            rel collection:drawer_04_joint_00:includes = </RootNode/Geometry/drawer_04_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Y"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "drawer_04_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0
+            custom string pxr:usd:physics:joint:type = "prismatic"
+            custom double pxr:usd:physics:joint:upperLimit = 0.3766129952855408
+            custom double3 pxr:usd:physics:localPos0 = (0.08575504273176193, 0.003386999946087599, 0.49022507667541504)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.08575504273176193, 0.003386999946087599, 0.49022507667541504)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "arm_01_joint_00"
+        {
+            custom bool _renamed = 1
+            custom string _renamed_as = "arm_01_joint_00"
+            custom float3 jw_rotation_default = (0, 0, 0)
+            custom float jw_rotation_limit_max_rna = 1.5707964
+            custom float jw_rotation_limit_min_rna = -1.5707964
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Z"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "arm_01_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = -90.00000250447816
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom double pxr:usd:physics:joint:upperLimit = 90.00000250447816
+            custom double3 pxr:usd:physics:localPos0 = (-0.21344326436519623, -0.20803670585155487, 0.9897616505622864)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.21344326436519623, -0.20803670585155487, 0.9897616505622864)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "bigLid_02_joint_00"
+        {
+            custom bool _renamed = 1
+            custom string _renamed_as = "bigLid_02_joint_00"
+            custom float3 jw_rotation_default = (0, 0, 0)
+            custom float jw_rotation_limit_max_rna = 1.5707964
+            custom float jw_rotation_limit_min_rna = 0
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Y"
+            custom string pxr:usd:physics:joint:body0 = "trashCan_02_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "bigLid_02_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom double pxr:usd:physics:joint:upperLimit = 90.00000250447816
+            custom double3 pxr:usd:physics:localPos0 = (0.0911027193069458, -0.00042700767517089844, 0.08216339349746704)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.15809807181358337, -0.07781410962343216, 0.3271591067314148)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "body_01_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:body_01_joint_00"]
+        )
+        {
+            custom bool _renamed = 1
+            rel collection:body_01_joint_00:includes = </RootNode/Geometry/body_01_obj_00>
+        }
+
+        def Xform "tire_03_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:tire_03_joint_00"]
+        )
+        {
+            rel collection:tire_03_joint_00:includes = </RootNode/Geometry/tire_03_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Y"
+            custom string pxr:usd:physics:joint:body0 = "wheel_03_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "tire_03_obj_00"
+            custom string pxr:usd:physics:joint:lowerLimit = "-inf"
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom string pxr:usd:physics:joint:upperLimit = "inf"
+            custom double3 pxr:usd:physics:localPos0 = (0.019169151782989502, -0.000012993812561035156, -0.06815589964389801)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.29105252027511597, 0.218664288520813, 0.03644304722547531)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "wheel_04_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:wheel_04_joint_00"]
+        )
+        {
+            rel collection:wheel_04_joint_00:includes = </RootNode/Geometry/wheel_04_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Z"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "wheel_04_obj_00"
+            custom string pxr:usd:physics:joint:lowerLimit = "-inf"
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom string pxr:usd:physics:joint:upperLimit = "inf"
+            custom double3 pxr:usd:physics:localPos0 = (0.2718774676322937, -0.21867163479328156, 0.10459894686937332)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2718774676322937, -0.21867163479328156, 0.10459894686937332)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "tire_01_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:tire_01_joint_00"]
+        )
+        {
+            rel collection:tire_01_joint_00:includes = </RootNode/Geometry/tire_01_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Y"
+            custom string pxr:usd:physics:joint:body0 = "wheel_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "tire_01_obj_00"
+            custom string pxr:usd:physics:joint:lowerLimit = "-inf"
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom string pxr:usd:physics:joint:upperLimit = "inf"
+            custom double3 pxr:usd:physics:localPos0 = (-0.019169151782989502, 0.000012978911399841309, -0.06815589219331741)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.3205021023750305, 0.18457026779651642, 0.03644304722547531)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "drawer_02_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:drawer_02_joint_00"]
+        )
+        {
+            rel collection:drawer_02_joint_00:includes = </RootNode/Geometry/drawer_02_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Y"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "drawer_02_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0
+            custom string pxr:usd:physics:joint:type = "prismatic"
+            custom double pxr:usd:physics:joint:upperLimit = 0.15655000507831573
+            custom double3 pxr:usd:physics:localPos0 = (0.08058369904756546, 0.14345000684261322, 0.853949785232544)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.08058369904756546, 0.14345000684261322, 0.853949785232544)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "tire_02_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:tire_02_joint_00"]
+        )
+        {
+            rel collection:tire_02_joint_00:includes = </RootNode/Geometry/tire_02_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Y"
+            custom string pxr:usd:physics:joint:body0 = "wheel_02_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "tire_02_obj_00"
+            custom string pxr:usd:physics:joint:lowerLimit = "-inf"
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom string pxr:usd:physics:joint:upperLimit = "inf"
+            custom double3 pxr:usd:physics:localPos0 = (-0.019169121980667114, 0.000012993812561035156, -0.06815590709447861)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.32050201296806335, -0.18458305299282074, 0.03644304722547531)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "wheel_01_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:wheel_01_joint_00"]
+        )
+        {
+            rel collection:wheel_01_joint_00:includes = </RootNode/Geometry/wheel_01_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Z"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "wheel_01_obj_00"
+            custom string pxr:usd:physics:joint:lowerLimit = "-inf"
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom string pxr:usd:physics:joint:upperLimit = "inf"
+            custom double3 pxr:usd:physics:localPos0 = (-0.301332950592041, 0.18455728888511658, 0.10459893941879272)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.301332950592041, 0.18455728888511658, 0.10459893941879272)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "drawer_03_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:drawer_03_joint_00"]
+        )
+        {
+            rel collection:drawer_03_joint_00:includes = </RootNode/Geometry/drawer_03_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Y"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "drawer_03_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0
+            custom string pxr:usd:physics:joint:type = "prismatic"
+            custom double pxr:usd:physics:joint:upperLimit = 0.3766129952855408
+            custom double3 pxr:usd:physics:localPos0 = (0.08575776219367981, 0.003386999946087599, 0.7114162445068359)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.08575776219367981, 0.003386999946087599, 0.7114162445068359)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "wheel_03_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:wheel_03_joint_00"]
+        )
+        {
+            rel collection:wheel_03_joint_00:includes = </RootNode/Geometry/wheel_03_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Z"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "wheel_03_obj_00"
+            custom string pxr:usd:physics:joint:lowerLimit = "-inf"
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom string pxr:usd:physics:joint:upperLimit = "inf"
+            custom double3 pxr:usd:physics:localPos0 = (0.27188336849212646, 0.21867728233337402, 0.10459894686937332)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.27188336849212646, 0.21867728233337402, 0.10459894686937332)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "drawer_01_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:drawer_01_joint_00"]
+        )
+        {
+            rel collection:drawer_01_joint_00:includes = </RootNode/Geometry/drawer_01_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "X"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "drawer_01_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0
+            custom string pxr:usd:physics:joint:type = "prismatic"
+            custom double pxr:usd:physics:joint:upperLimit = 0.17965400218963623
+            custom double3 pxr:usd:physics:localPos0 = (0.28034600615501404, 0.03655422478914261, 0.886533796787262)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.28034600615501404, 0.03655422478914261, 0.886533796787262)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "wheel_02_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:wheel_02_joint_00"]
+        )
+        {
+            rel collection:wheel_02_joint_00:includes = </RootNode/Geometry/wheel_02_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Z"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "wheel_02_obj_00"
+            custom string pxr:usd:physics:joint:lowerLimit = "-inf"
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom string pxr:usd:physics:joint:upperLimit = "inf"
+            custom double3 pxr:usd:physics:localPos0 = (-0.30133289098739624, -0.18459604680538177, 0.10459895431995392)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.30133289098739624, -0.18459604680538177, 0.10459895431995392)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+    }
+
+    def Scope "Grasp"
+    {
+    }
+
+    def Scope "PhysicsMaterials"
+    {
+        def Material "physics_mat_m_opaque__plastic__white_a01"
+        {
+        }
+
+        def Material "physics_mat_m_opaque__metal__glossy_a01"
+        {
+        }
+
+        def Material "physics_mat_m_opaque__metal__steel_a01"
+        {
+        }
+
+        def Material "physics_mat_m_opaque__metal__chrome_clean_a01"
+        {
+        }
+
+        def Material "physics_mat_m_opaque__plastic__emissive_blue_a01"
+        {
+        }
+
+        def Material "physics_mat_m_opaque__plastic__black_c01"
+        {
+        }
+
+        def Material "physics_mat_m_opaque__metal__steel_b01"
+        {
+        }
+
+        def Material "physics_mat_m_opaque__rubber__black_a01"
+        {
+        }
+
+        def Material "physics_mat_m_opaque__plastic__gray_a01"
+        {
+        }
+
+        def Material "physics_mat_m_opaque__plastic__black_a01"
+        {
+        }
+
+        def Material "physics_mat_m_opaque__plastic__orange_a01"
+        {
+        }
+
+        def Material "physics_mat_m_opaque__plastic__red_a01"
+        {
+        }
+    }
+
+    def Scope "Joints"
+    {
+    }
+
+    def Scope "VisualMaterials"
+    {
+    }
+}
+

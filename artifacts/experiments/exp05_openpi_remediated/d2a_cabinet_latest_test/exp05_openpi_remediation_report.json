@@ -1,0 +1,27 @@
+[
+  {
+    "seed": 0,
+    "spec_yaml": "generated_envs/exp04_d2a_cabinet/latest/exp04_d2a_cabinet.yaml",
+    "exit_code": 0,
+    "elapsed_seconds": 32.42,
+    "task_success": false,
+    "progress_score": 0.0,
+    "events": [],
+    "ee_drift_0_50_m": 0.0,
+    "step_0_obj_z": 0.9418,
+    "obj_z_drift_m": 0.0338,
+    "d_min_handle_m": null,
+    "d_min_can_m": null,
+    "max_door_rot_rad": 0.0,
+    "max_door_rot_deg": 0.0,
+    "max_can_vel_mps": 0.0,
+    "max_can_lift_m": 0.0,
+    "gates": {
+      "gate_1_zero_flail (<0.05m)": true,
+      "gate_2_handle_approach (<0.15m)": false,
+      "gate_3_door_rotation (>=45deg)": false,
+      "gate_4_subtask_exit (progress>=0.33)": false,
+      "gate_5_settled_grounding (z_drift<0.05m, early_speed<0.5m/s)": true
+    }
+  }
+]

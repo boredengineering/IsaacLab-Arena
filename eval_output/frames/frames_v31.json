@@ -1,0 +1,371 @@
+{
+  "scene": "generated_envs/g1_tabletop_apple_to_plate/v31/g1_tabletop_apple_to_plate.yaml",
+  "settle_steps": 60,
+  "bodies": {
+    "pelvis": {
+      "world": [
+        -0.50279,
+        -0.0065,
+        0.13903
+      ],
+      "env_local": [
+        -0.50279,
+        -0.0065,
+        0.13903
+      ]
+    },
+    "imu_in_pelvis": {
+      "world": [
+        -0.45335,
+        -0.00555,
+        0.05806
+      ],
+      "env_local": [
+        -0.45335,
+        -0.00555,
+        0.05806
+      ]
+    },
+    "pelvis_contour_link": {
+      "world": [
+        -0.50279,
+        -0.0065,
+        0.13903
+      ],
+      "env_local": [
+        -0.50279,
+        -0.0065,
+        0.13903
+      ]
+    },
+    "waist_yaw_link": {
+      "world": [
+        -0.50279,
+        -0.0065,
+        0.13903
+      ],
+      "env_local": [
+        -0.50279,
+        -0.0065,
+        0.13903
+      ]
+    },
+    "waist_roll_link": {
+      "world": [
+        -0.509,
+        -0.00634,
+        0.18277
+      ],
+      "env_local": [
+        -0.509,
+        -0.00634,
+        0.18277
+      ]
+    },
+    "torso_link": {
+      "world": [
+        -0.509,
+        -0.00634,
+        0.18277
+      ],
+      "env_local": [
+        -0.509,
+        -0.00634,
+        0.18277
+      ]
+    },
+    "imu_in_torso": {
+      "world": [
+        -0.55267,
+        -0.00873,
+        0.32953
+      ],
+      "env_local": [
+        -0.55267,
+        -0.00873,
+        0.32953
+      ]
+    },
+    "left_shoulder_pitch_link": {
+      "world": [
+        -0.5154,
+        0.09592,
+        0.42966
+      ],
+      "env_local": [
+        -0.5154,
+        0.09592,
+        0.42966
+      ]
+    },
+    "right_shoulder_pitch_link": {
+      "world": [
+        -0.50873,
+        -0.1044,
+        0.43144
+      ],
+      "env_local": [
+        -0.50873,
+        -0.1044,
+        0.43144
+      ]
+    },
+    "left_shoulder_roll_link": {
+      "world": [
+        -0.51715,
+        0.13619,
+        0.42648
+      ],
+      "env_local": [
+        -0.51715,
+        0.13619,
+        0.42648
+      ]
+    },
+    "right_shoulder_roll_link": {
+      "world": [
+        -0.50779,
+        -0.14475,
+        0.42897
+      ],
+      "env_local": [
+        -0.50779,
+        -0.14475,
+        0.42897
+      ]
+    },
+    "left_shoulder_yaw_link": {
+      "world": [
+        -0.51807,
+        0.14137,
+        0.32323
+      ],
+      "env_local": [
+        -0.51807,
+        0.14137,
+        0.32323
+      ]
+    },
+    "right_shoulder_yaw_link": {
+      "world": [
+        -0.50819,
+        -0.15162,
+        0.32581
+      ],
+      "env_local": [
+        -0.50819,
+        -0.15162,
+        0.32581
+      ]
+    },
+    "left_elbow_link": {
+      "world": [
+        -0.50281,
+        0.14125,
+        0.24261
+      ],
+      "env_local": [
+        -0.50281,
+        0.14125,
+        0.24261
+      ]
+    },
+    "right_elbow_link": {
+      "world": [
+        -0.49284,
+        -0.15171,
+        0.24521
+      ],
+      "env_local": [
+        -0.49284,
+        -0.15171,
+        0.24521
+      ]
+    },
+    "left_wrist_roll_link": {
+      "world": [
+        -0.40429,
+        0.14741,
+        0.22361
+      ],
+      "env_local": [
+        -0.40429,
+        0.14741,
+        0.22361
+      ]
+    },
+    "right_wrist_roll_link": {
+      "world": [
+        -0.39409,
+        -0.15116,
+        0.22646
+      ],
+      "env_local": [
+        -0.39409,
+        -0.15116,
+        0.22646
+      ]
+    },
+    "left_wrist_pitch_link": {
+      "world": [
+        -0.36649,
+        0.14909,
+        0.22018
+      ],
+      "env_local": [
+        -0.36649,
+        0.14909,
+        0.22018
+      ]
+    },
+    "right_wrist_pitch_link": {
+      "world": [
+        -0.35625,
+        -0.1502,
+        0.22311
+      ],
+      "env_local": [
+        -0.35625,
+        -0.1502,
+        0.22311
+      ]
+    },
+    "left_wrist_yaw_link": {
+      "world": [
+        -0.32105,
+        0.15108,
+        0.21328
+      ],
+      "env_local": [
+        -0.32105,
+        0.15108,
+        0.21328
+      ]
+    },
+    "right_wrist_yaw_link": {
+      "world": [
+        -0.31075,
+        -0.14907,
+        0.21641
+      ],
+      "env_local": [
+        -0.31075,
+        -0.14907,
+        0.21641
+      ]
+    }
+  },
+  "objects": {
+    "red_apple": {
+      "world": [
+        0.17056,
+        -0.26811,
+        0.10317
+      ],
+      "env_local": [
+        0.17056,
+        -0.26811,
+        0.10317
+      ],
+      "extent_m": [
+        0.06125,
+        0.05933,
+        0.06092
+      ],
+      "footprint_radius_m": 0.03062
+    },
+    "clay_plate": {
+      "world": [
+        -0.17687,
+        -0.01507,
+        0.08084
+      ],
+      "env_local": [
+        -0.17687,
+        -0.01507,
+        0.08084
+      ],
+      "extent_m": [
+        0.1503,
+        0.15099,
+        0.02355
+      ],
+      "footprint_radius_m": 0.0755
+    }
+  },
+  "all_body_names": [
+    "pelvis",
+    "imu_in_pelvis",
+    "left_hip_pitch_link",
+    "pelvis_contour_link",
+    "right_hip_pitch_link",
+    "waist_yaw_link",
+    "left_hip_roll_link",
+    "right_hip_roll_link",
+    "waist_roll_link",
+    "left_hip_yaw_link",
+    "right_hip_yaw_link",
+    "torso_link",
+    "left_knee_link",
+    "right_knee_link",
+    "d435_link",
+    "head_link",
+    "imu_in_torso",
+    "left_shoulder_pitch_link",
+    "logo_link",
+    "mid360_link",
+    "right_shoulder_pitch_link",
+    "left_ankle_pitch_link",
+    "right_ankle_pitch_link",
+    "left_shoulder_roll_link",
+    "right_shoulder_roll_link",
+    "left_ankle_roll_link",
+    "right_ankle_roll_link",
+    "left_shoulder_yaw_link",
+    "right_shoulder_yaw_link",
+    "left_elbow_link",
+    "right_elbow_link",
+    "left_wrist_roll_link",
+    "right_wrist_roll_link",
+    "left_wrist_pitch_link",
+    "right_wrist_pitch_link",
+    "left_wrist_yaw_link",
+    "right_wrist_yaw_link",
+    "left_hand_palm_link",
+    "right_hand_palm_link",
+    "left_hand_index_0_link",
+    "left_hand_middle_0_link",
+    "left_hand_thumb_0_link",
+    "right_hand_index_0_link",
+    "right_hand_middle_0_link",
+    "right_hand_thumb_0_link",
+    "left_hand_index_1_link",
+    "left_hand_middle_1_link",
+    "left_hand_thumb_1_link",
+    "right_hand_index_1_link",
+    "right_hand_middle_1_link",
+    "right_hand_thumb_1_link",
+    "left_hand_thumb_2_link",
+    "right_hand_thumb_2_link"
+  ],
+  "robot_root": {
+    "world": [
+      -0.50279,
+      -0.0065,
+      0.13903
+    ],
+    "env_local": [
+      -0.50279,
+      -0.0065,
+      0.13903
+    ]
+  },
+  "derived": {
+    "pelvis_height_above_root_m": 0.0,
+    "left_shoulder_height_above_root_m": 0.29063,
+    "red_apple_rel_pelvis_z_m": -0.03586,
+    "red_apple_shoulder_distance_m": 0.84241,
+    "clay_plate_rel_pelvis_z_m": -0.05819,
+    "clay_plate_shoulder_distance_m": 0.49859
+  }
+}

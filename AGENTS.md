@@ -33,6 +33,10 @@ docker exec "$ARENA_CONTAINER" su $(id -un) -c \
 
 Lint and format tooling (`pre-commit` and the hooks it runs — black, flake8, isort, pyupgrade, codespell) runs **on the host**.
 
+### Repository path and link invariant
+
+The workspace operates inside a devcontainer where the repository is mounted (as a named volume or host bind). **Never hardcode absolute filesystem paths or `file:///` URIs in plans, documentation, or links** (e.g. `file:///workspaces/...`). Always use repository-relative links (`../../../../...`) so paths resolve identically across host environments, devcontainers, editor extensions, and Git remotes.
+
 ## Repository layout
 
 - `isaaclab_arena/` — core package: `tasks/`, `policy/`, `evaluation/`, `embodiments/`, `scene/`, `assets/`, `tests/`
@@ -109,6 +113,7 @@ def test_foo():  # pytest-visible outer function
 
 ## Boundaries
 
+- **Always ask for explicit permission before committing changes** (`git commit`). Never commit automatically without user approval.
 - **Never** force-push to `main` or `release/*`. **Instead**, push to a `<username>/<type>/<short-description>` branch (`<type>` ∈ `feature`, `fix`, `docs`, `refactor`, `chore`, `ci`) and open a PR against `main`.
 - **Never** add AI-attribution lines to commits (no `Co-Authored-By: Claude…`, no `Generated with…`). **Instead**, sign off with `git commit -s` — DCO is the only required trailer.
 - **Never** commit models, datasets, or secrets. **Instead**, keep them on the host and mount them via `./docker/run_docker.sh -d <datasets> -m <models> -e <eval>`.

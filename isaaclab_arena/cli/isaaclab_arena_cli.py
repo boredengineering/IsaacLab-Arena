@@ -73,12 +73,13 @@ def add_isaaclab_arena_cli_args(parser: argparse.ArgumentParser) -> None:
 
     # Arena builds its environment after AppLauncher starts, so this flag both selects
     # optional environment cameras and enables camera rendering during app startup.
-    arena_group.add_argument(
-        "--enable_cameras",
-        action="store_true",
-        default=False,
-        help="Add the environment's camera sensors and observations.",
-    )
+    if "--enable_cameras" not in parser._option_string_actions:
+        arena_group.add_argument(
+            "--enable_cameras",
+            action="store_true",
+            default=False,
+            help="Add the environment's camera sensors and observations.",
+        )
 
     # TODO(cvolk, 2026-07-06): [typed-config-migration] Delete these manual builder flags after runner scripts
     # receive ArenaEnvBuilderCfg directly. The adapter tests keep their defaults aligned
@@ -134,6 +135,8 @@ def add_env_graph_spec_cli_args(parser: argparse.ArgumentParser) -> None:
     )
     env_graph_spec_group.add_argument(
         "--env_spec",
+        "--env_graph_spec_yaml",
+        dest="env_spec",
         type=str,
         default=None,
         help=(

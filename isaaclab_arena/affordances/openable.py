@@ -3,13 +3,18 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
+from __future__ import annotations
 
-from isaaclab.envs.manager_based_env import ManagerBasedEnv
+import torch
+from typing import TYPE_CHECKING
+
 from isaaclab.managers import SceneEntityCfg
 
 from isaaclab_arena.affordances.affordance_base import AffordanceBase
 from isaaclab_arena.utils.joint_utils import get_normalized_joint_position, set_normalized_joint_position
+
+if TYPE_CHECKING:
+    from isaaclab.envs.manager_based_env import ManagerBasedEnv
 
 
 class Openable(AffordanceBase):

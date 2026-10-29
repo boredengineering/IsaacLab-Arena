@@ -1,0 +1,28 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:eval_run_1793109840 a prov:Entity,
+        arena:EvaluationRun ;
+    prov:wasGeneratedBy :activity_eval_run_1793109840 ;
+    arena:blockingPredicate "objects_settled"^^xsd:string ;
+    arena:evaluatedGraph :exp04_d2b_counter ;
+    arena:metric_all_complete_rate "0.0"^^xsd:float ;
+    arena:metric_mean_progress_score "0.0"^^xsd:float ;
+    arena:metric_num_episodes 1 ;
+    arena:metric_object_moved_rate_subtask_1 "0.0"^^xsd:float ;
+    arena:metric_revolute_joint_moved_rate_subtask_0 "0.0"^^xsd:float ;
+    arena:metric_revolute_joint_moved_rate_subtask_2 "1.0"^^xsd:float ;
+    arena:metric_success_rate "0.0"^^xsd:float ;
+    arena:metricsPayload "{\"num_episodes\": 1, \"success_rate\": 0.0, \"revolute_joint_moved_rate_subtask_0\": 0.0, \"object_moved_rate_subtask_1\": 0.0, \"revolute_joint_moved_rate_subtask_2\": 1.0, \"subtask_success_rate\": [0.0, 0.0, 0.0]}"^^xsd:string ;
+    arena:semanticIntegrityVerified true .
+
+:activity_eval_run_1793109840 a prov:Activity ;
+    prov:endedAtTime "2026-10-27T14:04:00.560532+00:00"^^xsd:dateTime ;
+    prov:used :exp04_d2b_counter,
+        :policy_isaaclab_arena_openpi_policy_pi0_remote_policy_Pi0RemotePolicy .
+
+:policy_isaaclab_arena_openpi_policy_pi0_remote_policy_Pi0RemotePolicy a prov:Entity ;
+    arena:modelWeightsPath "isaaclab_arena_openpi.policy.pi0_remote_policy.Pi0RemotePolicy"^^xsd:string .
+

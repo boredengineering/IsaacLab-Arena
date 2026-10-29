@@ -1,0 +1,287 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:droid_packing_table_verified a arena:EnvironmentFamily ;
+    arena:currentVersion 40 .
+
+:droid_packing_table_verified_v40 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-18T06:51:23.666189+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v39 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 40 .
+
+:droid_packing_table_verified_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T01:36:36.482323+00:00"^^xsd:dateTime ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 1 .
+
+:droid_packing_table_verified_v10 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T02:12:31.997952+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v9 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 10 .
+
+:droid_packing_table_verified_v11 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T03:10:48.650441+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v10 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 11 .
+
+:droid_packing_table_verified_v12 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T03:11:57.089985+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v11 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 12 .
+
+:droid_packing_table_verified_v13 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T03:13:44.243234+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v12 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 13 .
+
+:droid_packing_table_verified_v14 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T03:15:30.359236+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v13 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 14 .
+
+:droid_packing_table_verified_v15 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T03:26:43.597153+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v14 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 15 .
+
+:droid_packing_table_verified_v16 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T03:28:36.863093+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v15 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 16 .
+
+:droid_packing_table_verified_v17 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T03:32:37.359666+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v16 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 17 .
+
+:droid_packing_table_verified_v18 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T03:33:52.001092+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v17 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 18 .
+
+:droid_packing_table_verified_v19 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T03:35:37.019915+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v18 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 19 .
+
+:droid_packing_table_verified_v2 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T01:37:55.089910+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v1 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 2 .
+
+:droid_packing_table_verified_v20 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T03:37:13.117396+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v19 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 20 .
+
+:droid_packing_table_verified_v21 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T03:38:43.256447+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v20 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 21 .
+
+:droid_packing_table_verified_v22 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T03:39:46.671705+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v21 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 22 .
+
+:droid_packing_table_verified_v23 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T04:01:30.560464+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v22 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 23 .
+
+:droid_packing_table_verified_v24 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T04:02:43.627388+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v23 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 24 .
+
+:droid_packing_table_verified_v25 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T04:03:49.281081+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v24 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 25 .
+
+:droid_packing_table_verified_v26 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T04:05:35.312314+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v25 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 26 .
+
+:droid_packing_table_verified_v27 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T04:06:22.487853+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v26 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 27 .
+
+:droid_packing_table_verified_v28 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T04:07:30.343438+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v27 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 28 .
+
+:droid_packing_table_verified_v29 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T04:08:36.366860+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v28 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 29 .
+
+:droid_packing_table_verified_v3 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T01:39:25.540667+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v2 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 3 .
+
+:droid_packing_table_verified_v30 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T04:08:51.332742+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v29 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 30 .
+
+:droid_packing_table_verified_v31 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T04:10:21.273215+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v30 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 31 .
+
+:droid_packing_table_verified_v32 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-18T06:36:12.817870+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v31 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 32 .
+
+:droid_packing_table_verified_v33 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-18T06:38:11.144094+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v32 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 33 .
+
+:droid_packing_table_verified_v34 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-18T06:39:56.386343+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v33 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 34 .
+
+:droid_packing_table_verified_v35 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-18T06:41:37.433330+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v34 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 35 .
+
+:droid_packing_table_verified_v36 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-18T06:46:44.417338+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v35 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 36 .
+
+:droid_packing_table_verified_v37 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-18T06:48:00.614167+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v36 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 37 .
+
+:droid_packing_table_verified_v38 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-18T06:49:17.035218+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v37 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 38 .
+
+:droid_packing_table_verified_v39 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-18T06:50:19.732213+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v38 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 39 .
+
+:droid_packing_table_verified_v4 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T01:42:06.670477+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v3 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 4 .
+
+:droid_packing_table_verified_v5 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T01:45:28.300035+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v4 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 5 .
+
+:droid_packing_table_verified_v6 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T02:06:09.433638+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v5 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 6 .
+
+:droid_packing_table_verified_v7 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T02:08:43.066853+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v6 ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 7 .
+
+:droid_packing_table_verified_v8 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T02:10:11.300177+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v7 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 8 .
+
+:droid_packing_table_verified_v9 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-17T02:11:19.054489+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :droid_packing_table_verified_v8 ;
+    arena:trigger "grounded_resolve"^^xsd:string ;
+    arena:versionNumber 9 .
+

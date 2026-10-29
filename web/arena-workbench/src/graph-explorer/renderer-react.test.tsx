@@ -1,0 +1,26 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { observeRendererVisibility } from './renderer-react';
+afterEach(()=>vi.unstubAllGlobals());
+it('pauses outside the viewport or hidden document, resumes only both visible, disconnects without reheating',()=>{
+  let intersect:(entries:{isIntersecting:boolean}[])=>void=()=>{};
+  const disconnect=vi.fn(),observe=vi.fn();
+  vi.stubGlobal('IntersectionObserver',class {constructor(cb:typeof intersect){intersect=cb;}disconnect=disconnect;observe=observe;});
+  let hidden=false;vi.spyOn(document,'hidden','get').mockImplementation(()=>hidden);
+  const engine={pauseAnimation:vi.fn(),resumeAnimation:vi.fn(),d3ReheatSimulation:vi.fn()};
+  const root=document.createElement('div');const cleanup=observeRendererVisibility(root,engine);
+  expect(observe).toHaveBeenCalledWith(root);
+  expect(engine.pauseAnimation).toHaveBeenCalledTimes(1);
+  intersect([{isIntersecting:true}]);expect(engine.resumeAnimation).toHaveBeenCalledTimes(1);
+  intersect([{isIntersecting:false}]);expect(engine.pauseAnimation).toHaveBeenCalledTimes(2);
+  hidden=true;document.dispatchEvent(new Event('visibilitychange'));
+  hidden=false;document.dispatchEvent(new Event('visibilitychange'));
+  expect(engine.resumeAnimation).toHaveBeenCalledTimes(1);
+  hidden=true;intersect([{isIntersecting:true}]);expect(engine.resumeAnimation).toHaveBeenCalledTimes(1);
+  hidden=false;document.dispatchEvent(new Event('visibilitychange'));
+  expect(engine.resumeAnimation).toHaveBeenCalledTimes(2);
+  cleanup();expect(disconnect).toHaveBeenCalledTimes(1);
+  intersect([{isIntersecting:true}]);document.dispatchEvent(new Event('visibilitychange'));
+  expect(engine.resumeAnimation).toHaveBeenCalledTimes(2);
+  expect(engine.d3ReheatSimulation).not.toHaveBeenCalled();
+  vi.restoreAllMocks();
+});

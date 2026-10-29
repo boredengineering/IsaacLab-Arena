@@ -1,0 +1,33 @@
+action_horizon: 32
+action_chunk_length: 16
+embodiment_tag: OXE_DROID
+video_backend: decord
+policy_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/gr00t_8dof_joint_space.yaml
+action_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/8dof_joint_space.yaml
+state_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/13dof_joint_space.yaml
+task_mode_name: droid_manipulation
+pov_cam_name_sim:
+- external_camera_rgb
+- wrist_camera_rgb
+original_image_size:
+- 720
+- 1280
+- 3
+target_image_size:
+- 180
+- 320
+- 3
+language_instruction: 'PHYSX SETTLE FAILURES:
+
+  Object ''yellow_banana'' unstable during 60-step PhysX settle: displaced 0.000m
+  from [0.463, -0.346, 0.022] to [0.464, -0.346, 0.021].
+
+  Object ''red_bowl'' unstable during 60-step PhysX settle: displaced 0.000m from
+  [0.442, 0.52, 0.03] to [0.442, 0.52, 0.03].
+
+
+  STEP-0 VLM VISUAL CRITIC (tier_2_local_vlm):
+
+  banana not on the table
+
+  The banana is not on the table, which is required before the task can begin.'

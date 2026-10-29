@@ -1,0 +1,97 @@
+{
+  "spec_path": "generated_envs/exp04_d2a_cabinet/glm_flash_candidate.yaml",
+  "timestamp_utc": "2026-10-28T06:37:51.122314+00:00",
+  "conforms": false,
+  "passes": {
+    "pass1_schema": true,
+    "pass2_kinematics": true,
+    "pass3_swept_sector": false,
+    "pass3_footprint_clearance": true,
+    "pass4_handoff": false,
+    "pass5_facing": false,
+    "pass6_standoff_elevation": false
+  },
+  "defects": [
+    {
+      "code": "SWEPT_VOLUME_COLLISION",
+      "object": "tomato_soup_can",
+      "clearance_m": -0.39999999999999997,
+      "message": "Prismatic drawer opening corridor (stroke=0.40m, width=0.50m) is blocked by object at (0.00, 0.00). Penetration: 0.400m.",
+      "remediation": "Shift 'tomato_soup_can' lateral position to outside drawer width (|Y - 0.00| > 0.35m)."
+    },
+    {
+      "code": "OPENNESS_THRESHOLD_LOW",
+      "threshold": 0.0,
+      "message": "Subtask 1 (OpenDrawerTask) openness_threshold 0.00 < required 0.75 for clearance."
+    },
+    {
+      "code": "TASK_AFFORDANCE_FACING_DEFECT",
+      "object": "kitchen_base_cabinet",
+      "alignment_dot": 0.0,
+      "world_aperture_normal": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "message": "Aperture normal [0.0, -1.0, 0.0] does not face the robot (alignment = 0.00 > -0.70); the object faces sideways or away.",
+      "remediation": "Add relation 'kind: rotate_around_solution, subject: kitchen_base_cabinet, params: {yaw_rad: -1.5708}' so the door faces the robot base. initial_pose rotation is ignored for objects placed by an 'on' relation."
+    },
+    {
+      "code": "DEFECT_ROBOT_FIXTURE_COLLISION",
+      "robot_pos_xy": [
+        -0.55,
+        0.0
+      ],
+      "fixture_pos_xy": [
+        0.0,
+        0.0
+      ],
+      "penetration_depth_m": 0.1,
+      "message": "Robot pedestal at (-0.55, 0.00) collides with fixture 'kitchen_base_cabinet' footprint (penetration: 0.100m). Fixture extends 0.60m x 0.62m.",
+      "remediation": "Rotate fixture 'kitchen_base_cabinet' by 90 deg (yaw = -1.5708) to align narrow depth along approach corridor, or translate fixture to achieve >= 0.05m clearance."
+    },
+    {
+      "code": "DEFECT_FIXTURE_ORIENTATION_MISALIGNED",
+      "fixture_id": "kitchen_base_cabinet",
+      "fixture_yaw_rad": 0.0,
+      "approach_alignment": -0.0,
+      "message": "Fixture 'kitchen_base_cabinet' working edge does not face the robot (alignment = -0.00 < 0.50). Approach normal [0.00, -1.00] is directed away from robot at (-0.55, 0.00).",
+      "remediation": "Rotate fixture 'kitchen_base_cabinet' (e.g. yaw = -1.5708) so its canonical approach corridor faces the robot."
+    },
+    {
+      "code": "DEFECT_TABLETOP_KINEMATICALLY_UNREACHABLE",
+      "effective_tabletop_z": 0.908,
+      "robot_stand_z": 0.0,
+      "reachable_z_envelope": [
+        -0.45,
+        0.2
+      ],
+      "message": "Tabletop surface height (0.908m) falls outside the robot workspace envelope [-0.45m, 0.20m] for robot stand height 0.00m.",
+      "remediation": "Select a fixture whose deck height is within [-0.45m, 0.20m] or adjust robot stand height."
+    },
+    {
+      "code": "DEFECT_MANIPULAND_ELEVATION_MISMATCH",
+      "source_id": "tomato_soup_can",
+      "reified_nominal_z": 0.0,
+      "effective_tabletop_z": 0.908,
+      "message": "Manipuland 'tomato_soup_can' reified delta_z (0.000m) mismatches supporting fixture surface deck height (0.908m).",
+      "remediation": "Set reified_relations delta_z for 'tomato_soup_can' to nominal = 0.908m."
+    },
+    {
+      "code": "DEFECT_MANIPULAND_ELEVATION_MISMATCH",
+      "source_id": "kitchen_base_cabinet",
+      "reified_nominal_z": 0.0,
+      "effective_tabletop_z": 0.908,
+      "message": "Manipuland 'kitchen_base_cabinet' reified delta_z (0.000m) mismatches supporting fixture surface deck height (0.908m).",
+      "remediation": "Set reified_relations delta_z for 'kitchen_base_cabinet' to nominal = 0.908m."
+    }
+  ],
+  "diagnostics": [
+    "Pass 1: Schema integrity verified (1 objects, 0 object_references registered).",
+    "Pass 2: USD kinematics verified for 'kitchen_base_cabinet' (type: prismatic, joint: 'drawer_1', limits: (0.0, 0.4), axis: [0, -1, 0]).",
+    "Pass 3c: Prismatic stroke corridor clears robot pedestal (clearance = 0.100m >= 0.05m).",
+    "Pass 3b: Tabletop 2D bounding footprint clearances verified across all surface objects.",
+    "Pass 6: Robot-to-fixture horizontal standoff verified (0.55m in [0.50, 1.20]m).",
+    "Pass 6: Fixture 'kitchen_base_cabinet' physical floor grounding verified (Z_base = 0.0000m)."
+  ]
+}

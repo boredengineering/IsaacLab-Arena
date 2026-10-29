@@ -1,0 +1,5 @@
+/* Keep optional presentation invisible until its committed readiness signal.
+   Legacy controls and the persistent workspace never depend on this chunk. */
+.app-shell:not(.workbench-v7) > .workbench-chrome {
+  display: none;
+}

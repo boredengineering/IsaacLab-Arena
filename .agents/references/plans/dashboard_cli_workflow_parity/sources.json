@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": 1,
+      "url": "https://neo4j.com/docs/python-manual/current/transactions",
+      "title": "",
+      "accessed": "2026-09-14",
+      "quotes": [
+        {
+          "text": "Because the transaction might be re-run, transaction functions must be idempotent",
+          "added": "2026-09-14"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "url": "https://neo4j.com/docs/cypher-manual/current/clauses/merge",
+      "title": "",
+      "accessed": "2026-09-14"
+    },
+    {
+      "id": 3,
+      "url": "https://www.sqlite.org/wal.html",
+      "title": "",
+      "accessed": "2026-09-14",
+      "quotes": [
+        {
+          "text": "WAL does not work over a network filesystem.",
+          "added": "2026-09-14"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "url": "https://docs.python.org/3/library/os.html",
+      "title": "",
+      "accessed": "2026-09-14"
+    },
+    {
+      "id": 5,
+      "url": "https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html",
+      "title": "",
+      "accessed": "2026-09-14",
+      "quotes": [
+        {
+          "text": "Duplicate messages: The events processing service might send out duplicate messages or events",
+          "added": "2026-09-14"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "url": "https://neo4j.com/docs/cypher-manual/5/clauses/merge",
+      "title": "",
+      "accessed": "2026-09-14",
+      "quotes": [
+        {
+          "text": "They also protect against duplicate creation under concurrent loads, where MERGE alone only guarantees the existence of the pattern, not its uniqueness.",
+          "added": "2026-09-14"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "url": "https://docs.python.org/3.12/library/os.html",
+      "title": "",
+      "accessed": "2026-09-14",
+      "quotes": [
+        {
+          "text": "If successful, the renaming will be an atomic operation",
+          "added": "2026-09-14"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "url": "https://man7.org/linux/man-pages/man2/fsync.2.html",
+      "title": "",
+      "accessed": "2026-09-14",
+      "quotes": [
+        {
+          "text": "Calling fsync() does not necessarily ensure that the entry in the directory containing the file has also reached disk.",
+          "added": "2026-09-14"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "url": "https://neo4j.com/docs/cypher-manual/5/constraints/managing-constraints",
+      "title": "",
+      "accessed": "2026-09-14"
+    },
+    {
+      "id": 10,
+      "url": "https://neo4j.com/docs/cypher-manual/25/schema/constraints",
+      "title": "",
+      "accessed": "2026-09-14"
+    },
+    {
+      "id": 11,
+      "url": "https://sqlite.org/backup.html",
+      "title": "",
+      "accessed": "2026-09-14",
+      "quotes": [
+        {
+          "text": "The effect of completing the backup call sequence is to make the destination a bit-wise identical copy of the source database as it was when the copying commenced.",
+          "added": "2026-09-14"
+        }
+      ]
+    }
+  ]
+}

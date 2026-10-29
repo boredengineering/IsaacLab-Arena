@@ -1,0 +1,37 @@
+action_horizon: 32
+action_chunk_length: 16
+embodiment_tag: OXE_DROID
+video_backend: decord
+policy_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/gr00t_8dof_joint_space.yaml
+action_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/8dof_joint_space.yaml
+state_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/13dof_joint_space.yaml
+task_mode_name: droid_manipulation
+pov_cam_name_sim:
+- external_camera_rgb
+- wrist_camera_rgb
+original_image_size:
+- 720
+- 1280
+- 3
+target_image_size:
+- 180
+- 320
+- 3
+language_instruction: 'PHYSX SETTLE FAILURES:
+
+  PhysX settle terminated prematurely at step 13 (< 30) due to instability/drop.
+
+  Object ''yellow_banana'' unstable during 30-step PhysX settle: displaced 0.316m
+  from [0.345, 0.019, 0.086] to [0.541, -0.207, 0.189].
+
+  Object ''red_bowl'' unstable during 30-step PhysX settle: displaced 0.297m from
+  [0.795, -0.143, 0.096] to [0.641, 0.09, 0.198].
+
+
+  STEP-0 VLM VISUAL CRITIC (tier_2_local_vlm):
+
+  banana is not in the red bowl
+
+  banana is not in the correct position for grasping
+
+  The banana is not in the red bowl and is not in the correct position for grasping.'

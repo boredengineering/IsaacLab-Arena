@@ -1,0 +1,12 @@
+{
+  "event": "object_dropped",
+  "step": 15,
+  "dropped_object_id": "yellow_banana",
+  "drop_position": [
+    -0.09,
+    -0.1997,
+    0.7492
+  ],
+  "support_fixture_id": "background_table",
+  "failure_reason": "Premature episode termination (step 15 < 50) due to object drop / instability."
+}

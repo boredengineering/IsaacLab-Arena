@@ -1,0 +1,2618 @@
+{
+  "source": "/workspaces/isaaclab_arena/.agents/references/presentations/category_a_b_graph_queries.cypher",
+  "database_writes": false,
+  "queries": [
+    {
+      "name": "1_discover_droid_apple",
+      "query": "MATCH (g:EnvironmentGraph)\nWHERE g.name CONTAINS 'apple' AND g.name CONTAINS 'droid'\nRETURN g.name AS graph_name, g.task_description AS task_description\nORDER BY graph_name;",
+      "rows": 2,
+      "nodes": [],
+      "relationships": [],
+      "node_count": 0,
+      "relationship_count": 0,
+      "notifications": [],
+      "table_rows": [
+        {
+          "graph_name": "droid_pick_apple_to_bowl",
+          "task_description": "Droid robot picks up a red apple from the maple table and places it into a wooden bowl that is also on the table."
+        },
+        {
+          "graph_name": "franka_droid_apple_to_bowl_maple_table",
+          "task_description": "Pick up the red apple from the front right of the maple table and place it into the wooden bowl on the front left."
+        }
+      ]
+    },
+    {
+      "name": "2_scene_overview",
+      "query": "MATCH p=(g:EnvironmentGraph {name: 'franka_droid_apple_to_bowl_maple_table'})-[*1..2]-(n)\nWHERE all(member IN nodes(p) WHERE member = g OR member.env_name = g.name)\nRETURN p\nLIMIT 100;",
+      "rows": 36,
+      "nodes": [
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "labels": [
+            "EnvironmentGraph"
+          ],
+          "properties": {
+            "task_description": "Pick up the red apple from the front right of the maple table and place it into the wooden bowl on the front left.",
+            "repair_iterations": 0,
+            "llm_call_count": 0,
+            "converged": true,
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "updated_at": "2026-09-01T04:03:50.800000000+00:00",
+            "generation_time_s": 0.0,
+            "total_tokens": 0,
+            "name": "franka_droid_apple_to_bowl_maple_table",
+            "model_used": "",
+            "task_composition": "atomic"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:203",
+          "labels": [
+            "Embodiment"
+          ],
+          "properties": {
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "registry_name": "droid_abs_joint_pos",
+            "id": "droid_robot",
+            "params": "{'initial_pose': {'position_xyz': [-0.55, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:210",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 3.2,
+            "required_headroom": 0.4,
+            "reifier_id": "reifier_apple_reachability",
+            "delta_z_nominal": 0.01,
+            "relation_type": "REACHABLE_BY",
+            "posterior_entropy": 0.15,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "kinematic_manifold": "droid_manipulation_workspace",
+            "evidence_sources": [
+              "robot_kinematics",
+              "workspace_envelope"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:211",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 3.2,
+            "required_headroom": 0.4,
+            "reifier_id": "reifier_bowl_reachability",
+            "delta_z_nominal": 0.01,
+            "relation_type": "REACHABLE_BY",
+            "posterior_entropy": 0.15,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "kinematic_manifold": "droid_manipulation_workspace",
+            "evidence_sources": [
+              "robot_kinematics",
+              "workspace_envelope"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "labels": [
+            "Fixture",
+            "Terrain"
+          ],
+          "properties": {
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "is_terrain": true,
+            "registry_name": "maple_table_robolab",
+            "id": "maple_table_bg",
+            "params": "{'initial_pose': {'position_xyz': [-0.15, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "labels": [
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "registry_name": "apple_01_objaverse_robolab",
+            "id": "red_apple",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, -0.0699, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:207",
+          "labels": [
+            "SurfaceAnchor"
+          ],
+          "properties": {
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "anchor_name": "table_top",
+            "id": "maple_table_bg_table_top",
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:206",
+          "labels": [
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "registry_name": "wooden_bowl_hot3d_robolab",
+            "id": "wooden_bowl",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, 0.1985, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:208",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.3,
+            "reifier_id": "reifier_apple_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_right_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.65
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:209",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.35,
+            "reifier_id": "reifier_bowl_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_left_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:212",
+          "labels": [
+            "Camera"
+          ],
+          "properties": {
+            "eye_offset": [
+              -1.5,
+              -1.5,
+              1.5
+            ],
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "id": "franka_droid_apple_to_bowl_maple_table_viewer_cam",
+            "fov": 65.0
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:383",
+          "type": "HAS_EMBODIMENT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:203",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:400",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:210",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:203",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:403",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:211",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:203",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:404",
+          "type": "STANDS_AT_AFFORDANCE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:203",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "properties": {
+            "relative_heading": "front_facing",
+            "standoff_distance": 0.85
+          }
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:384",
+          "type": "HAS_TERRAIN",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:387",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_center'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:388",
+          "type": "HAS_SUB_SURFACE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:207",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:390",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:206",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_left'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:394",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:208",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:397",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:209",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:385",
+          "type": "CONTAINS_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:389",
+          "type": "PLACED_ON_SUB_SURFACE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:207",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:393",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:208",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:399",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:210",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:406",
+          "type": "OBSERVES_INTERACTION_ZONE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:212",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:386",
+          "type": "CONTAINS_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:206",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:391",
+          "type": "PLACED_ON_SUB_SURFACE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:206",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:207",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:396",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:209",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:206",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:402",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:211",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:206",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:392",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:208",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:395",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:209",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:398",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:210",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:401",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:211",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:405",
+          "type": "HAS_CAMERA",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:212",
+          "properties": {}
+        }
+      ],
+      "node_count": 11,
+      "relationship_count": 24,
+      "notifications": [],
+      "table_rows": null
+    },
+    {
+      "name": "3_reified_statements",
+      "query": "MATCH membership=(g:EnvironmentGraph {name: 'franka_droid_apple_to_bowl_maple_table'})\n                 -[:HAS_REIFIER]->(rf:ReifiedRelation)\nMATCH statement=(subject)<-[:REIFIES_SUBJECT]-(rf)-[:REIFIES_OBJECT]->(object)\nOPTIONAL MATCH direct_fact=(subject)-[fact]->(object)\nWHERE type(fact) = rf.relation_type\nRETURN membership, statement, direct_fact;",
+      "rows": 4,
+      "nodes": [
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "labels": [
+            "EnvironmentGraph"
+          ],
+          "properties": {
+            "task_description": "Pick up the red apple from the front right of the maple table and place it into the wooden bowl on the front left.",
+            "repair_iterations": 0,
+            "llm_call_count": 0,
+            "converged": true,
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "updated_at": "2026-09-01T04:03:50.800000000+00:00",
+            "generation_time_s": 0.0,
+            "total_tokens": 0,
+            "name": "franka_droid_apple_to_bowl_maple_table",
+            "model_used": "",
+            "task_composition": "atomic"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:211",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 3.2,
+            "required_headroom": 0.4,
+            "reifier_id": "reifier_bowl_reachability",
+            "delta_z_nominal": 0.01,
+            "relation_type": "REACHABLE_BY",
+            "posterior_entropy": 0.15,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "kinematic_manifold": "droid_manipulation_workspace",
+            "evidence_sources": [
+              "robot_kinematics",
+              "workspace_envelope"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:206",
+          "labels": [
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "registry_name": "wooden_bowl_hot3d_robolab",
+            "id": "wooden_bowl",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, 0.1985, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:203",
+          "labels": [
+            "Embodiment"
+          ],
+          "properties": {
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "registry_name": "droid_abs_joint_pos",
+            "id": "droid_robot",
+            "params": "{'initial_pose': {'position_xyz': [-0.55, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:210",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 3.2,
+            "required_headroom": 0.4,
+            "reifier_id": "reifier_apple_reachability",
+            "delta_z_nominal": 0.01,
+            "relation_type": "REACHABLE_BY",
+            "posterior_entropy": 0.15,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "kinematic_manifold": "droid_manipulation_workspace",
+            "evidence_sources": [
+              "robot_kinematics",
+              "workspace_envelope"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "labels": [
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "registry_name": "apple_01_objaverse_robolab",
+            "id": "red_apple",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, -0.0699, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:209",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.35,
+            "reifier_id": "reifier_bowl_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_left_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "labels": [
+            "Fixture",
+            "Terrain"
+          ],
+          "properties": {
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "is_terrain": true,
+            "registry_name": "maple_table_robolab",
+            "id": "maple_table_bg",
+            "params": "{'initial_pose': {'position_xyz': [-0.15, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:208",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.3,
+            "reifier_id": "reifier_apple_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_right_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.65
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:401",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:211",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:402",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:211",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:206",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:403",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:211",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:203",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:398",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:210",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:399",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:210",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:400",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:210",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:203",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:395",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:209",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:396",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:209",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:206",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:397",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:209",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:390",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:206",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_left'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:392",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:208",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:393",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:208",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:394",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:208",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:387",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_center'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        }
+      ],
+      "node_count": 9,
+      "relationship_count": 14,
+      "notifications": [],
+      "table_rows": null
+    },
+    {
+      "name": "4_apple_placement_closeup",
+      "query": "MATCH membership=(g:EnvironmentGraph {name: 'franka_droid_apple_to_bowl_maple_table'})\n                 -[:HAS_REIFIER]->(rf:ReifiedRelation {reifier_id: 'reifier_apple_table'})\nMATCH statement=(apple)<-[:REIFIES_SUBJECT]-(rf)-[:REIFIES_OBJECT]->(table)\nMATCH direct_fact=(apple)-[:PLACED_ON]->(table)\nRETURN membership, statement, direct_fact;",
+      "rows": 1,
+      "nodes": [
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "labels": [
+            "EnvironmentGraph"
+          ],
+          "properties": {
+            "task_description": "Pick up the red apple from the front right of the maple table and place it into the wooden bowl on the front left.",
+            "repair_iterations": 0,
+            "llm_call_count": 0,
+            "converged": true,
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "updated_at": "2026-09-01T04:03:50.800000000+00:00",
+            "generation_time_s": 0.0,
+            "total_tokens": 0,
+            "name": "franka_droid_apple_to_bowl_maple_table",
+            "model_used": "",
+            "task_composition": "atomic"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:208",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.3,
+            "reifier_id": "reifier_apple_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_right_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.65
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "labels": [
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "registry_name": "apple_01_objaverse_robolab",
+            "id": "red_apple",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, -0.0699, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "labels": [
+            "Fixture",
+            "Terrain"
+          ],
+          "properties": {
+            "env_name": "franka_droid_apple_to_bowl_maple_table",
+            "is_terrain": true,
+            "registry_name": "maple_table_robolab",
+            "id": "maple_table_bg",
+            "params": "{'initial_pose': {'position_xyz': [-0.15, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:392",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:202",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:208",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:393",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:208",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:394",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:208",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:387",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:205",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:204",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_center'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        }
+      ],
+      "node_count": 4,
+      "relationship_count": 4,
+      "notifications": [],
+      "table_rows": null
+    },
+    {
+      "name": "5_reifier_annotations",
+      "query": "MATCH (g:EnvironmentGraph {name: 'franka_droid_apple_to_bowl_maple_table'})\n      -[:HAS_REIFIER]->(rf:ReifiedRelation)\nMATCH (rf)-[:REIFIES_SUBJECT]->(subject), (rf)-[:REIFIES_OBJECT]->(object)\nRETURN rf.reifier_id AS statement_id, rf.relation_type AS predicate,\n       subject.id AS subject, object.id AS object,\n       rf.surface_anchor AS surface_anchor,\n       rf.required_headroom AS required_headroom,\n       rf.required_friction AS required_friction,\n       rf.delta_x_min AS delta_x_min, rf.delta_x_max AS delta_x_max,\n       rf.delta_y_min AS delta_y_min, rf.delta_y_max AS delta_y_max,\n       rf.delta_z_nominal AS delta_z_nominal,\n       rf.prior_entropy AS prior_entropy, rf.posterior_entropy AS posterior_entropy,\n       rf.evidence_sources AS evidence_sources\nORDER BY statement_id;",
+      "rows": 4,
+      "nodes": [],
+      "relationships": [],
+      "node_count": 0,
+      "relationship_count": 0,
+      "notifications": [],
+      "table_rows": [
+        {
+          "statement_id": "reifier_apple_reachability",
+          "predicate": "REACHABLE_BY",
+          "subject": "red_apple",
+          "object": "droid_robot",
+          "surface_anchor": "",
+          "required_headroom": 0.4,
+          "required_friction": 0.6,
+          "delta_x_min": -0.05,
+          "delta_x_max": 0.05,
+          "delta_y_min": -0.05,
+          "delta_y_max": 0.05,
+          "delta_z_nominal": 0.01,
+          "prior_entropy": 3.2,
+          "posterior_entropy": 0.15,
+          "evidence_sources": [
+            "robot_kinematics",
+            "workspace_envelope"
+          ]
+        },
+        {
+          "statement_id": "reifier_apple_table",
+          "predicate": "PLACED_ON",
+          "subject": "red_apple",
+          "object": "maple_table_bg",
+          "surface_anchor": "table_top",
+          "required_headroom": 0.3,
+          "required_friction": 0.65,
+          "delta_x_min": -0.05,
+          "delta_x_max": 0.05,
+          "delta_y_min": -0.05,
+          "delta_y_max": 0.05,
+          "delta_z_nominal": 0.01,
+          "prior_entropy": 2.8,
+          "posterior_entropy": 0.08,
+          "evidence_sources": [
+            "tabletop_spatial_planner",
+            "front_right_sector_constraint"
+          ]
+        },
+        {
+          "statement_id": "reifier_bowl_reachability",
+          "predicate": "REACHABLE_BY",
+          "subject": "wooden_bowl",
+          "object": "droid_robot",
+          "surface_anchor": "",
+          "required_headroom": 0.4,
+          "required_friction": 0.6,
+          "delta_x_min": -0.05,
+          "delta_x_max": 0.05,
+          "delta_y_min": -0.05,
+          "delta_y_max": 0.05,
+          "delta_z_nominal": 0.01,
+          "prior_entropy": 3.2,
+          "posterior_entropy": 0.15,
+          "evidence_sources": [
+            "robot_kinematics",
+            "workspace_envelope"
+          ]
+        },
+        {
+          "statement_id": "reifier_bowl_table",
+          "predicate": "PLACED_ON",
+          "subject": "wooden_bowl",
+          "object": "maple_table_bg",
+          "surface_anchor": "table_top",
+          "required_headroom": 0.35,
+          "required_friction": 0.6,
+          "delta_x_min": -0.05,
+          "delta_x_max": 0.05,
+          "delta_y_min": -0.05,
+          "delta_y_max": 0.05,
+          "delta_z_nominal": 0.01,
+          "prior_entropy": 2.8,
+          "posterior_entropy": 0.08,
+          "evidence_sources": [
+            "tabletop_spatial_planner",
+            "front_left_sector_constraint"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6_direct_placement_properties",
+      "query": "MATCH (g:EnvironmentGraph {name: 'franka_droid_apple_to_bowl_maple_table'})\n      -[:CONTAINS_OBJECT]->(subject)\nMATCH (subject)-[placement:PLACED_ON]->(support)\nWHERE support.env_name = g.name\nRETURN subject.id AS subject, support.id AS support,\n       placement.surface_anchor AS surface_anchor,\n       placement.clearance AS clearance, placement.nominal_height AS nominal_height,\n       placement.raw_params AS raw_params;",
+      "rows": 2,
+      "nodes": [],
+      "relationships": [],
+      "node_count": 0,
+      "relationship_count": 0,
+      "notifications": [],
+      "table_rows": [
+        {
+          "subject": "wooden_bowl",
+          "support": "maple_table_bg",
+          "surface_anchor": "table_top",
+          "clearance": 0.05,
+          "nominal_height": 0.0,
+          "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_left'}"
+        },
+        {
+          "subject": "red_apple",
+          "support": "maple_table_bg",
+          "surface_anchor": "table_top",
+          "clearance": 0.05,
+          "nominal_height": 0.0,
+          "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_center'}"
+        }
+      ]
+    },
+    {
+      "name": "7_current_run_provenance",
+      "query": "MATCH p=(ev:EvaluationRun {id: 'eval_run_1788928970'})-[:USED_POLICY]->(policy:Policy)\nOPTIONAL MATCH environment_link=(ev)-[:EVALUATED_GRAPH]->(g:EnvironmentGraph)\nRETURN p, environment_link;",
+      "rows": 1,
+      "nodes": [
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:462",
+          "labels": [
+            "EvaluationRun"
+          ],
+          "properties": {
+            "blocking_predicate": "object_on_destination(force_threshold=0.1, velocity_threshold=0.1)",
+            "all_complete_rate": 0.0,
+            "semantic_integrity_verified": true,
+            "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+            "num_episodes": 2,
+            "id": "eval_run_1788928970",
+            "success_rate": 0.0,
+            "ended_at": "2026-09-09T04:42:50.655272+00:00",
+            "mean_progress_score": 0.5
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "labels": [
+            "Policy"
+          ],
+          "properties": {
+            "name": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:802",
+          "type": "USED_POLICY",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:462",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "properties": {}
+        }
+      ],
+      "node_count": 2,
+      "relationship_count": 1,
+      "notifications": [],
+      "table_rows": null
+    },
+    {
+      "name": "8_b1_scene_overview",
+      "query": "MATCH p=(g:EnvironmentGraph {name: 'franka_droid_tomato_soup_to_bin'})-[*1..2]-(n)\nWHERE all(member IN nodes(p) WHERE member = g OR member.env_name = g.name)\nRETURN p\nLIMIT 100;",
+      "rows": 36,
+      "nodes": [
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "labels": [
+            "EnvironmentGraph"
+          ],
+          "properties": {
+            "task_description": "Pick up the red tomato soup can from the front right of the maple table and place it into the blue sorting bin on the front left.",
+            "repair_iterations": 0,
+            "llm_call_count": 0,
+            "converged": true,
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "updated_at": "2026-09-01T18:37:32.121000000+00:00",
+            "generation_time_s": 0.0,
+            "total_tokens": 0,
+            "name": "franka_droid_tomato_soup_to_bin",
+            "model_used": "",
+            "task_composition": "atomic"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:221",
+          "labels": [
+            "Embodiment"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "registry_name": "droid_abs_joint_pos",
+            "id": "droid_robot",
+            "params": "{'initial_pose': {'position_xyz': [-0.55, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:228",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 3.2,
+            "required_headroom": 0.35,
+            "reifier_id": "reifier_tomato_soup_can_reachability",
+            "delta_z_nominal": 0.01,
+            "relation_type": "REACHABLE_BY",
+            "posterior_entropy": 0.15,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "droid_manipulation_workspace",
+            "evidence_sources": [
+              "droid_kinematics",
+              "workspace_envelope"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:229",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 3.2,
+            "required_headroom": 0.35,
+            "reifier_id": "reifier_blue_bin_reachability",
+            "delta_z_nominal": 0.01,
+            "relation_type": "REACHABLE_BY",
+            "posterior_entropy": 0.15,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "droid_manipulation_workspace",
+            "evidence_sources": [
+              "droid_kinematics",
+              "workspace_envelope"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "labels": [
+            "Fixture",
+            "Terrain"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "is_terrain": true,
+            "registry_name": "maple_table_robolab",
+            "id": "maple_table",
+            "params": "{'initial_pose': {'position_xyz': [-0.25, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "labels": [
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "registry_name": "tomato_soup_can_ycb_robolab",
+            "id": "tomato_soup_can",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, -0.1396, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:225",
+          "labels": [
+            "SurfaceAnchor"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "anchor_name": "table_top",
+            "id": "maple_table_table_top",
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:224",
+          "labels": [
+            "Receptacle",
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "registry_name": "bin_b03_vomp_robolab",
+            "id": "blue_bin",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, 0.1396, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:226",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.25,
+            "reifier_id": "reifier_tomato_soup_can_maple_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_right_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.65
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:227",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.3,
+            "reifier_id": "reifier_blue_bin_maple_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_left_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:230",
+          "labels": [
+            "Camera"
+          ],
+          "properties": {
+            "eye_offset": [
+              -1.5,
+              -1.5,
+              1.5
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "id": "franka_droid_tomato_soup_to_bin_viewer_cam",
+            "fov": 65.0
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:414",
+          "type": "HAS_EMBODIMENT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:221",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:431",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:228",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:221",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:434",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:229",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:221",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:435",
+          "type": "STANDS_AT_AFFORDANCE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:221",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "properties": {
+            "relative_heading": "front_facing",
+            "standoff_distance": 0.85
+          }
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:415",
+          "type": "HAS_TERRAIN",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:418",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_right'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:419",
+          "type": "HAS_SUB_SURFACE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:225",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:421",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:224",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_left'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:425",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:226",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:428",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:227",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:416",
+          "type": "CONTAINS_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:420",
+          "type": "PLACED_ON_SUB_SURFACE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:225",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:424",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:226",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:430",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:228",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:437",
+          "type": "OBSERVES_INTERACTION_ZONE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:230",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:417",
+          "type": "CONTAINS_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:224",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:422",
+          "type": "PLACED_ON_SUB_SURFACE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:224",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:225",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:427",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:227",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:224",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:433",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:229",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:224",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:423",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:226",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:426",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:227",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:429",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:228",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:432",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:229",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:436",
+          "type": "HAS_CAMERA",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:230",
+          "properties": {}
+        }
+      ],
+      "node_count": 11,
+      "relationship_count": 24,
+      "notifications": [],
+      "table_rows": null
+    },
+    {
+      "name": "9_b1_reified_statements",
+      "query": "MATCH membership=(g:EnvironmentGraph {name: 'franka_droid_tomato_soup_to_bin'})\n                 -[:HAS_REIFIER]->(rf:ReifiedRelation)\nMATCH statement=(subject)<-[:REIFIES_SUBJECT]-(rf)-[:REIFIES_OBJECT]->(object)\nOPTIONAL MATCH direct_fact=(subject)-[fact]->(object)\nWHERE type(fact) = rf.relation_type\nRETURN membership, statement, direct_fact;",
+      "rows": 4,
+      "nodes": [
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "labels": [
+            "EnvironmentGraph"
+          ],
+          "properties": {
+            "task_description": "Pick up the red tomato soup can from the front right of the maple table and place it into the blue sorting bin on the front left.",
+            "repair_iterations": 0,
+            "llm_call_count": 0,
+            "converged": true,
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "updated_at": "2026-09-01T18:37:32.121000000+00:00",
+            "generation_time_s": 0.0,
+            "total_tokens": 0,
+            "name": "franka_droid_tomato_soup_to_bin",
+            "model_used": "",
+            "task_composition": "atomic"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:229",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 3.2,
+            "required_headroom": 0.35,
+            "reifier_id": "reifier_blue_bin_reachability",
+            "delta_z_nominal": 0.01,
+            "relation_type": "REACHABLE_BY",
+            "posterior_entropy": 0.15,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "droid_manipulation_workspace",
+            "evidence_sources": [
+              "droid_kinematics",
+              "workspace_envelope"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:224",
+          "labels": [
+            "Receptacle",
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "registry_name": "bin_b03_vomp_robolab",
+            "id": "blue_bin",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, 0.1396, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:221",
+          "labels": [
+            "Embodiment"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "registry_name": "droid_abs_joint_pos",
+            "id": "droid_robot",
+            "params": "{'initial_pose': {'position_xyz': [-0.55, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:228",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 3.2,
+            "required_headroom": 0.35,
+            "reifier_id": "reifier_tomato_soup_can_reachability",
+            "delta_z_nominal": 0.01,
+            "relation_type": "REACHABLE_BY",
+            "posterior_entropy": 0.15,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "droid_manipulation_workspace",
+            "evidence_sources": [
+              "droid_kinematics",
+              "workspace_envelope"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "labels": [
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "registry_name": "tomato_soup_can_ycb_robolab",
+            "id": "tomato_soup_can",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, -0.1396, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:227",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.3,
+            "reifier_id": "reifier_blue_bin_maple_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_left_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "labels": [
+            "Fixture",
+            "Terrain"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "is_terrain": true,
+            "registry_name": "maple_table_robolab",
+            "id": "maple_table",
+            "params": "{'initial_pose': {'position_xyz': [-0.25, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:226",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.25,
+            "reifier_id": "reifier_tomato_soup_can_maple_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_right_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.65
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:432",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:229",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:433",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:229",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:224",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:434",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:229",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:221",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:429",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:228",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:430",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:228",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:431",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:228",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:221",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:426",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:227",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:427",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:227",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:224",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:428",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:227",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:421",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:224",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_left'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:423",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:226",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:424",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:226",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:425",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:226",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:418",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_right'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        }
+      ],
+      "node_count": 9,
+      "relationship_count": 14,
+      "notifications": [],
+      "table_rows": null
+    },
+    {
+      "name": "10_b1_can_statement_closeup",
+      "query": "MATCH membership=(g:EnvironmentGraph {name: 'franka_droid_tomato_soup_to_bin'})\n                 -[:HAS_REIFIER]->(rf:ReifiedRelation {reifier_id: 'reifier_tomato_soup_can_maple_table'})\nMATCH statement=(can)<-[:REIFIES_SUBJECT]-(rf)-[:REIFIES_OBJECT]->(table)\nMATCH direct_fact=(can)-[:PLACED_ON]->(table)\nRETURN membership, statement, direct_fact;",
+      "rows": 1,
+      "nodes": [
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "labels": [
+            "EnvironmentGraph"
+          ],
+          "properties": {
+            "task_description": "Pick up the red tomato soup can from the front right of the maple table and place it into the blue sorting bin on the front left.",
+            "repair_iterations": 0,
+            "llm_call_count": 0,
+            "converged": true,
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "updated_at": "2026-09-01T18:37:32.121000000+00:00",
+            "generation_time_s": 0.0,
+            "total_tokens": 0,
+            "name": "franka_droid_tomato_soup_to_bin",
+            "model_used": "",
+            "task_composition": "atomic"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:226",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.25,
+            "reifier_id": "reifier_tomato_soup_can_maple_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_right_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.65
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "labels": [
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "registry_name": "tomato_soup_can_ycb_robolab",
+            "id": "tomato_soup_can",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, -0.1396, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "labels": [
+            "Fixture",
+            "Terrain"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "is_terrain": true,
+            "registry_name": "maple_table_robolab",
+            "id": "maple_table",
+            "params": "{'initial_pose': {'position_xyz': [-0.25, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:423",
+          "type": "HAS_REIFIER",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:220",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:226",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:424",
+          "type": "REIFIES_SUBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:226",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:425",
+          "type": "REIFIES_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:226",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:418",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:223",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:222",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_right'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        }
+      ],
+      "node_count": 4,
+      "relationship_count": 4,
+      "notifications": [],
+      "table_rows": null
+    },
+    {
+      "name": "11_b1_statement_annotations",
+      "query": "MATCH (g:EnvironmentGraph {name: 'franka_droid_tomato_soup_to_bin'})\n      -[:HAS_REIFIER]->(rf:ReifiedRelation)\nMATCH (rf)-[:REIFIES_SUBJECT]->(subject), (rf)-[:REIFIES_OBJECT]->(object)\nRETURN rf.reifier_id AS statement_id, subject.id AS subject,\n       rf.relation_type AS predicate, object.id AS object,\n       rf.surface_anchor AS surface_anchor,\n       rf.required_headroom AS required_headroom, rf.required_friction AS required_friction,\n       rf.kinematic_manifold AS kinematic_manifold,\n       rf.prior_entropy AS prior_entropy, rf.posterior_entropy AS posterior_entropy,\n       rf.evidence_sources AS evidence_sources\nORDER BY statement_id;",
+      "rows": 4,
+      "nodes": [],
+      "relationships": [],
+      "node_count": 0,
+      "relationship_count": 0,
+      "notifications": [],
+      "table_rows": [
+        {
+          "statement_id": "reifier_blue_bin_maple_table",
+          "subject": "blue_bin",
+          "predicate": "PLACED_ON",
+          "object": "maple_table",
+          "surface_anchor": "table_top",
+          "required_headroom": 0.3,
+          "required_friction": 0.6,
+          "kinematic_manifold": "tabletop_stationary_reach",
+          "prior_entropy": 2.8,
+          "posterior_entropy": 0.08,
+          "evidence_sources": [
+            "tabletop_spatial_planner",
+            "front_left_sector_constraint"
+          ]
+        },
+        {
+          "statement_id": "reifier_blue_bin_reachability",
+          "subject": "blue_bin",
+          "predicate": "REACHABLE_BY",
+          "object": "droid_robot",
+          "surface_anchor": "",
+          "required_headroom": 0.35,
+          "required_friction": 0.6,
+          "kinematic_manifold": "droid_manipulation_workspace",
+          "prior_entropy": 3.2,
+          "posterior_entropy": 0.15,
+          "evidence_sources": [
+            "droid_kinematics",
+            "workspace_envelope"
+          ]
+        },
+        {
+          "statement_id": "reifier_tomato_soup_can_maple_table",
+          "subject": "tomato_soup_can",
+          "predicate": "PLACED_ON",
+          "object": "maple_table",
+          "surface_anchor": "table_top",
+          "required_headroom": 0.25,
+          "required_friction": 0.65,
+          "kinematic_manifold": "tabletop_stationary_reach",
+          "prior_entropy": 2.8,
+          "posterior_entropy": 0.08,
+          "evidence_sources": [
+            "tabletop_spatial_planner",
+            "front_right_sector_constraint"
+          ]
+        },
+        {
+          "statement_id": "reifier_tomato_soup_can_reachability",
+          "subject": "tomato_soup_can",
+          "predicate": "REACHABLE_BY",
+          "object": "droid_robot",
+          "surface_anchor": "",
+          "required_headroom": 0.35,
+          "required_friction": 0.6,
+          "kinematic_manifold": "droid_manipulation_workspace",
+          "prior_entropy": 3.2,
+          "posterior_entropy": 0.15,
+          "evidence_sources": [
+            "droid_kinematics",
+            "workspace_envelope"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "12_b1_recorded_evaluations",
+      "query": "MATCH policy_use=(ev:EvaluationRun)-[:USED_POLICY]->(policy:Policy)\nWHERE ev.id IN ['eval_run_1788238238', 'eval_run_1788238722', 'eval_run_1788279490',\n               'eval_run_1788281565', 'eval_run_1788284877', 'eval_run_1788287246',\n               'eval_run_1788289371']\nOPTIONAL MATCH environment_link=(ev)-[:EVALUATED_GRAPH]->(g:EnvironmentGraph)\nRETURN policy_use, environment_link;",
+      "rows": 7,
+      "nodes": [
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:237",
+          "labels": [
+            "EvaluationRun"
+          ],
+          "properties": {
+            "metrics_payload": "{\"num_episodes\": 42, \"success_rate\": 0.14285714285714285, \"object_moved_rate\": 0.9761904761904762}",
+            "num_episodes": 42,
+            "id": "eval_run_1788289371",
+            "success_rate": 0.14285714285714285,
+            "ended_at": "2026-09-01T19:02:51.154444+00:00"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "labels": [
+            "Policy"
+          ],
+          "properties": {
+            "name": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:231",
+          "labels": [
+            "EvaluationRun"
+          ],
+          "properties": {
+            "metrics_payload": "{\"num_episodes\": 20, \"success_rate\": 0.05, \"object_moved_rate\": 0.95}",
+            "num_episodes": 20,
+            "id": "eval_run_1788238238",
+            "success_rate": 0.05,
+            "ended_at": "2026-09-01T04:50:38.831430+00:00"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:236",
+          "labels": [
+            "EvaluationRun"
+          ],
+          "properties": {
+            "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+            "num_episodes": 1,
+            "id": "eval_run_1788287246",
+            "success_rate": 0.0,
+            "ended_at": "2026-09-01T18:27:26.944134+00:00"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:234",
+          "labels": [
+            "EvaluationRun"
+          ],
+          "properties": {
+            "metrics_payload": "{\"num_episodes\": 50, \"success_rate\": 0.46, \"object_moved_rate\": 0.98}",
+            "num_episodes": 50,
+            "id": "eval_run_1788281565",
+            "success_rate": 0.46,
+            "ended_at": "2026-09-01T16:52:45.752601+00:00"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:233",
+          "labels": [
+            "EvaluationRun"
+          ],
+          "properties": {
+            "metrics_payload": "{\"num_episodes\": 1, \"success_rate\": 1.0, \"object_moved_rate\": 1.0}",
+            "num_episodes": 1,
+            "id": "eval_run_1788279490",
+            "success_rate": 1.0,
+            "ended_at": "2026-09-01T16:18:10.471543+00:00"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:235",
+          "labels": [
+            "EvaluationRun"
+          ],
+          "properties": {
+            "metrics_payload": "{\"num_episodes\": 52, \"success_rate\": 0.4807692307692308, \"object_moved_rate\": 0.9807692307692307}",
+            "num_episodes": 52,
+            "id": "eval_run_1788284877",
+            "success_rate": 0.4807692307692308,
+            "ended_at": "2026-09-01T17:47:57.147665+00:00"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:232",
+          "labels": [
+            "EvaluationRun"
+          ],
+          "properties": {
+            "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 1.0}",
+            "num_episodes": 2,
+            "id": "eval_run_1788238722",
+            "success_rate": 0.0,
+            "ended_at": "2026-09-01T04:58:42.951526+00:00"
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:444",
+          "type": "USED_POLICY",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:237",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:438",
+          "type": "USED_POLICY",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:231",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:443",
+          "type": "USED_POLICY",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:236",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:441",
+          "type": "USED_POLICY",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:234",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:440",
+          "type": "USED_POLICY",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:233",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:442",
+          "type": "USED_POLICY",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:235",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:439",
+          "type": "USED_POLICY",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:232",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "properties": {}
+        }
+      ],
+      "node_count": 8,
+      "relationship_count": 7,
+      "notifications": [],
+      "table_rows": null
+    },
+    {
+      "name": "13_b4_scene_overview",
+      "query": "MATCH p=(g:EnvironmentGraph {name: 'franka_droid_spam_can_to_grey_bin'})-[*1..2]-(n)\nWHERE all(member IN nodes(p) WHERE member = g OR member.env_name = g.name)\nRETURN p\nLIMIT 100;",
+      "rows": 16,
+      "nodes": [
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:239",
+          "labels": [
+            "EnvironmentGraph"
+          ],
+          "properties": {
+            "task_description": "Pick up the blue spam can from the front right of the maple table and place it into the grey bin on the front left.",
+            "repair_iterations": 0,
+            "llm_call_count": 0,
+            "converged": true,
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "updated_at": "2026-09-01T19:27:53.778000000+00:00",
+            "generation_time_s": 0.0,
+            "total_tokens": 0,
+            "name": "franka_droid_spam_can_to_grey_bin",
+            "model_used": "",
+            "task_composition": "atomic"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:240",
+          "labels": [
+            "Embodiment"
+          ],
+          "properties": {
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "registry_name": "droid_abs_joint_pos",
+            "id": "droid_robot",
+            "params": "{'initial_pose': {'position_xyz': [-0.55, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:241",
+          "labels": [
+            "Fixture",
+            "Terrain"
+          ],
+          "properties": {
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "is_terrain": true,
+            "registry_name": "maple_table_robolab",
+            "id": "maple_table",
+            "params": "{'initial_pose': {'position_xyz': [-0.25, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:242",
+          "labels": [
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "registry_name": "spam_can_ycb_robolab",
+            "id": "spam_can",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, -0.1396, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:244",
+          "labels": [
+            "SurfaceAnchor"
+          ],
+          "properties": {
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "anchor_name": "table_top",
+            "id": "maple_table_table_top",
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:243",
+          "labels": [
+            "Receptacle",
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "registry_name": "grey_bin_robolab",
+            "id": "grey_bin",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, 0.1396, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:245",
+          "labels": [
+            "Camera"
+          ],
+          "properties": {
+            "eye_offset": [
+              -1.5,
+              -1.5,
+              1.5
+            ],
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "id": "franka_droid_spam_can_to_grey_bin_viewer_cam",
+            "fov": 65.0
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:446",
+          "type": "HAS_EMBODIMENT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:239",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:240",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:455",
+          "type": "STANDS_AT_AFFORDANCE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:240",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:241",
+          "properties": {
+            "relative_heading": "front_facing",
+            "standoff_distance": 0.85
+          }
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:447",
+          "type": "HAS_TERRAIN",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:239",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:241",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:450",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:242",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:241",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_right'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:451",
+          "type": "HAS_SUB_SURFACE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:241",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:244",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:453",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:243",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:241",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_left'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:448",
+          "type": "CONTAINS_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:239",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:242",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:452",
+          "type": "PLACED_ON_SUB_SURFACE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:242",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:244",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:457",
+          "type": "OBSERVES_INTERACTION_ZONE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:245",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:242",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:449",
+          "type": "CONTAINS_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:239",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:243",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:454",
+          "type": "PLACED_ON_SUB_SURFACE",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:243",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:244",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:456",
+          "type": "HAS_CAMERA",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:239",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:245",
+          "properties": {}
+        }
+      ],
+      "node_count": 7,
+      "relationship_count": 12,
+      "notifications": [],
+      "table_rows": null
+    },
+    {
+      "name": "14_b4_support_statements_closeup",
+      "query": "MATCH membership=(g:EnvironmentGraph {name: 'franka_droid_spam_can_to_grey_bin'})\n                 -[:CONTAINS_OBJECT]->(item)\nWHERE item.id IN ['spam_can', 'grey_bin']\nMATCH support_statement=(item)-[:PLACED_ON]->(table)\nWHERE table.env_name = g.name\nRETURN membership, support_statement;",
+      "rows": 2,
+      "nodes": [
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:239",
+          "labels": [
+            "EnvironmentGraph"
+          ],
+          "properties": {
+            "task_description": "Pick up the blue spam can from the front right of the maple table and place it into the grey bin on the front left.",
+            "repair_iterations": 0,
+            "llm_call_count": 0,
+            "converged": true,
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "updated_at": "2026-09-01T19:27:53.778000000+00:00",
+            "generation_time_s": 0.0,
+            "total_tokens": 0,
+            "name": "franka_droid_spam_can_to_grey_bin",
+            "model_used": "",
+            "task_composition": "atomic"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:243",
+          "labels": [
+            "Receptacle",
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "registry_name": "grey_bin_robolab",
+            "id": "grey_bin",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, 0.1396, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:241",
+          "labels": [
+            "Fixture",
+            "Terrain"
+          ],
+          "properties": {
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "is_terrain": true,
+            "registry_name": "maple_table_robolab",
+            "id": "maple_table",
+            "params": "{'initial_pose': {'position_xyz': [-0.25, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:242",
+          "labels": [
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "registry_name": "spam_can_ycb_robolab",
+            "id": "spam_can",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, -0.1396, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:449",
+          "type": "CONTAINS_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:239",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:243",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:453",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:243",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:241",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_left'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:448",
+          "type": "CONTAINS_OBJECT",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:239",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:242",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:450",
+          "type": "PLACED_ON",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:242",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:241",
+          "properties": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_right'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        }
+      ],
+      "node_count": 4,
+      "relationship_count": 4,
+      "notifications": [],
+      "table_rows": null
+    },
+    {
+      "name": "15_b4_reification_gap",
+      "query": "MATCH (g:EnvironmentGraph {name: 'franka_droid_spam_can_to_grey_bin'})\nOPTIONAL MATCH (rf:ReifiedRelation {env_name: g.name})\nRETURN g.name AS graph_name, count(rf) AS reifier_count,\n       collect(rf.reifier_id) AS statement_ids;",
+      "rows": 1,
+      "nodes": [],
+      "relationships": [],
+      "node_count": 0,
+      "relationship_count": 0,
+      "notifications": [],
+      "table_rows": [
+        {
+          "graph_name": "franka_droid_spam_can_to_grey_bin",
+          "reifier_count": 0,
+          "statement_ids": []
+        }
+      ]
+    },
+    {
+      "name": "16_b4_edge_annotations",
+      "query": "MATCH (g:EnvironmentGraph {name: 'franka_droid_spam_can_to_grey_bin'})\n      -[:CONTAINS_OBJECT]->(item)\nMATCH (item)-[placement:PLACED_ON]->(table)\nWHERE table.env_name = g.name\nRETURN item.id AS subject, item.registry_name AS asset,\n       type(placement) AS predicate, table.id AS object,\n       placement.surface_anchor AS surface_anchor,\n       placement.clearance AS clearance, placement.nominal_height AS nominal_height,\n       placement.raw_params AS source_parameters\nORDER BY subject;",
+      "rows": 2,
+      "nodes": [],
+      "relationships": [],
+      "node_count": 0,
+      "relationship_count": 0,
+      "notifications": [],
+      "table_rows": [
+        {
+          "subject": "grey_bin",
+          "asset": "grey_bin_robolab",
+          "predicate": "PLACED_ON",
+          "object": "maple_table",
+          "surface_anchor": "table_top",
+          "clearance": 0.05,
+          "nominal_height": 0.0,
+          "source_parameters": "{'surface_anchor': 'table_top', 'surface_sector': 'front_left'}"
+        },
+        {
+          "subject": "spam_can",
+          "asset": "spam_can_ycb_robolab",
+          "predicate": "PLACED_ON",
+          "object": "maple_table",
+          "surface_anchor": "table_top",
+          "clearance": 0.05,
+          "nominal_height": 0.0,
+          "source_parameters": "{'surface_anchor': 'table_top', 'surface_sector': 'front_right'}"
+        }
+      ]
+    },
+    {
+      "name": "17_b4_recorded_evaluations",
+      "query": "MATCH policy_use=(ev:EvaluationRun)-[:USED_POLICY]->(policy:Policy)\nWHERE ev.id IN ['eval_run_1788290861', 'eval_run_1788292259', 'eval_run_1788292607']\nOPTIONAL MATCH environment_link=(ev)-[:EVALUATED_GRAPH]->(g:EnvironmentGraph)\nRETURN policy_use, environment_link;",
+      "rows": 3,
+      "nodes": [
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:238",
+          "labels": [
+            "EvaluationRun"
+          ],
+          "properties": {
+            "metrics_payload": "{\"num_episodes\": 70, \"success_rate\": 0.2571428571428571, \"object_moved_rate\": 0.9428571428571428}",
+            "num_episodes": 70,
+            "id": "eval_run_1788290861",
+            "success_rate": 0.2571428571428571,
+            "ended_at": "2026-09-01T19:27:41.721886+00:00"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "labels": [
+            "Policy"
+          ],
+          "properties": {
+            "name": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:246",
+          "labels": [
+            "EvaluationRun"
+          ],
+          "properties": {
+            "metrics_payload": "{\"num_episodes\": 67, \"success_rate\": 0.19402985074626866, \"object_moved_rate\": 0.5970149253731343}",
+            "num_episodes": 67,
+            "id": "eval_run_1788292259",
+            "success_rate": 0.19402985074626866,
+            "ended_at": "2026-09-01T19:50:59.877746+00:00"
+          }
+        },
+        {
+          "element_id": "4:5af5f793-962d-42f6-9231-952375f396f4:247",
+          "labels": [
+            "EvaluationRun"
+          ],
+          "properties": {
+            "metrics_payload": "{\"num_episodes\": 2, \"success_rate\": 0.0, \"object_moved_rate\": 0.5}",
+            "num_episodes": 2,
+            "id": "eval_run_1788292607",
+            "success_rate": 0.0,
+            "ended_at": "2026-09-01T19:56:47.968149+00:00"
+          }
+        }
+      ],
+      "relationships": [
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:445",
+          "type": "USED_POLICY",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:238",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:458",
+          "type": "USED_POLICY",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:246",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "properties": {}
+        },
+        {
+          "element_id": "5:5af5f793-962d-42f6-9231-952375f396f4:459",
+          "type": "USED_POLICY",
+          "source": "4:5af5f793-962d-42f6-9231-952375f396f4:247",
+          "target": "4:5af5f793-962d-42f6-9231-952375f396f4:185",
+          "properties": {}
+        }
+      ],
+      "node_count": 4,
+      "relationship_count": 3,
+      "notifications": [],
+      "table_rows": null
+    }
+  ]
+}

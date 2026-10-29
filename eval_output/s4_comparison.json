@@ -1,0 +1,86 @@
+[
+  {
+    "trace": "eval_output/s4_baseline/reach_traces/baseline.jsonl",
+    "rows": 5516,
+    "episode_indexed": true,
+    "episodes": 20,
+    "samples": 20,
+    "max_lift_m": 0.08511,
+    "has_hand_columns": true,
+    "hand_z_minus_obj": {
+      "median": 0.08789,
+      "mean": 0.0871905,
+      "stdev": 0.020394641317603115,
+      "min": 0.02776,
+      "max": 0.12124,
+      "values": [
+        0.08779,
+        0.0997,
+        0.10159,
+        0.02776,
+        0.08574,
+        0.11176,
+        0.08502,
+        0.06789,
+        0.11165,
+        0.09099,
+        0.0619,
+        0.06946,
+        0.08799,
+        0.09176,
+        0.09854,
+        0.08096,
+        0.08262,
+        0.12124,
+        0.09584,
+        0.08361
+      ]
+    },
+    "hand_xy_to_obj_at_closest": {
+      "median": 0.05077,
+      "mean": 0.0430505
+    }
+  },
+  {
+    "trace": "eval_output/s4_align/reach_traces/align.jsonl",
+    "rows": 5519,
+    "episode_indexed": true,
+    "episodes": 20,
+    "samples": 20,
+    "max_lift_m": 0.10542,
+    "has_hand_columns": true,
+    "hand_z_minus_obj": {
+      "median": 0.09043999999999999,
+      "mean": 0.0958125,
+      "stdev": 0.023416352108145102,
+      "min": 0.0656,
+      "max": 0.15325,
+      "values": [
+        0.09119,
+        0.14903,
+        0.09375,
+        0.0656,
+        0.08446,
+        0.08933,
+        0.08509,
+        0.0762,
+        0.08643,
+        0.15325,
+        0.08969,
+        0.09383,
+        0.09166,
+        0.09458,
+        0.07644,
+        0.06834,
+        0.08918,
+        0.09972,
+        0.13026,
+        0.10822
+      ]
+    },
+    "hand_xy_to_obj_at_closest": {
+      "median": 0.047784999999999994,
+      "mean": 0.041816
+    }
+  }
+]

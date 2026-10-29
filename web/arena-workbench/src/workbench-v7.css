@@ -1,0 +1,243 @@
+/* Cybernetic-Physics identity: static assets and provenance in BRANDING.md and
+   preview/brand/sources.json. Font licenses are shipped by WorkbenchChrome.
+   Unique family aliases prevent font registration from altering legacy chrome. */
+@font-face {
+  font-family: 'Workbench Tomorrow';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./preview/brand/Tomorrow-Regular-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Workbench IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./preview/brand/IBMPlexSans-Regular-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Workbench Kode Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./preview/brand/KodeMono-Variable-latin.woff2') format('woff2');
+}
+
+/* The parent applies this opt-in only after the optional chrome is ready.
+   The workspace remains its sibling, never a child of the optional boundary. */
+.workbench-v7.app-shell {
+  --workbench-sidebar-width: 234px;
+  --workbench-globalbar-height: 72px;
+  --font-display: 'Workbench Tomorrow', Arial, sans-serif;
+  --font-body: 'Workbench IBM Plex Sans', Arial, sans-serif;
+  --font-mono: 'Workbench Kode Mono', ui-monospace, monospace;
+  --page: #ffffff;
+  --surface: #fafafa;
+  --inset: #f0f0f0;
+  --text: #0d0d0d;
+  --muted: #5c5c5c;
+  --border: #c9c9c9;
+  --control-border: #777777;
+  --accent: #30666b;
+  --accent-foreground: #ffffff;
+  --selected: #e8eeee;
+  --hover: #e8eeee;
+  --warning: #745416;
+  --error: #96382d;
+  color-scheme: light;
+  display: grid;
+  grid-template-columns: var(--workbench-sidebar-width) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 100dvh;
+  min-width: 0;
+  font-family: var(--font-body);
+  background: var(--page);
+  color: var(--text);
+}
+[data-theme='dark'] .workbench-v7.app-shell {
+  --page: #000000;
+  --surface: #0d0d0d;
+  --inset: #060606;
+  --text: #ffffff;
+  --muted: #acacac;
+  --border: #393939;
+  --accent: #4f8d7d;
+  --accent-foreground: #000000;
+  --selected: #141414;
+  --hover: #222222;
+  --warning: #edc785;
+  --error: #f6aba3;
+  color-scheme: dark;
+}
+.workbench-v7 .workbench-chrome { display: contents; }
+.workbench-v7 :is(h1, h2, h3) {
+  font-family: var(--font-display);
+  font-weight: 400;
+  text-transform: uppercase;
+}
+.workbench-v7 .main-shell {
+  grid-row: 2;
+  grid-column: 2;
+  min-width: 0;
+  max-width: 100%;
+}
+.workbench-v7 .workbench-globalbar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  min-width: 0;
+  min-height: var(--workbench-globalbar-height);
+  padding: 12px 24px 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+.workbench-v7 .workbench-brand { display: grid; gap: 3px; flex: 0 0 auto; }
+.workbench-v7 .workbench-wordmark { display: block; width: 156px; height: 31.2px; }
+.workbench-v7 .workbench-brand small { color: var(--muted); font-size: 10px; letter-spacing: .02em; }
+.workbench-v7 .workbench-account-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-left: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.workbench-v7 .workbench-theme-control { flex: 0 0 auto; }
+.workbench-v7 .workbench-session-controls,
+.workbench-v7 .workbench-session-controls .session-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.workbench-v7 .workbench-session-controls .connection { white-space: normal; }
+.workbench-v7 .workbench-sidebar {
+  grid-column: 1;
+  grid-row: 2;
+  position: sticky;
+  align-self: start;
+  top: 0;
+  max-height: 100dvh;
+  min-height: calc(100dvh - var(--workbench-globalbar-height));
+  min-width: 0;
+  padding: 24px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-right: 1px solid var(--border);
+  background: var(--inset);
+  color: var(--text);
+  overflow-y: auto;
+}
+.workbench-v7 .workbench-sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.workbench-v7 .workbench-sidebar-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.workbench-v7 .workbench-chrome button {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  min-height: 40px;
+  border: 1px solid var(--control-border);
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--text);
+  white-space: normal;
+}
+.workbench-v7 .workbench-chrome button:hover:not(:disabled) { background: var(--hover); border-color: var(--accent); }
+.workbench-v7 .workbench-sidebar-toggle { display: grid; place-items: center; flex: 0 0 40px; padding: 8px; }
+.workbench-v7 .workbench-navigation { min-width: 0; }
+.workbench-v7 .workbench-navigation nav { display: grid; gap: 5px; margin: 0; }
+.workbench-v7 .workbench-navigation .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 45px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: left;
+  text-transform: uppercase;
+  text-decoration: none;
+  background: transparent;
+  color: var(--muted);
+}
+.workbench-v7 .workbench-navigation .nav-item:hover { background: var(--hover); color: var(--text); }
+.workbench-v7 .workbench-navigation .nav-item:is(.selected, [aria-current='page'], [data-status='active']) {
+  background: var(--selected);
+  color: var(--accent);
+  border-color: var(--border);
+}
+.workbench-v7 .workbench-nav-marker { flex: 0 0 20px; text-align: center; font-size: 10px; }
+.workbench-v7 .workbench-nav-label { overflow-wrap: anywhere; }
+.workbench-v7 .workbench-chrome :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.workbench-v7 .workbench-chrome .theme-toggle { display: inline-flex; gap: 9px; align-items: center; justify-content: center; }
+.workbench-v7 .workbench-chrome .theme-track { flex-shrink: 0; background: #c9c9c9; }
+.workbench-v7 .workbench-chrome .theme-toggle[aria-checked='true'] .theme-track { background: var(--accent); }
+.workbench-v7 .workbench-chrome .theme-toggle[aria-checked='true'] .theme-track > span { background: #000000; }
+.workbench-v7 .workbench-font-notices { margin-top: auto; padding-top: 20px; color: var(--muted); font-family: var(--font-mono); font-size: 10px; }
+.workbench-v7 .workbench-font-notices summary { cursor: pointer; min-height: 40px; padding: 10px 4px; }
+.workbench-v7 .workbench-license-marker { display: none; }
+.workbench-v7 .workbench-license-content {
+  position: fixed;
+  z-index: 50;
+  left: 12px;
+  bottom: 64px;
+  width: min(650px, calc(100vw - 24px));
+  max-height: 60dvh;
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+  color: var(--text);
+}
+.workbench-v7 .workbench-license-content pre { font-family: var(--font-mono); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface); color: var(--text); }
+
+@media (max-width: 1150px) {
+  .workbench-v7.app-shell { --workbench-sidebar-width: 200px; }
+}
+@media (max-width: 760px) {
+  .workbench-v7.app-shell { --workbench-sidebar-width: 168px; --workbench-globalbar-height: 112px; }
+  .workbench-v7 .workbench-globalbar { gap: 8px; padding: 8px 12px; }
+  .workbench-v7 .workbench-brand { width: 100%; }
+  .workbench-v7 .workbench-wordmark { width: 130px; height: 26px; }
+  .workbench-v7 .workbench-account-actions { flex: 1 0 100%; gap: 8px; }
+  .workbench-v7 .workbench-sidebar { padding: 16px 8px; }
+  .workbench-v7 .workbench-chrome button { min-height: 44px; }
+  .workbench-v7 .workbench-sidebar-toggle { flex-basis: 44px; }
+}
+/* Keep this after breakpoint widths. The state lives only in Chrome, not in a
+   parent effect or storage, so temporary narrow viewports cannot erase wide intent. */
+.workbench-v7.app-shell:has(> .workbench-chrome[data-sidebar-collapsed="true"]) { --workbench-sidebar-width: 68px; }
+.workbench-v7 .workbench-chrome[data-sidebar-collapsed="true"] .workbench-sidebar-heading { justify-content: center; }
+.workbench-v7 .workbench-chrome[data-sidebar-collapsed="true"] .workbench-sidebar-label { display: none; }
+.workbench-v7 .workbench-chrome[data-sidebar-collapsed="true"] .workbench-navigation .nav-item { justify-content: center; gap: 0; padding: 8px; }
+.workbench-v7 .workbench-chrome[data-sidebar-collapsed="true"] .workbench-nav-label,
+.workbench-v7 .workbench-chrome[data-sidebar-collapsed="true"] .workbench-license-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.workbench-v7 .workbench-chrome[data-sidebar-collapsed="true"] .workbench-font-notices summary { list-style: none; text-align: center; }
+.workbench-v7 .workbench-chrome[data-sidebar-collapsed="true"] .workbench-license-marker { display: inline; }

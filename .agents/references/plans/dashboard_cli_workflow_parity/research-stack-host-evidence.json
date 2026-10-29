@@ -1,0 +1,21 @@
+{
+  "scope": "Host helper source/unit acceptance, not live provisioning or startup",
+  "source_sha256": {
+    "docker/workbench/control.py": "57b80db6e9200404b1cefe3ebdba6df42be9d55aa36b77d28fb69f34b5181541",
+    "docker/workbench/test_control.py": "a9e2560305f61fb52e9269903fdd98b2e9ac954e24765903849ed869b0cde5e4",
+    "docker/workbench/runtime.py": "7bb0d6c2042710727b1bc6f42fe4574f16bc256b25c49dca19f23a5957ac3380",
+    "docker/workbench/workbench.py": "9ee180145018afb6628cda09706774e03bc01232f51815e0276888eb3d74ac03",
+    "docker/resource_limits.py": "f542d3459ef9bed17b120b4ae4a6711732494bcaf39ba961abb8c42d7247463c"
+  },
+  "control_tests": 46,
+  "launcher_tests": 24,
+  "independent_review": "deleg_b09e0f5a: no required source blockers; additional reviewer command denied, not executed",
+  "operator_review_mode": "operator-reviewed-existing-v1",
+  "limits": [
+    "Trusted container administrators/runtime/mount writers",
+    "Listed-file hashes are not transitive or writable-layer attestation",
+    "No atomic check-to-execution guarantee",
+    "No live profiles, credentials, service startup or deployment verified"
+  ],
+  "runbook_count_synchronized": true
+}

@@ -18,6 +18,7 @@ from isaaclab_arena.tasks.predicates.temporal import TrueForConsecutiveStepsCfg,
 Predicate = Callable | TerminationTermCfg | TrueForConsecutiveStepsCfg
 PredicateSequence = list[Predicate] | list[tuple[Predicate, float]]
 PredicateSequences = dict[str, PredicateSequence]
+PredicateGroups = PredicateSequences
 
 
 DEFAULT_SEQUENCE_NAME = "default_sequence"
@@ -63,6 +64,9 @@ def _format_predicate_sequences(
         sequence_name: _format_predicate_sequence(sequence, sequence_name=sequence_name)
         for sequence_name, sequence in predicate_sequences.items()
     }
+
+
+_format_predicate_groups = _format_predicate_sequences
 
 
 def _is_predicate(value) -> bool:

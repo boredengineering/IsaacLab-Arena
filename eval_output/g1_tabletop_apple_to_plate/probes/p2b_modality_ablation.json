@@ -1,0 +1,64 @@
+{
+  "model_path": "/models/isaaclab_arena/static_apple_tutorial/gn1x_tuned_static_apple",
+  "dataset_path": "/datasets/isaaclab_arena/static_apple_tutorial/lerobot",
+  "traj_id": 0,
+  "steps_probed": [
+    60,
+    80,
+    100
+  ],
+  "mean_sampling_noise_floor": 1.2358824213345845,
+  "aggregates": {
+    "vision": {
+      "median": 3.4216107261076383,
+      "mean": 4.129586806367047,
+      "pooled": 2.128348629161286,
+      "n": 3
+    },
+    "state": {
+      "median": 6.369642974467476,
+      "mean": 7.4144621816798875,
+      "pooled": 3.0459166459699802,
+      "n": 3
+    },
+    "prompt": {
+      "median": 1.8433015526093992,
+      "mean": 1.59184581107797,
+      "pooled": 1.1402144257638485,
+      "n": 3
+    }
+  },
+  "per_step": [
+    {
+      "sampling_noise_floor": 0.3533543050289154,
+      "vision_ablation_delta": 1.209040880203247,
+      "vision_ablation_ratio": 3.4216107261076383,
+      "state_ablation_delta": 2.2507407665252686,
+      "state_ablation_ratio": 6.369642974467476,
+      "prompt_ablation_delta": 0.6922847032546997,
+      "prompt_ablation_ratio": 1.959180045076992,
+      "step": 60
+    },
+    {
+      "sampling_noise_floor": 0.31176695227622986,
+      "vision_ablation_delta": 2.3519487380981445,
+      "vision_ablation_ratio": 7.5439321612711705,
+      "state_ablation_delta": 4.481555461883545,
+      "state_ablation_ratio": 14.37469696246966,
+      "prompt_ablation_delta": 0.574680507183075,
+      "prompt_ablation_ratio": 1.8433015526093992,
+      "step": 80
+    },
+    {
+      "sampling_noise_floor": 3.0425260066986084,
+      "vision_ablation_delta": 4.33017635345459,
+      "vision_ablation_ratio": 1.4232175317223297,
+      "state_ablation_delta": 4.560888290405273,
+      "state_ablation_ratio": 1.4990466081025264,
+      "prompt_ablation_delta": 2.960547685623169,
+      "prompt_ablation_ratio": 0.9730558355475184,
+      "step": 100
+    }
+  ],
+  "verdict": "vision IS load-bearing. The fault is in what vision encodes for this scene, so photometric/appearance alignment is worth trying before a re-finetune."
+}

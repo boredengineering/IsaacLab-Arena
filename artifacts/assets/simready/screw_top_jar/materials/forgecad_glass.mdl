@@ -1,0 +1,25 @@
+mdl 1.4;
+
+import ::df::*;
+
+// ForgeCAD glass: a clear or tinted dielectric that reflects and refracts.
+// clarity is the see-through share; the rest is a diffuse surface of the same tint.
+export material forgecad_glass(
+    color tint = color(1.0),
+    float roughness = 0.0,
+    uniform float ior = 1.5,
+    float clarity = 1.0
+) = material(
+    ior: color(ior),
+    surface: material_surface(
+        scattering: df::weighted_layer(
+            weight: clarity,
+            layer: df::simple_glossy_bsdf(
+                roughness_u: roughness * roughness,
+                tint: tint,
+                mode: df::scatter_reflect_transmit
+            ),
+            base: df::diffuse_reflection_bsdf(tint: tint)
+        )
+    )
+);

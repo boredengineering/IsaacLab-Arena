@@ -1,0 +1,85 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+env_name: g1_apple_to_plate_rl
+embodiment:
+  id: robot
+  registry_name: g1_wbc_agile_joint
+  params:
+    initial_pose:
+      position_xyz: [-0.46, 0.0, 0.0007]
+      rotation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    initial_joint_pos:
+      left_shoulder_roll_joint: 0.25
+      right_shoulder_roll_joint: -0.25
+      left_shoulder_yaw_joint: 0.5
+      right_shoulder_yaw_joint: -0.5
+    finger_contact_friction:
+      material_path: /World/Materials/g1_static_pick_place_high_friction_fingers
+      static_friction: 6.0
+      dynamic_friction: 5.0
+      prim_name_markers: [hand, thumb, index, middle]
+background:
+  id: maple_table
+  registry_name: maple_table_robolab
+  params:
+    initial_pose:
+      position_xyz: [-0.58, 0.0, 0.078]
+      rotation_xyzw: [0.0, 0.0, 0.0, 1.0]
+objects:
+- id: apple_01_objaverse_robolab
+  registry_name: apple_01_objaverse_robolab
+  params:
+    initial_pose:
+      position_xyz: [-0.1730, 0.1900, 0.0975]
+      rotation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    scale: [0.009, 0.009, 0.009]
+- id: clay_plates_hot3d_robolab
+  registry_name: clay_plates_hot3d_robolab
+  params:
+    initial_pose:
+      position_xyz: [-0.1730, -0.0200, 0.0780]
+      rotation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    scale: [0.5, 0.5, 0.5]
+relations:
+- kind: is_anchor
+  subject: maple_table
+  params: {}
+- kind: is_anchor
+  subject: apple_01_objaverse_robolab
+  params: {}
+- kind: is_anchor
+  subject: clay_plates_hot3d_robolab
+  params: {}
+reified_relations:
+- reifier_id: reifier_apple_table
+  source_id: apple_01_objaverse_robolab
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_deck
+  surface_sector: front_right
+  contact_normal: [0.0, 0.0, 1.0]
+  required_friction: 5.0
+  kinematic_manifold: unitree_g1_left_arm_tabletop_reach
+- reifier_id: reifier_plate_table
+  source_id: clay_plates_hot3d_robolab
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_deck
+  surface_sector: front_left
+  contact_normal: [0.0, 0.0, 1.0]
+  required_friction: 1.0
+task:
+  composition: atomic
+  description: Pick up the apple_01_objaverse_robolab, and place it into the clay_plates_hot3d_robolab
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: apple_01_objaverse_robolab
+      destination_location: clay_plates_hot3d_robolab
+      background_scene: maple_table
+      episode_length_s: 6.0
+      min_lift_height: 0.03
+      max_destination_xy_separation: 0.075

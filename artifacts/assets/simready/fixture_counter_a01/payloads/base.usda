@@ -1,0 +1,546 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary SimReady_Metadata = {
+            dictionary Variants = {
+                dictionary Physics = {
+                    dictionary MuJoCo = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "MuJoCo"
+                    }
+                    dictionary Newton = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "Newton"
+                    }
+                    dictionary PhysX = {
+                        string activateOption = "Enabled"
+                        string prim = "/RootNode"
+                        string variantSetName = "PhysX"
+                    }
+                }
+            }
+            string asset_location = "simready_content\\common_assets\\props_endeavor_kitchen\\fixture_counter_a01\\simready_physx_usd\\sm_fixture_counter_a01_01.usd"
+            string asset_type = "prop"
+            string uuid = "dc84762e-f7de-4952-a31a-2ab5abff716f"
+            dictionary validation = {
+                string profile = "Robotics-Prop"
+                string profile_version = "3.1.0"
+                dictionary validated_features = {
+                    dictionary "2026-02-20" = {
+                        dictionary FET000_CORE = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET001_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['AA.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET003_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_NEUTRAL = {
+                            string dependencies = "[{'FET003_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET004_BASE_PHYSX = {
+                            string dependencies = "[{'FET003_BASE_PHYSX': {'version': '0.1.0'}}, {'FET004_BASE_NEUTRAL': {'version': '0.1.0'}}]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET005_BASE_NEUTRAL = {
+                            string dependencies = "[]"
+                            bool passed = 1
+                            string version = "0.1.0"
+                        }
+                        dictionary FET006_BASE_MDL = {
+                            string dependencies = "[]"
+                            string "failing requirements" = "['VM.MDL.001']"
+                            bool passed = 0
+                            string version = "0.1.0"
+                        }
+                    }
+                }
+            }
+        }
+        string asset_dir = "simready_content/common_assets/props_endeavor_kitchen/fixture_counter_a01"
+        string asset_name = "fixture_counter_a01"
+        string asset_type = "prop"
+        string profile = "Prop-Robotics-Neutral"
+        string source_file = "../simready_usd/sm_fixture_counter_a01_01.usd"
+        string usd_date_generated = "2026-02-20 17:05:57"
+        bool used_dsrs_exporter = 1
+    }
+    defaultPrim = "RootNode"
+    metersPerUnit = 1
+    subLayers = [
+        @./Physics/physics.usda@
+    ]
+    upAxis = "Z"
+)
+
+def Xform "RootNode" (
+    prepend apiSchemas = ["SemanticsLabelsAPI:wikidata_class", "SemanticsAPI:wikidata_class", "SemanticsLabelsAPI:wikidata_qcode", "SemanticsAPI:wikidata_qcode"]
+    assetInfo = {
+        asset identifier = @../sm_fixture_counter_a01_01.usd@
+        string name = "sm_fixture_counter_a01_01"
+    }
+    customData = {
+        dictionary Blender = {
+            bool generated = 1
+        }
+        dictionary omni = {
+            dictionary cip = {
+                string timestamp = "2026-02-20 17:08:30"
+                string type = "prop"
+                dictionary validator = {
+                    string[] rules = []
+                    string version = "1.1.6"
+                }
+            }
+        }
+    }
+    kind = "component"
+)
+{
+    custom string omni:simready:documentation = "furniture item"
+    string semantic:wikidata_class:params:semanticData = "counter"
+    string semantic:wikidata_class:params:semanticType = "wikidata_class"
+    string semantic:wikidata_qcode:params:semanticData = "Q1420266"
+    string semantic:wikidata_qcode:params:semanticType = "wikidata_qcode"
+    token[] semantics:labels:wikidata_class = ["counter"]
+    token[] semantics:labels:wikidata_qcode = ["Q1420266"]
+
+    def Scope "Materials"
+    {
+    }
+
+    def Scope "Geometry"
+    {
+        def Xform "shelf_03_obj_00" (
+            active = true
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/shelf_03_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom float3 pxr:usd:physics_centerofmass = (-0.46606013, -0.00017189271, -0.035812207)
+            custom double3 pxr:usd:physics_inertia = (1.1999044707789208, 1.3532434094494294, 2.40701154042975)
+            custom double pxr:usd:physics_mass = 20.13248053151481
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2594617307, -0.977899909, 0.5003246665)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "body_01_obj_00" (
+            active = true
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/body_01_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom float3 pxr:usd:physics_centerofmass = (0.35907266, -0.4835817, 0.4106029)
+            custom double3 pxr:usd:physics_inertia = (143.23138678414344, 19.006205500370008, 133.22534290809284)
+            custom double pxr:usd:physics_mass = 129.8478953135358
+            token visibility = "inherited"
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.3392239511, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "shelf_08_obj_00" (
+            active = true
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/shelf_08_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom float3 pxr:usd:physics_centerofmass = (-0.4336727, 0.004527154, -0.1969986)
+            custom double3 pxr:usd:physics_inertia = (6.102100232261154, 2.190936030218179, 7.098351665628514)
+            custom double pxr:usd:physics_mass = 32.97645159725612
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.3335936575, 1.130306721, 0.4556723528)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "shelf_02_obj_00" (
+            active = true
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/shelf_02_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom float3 pxr:usd:physics_centerofmass = (-0.46566424, -0.00020987233, -0.035838995)
+            custom double3 pxr:usd:physics_inertia = (1.1984467846454145, 1.3490553120431095, 2.401321362491688)
+            custom double pxr:usd:physics_mass = 20.13297141446109
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.259458214, -0.977899909, 0.7032589316)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "shelf_01_obj_00" (
+            active = true
+            prepend apiSchemas = ["MaterialBindingAPI"]
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/shelf_01_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom rel material:binding:physics = </RootNode/PhysicsMaterials/physics_mat_m_opaque__plastic__black_a01>
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom float3 pxr:usd:physics_centerofmass = (-0.4135444, -0.000078598234, -0.19309834)
+            custom double3 pxr:usd:physics_inertia = (6.640945014635051, 8.337594470532391, 3.8158783276072783)
+            custom double pxr:usd:physics_mass = 38.51520002604547
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2703720033, -1.358780861, 0.6392798424)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "shelf_04_obj_00" (
+            active = true
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/shelf_04_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom float3 pxr:usd:physics_centerofmass = (-0.4660612, -0.00009540656, -0.035804894)
+            custom double3 pxr:usd:physics_inertia = (1.1989192828840627, 1.3532286640435636, 2.4059887739712726)
+            custom double pxr:usd:physics_mass = 20.131263044505765
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2594636977, -0.977899909, 0.2973885238)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "shelf_06_obj_00" (
+            active = true
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/shelf_06_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom float3 pxr:usd:physics_centerofmass = (-0.43465468, 0.000029140352, -0.19625159)
+            custom double3 pxr:usd:physics_inertia = (9.047877405613596, 2.3682461085782887, 10.20054959723845)
+            custom double pxr:usd:physics_mass = 35.20101428204614
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.3337612748, -0.3048028648, 0.450848043)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "shelf_05_obj_00" (
+            active = true
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/shelf_05_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom float3 pxr:usd:physics_centerofmass = (-0.021143155, 0.09513955, 0.034891255)
+            custom double3 pxr:usd:physics_inertia = (0.27979354805895007, 0.1527466647880634, 0.1315249508088832)
+            custom double pxr:usd:physics_mass = 2.4345019579517535
+            token visibility = "inherited"
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2969649196, -1.203214169, 0.4997504652)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+
+        def Xform "shelf_07_obj_00" (
+            active = true
+            instanceable = true
+            prepend references = @./instances.usda@</Instances/shelf_08_mesh_00>
+        )
+        {
+            custom bool _renamed = 1
+            custom double4 pxr:physics:principalAxes = (1, 0, 0, 0)
+            custom float3 pxr:usd:physics_centerofmass = (-0.4336727, 0.004527154, -0.1969986)
+            custom double3 pxr:usd:physics_inertia = (6.102100232261154, 2.190936030218179, 7.098351665628514)
+            custom double pxr:usd:physics_mass = 32.97645159725612
+            quatd xformOp:orient = (1, 0, 0, 0)
+            double3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.3340068618, 1.130306721, 0.8359417496)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+        }
+    }
+
+    def Scope "ReferencePrims"
+    {
+        def Xform "shelf_05_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:shelf_05_joint_00"]
+        )
+        {
+            rel collection:shelf_05_joint_00:includes = </RootNode/Geometry/shelf_05_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "Z"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "shelf_05_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0
+            custom string pxr:usd:physics:joint:type = "revolute"
+            custom double pxr:usd:physics:joint:upperLimit = -1.5707963705062866
+            custom double3 pxr:usd:physics:localPos0 = (0.6350016593933105, -1.205509901046753, 0.4997504651546478)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.29577767848968506, -1.205509901046753, 0.4997504651546478)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "shelf_02_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:shelf_02_joint_00"]
+        )
+        {
+            rel collection:shelf_02_joint_00:includes = </RootNode/Geometry/shelf_02_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "X"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "shelf_02_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0
+            custom string pxr:usd:physics:joint:type = "prismatic"
+            custom double pxr:usd:physics:joint:upperLimit = 0.47991999983787537
+            custom double3 pxr:usd:physics:localPos0 = (0.6095959544181824, -0.9778999090194702, 0.7032589316368103)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2703720033168793, -0.9778999090194702, 0.7032589316368103)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "body_01_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:body_01_joint_00"]
+        )
+        {
+            custom bool _renamed = 1
+            rel collection:body_01_joint_00:includes = </RootNode/Geometry/body_01_obj_00>
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (-0.3392239511013031, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "shelf_01_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:shelf_01_joint_00"]
+        )
+        {
+            rel collection:shelf_01_joint_00:includes = </RootNode/Geometry/shelf_01_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "X"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "shelf_01_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0
+            custom string pxr:usd:physics:joint:type = "prismatic"
+            custom double pxr:usd:physics:joint:upperLimit = 0.4606809914112091
+            custom double3 pxr:usd:physics:localPos0 = (0.6095959544181824, -1.358780860900879, 0.639279842376709)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2703720033168793, -1.358780860900879, 0.639279842376709)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "shelf_03_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:shelf_03_joint_00"]
+        )
+        {
+            rel collection:shelf_03_joint_00:includes = </RootNode/Geometry/shelf_03_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "X"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "shelf_03_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = -0.000003516674041748047
+            custom string pxr:usd:physics:joint:type = "prismatic"
+            custom double pxr:usd:physics:joint:upperLimit = 0.4799164831638336
+            custom double3 pxr:usd:physics:localPos0 = (0.6095994710922241, -0.9778999090194702, 0.5003246665000916)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.270375519990921, -0.9778999090194702, 0.5003246665000916)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "shelf_06_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:shelf_06_joint_00"]
+        )
+        {
+            rel collection:shelf_06_joint_00:includes = </RootNode/Geometry/shelf_06_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "X"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "shelf_06_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0
+            custom string pxr:usd:physics:joint:type = "prismatic"
+            custom double pxr:usd:physics:joint:upperLimit = 0.46087199449539185
+            custom double3 pxr:usd:physics:localPos0 = (0.6719539165496826, -0.30480286478996277, 0.4508480429649353)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.3327299952507019, -0.30480286478996277, 0.4508480429649353)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "shelf_04_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:shelf_04_joint_00"]
+        )
+        {
+            rel collection:shelf_04_joint_00:includes = </RootNode/Geometry/shelf_04_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "X"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "shelf_04_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = -0.0000054836273193359375
+            custom string pxr:usd:physics:joint:type = "prismatic"
+            custom double pxr:usd:physics:joint:upperLimit = 0.47991451621055603
+            custom double3 pxr:usd:physics:localPos0 = (0.6096014380455017, -0.9778999090194702, 0.2973885238170624)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.2703774869441986, -0.9778999090194702, 0.2973885238170624)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "shelf_08_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:shelf_08_joint_00"]
+        )
+        {
+            rel collection:shelf_08_joint_00:includes = </RootNode/Geometry/shelf_08_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "X"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "shelf_08_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0.000002175569534301758
+            custom string pxr:usd:physics:joint:type = "prismatic"
+            custom double pxr:usd:physics:joint:upperLimit = 0.46087417006492615
+            custom double3 pxr:usd:physics:localPos0 = (0.6719517707824707, 1.1303067207336426, 0.4508479833602905)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.3327278196811676, 1.1303067207336426, 0.4508479833602905)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def Xform "shelf_07_joint_00" (
+            prepend apiSchemas = ["CollectionAPI:shelf_07_joint_00"]
+        )
+        {
+            rel collection:shelf_07_joint_00:includes = </RootNode/Geometry/shelf_07_obj_00>
+            custom double pxr:usd:physics:breakForce = inf
+            custom double pxr:usd:physics:breakTorque = inf
+            custom string pxr:usd:physics:joint:axis = "X"
+            custom string pxr:usd:physics:joint:body0 = "body_01_obj_00"
+            custom string pxr:usd:physics:joint:body1 = "shelf_07_obj_00"
+            custom double pxr:usd:physics:joint:lowerLimit = 0
+            custom string pxr:usd:physics:joint:type = "prismatic"
+            custom double pxr:usd:physics:joint:upperLimit = 0.46087199449539185
+            custom double3 pxr:usd:physics:localPos0 = (0.6719539165496826, 1.1208536624908447, 0.832363486289978)
+            custom double3 pxr:usd:physics:localPos1 = (0, 0, 0)
+            custom double4 pxr:usd:physics:localRot0 = (1, 0, 0, 0)
+            custom double4 pxr:usd:physics:localRot1 = (1, 0, 0, 0)
+            float3 xformOp:rotateXYZ = (0, 0, 0)
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (0.3327299952507019, 1.1208536624908447, 0.832363486289978)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+    }
+
+    def Scope "Grasp"
+    {
+    }
+
+    def Scope "PhysicsMaterials"
+    {
+        def Material "physics_mat_m_opaque__plastic__black_a01" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token[] semantics:labels:material = ["plastic"]
+        }
+
+        def Material "physics_mat_m_opaque__metal__white_a01" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token[] semantics:labels:material = ["steel"]
+        }
+
+        def Material "physics_mat_m_opaque__plastic__white_a01" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token[] semantics:labels:material = ["plastic"]
+        }
+
+        def Material "physics_mat_m_opaque__metal__chrome_a01" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token[] semantics:labels:material = ["steel"]
+        }
+
+        def Material "physics_mat_m_opaque__metal__glossy_a01" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token[] semantics:labels:material = ["steel"]
+        }
+
+        def Material "physics_mat_m_opaque__wood__counter_a01" (
+            prepend apiSchemas = ["SemanticsLabelsAPI:material"]
+        )
+        {
+            token[] semantics:labels:material = ["wood"]
+        }
+    }
+
+    def Scope "Joints"
+    {
+    }
+
+    def Scope "VisualMaterials"
+    {
+    }
+}
+

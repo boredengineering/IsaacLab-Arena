@@ -1,0 +1,92 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:activity_eval_run_s4_griptest_20260907 a prov:Activity ;
+    prov:generated :eval_run_s4_griptest_20260907 ;
+    prov:used :policy_gn1x_static_apple_griptest .
+
+:belief_eval_run_s4_griptest_20260907_contact_timing_mismatch a arena:ProbeObservation ;
+    arena:observationMetric "posterior_belief::contact_timing_mismatch"^^xsd:string ;
+    arena:observationValue "0.7"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_griptest_20260907 .
+
+:belief_eval_run_s4_griptest_20260907_lateral_reach_error a arena:ProbeObservation ;
+    arena:observationMetric "posterior_belief::lateral_reach_error"^^xsd:string ;
+    arena:observationValue "0.9"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_griptest_20260907 .
+
+:belief_eval_run_s4_griptest_20260907_premature_closure_lockout a arena:ProbeObservation ;
+    arena:observationMetric "posterior_belief::premature_closure_lockout"^^xsd:string ;
+    arena:observationValue "0.05"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_griptest_20260907 .
+
+:belief_eval_run_s4_griptest_20260907_vertical_reach_ood a arena:ProbeObservation ;
+    arena:observationMetric "posterior_belief::vertical_reach_ood"^^xsd:string ;
+    arena:observationValue "0.15"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_griptest_20260907 .
+
+:failure_contact_timing_mismatch arena:posteriorBelief "0.7"^^xsd:float .
+
+:failure_vertical_reach_ood arena:posteriorBelief "0.15"^^xsd:float .
+
+:observation_eval_run_s4_griptest_20260907_0 a arena:ProbeObservation ;
+    rdfs:comment "griptest: 20 episodes, success=0.0"^^xsd:string ;
+    arena:likelihoodRatio "3.0"^^xsd:float ;
+    arena:observationMetric "reference_scene_success_rate"^^xsd:string ;
+    arena:observationValue "0.0"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_griptest_20260907 ;
+    arena:producedByTechnique :diagnostic_reference_scene_control_run .
+
+:observation_eval_run_s4_griptest_20260907_1 a arena:ProbeObservation ;
+    rdfs:comment "pinned frame left_hand_middle_1_link; lateral error 0.1225m"^^xsd:string ;
+    arena:likelihoodRatio "3.0"^^xsd:float ;
+    arena:observationMetric "hand_lateral_to_obj_at_closest"^^xsd:string ;
+    arena:observationValue "0.122475"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_griptest_20260907 ;
+    arena:producedByTechnique :diagnostic_reference_scene_control_run .
+
+:observation_eval_run_s4_griptest_20260907_2 a arena:ProbeObservation ;
+    rdfs:comment "pinned frame left_hand_middle_1_link; vertical error +0.0533m"^^xsd:string ;
+    arena:likelihoodRatio "3.0"^^xsd:float ;
+    arena:observationMetric "hand_z_minus_obj_at_closest"^^xsd:string ;
+    arena:observationValue "0.05333"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_griptest_20260907 ;
+    arena:producedByTechnique :diagnostic_reference_scene_control_run .
+
+:observation_eval_run_s4_griptest_20260907_3 a arena:ProbeObservation ;
+    rdfs:comment "pinned frame left_hand_middle_1_link; 3d distance 0.1406m"^^xsd:string ;
+    arena:likelihoodRatio "3.0"^^xsd:float ;
+    arena:observationMetric "hand_dist_to_obj_at_closest"^^xsd:string ;
+    arena:observationValue "0.14064"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_griptest_20260907 ;
+    arena:producedByTechnique :diagnostic_reference_scene_control_run .
+
+:observation_eval_run_s4_griptest_20260907_4 a arena:ProbeObservation ;
+    rdfs:comment "reopens below 0.025 at closest approach; not grasping prematurely on contact"^^xsd:string ;
+    arena:likelihoodRatio "3.0"^^xsd:float ;
+    arena:observationMetric "closure_at_closest_approach"^^xsd:string ;
+    arena:observationValue "0.0122"^^xsd:float ;
+    arena:observedDuring :eval_run_s4_griptest_20260907 ;
+    arena:producedByTechnique :diagnostic_gripper_closure_timing_probe ;
+    arena:refutes :failure_premature_closure_lockout .
+
+:failure_lateral_reach_error arena:posteriorBelief "0.9"^^xsd:float .
+
+:failure_premature_closure_lockout arena:posteriorBelief "0.05"^^xsd:float .
+
+:eval_run_s4_griptest_20260907 a arena:EvaluationRun ;
+    arena:appliedTechnique :diagnostic_gripper_closure_timing_probe,
+        :diagnostic_reference_scene_control_run ;
+    arena:attributedToFailureMode :failure_lateral_reach_error ;
+    arena:evaluatedGraph :galileo_g1_static_pick_and_place ;
+    arena:evaluatedPolicy :policy_gn1x_static_apple_griptest ;
+    arena:metric_dist_median_m "0.14064"^^xsd:float ;
+    arena:metric_lateral_median_m "0.122475"^^xsd:float ;
+    arena:metric_num_episodes 20 ;
+    arena:metric_success_rate 0 ;
+    arena:metric_vertical_median_m "0.05333"^^xsd:float ;
+    arena:metricsPayload "{\"success_rate\": 0.0, \"num_episodes\": 20, \"lateral_median_m\": 0.122475, \"vertical_median_m\": 0.05333, \"dist_median_m\": 0.14064}"^^xsd:string ;
+    arena:nextTechnique :diagnostic_success_progress_consistency_check .

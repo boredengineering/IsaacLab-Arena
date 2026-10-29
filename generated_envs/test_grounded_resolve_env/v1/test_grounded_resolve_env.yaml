@@ -1,0 +1,140 @@
+env_name: banana_to_red_bowl_packing_table
+embodiment:
+  id: robot_droid
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.4367
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: background_packing_table
+  registry_name: packing_table
+  params: {}
+objects:
+- id: yellow_banana
+  registry_name: banana_ycb_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.09
+      - -0.1997
+      - 0.7493
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: red_bowl
+  registry_name: bowl_ycb_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.09
+      - 0.1997
+      - 0.7493
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: background_packing_table
+  params: {}
+- kind: 'on'
+  subject: yellow_banana
+  reference: background_packing_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_right
+- kind: 'on'
+  subject: red_bowl
+  reference: background_packing_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_left
+reified_relations:
+- reifier_id: reifier_banana_table
+  source_id: yellow_banana
+  relation_type: PLACED_ON
+  target_id: background_packing_table
+  surface_anchor: table_top
+  surface_sector: front_right
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: 0.3
+    max_val: 0.5
+    nominal: 0.4
+  delta_y:
+    min_val: -0.1
+    max_val: 0.1
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.0
+    nominal: 0.0
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+- reifier_id: reifier_bowl_table
+  source_id: red_bowl
+  relation_type: PLACED_ON
+  target_id: background_packing_table
+  surface_anchor: table_top
+  surface_sector: front_left
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.5
+    max_val: -0.3
+    nominal: -0.4
+  delta_y:
+    min_val: -0.1
+    max_val: 0.1
+    nominal: 0.0
+  delta_z:
+    min_val: 0.0
+    max_val: 0.0
+    nominal: 0.0
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+placement_validators:
+  enabled_checks:
+  - non_overlap
+  - reachability
+  - headroom
+  - friction
+  required_checks:
+  - headroom
+  - friction
+task:
+  composition: atomic
+  description: Grasp the yellow banana from the front right side of the packing table
+    and place it into the red bowl on the front left.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: yellow_banana
+      destination_location: red_bowl
+      background_scene: background_packing_table

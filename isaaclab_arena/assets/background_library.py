@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from pathlib import Path
 from typing import Any
 
 import isaaclab.sim as sim_utils
@@ -15,6 +16,8 @@ from isaaclab_arena.assets.lightwheel_utils import acquire_lightwheel_asset
 from isaaclab_arena.assets.nucleus import ARENA_NUCLEUS_DIR, ISAAC_STAGING_NUCLEUS_DIR
 from isaaclab_arena.assets.register import register_asset
 from isaaclab_arena.utils.pose import Pose
+
+_SIMREADY_LOCAL_DIR = Path(__file__).resolve().parents[2] / "artifacts" / "assets" / "simready"
 
 
 class LibraryBackground(Background):
@@ -34,11 +37,12 @@ class LibraryBackground(Background):
     def __init__(self, **kwargs):
         # Check lazy USD paths are set by here
         assert self.usd_path is not None
+        initial_pose = kwargs.pop("initial_pose", self.initial_pose)
         super().__init__(
             name=self.name,
             tags=self.tags,
             usd_path=self.usd_path,
-            initial_pose=self.initial_pose,
+            initial_pose=initial_pose,
             object_min_z=self.object_min_z,
             spawn_cfg_addon=self.spawn_cfg_addon,
             asset_cfg_addon=self.asset_cfg_addon,
@@ -145,7 +149,8 @@ class OfficeTableBackground(LibraryBackground):
     }
 
     def __init__(self, **kwargs):
-        super().__init__(scale=self.scale, **kwargs)
+        kwargs.setdefault("scale", self.scale)
+        super().__init__(**kwargs)
 
 
 @register_asset
@@ -217,6 +222,90 @@ class TableOakRobolab(LibraryBackground):
     tags = ["background", "robolab"]
     usd_path = f"{ARENA_NUCLEUS_DIR}/Arena/assets/object_library/srl_robolab_assets/fixtures/table_oak.usd"
     object_min_z = -0.05
+
+
+@register_asset
+class KitchenBaseCabinetBackground(LibraryBackground):
+    """SimReady ForgeCAD kitchen base cabinet with intrinsic prismatic drawer and revolute door."""
+
+    name = "kitchen_base_cabinet"
+    tags = ["background", "simready", "articulated_fixture"]
+    usd_path = str(_SIMREADY_LOCAL_DIR / "kitchen_base_cabinet" / "kitchen_base_cabinet.usda")
+    object_min_z = -0.05
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+
+@register_asset
+class FixtureCounterA01Background(LibraryBackground):
+    """SimReady PalatialSim commercial kitchen counter with intrinsic prismatic drawers."""
+
+    name = "fixture_counter_a01"
+    tags = ["background", "simready", "articulated_fixture"]
+    usd_path = str(_SIMREADY_LOCAL_DIR / "fixture_counter_a01" / "sm_fixture_counter_a01_01.usd")
+    object_min_z = -0.05
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+
+@register_asset
+class SmFixtureCounterA01Background(FixtureCounterA01Background):
+    """Canonical SimReady asset alias for FixtureCounterA01Background."""
+
+    name = "sm_fixture_counter_a01_01"
+
+
+@register_asset
+class CartMedicalUtilityBackground(LibraryBackground):
+    """SimReady NVIDIA medical utility cart with dual revolute doors/lids and prismatic drawers."""
+
+    name = "cart_medical_utility"
+    tags = ["background", "simready", "articulated_fixture"]
+    usd_path = str(_SIMREADY_LOCAL_DIR / "cart_medical_utility_a03" / "sm_cart_medical_utility_a03_01.usd")
+    object_min_z = -0.05
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+
+@register_asset
+class SmCartMedicalUtilityA03Background(CartMedicalUtilityBackground):
+    """Canonical SimReady asset alias for CartMedicalUtilityBackground."""
+
+    name = "sm_cart_medical_utility_a03_01"
+
+
+@register_asset
+class FacilityEquipmentBeverageFridgeBackground(LibraryBackground):
+    """SimReady commercial display beverage refrigerator with intrinsic revolute glass door."""
+
+    name = "facilityEquipment_beverageFridge_display_a01"
+    tags = ["background", "simready", "articulated_fixture"]
+    usd_path = str(
+        _SIMREADY_LOCAL_DIR
+        / "facilityEquipment_beverageFridge_display_a01"
+        / "sm_facilityEquipment_beverageFridge_display_a01_01.usd"
+    )
+    object_min_z = -0.05
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+
+@register_asset
+class SmFacilityEquipmentBeverageFridgeDisplayA01Background(FacilityEquipmentBeverageFridgeBackground):
+    """Canonical SimReady asset alias for FacilityEquipmentBeverageFridgeBackground."""
+
+    name = "sm_facilityEquipment_beverageFridge_display_a01_01"
+
+
+@register_asset
+class BeverageFridgeBackground(FacilityEquipmentBeverageFridgeBackground):
+    """Canonical short alias for beverage display refrigerator."""
+
+    name = "beverage_fridge"
 
 
 # -----------------------------------------------------------------------------

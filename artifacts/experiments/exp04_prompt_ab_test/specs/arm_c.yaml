@@ -1,0 +1,161 @@
+env_name: exp04_d1c_microwave
+embodiment:
+  id: droid
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.8
+      - 0.0
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: office_table
+  registry_name: office_table_background
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.0
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - -0.7071068
+      - 0.7071068
+objects:
+- id: microwave
+  registry_name: microwave
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.15
+      - -0.15
+      - 0.531
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - -0.7071068
+      - 0.7071068
+- id: tomato_soup_can
+  registry_name: tomato_soup_can_ycb_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.2
+      - 0.45
+      - 0.531
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: office_table
+  params: {}
+- kind: 'on'
+  subject: microwave
+  reference: office_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_right
+- kind: rotate_around_solution
+  subject: microwave
+  params:
+    yaw_rad: -1.5708
+- kind: 'on'
+  subject: tomato_soup_can
+  reference: office_table
+  params:
+    surface_anchor: table_top
+    surface_sector: front_left
+reified_relations:
+- reifier_id: reifier_microwave_office_table
+  source_id: microwave
+  relation_type: PLACED_ON
+  target_id: office_table
+  surface_anchor: table_top
+  surface_sector: front_right
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: 0.05
+    max_val: 0.25
+    nominal: 0.15
+  delta_y:
+    min_val: -0.25
+    max_val: -0.05
+    nominal: -0.15
+  delta_z:
+    min_val: 0.531
+    max_val: 0.531
+    nominal: 0.531
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+  - motion_clearance_engine
+- reifier_id: reifier_tomato_soup_can_office_table
+  source_id: tomato_soup_can
+  relation_type: PLACED_ON
+  target_id: office_table
+  surface_anchor: table_top
+  surface_sector: front_left
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: -0.25
+    max_val: -0.15
+    nominal: -0.2
+  delta_y:
+    min_val: 0.35
+    max_val: 0.55
+    nominal: 0.45
+  delta_z:
+    min_val: 0.531
+    max_val: 0.531
+    nominal: 0.531
+  required_headroom: 0.35
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+  - motion_clearance_engine
+placement_validators:
+  enabled_checks:
+  - non_overlap
+  - reachability
+  - containment
+  required_checks:
+  - non_overlap
+  - reachability
+  - containment
+task:
+  composition: sequential
+  description: Pick up the tomato soup can and place it on the turntable inside the
+    microwave.
+  subtasks:
+  - kind: OpenDoorTask
+    params:
+      openable_object: microwave
+      openness_threshold: 0.8
+      reset_openness: 0.85
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: tomato_soup_can
+      destination_location: microwave
+      background_scene: office_table

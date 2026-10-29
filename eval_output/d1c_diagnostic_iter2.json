@@ -1,0 +1,33 @@
+{
+  "spec_path": "generated_envs/droid_microwave_subtask_3c_open_and_stow/repaired/droid_microwave_subtask_3c_open_and_stow.yaml",
+  "timestamp_utc": "2026-10-25T02:06:26.523498+00:00",
+  "conforms": false,
+  "passes": {
+    "pass1_schema": true,
+    "pass2_kinematics": true,
+    "pass3_swept_sector": false,
+    "pass3_footprint_clearance": true,
+    "pass4_handoff": false,
+    "pass5_facing": true
+  },
+  "defects": [
+    {
+      "code": "SWEPT_VOLUME_COLLISION",
+      "object": "tomato_soup_can",
+      "clearance_m": -0.09586187348508896,
+      "message": "Revolute door swing arc (R=0.35m) collides with object at (0.55, -0.45). Clearance -0.096m < required 0.10m margin.",
+      "remediation": "Shift 'tomato_soup_can' Y-coordinate to >= 0.35m (e.g. 0.35m) or <= -0.65m to place safely outside door swing arc."
+    },
+    {
+      "code": "OPENNESS_THRESHOLD_LOW",
+      "threshold": 0.0,
+      "message": "Open task threshold 0.00 < required 0.75 for clearance."
+    }
+  ],
+  "diagnostics": [
+    "Pass 1: Schema integrity verified (2 objects registered).",
+    "Pass 2: USD kinematics verified for 'microwave' (type: revolute, joint: 'microjoint', limits: (0.0, 1.5708), axis: [0, 0, 1]).",
+    "Pass 3b: Tabletop 2D bounding footprint clearances verified across all surface objects.",
+    "Pass 5: 'microwave' Aperture facing verified (alignment = -1.00)."
+  ]
+}

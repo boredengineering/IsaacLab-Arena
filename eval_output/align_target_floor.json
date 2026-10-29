@@ -1,0 +1,29 @@
+{
+  "teacher": "/models/isaaclab_arena/DA3METRIC-LARGE",
+  "grids": [
+    {
+      "tokens": 264,
+      "cosine_to_mean": 0.8730530142784119,
+      "constant_predictor_align_loss": 0.12694698572158813,
+      "effective_rank": 8.621127980648348,
+      "dims_for_90pct_variance": 21,
+      "top_eigenvalue_share": 0.2755056917667389,
+      "grid": [
+        8,
+        11
+      ]
+    },
+    {
+      "tokens": 5439,
+      "cosine_to_mean": 0.8554134368896484,
+      "constant_predictor_align_loss": 0.14458656311035156,
+      "effective_rank": 11.300146687579247,
+      "dims_for_90pct_variance": 37,
+      "top_eigenvalue_share": 0.23274162411689758,
+      "grid": [
+        37,
+        49
+      ]
+    }
+  ]
+}

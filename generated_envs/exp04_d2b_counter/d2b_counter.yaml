@@ -1,0 +1,120 @@
+env_name: exp04_d2b_counter
+embodiment:
+  id: droid
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - -0.95
+      - 0.0
+      - 0.75
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: fixture_counter_a01
+  registry_name: fixture_counter_a01
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.10
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - -0.7071068
+      - 0.7071068
+objects:
+- id: tomato_soup_can
+  registry_name: tomato_soup_can_ycb_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.10
+      - 0.48
+      - 0.90
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+object_references:
+- id: storage_drawer
+  parent_id: fixture_counter_a01
+  prim_path: /Geometry/shelf_02_obj_00/shelf_02_mesh_00
+  object_type: articulation
+  params:
+    openable_joint_name: joint_shelf_02_joint_00
+relations:
+- kind: is_anchor
+  subject: fixture_counter_a01
+  params: {}
+- kind: is_anchor
+  subject: storage_drawer
+  params: {}
+- kind: 'on'
+  subject: tomato_soup_can
+  reference: fixture_counter_a01
+  params:
+    surface_anchor: counter_deck
+    surface_sector: front_left
+reified_relations:
+- reifier_id: reifier_tomato_soup_can_counter_deck
+  source_id: tomato_soup_can
+  relation_type: PLACED_ON
+  target_id: fixture_counter_a01
+  surface_anchor: counter_deck
+  surface_sector: front_left
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: 0.05
+    max_val: 0.15
+    nominal: 0.10
+  delta_y:
+    min_val: 0.44
+    max_val: 0.52
+    nominal: 0.48
+  delta_z:
+    min_val: 0.90
+    max_val: 0.90
+    nominal: 0.90
+  required_headroom: 0.30
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.5
+  posterior_entropy: 0.05
+  evidence_sources:
+  - tabletop_spatial_planner
+  - motion_clearance_engine
+placement_validators:
+  enabled_checks:
+  - non_overlap
+  - reachability
+  - containment
+  required_checks:
+  - non_overlap
+  - reachability
+  - containment
+task:
+  composition: sequential
+  description: Pull open the intrinsic counter drawer along its prismatic slide axis, stow the tomato soup can upright inside the drawer cavity, and push the drawer completely closed.
+  subtasks:
+  - kind: OpenDrawerTask
+    params:
+      openable_object: storage_drawer
+      openness_threshold: 0.80
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: tomato_soup_can
+      destination_location: storage_drawer
+      background_scene: fixture_counter_a01
+  - kind: CloseDrawerTask
+    params:
+      openable_object: storage_drawer
+      closedness_threshold: 0.10

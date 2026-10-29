@@ -128,3 +128,65 @@ def add_policy_runner_arguments(parser: argparse.ArgumentParser) -> None:
         default=8000,
         help="Port to serve the evaluation report on when --serve_evaluation_report is set. Defaults to 8000.",
     )
+    parser.add_argument(
+        "--check_settling",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Check that all movable scene objects physically settle before/during policy inference.",
+    )
+    parser.add_argument(
+        "--settle_steps",
+        type=int,
+        default=50,
+        help=(
+            "Number of initial simulation steps to allow objects and robot to settle onto surfaces before policy"
+            " rollout."
+        ),
+    )
+    parser.add_argument(
+        "--settle_lin_vel_thresh",
+        type=float,
+        default=0.1,
+        help="Max per-object linear speed (m/s) for an object to be considered settled.",
+    )
+    parser.add_argument(
+        "--settle_ang_vel_thresh",
+        type=float,
+        default=1.0,
+        help="Max per-object angular speed (rad/s) for an object to be considered settled.",
+    )
+    parser.add_argument(
+        "--trace_reach",
+        type=str,
+        default=None,
+        help=(
+            "Log per-step reach geometry to this JSONL path: the manipuland's height above its "
+            "own resting height, its speed, and its distance to the destination. This is what "
+            "distinguishes a policy that never touches the object from one that picks it but "
+            "lifts less than the success gate's threshold."
+        ),
+    )
+    parser.add_argument(
+        "--trace_reach_object",
+        type=str,
+        default=None,
+        help="Scene name of the manipuland to trace. Required when --trace_reach is set.",
+    )
+    parser.add_argument(
+        "--trace_reach_hand_body",
+        type=str,
+        default=None,
+        help=(
+            "Pin the reach metric to one named end-effector body, e.g. 'left_hand_middle_1_link'. "
+            "Without it the tracer reports the nearest matching body each step, which is a "
+            "selection bias rather than a measurement: the minimum over several links is smaller "
+            "than any single link's distance, and the reported frame changes between steps. "
+            "Measured on this repo's traces, that understated lateral error by 3-5 cm."
+        ),
+    )
+    parser.add_argument(
+        "--trace_reach_destination",
+        type=str,
+        default=None,
+        help="Scene name of the destination object, for the distance column.",
+    )

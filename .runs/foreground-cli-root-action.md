@@ -1,0 +1,8 @@
+URGENT root composition binding status:
+CLI/default factory now imports ONLY foreground_workflow.application_from_cli(config, credentials, *, allow_startup=False). Root module is present but factory not yet present. Please bind this exact function in root or provide explicit fixed profile factory ASAP; absent factory cannot be final acceptance. Do not rely solely on application_factory injection in tests.
+
+Frozen config exact keys: schema_version (int 1), composition ('isolated-synthetic-v1'), database exact {uri,database,username}, deployment_id,workspace_id,artifact_root,lease_root. No model config required to open root (status/replay/cancel/resume). Credentials optional {} or bounded private FD JSON (factory validates specific model shape). CLI preserves IDs exactly. Root factory must not resolve models/probe/start. CLI public success {schema_version:1,result:publicdict}; static errors/exit codes module documented.
+
+ScopedHostBootstrap helper port now exists in workflow/bootstrap.py, stdlib-only. prepare(requirements, timeout_s) -> tuple passed/unavailable. Full closure pins validated before observe; all roles observed before opt-in scoped runtime/neo4j startup. No reviewed installed scoped capability exists (existing Controller.start is whole stack/API), so helper=None is honest not-ready; synthetic helper proven without host operations. Add gate binding through check (pending next tracer).
+
+Verified host stdlib parser-only tests: python3 isaaclab_arena/tests/test_environment_workflow_cli.py. New file currently 6 tests green (no application execution host). Combined root+actual main acceptance still needs isolated cohort. Injected factory API remains available for root cohort but DEFAULT configured binding must also be tested.

@@ -134,10 +134,48 @@ class OnRelationValidator(PrePhysicsPlacementValidator):
                 # Preserve scalar height arithmetic at the strict On contact boundary.
                 bottom = positions[obj][2] + float(env_bboxes[obj].min_point[0, 2])
                 top = positions[relation.parent][2] + float(env_bboxes[relation.parent].max_point[0, 2])
+
+                sec_name = getattr(relation, "surface_sector", None) or getattr(relation, "surface_anchor", None)
+                w_bounds = None
+                if sec_name is not None:
+                    from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
+                        get_fixture_sector_bounds,
+                        transform_sector_bounds_to_world,
+                    )
+
+                    parent_reg_name = getattr(relation.parent, "registry_name", getattr(relation.parent, "name", ""))
+                    sec_bounds = get_fixture_sector_bounds(parent_reg_name, sec_name)
+                    parent_pose = (
+                        relation.parent.get_initial_pose() if hasattr(relation.parent, "get_initial_pose") else None
+                    )
+                    p_rot = (
+                        parent_pose.rotation_xyzw
+                        if parent_pose is not None and hasattr(parent_pose, "rotation_xyzw")
+                        else (0.0, 0.0, 0.0, 1.0)
+                    )
+                    w_bounds = transform_sector_bounds_to_world(sec_bounds, positions[relation.parent], p_rot)
+                    if w_bounds[4] != 0.0:
+                        top = float(w_bounds[4])
+
+                if getattr(relation, "nominal_height", None) is not None:
+                    top = float(relation.nominal_height)
+
                 height_fits = relation.is_child_bottom_z_within_placement_height_range(
                     bottom, top, self._params.on_relation_z_tolerance_m
                 )
-                if not height_fits or not self._validate_footprint(relation, child_world, parent_world):
+                if w_bounds is not None:
+                    m = 0.0 if relation.overlap else relation.edge_margin_m
+                    sec_min_x, sec_max_x = w_bounds[0], w_bounds[1]
+                    sec_min_y, sec_max_y = w_bounds[2], w_bounds[3]
+                    footprint_ok = not (
+                        child_world.min_point[0, 0] < sec_min_x - m
+                        or child_world.max_point[0, 0] > sec_max_x + m
+                        or child_world.min_point[0, 1] < sec_min_y - m
+                        or child_world.max_point[0, 1] > sec_max_y + m
+                    )
+                else:
+                    footprint_ok = self._validate_footprint(relation, child_world, parent_world)
+                if not height_fits or not footprint_ok:
                     if self._params.verbose:
                         print(f"{type(relation).__name__}: '{obj.name}' outside support footprint or height range")
                     return False

@@ -1,0 +1,138 @@
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+# 1. Mandatory Physical Ground Surface Invariant
+arena:MandatoryTerrainShape a sh:NodeShape ;
+    sh:targetClass arena:EnvironmentGraph ;
+    sh:property [
+        sh:path arena:hasTerrain ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "FATAL: Every EnvironmentGraph MUST contain exactly 1 physical terrain ground plane." ;
+    ] .
+
+# 2. Pink WBC Single-Threaded Pinocchio Invariant
+arena:PinkWBCEnvironmentCountShape a sh:NodeShape ;
+    sh:targetClass arena:Embodiment ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "CRITICAL: When using Pink WBC (g1_decoupled_wbc_pink_action), num_envs MUST equal 1 due to single-threaded Pinocchio QP solver." ;
+        sh:select """
+            PREFIX arena: <https://isaac-sim.github.io/arena/schema#>
+            SELECT $this
+            WHERE {
+                $this arena:controllerBinding "g1_decoupled_wbc_pink_action" .
+                $this arena:numEnvs ?envs .
+                FILTER (?envs > 1)
+            }
+        """ ;
+    ] .
+
+# 3. Room-Scale Locomotion Corridor Clearance Constraint
+arena:LocomotionCorridorClearanceShape a sh:NodeShape ;
+    sh:targetClass arena:EnvironmentGraph ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "ERROR: Free-space bipedal locomotion corridor clearance radius must be >= 0.60m." ;
+        sh:select """
+            PREFIX arena: <https://isaac-sim.github.io/arena/schema#>
+            SELECT $this
+            WHERE {
+                ?this arena:minClearanceRadius ?r .
+                FILTER (?r < 0.60)
+            }
+        """ ;
+    ] .
+
+# 4. Hierarchical Placement Invariant: Manipulands must be placed on furniture/fixtures when present
+arena:HierarchicalPlacementShape a sh:NodeShape ;
+    sh:targetClass arena:EnvironmentGraph ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "ERROR: When a furniture fixture (e.g., shelving, table) is present, manipulands must be placed on the fixture rather than directly on the room background." ;
+        sh:select """
+            PREFIX arena: <https://isaac-sim.github.io/arena/schema#>
+            SELECT $this
+            WHERE {
+                $this arena:hasObject ?obj .
+                $this arena:hasObject ?fixture .
+                ?fixture a arena:Furniture .
+                ?obj a arena:RigidObject .
+                $this arena:hasFixture ?bg .
+                ?obj arena:placedOn ?bg .
+                FILTER (?obj != ?fixture)
+            }
+        """ ;
+    ] .
+
+# 5. Camera Observation Invariant: Camera must declare an observation target
+arena:CameraObservationShape a sh:NodeShape ;
+    sh:targetClass arena:Camera ;
+    sh:property [
+        sh:path arena:observes ;
+        sh:minCount 1 ;
+        sh:message "ERROR: Every Camera in the EnvironmentGraph must declare an 'arena:observes' relationship pointing to a scene entity." ;
+    ] .
+
+# 6. Robot Affordance Reachability Invariant
+arena:RobotAffordanceReachabilityShape a sh:NodeShape ;
+    sh:targetClass arena:Embodiment ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "ERROR: Embodiment standoff distance to furniture interaction affordance must be between 0.50m and 1.20m." ;
+        sh:select """
+            PREFIX arena: <https://isaac-sim.github.io/arena/schema#>
+            SELECT $this
+            WHERE {
+                $this arena:standoffDistance ?dist .
+                FILTER (?dist < 0.50 || ?dist > 1.20)
+            }
+        """ ;
+    ] .
+# 7. Evaluation Run Semantic Integrity Invariant
+arena:EvaluationRunIntegrityShape a sh:NodeShape ;
+    sh:targetClass arena:EvaluationRun ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "CRITICAL: EvaluationRun reports success_rate > 0 but failed semantic integrity audit (discrepancy between RL termination and physical task predicates)." ;
+        sh:select """
+            PREFIX arena: <https://isaac-sim.github.io/arena/schema#>
+            SELECT $this
+            WHERE {
+                $this arena:metric_success_rate ?sr .
+                FILTER (?sr > 0.0)
+                $this arena:semanticIntegrityVerified false .
+            }
+        """ ;
+    ] .
+
+# 8. Intrinsic Fixture Sub-Prim Invariant (Prevents Type B Category Conflation)
+arena:IntrinsicFixtureArticulationShape a sh:NodeShape ;
+    sh:targetClass arena:ArticulatedSubPrim ;
+    sh:property [
+        sh:path arena:placedOn ;
+        sh:maxCount 0 ;
+        sh:message "DEFECT_INTRINSIC_ARTICULATION_CONFLATION: An intrinsic fixture sub-prim (e.g. drawer) cannot have a 'placedOn' relation. It is part of the fixture kinematics." ;
+    ] ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "DEFECT_MISSING_PARENT_FIXTURE: Every ArticulatedSubPrim must be linked to a grounded Fixture via 'arena:hasSubPrim'." ;
+        sh:select """
+            PREFIX arena: <https://isaac-sim.github.io/arena/schema#>
+            SELECT $this
+            WHERE {
+                FILTER NOT EXISTS { ?fixture arena:hasSubPrim $this . }
+            }
+        """ ;
+    ] .
+
+# 9. Placed Articulated Prop Invariant (Enforces Type A External Support)
+arena:PlacedArticulatedPropShape a sh:NodeShape ;
+    sh:targetClass arena:ArticulatedProp ;
+    sh:property [
+        sh:path arena:placedOn ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "DEFECT_UNSUPPORTED_ARTICULATED_PROP: Free-standing articulated prop (e.g. microwave) must be placed on a grounded fixture." ;
+    ] .

@@ -188,9 +188,19 @@ class CompositeTaskBase(TaskBase):
 
     def get_events_cfg(self) -> Any:
         "Make combined events cfg from all subtasks."
-        # Collect events_cfgs from subtasks with renamed fields to avoid collisions
+        # Collect events_cfgs from subtasks with renamed fields to avoid collisions.
+        # When multiple subtasks operate on the same openable_object (e.g., OpenDrawerTask
+        # followed by CloseDrawerTask in a sequential task), only the first subtask's
+        # reset event should set the initial joint openness at episode reset.
         renamed_events_cfgs = []
+        seen_openable_objects: set[str] = set()
         for i, subtask in enumerate(self.subtasks):
+            openable_obj = getattr(subtask, "openable_object", None)
+            if openable_obj is not None:
+                openable_name = getattr(openable_obj, "name", str(id(openable_obj)))
+                if openable_name in seen_openable_objects:
+                    continue
+                seen_openable_objects.add(openable_name)
             subtask_events_cfg = subtask.get_events_cfg()
             if subtask_events_cfg is None:
                 continue

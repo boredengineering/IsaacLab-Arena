@@ -111,7 +111,9 @@ class Object(RootedObjectBase):
         ), f"No rigid body found in {self.name} USD file: {usd_path}. Can't add contact sensor."
         return self.prim_path + rigid_body_relative_path
 
-    def get_contact_sensor_cfg(self, contact_against_object: ObjectBase | None = None) -> ContactSensorCfg:
+    def get_contact_sensor_cfg(
+        self, contact_against_object: ObjectBase | None = None, usd_path: str | None = None
+    ) -> ContactSensorCfg:
         # We override this function from the parent class because some assets do not have their rigid body
         # at the root of the USD file. To be robust to this, we find the shallowest rigid body and add the
         # contact sensor to it.
@@ -119,8 +121,11 @@ class Object(RootedObjectBase):
             assert isinstance(
                 contact_against_object, RootedObjectBase
             ), "Contact sensors against deformable objects and other non-rooted objects are not supported"
-        contact_sensor_prim_path = self.get_contact_sensor_prim_path()
-        if isinstance(contact_against_object, Object) and contact_against_object.object_type == ObjectType.BASE:
+        contact_sensor_prim_path = self.get_contact_sensor_prim_path(usd_path=usd_path)
+        if isinstance(contact_against_object, Object) and contact_against_object.object_type in (
+            ObjectType.ARTICULATION,
+            ObjectType.BASE,
+        ):
             # PhysX needs a separate filter expression for each nested target body.
             body_paths = read_asset_rigid_body_paths(
                 contact_against_object.usd_path,
@@ -138,8 +143,10 @@ class Object(RootedObjectBase):
             filter_prim_paths = [contact_against_object.get_contact_sensor_prim_path()]
         elif isinstance(contact_against_object, ObjectBase):
             # Handles ObjectReference.
-            # NOTE(alexmillane, 2026.04.10): ObjectReference is assumed to have its rigid body at its scene prim path.
-            filter_prim_paths = [contact_against_object.get_prim_path()]
+            if hasattr(contact_against_object, "get_contact_filter_prim_paths"):
+                filter_prim_paths = contact_against_object.get_contact_filter_prim_paths()
+            else:
+                filter_prim_paths = [contact_against_object.get_prim_path()]
         elif contact_against_object is None:
             filter_prim_paths = []
         return ContactSensorCfg(

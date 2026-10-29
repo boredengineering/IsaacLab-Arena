@@ -1,0 +1,691 @@
+{
+  "graphs": [
+    {
+      "name": "franka_droid_spam_can_to_grey_bin",
+      "properties": {
+        "task_description": "Pick up the blue spam can from the front right of the maple table and place it into the grey bin on the front left.",
+        "repair_iterations": 0,
+        "llm_call_count": 0,
+        "converged": true,
+        "completion_tokens": 0,
+        "prompt_tokens": 0,
+        "updated_at": "2026-09-01T19:27:53.778000000+00:00",
+        "name": "franka_droid_spam_can_to_grey_bin",
+        "generation_time_s": 0.0,
+        "total_tokens": 0,
+        "model_used": "",
+        "task_composition": "atomic"
+      },
+      "members": [
+        {
+          "relationship": "HAS_CAMERA",
+          "labels": [
+            "Camera"
+          ],
+          "properties": {
+            "eye_offset": [
+              -1.5,
+              -1.5,
+              1.5
+            ],
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "id": "franka_droid_spam_can_to_grey_bin_viewer_cam",
+            "fov": 65.0
+          }
+        },
+        {
+          "relationship": "CONTAINS_OBJECT",
+          "labels": [
+            "RigidObject",
+            "Receptacle"
+          ],
+          "properties": {
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "registry_name": "grey_bin_robolab",
+            "id": "grey_bin",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, 0.1396, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "relationship": "CONTAINS_OBJECT",
+          "labels": [
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "registry_name": "spam_can_ycb_robolab",
+            "id": "spam_can",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, -0.1396, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "relationship": "HAS_TERRAIN",
+          "labels": [
+            "Fixture",
+            "Terrain"
+          ],
+          "properties": {
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "is_terrain": true,
+            "registry_name": "maple_table_robolab",
+            "id": "maple_table",
+            "params": "{'initial_pose': {'position_xyz': [-0.25, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "relationship": "HAS_EMBODIMENT",
+          "labels": [
+            "Embodiment"
+          ],
+          "properties": {
+            "env_name": "franka_droid_spam_can_to_grey_bin",
+            "registry_name": "droid_abs_joint_pos",
+            "id": "droid_robot",
+            "params": "{'initial_pose': {'position_xyz': [-0.55, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        }
+      ],
+      "statements": [],
+      "direct_edges": [
+        {
+          "subject": "droid_robot",
+          "predicate": "STANDS_AT_AFFORDANCE",
+          "object": "maple_table",
+          "annotations": {
+            "relative_heading": "front_facing",
+            "standoff_distance": 0.85
+          }
+        },
+        {
+          "subject": "maple_table",
+          "predicate": "HAS_SUB_SURFACE",
+          "object": "maple_table_table_top",
+          "annotations": {}
+        },
+        {
+          "subject": "spam_can",
+          "predicate": "PLACED_ON_SUB_SURFACE",
+          "object": "maple_table_table_top",
+          "annotations": {}
+        },
+        {
+          "subject": "spam_can",
+          "predicate": "PLACED_ON",
+          "object": "maple_table",
+          "annotations": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_right'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "subject": "grey_bin",
+          "predicate": "PLACED_ON_SUB_SURFACE",
+          "object": "maple_table_table_top",
+          "annotations": {}
+        },
+        {
+          "subject": "grey_bin",
+          "predicate": "PLACED_ON",
+          "object": "maple_table",
+          "annotations": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_left'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "subject": "franka_droid_spam_can_to_grey_bin_viewer_cam",
+          "predicate": "OBSERVES_INTERACTION_ZONE",
+          "object": "spam_can",
+          "annotations": {}
+        }
+      ]
+    },
+    {
+      "name": "franka_droid_tomato_soup_to_bin",
+      "properties": {
+        "task_description": "Pick up the red tomato soup can from the front right of the maple table and place it into the blue sorting bin on the front left.",
+        "repair_iterations": 0,
+        "llm_call_count": 0,
+        "converged": true,
+        "completion_tokens": 0,
+        "prompt_tokens": 0,
+        "updated_at": "2026-09-01T18:37:32.121000000+00:00",
+        "name": "franka_droid_tomato_soup_to_bin",
+        "generation_time_s": 0.0,
+        "total_tokens": 0,
+        "model_used": "",
+        "task_composition": "atomic"
+      },
+      "members": [
+        {
+          "relationship": "HAS_CAMERA",
+          "labels": [
+            "Camera"
+          ],
+          "properties": {
+            "eye_offset": [
+              -1.5,
+              -1.5,
+              1.5
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "id": "franka_droid_tomato_soup_to_bin_viewer_cam",
+            "fov": 65.0
+          }
+        },
+        {
+          "relationship": "HAS_REIFIER",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 3.2,
+            "required_headroom": 0.35,
+            "reifier_id": "reifier_blue_bin_reachability",
+            "delta_z_nominal": 0.01,
+            "relation_type": "REACHABLE_BY",
+            "posterior_entropy": 0.15,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "droid_manipulation_workspace",
+            "evidence_sources": [
+              "droid_kinematics",
+              "workspace_envelope"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "relationship": "HAS_REIFIER",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 3.2,
+            "required_headroom": 0.35,
+            "reifier_id": "reifier_tomato_soup_can_reachability",
+            "delta_z_nominal": 0.01,
+            "relation_type": "REACHABLE_BY",
+            "posterior_entropy": 0.15,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "droid_manipulation_workspace",
+            "evidence_sources": [
+              "droid_kinematics",
+              "workspace_envelope"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "relationship": "HAS_REIFIER",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.3,
+            "reifier_id": "reifier_blue_bin_maple_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_left_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.6
+          }
+        },
+        {
+          "relationship": "HAS_REIFIER",
+          "labels": [
+            "ReifiedRelation"
+          ],
+          "properties": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.25,
+            "reifier_id": "reifier_tomato_soup_can_maple_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_right_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.65
+          }
+        },
+        {
+          "relationship": "CONTAINS_OBJECT",
+          "labels": [
+            "RigidObject",
+            "Receptacle"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "registry_name": "bin_b03_vomp_robolab",
+            "id": "blue_bin",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, 0.1396, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "relationship": "CONTAINS_OBJECT",
+          "labels": [
+            "RigidObject"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "registry_name": "tomato_soup_can_ycb_robolab",
+            "id": "tomato_soup_can",
+            "params": "{'initial_pose': {'position_xyz': [-0.1263, -0.1396, 0.75], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "relationship": "HAS_TERRAIN",
+          "labels": [
+            "Fixture",
+            "Terrain"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "is_terrain": true,
+            "registry_name": "maple_table_robolab",
+            "id": "maple_table",
+            "params": "{'initial_pose': {'position_xyz': [-0.25, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        },
+        {
+          "relationship": "HAS_EMBODIMENT",
+          "labels": [
+            "Embodiment"
+          ],
+          "properties": {
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "registry_name": "droid_abs_joint_pos",
+            "id": "droid_robot",
+            "params": "{'initial_pose': {'position_xyz': [-0.55, 0.0, 0.0], 'rotation_xyzw': [0.0, 0.0, 0.0, 1.0]}}"
+          }
+        }
+      ],
+      "statements": [
+        {
+          "annotations": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.3,
+            "reifier_id": "reifier_blue_bin_maple_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_left_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.6
+          },
+          "subject": "blue_bin",
+          "object": "maple_table"
+        },
+        {
+          "annotations": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 3.2,
+            "required_headroom": 0.35,
+            "reifier_id": "reifier_blue_bin_reachability",
+            "delta_z_nominal": 0.01,
+            "relation_type": "REACHABLE_BY",
+            "posterior_entropy": 0.15,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "droid_manipulation_workspace",
+            "evidence_sources": [
+              "droid_kinematics",
+              "workspace_envelope"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "",
+            "required_friction": 0.6
+          },
+          "subject": "blue_bin",
+          "object": "droid_robot"
+        },
+        {
+          "annotations": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 2.8,
+            "required_headroom": 0.25,
+            "reifier_id": "reifier_tomato_soup_can_maple_table",
+            "delta_z_nominal": 0.01,
+            "relation_type": "PLACED_ON",
+            "posterior_entropy": 0.08,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "tabletop_stationary_reach",
+            "evidence_sources": [
+              "tabletop_spatial_planner",
+              "front_right_sector_constraint"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "table_top",
+            "required_friction": 0.65
+          },
+          "subject": "tomato_soup_can",
+          "object": "maple_table"
+        },
+        {
+          "annotations": {
+            "delta_y_min": -0.05,
+            "delta_x_max": 0.05,
+            "prior_entropy": 3.2,
+            "required_headroom": 0.35,
+            "reifier_id": "reifier_tomato_soup_can_reachability",
+            "delta_z_nominal": 0.01,
+            "relation_type": "REACHABLE_BY",
+            "posterior_entropy": 0.15,
+            "delta_y_max": 0.05,
+            "contact_normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "env_name": "franka_droid_tomato_soup_to_bin",
+            "kinematic_manifold": "droid_manipulation_workspace",
+            "evidence_sources": [
+              "droid_kinematics",
+              "workspace_envelope"
+            ],
+            "delta_x_min": -0.05,
+            "surface_anchor": "",
+            "required_friction": 0.6
+          },
+          "subject": "tomato_soup_can",
+          "object": "droid_robot"
+        }
+      ],
+      "direct_edges": [
+        {
+          "subject": "droid_robot",
+          "predicate": "STANDS_AT_AFFORDANCE",
+          "object": "maple_table",
+          "annotations": {
+            "relative_heading": "front_facing",
+            "standoff_distance": 0.85
+          }
+        },
+        {
+          "subject": "maple_table",
+          "predicate": "HAS_SUB_SURFACE",
+          "object": "maple_table_table_top",
+          "annotations": {}
+        },
+        {
+          "subject": "tomato_soup_can",
+          "predicate": "PLACED_ON_SUB_SURFACE",
+          "object": "maple_table_table_top",
+          "annotations": {}
+        },
+        {
+          "subject": "tomato_soup_can",
+          "predicate": "PLACED_ON",
+          "object": "maple_table",
+          "annotations": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_right'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "subject": "blue_bin",
+          "predicate": "PLACED_ON_SUB_SURFACE",
+          "object": "maple_table_table_top",
+          "annotations": {}
+        },
+        {
+          "subject": "blue_bin",
+          "predicate": "PLACED_ON",
+          "object": "maple_table",
+          "annotations": {
+            "raw_params": "{'surface_anchor': 'table_top', 'surface_sector': 'front_left'}",
+            "surface_anchor": "table_top",
+            "bound_x": [],
+            "bound_y": [],
+            "clearance": 0.05,
+            "nominal_height": 0.0
+          }
+        },
+        {
+          "subject": null,
+          "predicate": "REIFIES_SUBJECT",
+          "object": "tomato_soup_can",
+          "annotations": {}
+        },
+        {
+          "subject": null,
+          "predicate": "REIFIES_OBJECT",
+          "object": "maple_table",
+          "annotations": {}
+        },
+        {
+          "subject": null,
+          "predicate": "REIFIES_OBJECT",
+          "object": "maple_table",
+          "annotations": {}
+        },
+        {
+          "subject": null,
+          "predicate": "REIFIES_SUBJECT",
+          "object": "blue_bin",
+          "annotations": {}
+        },
+        {
+          "subject": null,
+          "predicate": "REIFIES_OBJECT",
+          "object": "droid_robot",
+          "annotations": {}
+        },
+        {
+          "subject": null,
+          "predicate": "REIFIES_SUBJECT",
+          "object": "tomato_soup_can",
+          "annotations": {}
+        },
+        {
+          "subject": null,
+          "predicate": "REIFIES_SUBJECT",
+          "object": "blue_bin",
+          "annotations": {}
+        },
+        {
+          "subject": null,
+          "predicate": "REIFIES_OBJECT",
+          "object": "droid_robot",
+          "annotations": {}
+        },
+        {
+          "subject": "franka_droid_tomato_soup_to_bin_viewer_cam",
+          "predicate": "OBSERVES_INTERACTION_ZONE",
+          "object": "tomato_soup_can",
+          "annotations": {}
+        }
+      ]
+    }
+  ],
+  "evaluations": [
+    {
+      "id": "eval_run_1788238238",
+      "num_episodes": 20,
+      "success_rate": 0.05,
+      "relationship": "USED_POLICY",
+      "neighbor_labels": [
+        "Policy"
+      ],
+      "neighbor": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+    },
+    {
+      "id": "eval_run_1788238722",
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "relationship": "USED_POLICY",
+      "neighbor_labels": [
+        "Policy"
+      ],
+      "neighbor": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+    },
+    {
+      "id": "eval_run_1788279490",
+      "num_episodes": 1,
+      "success_rate": 1.0,
+      "relationship": "USED_POLICY",
+      "neighbor_labels": [
+        "Policy"
+      ],
+      "neighbor": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+    },
+    {
+      "id": "eval_run_1788281565",
+      "num_episodes": 50,
+      "success_rate": 0.46,
+      "relationship": "USED_POLICY",
+      "neighbor_labels": [
+        "Policy"
+      ],
+      "neighbor": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+    },
+    {
+      "id": "eval_run_1788284877",
+      "num_episodes": 52,
+      "success_rate": 0.4807692307692308,
+      "relationship": "USED_POLICY",
+      "neighbor_labels": [
+        "Policy"
+      ],
+      "neighbor": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+    },
+    {
+      "id": "eval_run_1788287246",
+      "num_episodes": 1,
+      "success_rate": 0.0,
+      "relationship": "USED_POLICY",
+      "neighbor_labels": [
+        "Policy"
+      ],
+      "neighbor": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+    },
+    {
+      "id": "eval_run_1788289371",
+      "num_episodes": 42,
+      "success_rate": 0.14285714285714285,
+      "relationship": "USED_POLICY",
+      "neighbor_labels": [
+        "Policy"
+      ],
+      "neighbor": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+    },
+    {
+      "id": "eval_run_1788290861",
+      "num_episodes": 70,
+      "success_rate": 0.2571428571428571,
+      "relationship": "USED_POLICY",
+      "neighbor_labels": [
+        "Policy"
+      ],
+      "neighbor": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+    },
+    {
+      "id": "eval_run_1788292259",
+      "num_episodes": 67,
+      "success_rate": 0.19402985074626866,
+      "relationship": "USED_POLICY",
+      "neighbor_labels": [
+        "Policy"
+      ],
+      "neighbor": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+    },
+    {
+      "id": "eval_run_1788292607",
+      "num_episodes": 2,
+      "success_rate": 0.0,
+      "relationship": "USED_POLICY",
+      "neighbor_labels": [
+        "Policy"
+      ],
+      "neighbor": "isaaclab_arena_gr00t_gr00t_remote_closedloop_Gr00tRemoteClosedloopPolicy"
+    }
+  ]
+}

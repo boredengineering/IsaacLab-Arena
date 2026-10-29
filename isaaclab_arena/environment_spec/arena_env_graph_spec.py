@@ -5,9 +5,15 @@
 
 from __future__ import annotations
 
+import sys
 import yaml
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -17,6 +23,8 @@ from isaaclab_arena.environment_spec.arena_env_graph_types import (
     CompositeTaskSpec,
     ObjectReferenceSpec,
     ObjectSetSpec,
+    PlacementValidatorSpec,
+    ReifiedRelationSpec,
     SpatialRelationSpec,
     TaskSpec,
 )
@@ -49,7 +57,14 @@ class ArenaEnvGraphSpec(BaseModel):
     relations: list[SpatialRelationSpec] = Field(
         default_factory=list, description="Spatial layout relations across all assets."
     )
+    reified_relations: list[ReifiedRelationSpec] | None = Field(
+        default=None, description="RDF 1.2 reified causal and physical invariant relations."
+    )
     task: CompositeTaskSpec = Field(description="Root task the robot performs to manipulate the objects.")
+    placement_validators: PlacementValidatorSpec | None = Field(
+        default=None,
+        description="Optional per-env placement validators selecting which build-time checks run.",
+    )
     # TODO(qianl, 2026-09-22): [env-spec-refactor] Add tags for fields excluded from agentic inference.
     placer_params: dict[str, Any] | None = Field(
         default=None,
@@ -70,7 +85,23 @@ class ArenaEnvGraphSpec(BaseModel):
         default=None, description="Optional authoring-time CLI flags that swap an asset's registry_name; usually empty."
     )
 
-    @field_validator("object_sets", "object_references", "cli_override_specs", mode="before")
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_spec_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            normalized = dict(data)
+            if not normalized.get("env_name"):
+                emb = normalized.get("embodiment")
+                emb_name = (
+                    emb
+                    if isinstance(emb, str)
+                    else (emb.get("registry_name", "env") if isinstance(emb, dict) else "env")
+                )
+                normalized["env_name"] = f"{emb_name}_generated_task"
+            return normalized
+        return data
+
+    @field_validator("object_sets", "object_references", "cli_override_specs", "reified_relations", mode="before")
     @classmethod
     def _none_if_empty_list(cls, value: Any) -> Any:
         if value == []:
@@ -86,15 +117,6 @@ class ArenaEnvGraphSpec(BaseModel):
         from isaaclab_arena.environment_spec.placer_params_cfg_override import build_placer_params_from_override
 
         build_placer_params_from_override(value)
-        return value
-
-    # TODO(qianl, 2026-09-22): [env-spec-refactor] Set extra="forbid" on ArenaEnvGraphSpec model and remove this.
-    @model_validator(mode="before")
-    @classmethod
-    def _reject_legacy_placement_validators(cls, value: Any) -> Any:
-        """Detects the removed yaml key before parsing graph spec."""
-        if isinstance(value, dict) and "placement_validators" in value:
-            raise ValueError("placement_validators was removed; put validator fields under placer_params")
         return value
 
     @model_validator(mode="after")

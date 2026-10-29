@@ -370,6 +370,12 @@ class CompletionCriteriaRunner:
 
         env_ids = torch.as_tensor(env_ids, dtype=torch.long, device=self.device)
         for sequence_name in self.completion_criteria.sequence_names:
+            if self.current_predicate_index[sequence_name].is_inference() and not torch.is_inference_mode_enabled():
+                self.current_predicate_index[sequence_name] = self.current_predicate_index[sequence_name].clone()
+            if self.sequence_score[sequence_name].is_inference() and not torch.is_inference_mode_enabled():
+                self.sequence_score[sequence_name] = self.sequence_score[sequence_name].clone()
+            if self.sequence_complete[sequence_name].is_inference() and not torch.is_inference_mode_enabled():
+                self.sequence_complete[sequence_name] = self.sequence_complete[sequence_name].clone()
             self.current_predicate_index[sequence_name][env_ids] = 0
             self.sequence_score[sequence_name][env_ids] = 0.0
             self.sequence_complete[sequence_name][env_ids] = False

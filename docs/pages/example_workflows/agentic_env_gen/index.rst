@@ -9,6 +9,24 @@ The environment can be used for policy evaluation.
 For the concept overview, see
 :doc:`Agentic Environment Generation <../../concepts/agentic_environment_generation/index>`.
 
+For the experimental closed-loop refinement architecture, see
+:doc:`../../concepts/dcrg`. DCRG controls evaluation and bounded proposals;
+the existing Graph-RAG retriever remains responsible for reading prior experience.
+See :doc:`dcrg` for the bounded CLI, runtime prerequisites, artifact layout, and
+the measured C1 pilot outcome.
+
+For Plan 03's managed capture and task-bound policy adapter contracts, see
+:doc:`workflow_native_policy`. Those isolated-tested components do not enable
+native execution through the :doc:`query-only installed CLI <workflow_query_cli>`.
+
+Begin Plan 04 operator preparation with :doc:`workflow_setup_readiness`, an
+offline inventory of explicit public selections and setup blockers. It does not
+read credentials, probe services or authorize execution.
+
+The containerized TanStack workbench is being introduced through separate
+integration and parity gates. See :doc:`workbench` for its current capabilities
+and :doc:`../../concepts/agentic_workbench` for its Python/frontend boundary.
+It does not replace Streamlit until authoring and real preview parity pass.
 
 In this section, we will walk through the following example environment generation workflows to explain how to use this tool for your own tasks.
 
@@ -158,3 +176,11 @@ and can be used directly for policy evaluation:
    tabletop_pnp_composite_task/index
    kitchen_pick_and_place/index
    kitchen_open_door/index
+   gui_runner
+   workbench
+   eval_with_gr00t
+   eval_with_openpi
+   dcrg
+   workflow_native_policy
+   workflow_query_cli
+   workflow_setup_readiness

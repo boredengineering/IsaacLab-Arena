@@ -1,0 +1,25 @@
+{
+  "name": "simready_download",
+  "description": "Download a SimReady USD stage and its metadata into the local IsaacLab-Arena asset cache for simulation and affordance introspection.",
+  "parameters": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "asset_url": {
+        "type": "string",
+        "description": "Hugging Face resolve URL to the .usd or .usdc stage file."
+      },
+      "asset_name": {
+        "type": "string",
+        "description": "Optional local filename to assign to the downloaded stage."
+      },
+      "target_dir": {
+        "type": "string",
+        "description": "Optional target directory (defaults to artifacts/assets/simready/)."
+      }
+    },
+    "required": [
+      "asset_url"
+    ]
+  }
+}

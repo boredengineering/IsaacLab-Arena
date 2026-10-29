@@ -13,7 +13,16 @@ from typing import Any
 import isaaclab.sim as sim_utils
 from isaaclab.sim.spawners.spawner_cfg import DeformableObjectSpawnerCfg
 from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
-from isaaclab_physx.sim.schemas import PhysxCollisionCfg, PhysxDeformableBodyPropertiesCfg
+from isaaclab_physx.sim.schemas import PhysxDeformableBodyPropertiesCfg
+
+try:
+    from isaaclab_physx.sim.schemas import PhysxCollisionCfg
+
+    _COLLISION_PROPS_IS_LIST = True
+except ImportError:
+    from isaaclab_physx.sim.schemas import PhysxCollisionPropertiesCfg as PhysxCollisionCfg
+
+    _COLLISION_PROPS_IS_LIST = False
 from isaaclab_physx.sim.spawners.materials import PhysxDeformableBodyMaterialCfg, PhysxSurfaceDeformableBodyMaterialCfg
 
 from isaaclab_arena.assets.deformable_object import DeformableObject
@@ -53,7 +62,11 @@ class DeformableCube(LibraryDeformableObject):
     spawner_cfg = sim_utils.MeshCuboidCfg(
         size=(0.15, 0.04, 0.04),
         deformable_props=PhysxDeformableBodyPropertiesCfg(linear_damping=0.0),
-        collision_props=[PhysxCollisionCfg(rest_offset=0.0, contact_offset=0.0025)],
+        collision_props=(
+            [PhysxCollisionCfg(rest_offset=0.0, contact_offset=0.0025)]
+            if _COLLISION_PROPS_IS_LIST
+            else PhysxCollisionCfg(rest_offset=0.0, contact_offset=0.0025)
+        ),
         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.95, 0.85, 0.1)),
         physics_material=PhysxDeformableBodyMaterialCfg(
             youngs_modulus=8.0e4,
@@ -68,13 +81,20 @@ class DeformableSurface(LibraryDeformableObject):
     """PhysX surface matching Isaac Lab's Franka cloth lift geometry."""
 
     name = "deformable_surface"
+    _rect_kwargs: dict[str, Any] = (
+        {"edge_refinement": 30}
+        if "edge_refinement" in getattr(sim_utils.MeshRectangleCfg, "__dataclass_fields__", {})
+        else {"resolution": (30, 30)}
+    )
     spawner_cfg = sim_utils.MeshRectangleCfg(
         size=(0.2, 0.2),
-        edge_refinement=30,
         deformable_props=PhysxDeformableBodyPropertiesCfg(),
         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.95, 0.85, 0.1)),
         physics_material=PhysxSurfaceDeformableBodyMaterialCfg(),
+        **_rect_kwargs,
     )
+    if not hasattr(spawner_cfg, "edge_refinement"):
+        spawner_cfg.edge_refinement = 30
 
 
 @register_asset

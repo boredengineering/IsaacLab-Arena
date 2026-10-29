@@ -47,7 +47,12 @@ class Pi0RemotePolicy(RemoteChunkReplayPolicy, PolicyBase[Pi0RemotePolicyCfg]):
             f"Unknown policy_variant {config.policy_variant!r} for adapter"
             f" {type(adapter).__name__}; known: {sorted(adapter.open_loop_horizon_by_variant)}"
         )
-        super().__init__(config, adapter, adapter.open_loop_horizon_by_variant[config.policy_variant])
+        horizon = (
+            config.open_loop_horizon
+            if config.open_loop_horizon is not None
+            else adapter.open_loop_horizon_by_variant[config.policy_variant]
+        )
+        super().__init__(config, adapter, horizon)
 
 
 def _resolve_openpi_embodiment_adapter(key: str) -> Pi0EmbodimentAdapter:

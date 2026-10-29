@@ -225,6 +225,9 @@ class On(Relation):
         super().__init__(parent, relation_loss_weight)
         assert clearance_m >= 0.0, f"Clearance must be non-negative, got {clearance_m}"
         assert edge_margin_m >= 0.0, f"edge_margin_m must be non-negative, got {edge_margin_m}"
+        if isinstance(sector_bounds, str):
+            surface_sector = surface_sector or sector_bounds
+            sector_bounds = None
         self.clearance_m = clearance_m
         self.edge_margin_m = edge_margin_m
         self.overlap = overlap

@@ -108,10 +108,24 @@ def build_neutral_hold_action(base_env) -> torch.Tensor:
 
     # Detect a whole-body-control action term rather than keying on the action width, which
     # several embodiments share.
-    is_wbc = any(
-        "wbc" in type(term).__name__.lower() for term in getattr(base_env.action_manager, "_terms", {}).values()
-    )
+    terms = list(getattr(base_env.action_manager, "_terms", {}).values())
+    is_wbc = any("wbc" in type(term).__name__.lower() for term in terms)
     if not is_wbc:
+        # Populate absolute joint-position action terms (use_default_offset=False, e.g.
+        # droid_abs_joint_pos) with the robot's current joint positions so the settle loop
+        # holds the reset posture instead of driving every joint toward 0 rad.
+        col_offset = 0
+        for term in terms:
+            term_dim = int(getattr(term, "action_dim", 0))
+            if (
+                type(term).__name__ == "JointPositionAction"
+                and not getattr(getattr(term, "cfg", None), "use_default_offset", True)
+                and hasattr(term, "_asset")
+                and hasattr(term, "_joint_ids")
+            ):
+                joint_pos = wp.to_torch(term._asset.data.joint_pos)[:, term._joint_ids]
+                hold_action[:, col_offset : col_offset + term_dim] = joint_pos.to(hold_action.device)
+            col_offset += term_dim
         return hold_action
 
     num_navigate_cmd, num_base_height_cmd, num_torso_rpy_cmd = 3, 1, 3

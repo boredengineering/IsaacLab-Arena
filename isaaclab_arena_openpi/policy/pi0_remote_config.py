@@ -31,3 +31,6 @@ class Pi0RemotePolicyCfg(PolicyCfg):
 
     ping_timeout: float | None = 300.0
     """Seconds to wait for a keepalive pong before dropping, or None to wait indefinitely."""
+
+    open_loop_horizon: int | None = None
+    """Number of actions to replay before refetching a chunk, or None for the adapter default."""

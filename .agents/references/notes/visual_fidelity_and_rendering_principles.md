@@ -53,9 +53,106 @@ Realistic indoor lighting is rarely a single harsh source. RoboLab's screenshot 
 
 ---
 
-## 3. Concrete Implementation in IsaacLab-Arena
+## 3. 3D Gaussian Splatting (3DGS) & NVIDIA NuRec Neural Reconstruction
 
-### 3.1 Defining a Calibrated Studio / Indoor Lighting Config
+In addition to traditional mesh-based PBR assets and panoramic HDR domes, cutting-edge physical AI research (exemplified by NVIDIA RoboLab and World Labs) achieves near-photographic environment fidelity by incorporating **3D Gaussian Splatting (3DGS)** and **NVIDIA NuRec (Neural Reconstruction)**.
+
+### 3.1 Why 3DGS Backgrounds Outperform Traditional Polygon Meshes
+1. **Continuous Radiance & Micro-Detail**: Captures fine view-dependent specularities, subtle ambient inter-reflections, brushed metal sheens, and real-world micro-shadows that are prohibitively expensive or impossible to author manually via polygonal meshes.
+2. **Authentic Environment Grounding**: Directly captured from real physical spaces (e.g., actual domestic kitchens, hospital stations, machine shops), eliminating the "sterile CGI" look.
+3. **Real-Time RTX Splat Raycasting**: Omniverse Kit's `omni.rtx.spg` (Spatial Particle Grids) extension natively renders Gaussian splats alongside standard PhysX dynamic rigid bodies in the same offscreen viewport.
+
+### 3.2 Omniverse NuRec Schema Architecture
+Omniverse encapsulates 3DGS within a standard OpenUSD `Volume` prim using the **OmniNuRecFieldAsset** schema:
+
+```usda
+def Volume "Gaussian" (
+    prepend apiSchemas = ["OmniNuRecVolumeAPI"]
+)
+{
+    custom bool omni:nurec:isNuRecVolume = 1
+
+    def OmniNuRecFieldAsset "density_field"
+    {
+        custom token fieldDataType = "float"
+        custom token fieldName = "density"
+        custom token fieldRole = "density"
+        custom asset filePath = @MarbleKitchen.usdz[MarbleKitchen.nurec]@
+    }
+
+    def OmniNuRecFieldAsset "emissive_color_field"
+    {
+        custom token fieldDataType = "float3"
+        custom token fieldName = "emissiveColor"
+        custom token fieldRole = "emissiveColor"
+        custom asset filePath = @MarbleKitchen.usdz[MarbleKitchen.nurec]@
+        custom float4 omni:nurec:ccmB = (0, 0, 1, 0)
+        custom float4 omni:nurec:ccmG = (0, 1, 0, 0)
+        custom float4 omni:nurec:ccmR = (1, 0, 0, 0)
+    }
+}
+```
+
+* **Packaging (`.usdz`)**: Bundles the binary weights (`.nurec`) with USD descriptions (`gauss.usda`, `default.usda`) for portable distribution.
+* **Density & Emissive Color Fields**: The density field governs volumetric transmittance and opacity, while the emissive color field maps view-dependent directional radiance (spherical harmonics).
+
+### 3.3 The Hybrid Splat + Collision Proxy Mesh Design Pattern
+> [!IMPORTANT]
+> **3D Gaussian Splats have zero physical collision bounds.**
+> Because 3DGS prims are purely volumetric optical emitters, physical rigid bodies (robots, grippers, cups, fruit) placed on a splat surface will fall straight through countertops into the void unless paired with a physical collision proxy.
+
+RoboLab solves this via a **hybrid dual-layer USD architecture** (`assets/scenes/marble/marblekitchen.usda`):
+1. **Visual Layer (`Volume/Gaussian`)**: An `OmniNuRecFieldAsset` displaying the photorealistic 3DGS kitchen.
+2. **Physical Layer (`geometry_0`)**: An invisible, co-registered proxy collision mesh authoring PhysX dynamics:
+   ```usda
+   def Xform "geometry_0"
+   {
+       token visibility = "invisible"  # Hidden from camera rays
+       quatf xformOp:orient = (0.5, -0.5, -0.5, 0.5)
+       double3 xformOp:translate = (59.2, -5.19115, 3.87041)
+
+       def Mesh "geometry_0" (
+           apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysxTriangleMeshCollisionAPI"]
+       )
+       {
+           # Contact geometry aligned with the splat countertop and sink
+       }
+   }
+   ```
+This invariant allows PhysX rigid-body solvers to calculate resting contacts, grasps, and placement dynamics on countertops while cameras observe photorealistic splats.
+
+### 3.4 Public 3DGS Kitchen Datasets & NVIDIA Resources
+Teams can leverage several high-fidelity 3DGS and neural reconstruction resources:
+
+1. **RoboLab Marble Kitchen**:
+   - Packaged as `MarbleKitchen.usdz` (236 MB) + `marblekitchen.usda`.
+   - Captured via World Labs Marble reconstruction platform; includes co-registered invisible PhysX collision proxy mesh.
+2. **NVIDIA Hugging Face Physical AI Ecosystem**:
+   - `nvidia/PhysicalAI-Robotics-NuRec`: 400+ real-world robotics and manipulation scenes captured as NuRec OpenUSD assets.
+   - `nvidia/instant-nurec`: Automated pipeline for converting multi-view camera video into NuRec USDs.
+   - `nvidia/Harmonizer`: Diffusion-based image harmonizer tailored to blend synthetic foreground objects into neural background plates.
+   - `nvidia/Lyra`: Feed-forward, single-pass 3DGS reconstruction from sparse camera viewpoints.
+3. **Open 3DGS Kitchen Benchmarks**:
+   - **Mip-NeRF 360 "Kitchen"**: Industry-standard real-world indoor capture benchmark, publicly available converted to 3DGS format.
+   - **ScanNet++ Kitchens / Living Spaces**: High-resolution DSLR + sub-millimeter LiDAR scans with full camera trajectories, converted to 3DGS.
+   - **DL3DV-10K**: Extensive collection of 10,000 indoor/outdoor camera trajectories including modern kitchen setups.
+
+### 3.5 Omniverse RTX Engine Requirements for 3DGS
+To render NuRec / 3DGS in Isaac Sim:
+* **Extension**: `omni.rtx.spg` (version $\ge$ 0.2.0, ships natively in Isaac Sim 6.0).
+* **Launch Arguments**: Must be passed to `SimulationApp`:
+  ```python
+  extra_args = ["--enable", "omni.rtx.spg", "--/renderer/multiGpu/enabled=false"]
+  simulation_app = SimulationApp({"headless": True, "extra_args": extra_args})
+  ```
+* **Carb Rendering Overrides**: NuRec uses RTPT warmup accumulation:
+  - Warmup steps: 800 ticks for offline frame convergence; 30–60 ticks for interactive evaluation.
+
+---
+
+## 4. Concrete Implementation in IsaacLab-Arena
+
+### 4.1 Defining a Calibrated Studio / Indoor Lighting Config
 In Arena or IsaacLab environment configs, define an `AssetBaseCfg` light rig combining HDR dome lighting and soft distant lighting:
 
 ```python
@@ -97,7 +194,7 @@ class PhotorealisticStudioLightingCfg:
     )
 ```
 
-### 3.2 Viewport Rendering Pipeline Parameters
+### 4.2 Viewport Rendering Pipeline Parameters
 When generating screenshots, evaluation videos, or step-0 VLM inspection frames via `SimulationApp`:
 
 ```python
@@ -108,7 +205,7 @@ def configure_high_fidelity_camera(stage, camera_prim_path="/OmniverseKit_Persp"
     camera_prim.GetAttribute("horizontalAperture").Set(20.955) # 35mm equivalent sensor
 ```
 
-### 3.3 Physics Stabilization Hook
+### 4.3 Physics Stabilization Hook
 Ensure scene generators execute dynamic settle before saving static USDA stages or rendering thumbnails:
 
 ```python
@@ -122,8 +219,92 @@ def settle_and_capture(world, camera, settle_steps=60):
 
 ---
 
-## 4. Cross-References
+## 5. Feasibility & Integration Review: Adding MarbleKitchen to IsaacLab-Arena
+
+Can our current IsaacLab-Arena setup run the necessary components to render and simulate tasks in `MarbleKitchen`?
+
+### 5.1 Verification Checklist & Compatibility Matrix
+
+| Component | Status | Finding / Verification Result |
+| :--- | :--- | :--- |
+| **Isaac Sim Version** | **Compatible** | Isaac Sim 6.0 (Kit 106.5 / 110.x compatible) runs inside container `isaaclab_arena-latest-isaaclab-arena-private`. |
+| **GPU / Hardware** | **Compatible** | Dual Blackwell GPUs (`RTX PRO 6000` 96 GB + `RTX 5090` 32 GB, `sm_120`, driver 13.2, Warp 1.13.0). |
+| **3DGS / SPG Extension** | **Verified Active** | Tested live in container: `omni.rtx.spg-0.2.1` loads, initializes, and activates successfully via `SimulationApp(extra_args=["--enable", "omni.rtx.spg", "--/renderer/multiGpu/enabled=false"])`. |
+| **NuRec Utilities** | **Present** | `isaacsim.replicator.nurec_utils` and `nurec_render.py` are natively available under `/isaac-sim/exts/` in the simulation container. |
+| **USD NuRec Schema** | **Compatible** | Isaac Sim's OpenUSD plug-in registry loads `OmniNuRecFieldAsset` definitions and resolves `@MarbleKitchen.usdz[MarbleKitchen.nurec]@`. |
+| **Container Mount Boundary** | **Requires Action** | The asset files (`MarbleKitchen.usdz` 236 MB, `marblekitchen.usda`) currently reside in `/workspaces/RoboLab/assets/scenes/marble/`. The devcontainer (`wizardly_knuth`) mounts RoboLab, but the inner simulation container (`isaaclab_arena`) only mounts `isaaclab-arena-private`. |
+
+### 5.2 Resolution for the Mount Boundary
+Because both repositories reside on the exact same host NVMe partition (`/dev/nvme0n1p2 ext4`), staging the assets into `isaaclab-arena-private` does not require re-downloading or significant disk space:
+```bash
+# From the devcontainer or host:
+mkdir -p artifacts/assets/marble
+cp -l /workspaces/RoboLab/assets/scenes/marble/MarbleKitchen.usdz artifacts/assets/marble/
+cp /workspaces/RoboLab/assets/scenes/marble/marblekitchen.usda artifacts/assets/marble/
+```
+*(Using `cp -l` creates a hardlink on the same filesystem, taking 0 extra storage bytes and completing instantly.)*
+
+### 5.3 Arena Integration Recipe & Actions Executed
+The integration has been executed and verified live:
+1. **Staging**: Assets staged under `artifacts/assets/marble/` (`MarbleKitchen.usdz` [226 MB], `marblekitchen.usda` [19 MB]).
+2. **Git Invariant Enforcement**: Added `artifacts/assets/marble/` to `.gitignore` to maintain strict repo boundaries (never commit large binary blobs/weights).
+3. **Asset Registration**: Implemented `MarbleKitchenBackground` in [`isaaclab_arena/assets/background_library.py`](../../../isaaclab_arena/assets/background_library.py):
+   ```python
+   _MARBLE_LOCAL_DIR = Path(__file__).resolve().parents[2] / "artifacts" / "assets" / "marble"
+
+
+   @register_asset
+   class MarbleKitchenBackground(LibraryBackground):
+       """3DGS Marble Kitchen scene with co-registered PhysX collision proxy."""
+
+       name = "marble_kitchen"
+       tags = ["background", "3dgs", "nurec", "kitchen"]
+       usd_path = str(_MARBLE_LOCAL_DIR / "marblekitchen.usda")
+       initial_pose = Pose.identity()
+       object_min_z = -0.5
+   ```
+4. **Live Container Verification**: Tested via `AssetRegistry().get_asset_by_name("marble_kitchen")` inside the simulation container; resolved properly with tags `['background', '3dgs', 'nurec', 'kitchen']` and verified USD stage parsing.
+
+---
+
+## 6. Architectural Gap & Future Fix: Automated Dynamic Asset Discovery
+
+> [!WARNING]
+> **The Manual Registration Bottleneck**:
+> Currently, every new asset—whether a SimReady CAD fixture, a photogrammetric PBR scan, or a 3DGS NuRec capture—requires a developer or agent to manually open `background_library.py` or `object_library.py` and write a bespoke Python subclass decorated with `@register_asset`.
+> This pattern is fragile, scales poorly across distributed multi-asset pipelines, and tightly couples asset file downloads to library code edits.
+
+### 6.1 Requirements for a Robust Dynamic Discovery System
+To eliminate manual library editing, Arena should implement a pluggable, automated asset discovery mechanism:
+
+1. **Manifest-Driven Asset Packages (`asset_manifest.yaml`)**:
+   Any asset staged under `artifacts/assets/<asset_name>/` or custom mounted volumes can include a standardized declarative descriptor:
+   ```yaml
+   name: marble_kitchen
+   type: background
+   tags: [background, 3dgs, nurec, kitchen]
+   usd_file: marblekitchen.usda
+   initial_pose:
+     position: [0.0, 0.0, 0.0]
+     rotation_xyzw: [0.0, 0.0, 0.0, 1.0]
+   object_min_z: -0.5
+   spg_required: true
+   ```
+
+2. **USD Introspection Crawler (`ensure_assets_registered`)**:
+   Enhance `ensure_assets_registered()` in [`isaaclab_arena/assets/registries.py`](../../../isaaclab_arena/assets/registries.py) to run an automated directory scan over registered asset paths:
+   * **Schema Introspection**: Crawl `.usd`/`.usda` files; if prims contain `OmniNuRecFieldAsset` or `omni:nurec:isNuRecVolume`, auto-tag as `["3dgs", "nurec"]`.
+   * **Collision Detection**: Check for `PhysicsCollisionAPI` / `PhysxCollisionAPI` to determine whether the stage includes intrinsic physics proxies or needs procedural table planes.
+   * **Dynamic Class Factory**: Use `type("DynamicBackground_" + name, (LibraryBackground,), class_dict)` to register the asset into `AssetRegistry` at runtime without requiring static Python code edits.
+
+3. **External Volume Mounting & Environment Variable Path Resolution**:
+   Introduce `ARENA_ASSET_PATHS` (colon-delimited paths, similar to `PXR_USD_PATH_SEARCH` or ROS `CMAKE_PREFIX_PATH`). This allows mounting arbitrary host asset directories (such as `/workspaces/RoboLab/assets` or NAS/S3 shares) directly without copying them into the project repository.
+
+---
+
+## 7. Cross-References
 
 - **RoboLab Backgrounds**: Refer to backgrounds catalog in [`../../../RoboLab/docs/background.md`](../../../RoboLab/docs/background.md).
+- **RoboLab Marble Kitchen Scene**: See [`../../../RoboLab/assets/scenes/marble/marblekitchen.usda`](../../../RoboLab/assets/scenes/marble/marblekitchen.usda) and task definition [`../../../RoboLab/robolab/tasks/test_tasks/marble.py`](../../../RoboLab/robolab/tasks/test_tasks/marble.py).
 - **RoboLab Lighting Presets**: See [`../../../RoboLab/docs/lighting.md`](../../../RoboLab/docs/lighting.md) and [`../../../RoboLab/robolab/variations/lighting.py`](../../../RoboLab/robolab/variations/lighting.py).
 - **Asset Grounding Standards**: See [`.agent/skills/arena-digital-twin-grounding/SKILL.md`](../../../.agent/skills/arena-digital-twin-grounding/SKILL.md).

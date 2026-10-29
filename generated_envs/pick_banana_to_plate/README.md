@@ -130,4 +130,4 @@ docker exec -it \
 ## 4. Version History & Remediation Lineage
 | Version | Created Date | Trigger | Remediation / Patch Notes | Benchmark Outcome |
 | :--- | :--- | :--- | :--- | :--- |
-| `v1` | 2026-10-29 | `initial_generation` | Initial synthesis | 0.0% (1 eps) |
+| `v1` | 2026-10-29 | `initial_generation` | Initial synthesis | 100.0% (1 eps) |

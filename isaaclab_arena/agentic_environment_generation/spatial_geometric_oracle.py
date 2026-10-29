@@ -136,13 +136,13 @@ FIXTURE_SECTOR_BOUNDS: dict[str, dict[str, tuple[float, float, float, float, flo
         "table_top": (0.25, 0.88, -0.48, 0.48, 0.0),
     },
     "maple_table_robolab": {
-        "front_center": (0.25, 0.65, -0.20, 0.20, 0.0),
-        "front_left": (0.25, 0.65, 0.05, 0.45, 0.0),
-        "front_right": (0.25, 0.65, -0.45, -0.05, 0.0),
-        "left": (0.25, 0.65, 0.05, 0.45, 0.0),
-        "right": (0.25, 0.65, -0.45, -0.05, 0.0),
-        "front_half": (0.25, 0.65, -0.48, 0.48, 0.0),
-        "robot_front": (0.25, 0.65, -0.48, 0.48, 0.0),
+        "front_center": (0.35, 0.58, -0.15, 0.15, 0.0),
+        "front_left": (0.35, 0.58, 0.06, 0.25, 0.0),
+        "front_right": (0.35, 0.58, -0.25, -0.06, 0.0),
+        "left": (0.35, 0.58, 0.06, 0.25, 0.0),
+        "right": (0.35, 0.58, -0.25, -0.06, 0.0),
+        "front_half": (0.25, 0.65, -0.40, 0.40, 0.0),
+        "robot_front": (0.25, 0.65, -0.40, 0.40, 0.0),
         "rear_center": (0.55, 0.88, -0.15, 0.15, 0.0),
         "rear_left": (0.55, 0.88, 0.05, 0.48, 0.0),
         "rear_right": (0.55, 0.88, -0.48, -0.05, 0.0),
@@ -856,13 +856,18 @@ def relax_spec_spatial_factor_graph(
     # 3. Add Robot Embodiment
     if spec.embodiment:
         emb_id = spec.embodiment.id
-        default_emb_x = -0.15 if "maple_table" in bg_lower else -0.55
+        is_robot_origin_bg = "maple_table" in bg_lower
+        default_emb_x = 0.0 if is_robot_origin_bg else -0.55
         init_emb = (
-            spec.embodiment.params.get("initial_pose", {}).get("position_xyz", [default_emb_x, 0.0, floor_z])
-            if spec.embodiment.params
-            else [default_emb_x, 0.0, floor_z]
+            [0.0, 0.0, floor_z]
+            if is_robot_origin_bg
+            else (
+                spec.embodiment.params.get("initial_pose", {}).get("position_xyz", [default_emb_x, 0.0, floor_z])
+                if spec.embodiment.params
+                else [default_emb_x, 0.0, floor_z]
+            )
         )
-        fg.add_variable(emb_id, [init_emb[0], init_emb[1], init_emb[2], 0.0], is_fixed=False)
+        fg.add_variable(emb_id, [init_emb[0], init_emb[1], init_emb[2], 0.0], is_fixed=is_robot_origin_bg)
         fg.add_ground_factor(emb_id, floor_z=floor_z)
 
     # 4. Add Manipulands & Receptacles

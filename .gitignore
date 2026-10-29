@@ -142,6 +142,7 @@ eval_output/**/*.mp4
 
 # Local model weights and cache
 artifacts/openpi_cache/
+artifacts/assets/marble/
 
 
 # temp

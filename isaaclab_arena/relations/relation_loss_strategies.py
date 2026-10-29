@@ -351,7 +351,30 @@ class OnLossStrategy(RelationLossStrategy):
             child_min, child_max = child_max, child_min
 
         sec_name = getattr(relation, "surface_sector", None) or getattr(relation, "surface_anchor", None)
-        if sec_name is not None:
+        explicit_sb = getattr(relation, "sector_bounds", None)
+        if isinstance(explicit_sb, str):
+            sec_name = sec_name or explicit_sb
+            explicit_sb = None
+        if explicit_sb is not None and len(explicit_sb) >= 4:
+            sec_x_min = torch.as_tensor(float(explicit_sb[0]), device=child_pos.device, dtype=child_pos.dtype)
+            sec_x_max = torch.as_tensor(float(explicit_sb[1]), device=child_pos.device, dtype=child_pos.dtype)
+            sec_y_min = torch.as_tensor(float(explicit_sb[2]), device=child_pos.device, dtype=child_pos.dtype)
+            sec_y_max = torch.as_tensor(float(explicit_sb[3]), device=child_pos.device, dtype=child_pos.dtype)
+            bound_x_min = torch.maximum(parent_x_min + m, sec_x_min)
+            bound_x_max = torch.minimum(parent_x_max - m, sec_x_max)
+            bound_y_min = torch.maximum(parent_y_min + m, sec_y_min)
+            bound_y_max = torch.minimum(parent_y_max - m, sec_y_max)
+            valid_x_min = bound_x_min - child_min[:, 0]
+            valid_x_max = bound_x_max - child_max[:, 0]
+            valid_y_min = bound_y_min - child_min[:, 1]
+            valid_y_max = bound_y_max - child_max[:, 1]
+            center_x = (bound_x_min + bound_x_max) / 2.0 - (child_min[:, 0] + child_max[:, 0]) / 2.0
+            center_y = (bound_y_min + bound_y_max) / 2.0 - (child_min[:, 1] + child_max[:, 1]) / 2.0
+            valid_x_min = torch.where(valid_x_min > valid_x_max, center_x, valid_x_min)
+            valid_x_max = torch.where(valid_x_min > valid_x_max, center_x, valid_x_max)
+            valid_y_min = torch.where(valid_y_min > valid_y_max, center_y, valid_y_min)
+            valid_y_max = torch.where(valid_y_min > valid_y_max, center_y, valid_y_max)
+        elif sec_name is not None:
             from isaaclab_arena.agentic_environment_generation.spatial_geometric_oracle import (
                 get_fixture_sector_bounds,
                 transform_sector_bounds_to_world,

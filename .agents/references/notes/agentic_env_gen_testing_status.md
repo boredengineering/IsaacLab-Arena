@@ -178,6 +178,31 @@ Executed end-to-end closed-loop evaluation rollout using Arena's standard evalua
 
 ---
 
-## 8. Next Steps & Ongoing Activities
-1. Complete remaining simulation test suites in `isaaclab_arena/tests`.
-2. Present full findings and verified capabilities to the user.
+## 8. OpenPI π₀.₅ OOD Remediation & Verified 100% Task Completion (`2026-10-29_19-27-25`)
+
+Following the initial timeout in Section 7, we performed a deep-dive audit of the recorded camera streams, USD stage geometry (`maple_table.usda`), and OpenPI checkpoint normalization statistics (`norm_stats.json`), documented in [`openpi_droid_tabletop_remediation_plan.md`](../plans/openpi_droid_tabletop_remediation_plan.md):
+
+1. **Fixed `build_neutral_hold_action` Settle-Loop Zeroing ([`policy_runner.py`](../../../isaaclab_arena/evaluation/policy_runner.py))**:
+   - `build_neutral_hold_action()` previously returned `zeros(1, 8)` for `droid_abs_joint_pos` (`JointPositionAction` with `use_default_offset=False`), driving all 7 Franka arm joints to `0.0 rad` (a vertical flagpole singularity) during the 41-step `verify_and_settle_scene` loop before OpenPI ever received Step 0. Updated it to hold the robot's current reset joint positions.
+2. **Fixed `maple_table_robolab` Robot Base Origin (`[0.0, 0.0, 0.0]`)**:
+   - Anchored `robot_droid` at `[0.0, 0.0, 0.0]` in [`pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml) and [`spatial_geometric_oracle.py`](../../../isaaclab_arena/agentic_environment_generation/spatial_geometric_oracle.py) (`is_fixed=True` for robot-origin calibrated backgrounds), eliminating the 43.7 cm gap between the stand and the table and restoring calibrated DROID camera extrinsics.
+3. **Added Robolab HDR Lighting & Directional Shadows ([`arena_env_graph_conversion_utils.py`](../../../isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py))**:
+   - Configured `hdr: home_office_robolab`, `light_intensity: 500.0`, and `directional_light_on: true`, matching the SRL Robolab training distribution.
+4. **Normalized `On` Sector Bounds & Canonicalized Prompt**:
+   - Normalized string `sector_bounds` in [`relations.py`](../../../isaaclab_arena/relations/relations.py), tightened `maple_table_robolab` active sector bounds, and updated the prompt to `"Pick up the banana and place it on the plate."`
+5. **Configured `--open_loop_horizon 8` & `episode_length_s: 40.0`**:
+   - Exposed `open_loop_horizon` in [`pi0_remote_config.py`](../../../isaaclab_arena_openpi/policy/pi0_remote_config.py) and [`pi0_remote_policy.py`](../../../isaaclab_arena_openpi/policy/pi0_remote_policy.py).
+
+### Verified Rollout Results (`outputs/rollouts_openpi/2026-10-29_19-27-25/`)
+- **Success Rate**: **`1.0` (`1/1` episode complete, `overall_score: 1.0`, `episode_length: 267` steps / `17.8s`)**
+- **Milestone Events**:
+  - `step 2`: `objects_settled` (`+0.333`)
+  - `step 211`: `object_is_above_height(object_name='banana', use_settled_state=True)` (`+0.333`)
+  - `step 267`: `object_on_destination` (`+0.333`)
+- **Recorded Video & Telemetry Artifacts**:
+  - Viewport Video: [`outputs/rollouts_openpi/2026-10-29_19-27-25/rl-video-step-0.mp4`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/rl-video-step-0.mp4)
+  - Robot External Camera 1: [`outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-external_camera_rgb-episode-0.mp4`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-external_camera_rgb-episode-0.mp4)
+  - Robot External Camera 2: [`outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-external_camera_2_rgb-episode-0.mp4`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-external_camera_2_rgb-episode-0.mp4)
+  - Robot Wrist Camera: [`outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-wrist_camera_rgb-episode-0.mp4`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-wrist_camera_rgb-episode-0.mp4)
+  - Interactive Evaluation Report: [`outputs/rollouts_openpi/2026-10-29_19-27-25/index.html`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/index.html)
+  - Episode Results JSONL: [`outputs/rollouts_openpi/2026-10-29_19-27-25/episode_results_rank0.jsonl`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/episode_results_rank0.jsonl)

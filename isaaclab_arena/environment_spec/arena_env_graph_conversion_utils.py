@@ -121,11 +121,20 @@ def _ensure_scene_lighting(graph_spec: ArenaEnvGraphSpec, assets_by_node_id: dic
 
     dome_node_id = _unique_node_id(set(assets_by_node_id), _DEFAULT_DOME_LIGHT_NODE_ID)
     dome_light = AssetRegistry().get_asset_by_name(_DEFAULT_DOME_LIGHT_ASSET_NAME)()
+    bg_params = graph_spec.background.params or {}
+    if bg_params.get("light_intensity") is not None:
+        dome_light.set_intensity(float(bg_params["light_intensity"]))
+    if bg_params.get("hdr") is not None:
+        from isaaclab_arena.assets.registries import HDRImageRegistry
+
+        hdr_instance = HDRImageRegistry().get_hdr_by_name(str(bg_params["hdr"]))()
+        dome_light.add_hdr(hdr_instance)
     assets_by_node_id[dome_node_id] = dome_light
 
     directional_node_id = _unique_node_id(set(assets_by_node_id), _DEFAULT_DIRECTIONAL_LIGHT_NODE_ID)
     directional_light = AssetRegistry().get_asset_by_name(_DEFAULT_DIRECTIONAL_LIGHT_ASSET_NAME)()
-    directional_light.off()  # a lighting-direction variation turns it back on at build time
+    if not bg_params.get("directional_light_on", False):
+        directional_light.off()  # a lighting-direction variation turns it back on at build time
     # Let the direction variation dim this dome when it activates, so shadows show.
     directional_light.set_dome_light(dome_light)
     assets_by_node_id[directional_node_id] = directional_light
@@ -232,6 +241,9 @@ def instantiate_assets_from_spec(
     assets_by_node_id[graph_spec.embodiment.id] = embodiment_instance
 
     bg_params = parse_asset_params(graph_spec.background.params)
+    bg_params.pop("hdr", None)
+    bg_params.pop("light_intensity", None)
+    bg_params.pop("directional_light_on", None)
     assets_by_node_id[graph_spec.background.id] = asset_registry.get_asset_by_name(graph_spec.background.registry_name)(
         **bg_params
     )

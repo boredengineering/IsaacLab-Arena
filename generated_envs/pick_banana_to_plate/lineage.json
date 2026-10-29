@@ -13,16 +13,16 @@
       "spec_file": "pick_banana_to_plate/v1/pick_banana_to_plate.yaml",
       "policy_file": "pick_banana_to_plate/v1/policy_config.yaml",
       "evaluation": {
-        "timestamp": "2026-10-29T18:51:19.678342+00:00",
-        "eval_dir": "outputs/2026-10-29_18-50-28",
-        "success_rate": 0.0,
-        "object_moved_rate": 0.0,
+        "timestamp": "2026-10-29T19:35:03.911603+00:00",
+        "eval_dir": "outputs/2026-10-29_19-33-07",
+        "success_rate": 1.0,
+        "object_moved_rate": 1.0,
         "num_episodes": 1,
         "progress_score": 0.0,
         "raw_metrics": {
           "num_episodes": 1,
-          "success_rate": 0.0,
-          "object_moved_rate": 0.0
+          "success_rate": 1.0,
+          "object_moved_rate": 1.0
         }
       }
     }

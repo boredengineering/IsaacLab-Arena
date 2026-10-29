@@ -1,8 +1,8 @@
 # OpenPI π₀.₅ DROID Tabletop Evaluation Diagnosis & Remediation Plan
 
-**Document Version:** 1.0.0  
+**Document Version:** 1.1.0  
 **Date:** 2026-10-29  
-**Status:** Proposed for Implementation  
+**Status:** Verified & Completed (`success_rate: 1.0`, `overall_score: 1.0` in 267 steps)  
 **Target Environment:** [`generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml)  
 **Target Policy:** OpenPI `pi05_droid_jointpos_polaris` (`pi05` variant, `droid` adapter)  
 **Related References:**
@@ -22,6 +22,7 @@ The episode terminated in `TIMEOUT` (`success_rate: 0.0`, `object_moved_rate: 0.
 
 | # | Category | Root Cause | Empirical Evidence from Run & Codebase | Impact on OpenPI $\pi_{0.5}$ |
 | :--- | :--- | :--- | :--- | :--- |
+| **0** | **Settle-Loop Action Zeroing (`build_neutral_hold_action` CRITICAL BUG)** | [`build_neutral_hold_action()`](../../../isaaclab_arena/evaluation/policy_runner.py) only checked for `"wbc"` (G1) and returned `torch.zeros((num_envs, 8))` for all other embodiments during the 41-step `verify_and_settle_scene` loop. Because `droid_abs_joint_pos` uses `JointPositionActionCfg(use_default_offset=False)`, sending zeros commanded all 7 Franka arm joints to **`0.0 rad`** for 41 steps (`2.73s`) before policy inference started! | In `ext1_000.png` and `viewport_000.png`, the arm was standing straight up in a vertical flagpole singularity (`q = [0, 0, 0, -0.07, 0, 0, 0]`, hitting the upper limit of `panda_joint4` and lower limit of `panda_joint6`) instead of the reset pose `[0, -0.628, 0, -2.513, 0, 1.885, 0]`. | Put `q4` (`-0.07` vs `[-2.77, -1.26]`) and `q6` (`0.0` vs `[1.17, 3.20]`) more than 3 standard deviations outside `norm_stats.json` before OpenPI even received Step 0! |
 | **1** | **Scene Coordinate Frame & Robot Base Pose (CRITICAL OOD)** | `maple_table_robolab` is authored in **Robot Base Frame** (`table` is already at $X \in [0.20, 0.90]\,\text{m}$, deck at $Z = 0.0\,\text{m}$, ground at $Z = -0.697\,\text{m}$), expecting `robot_droid` at `[0.0, 0.0, 0.0]`. Setting `robot_droid` to `[-0.4367, 0.0, 0.0]` (a `packing_table` offset) or letting `SpatialFactorGraph` push it to `-0.3371` created a **43.7 cm physical chasm** between the robot stand and the table. | Solved object poses: `banana = (0.397, -0.147, 0.031)`, `plate = (0.416, 0.227, 0.010)`. From `X = -0.4367`, the banana is **$0.846\,\text{m}$** away (99% of Franka's $0.855\,\text{m}$ lock-out limit) and the plate is **$0.882\,\text{m}$** away (physically unreachable). From `X = 0.0`, they are at **$0.423\,\text{m}$** and **$0.474\,\text{m}$** (ideal workspace). | Furthermore, because `external_camera` and `external_camera_2` are parented to `{ENV_REGEX_NS}/Robot/panda_link0` ([`droid.py`](../../../isaaclab_arena/embodiments/droid/droid.py)), moving the robot base backward shifted both external cameras 43.7 cm backward, while `wrist_camera` at Step 0 stared straight down at the grey perforated metal robot stand instead of the tabletop. |
 | **2** | **Visual Lighting Distribution Shift (SigLIP OOD)** | [`_ensure_scene_lighting()`](../../../isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py) falls back to an untextured `DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=1500.0)` when no `hdr` is configured. | `pi05_droid_jointpos_polaris` was co-trained on SRL Robolab scenes rendered with indoor HDR environment maps (`home_office_robolab`, `billiard_hall_robolab`, `wooden_lounge_robolab`) at `intensity=500.0` ([`pick_and_place_maple_table_environment.py`](../../../isaaclab_arena_environments/pick_and_place_maple_table_environment.py)). | At `intensity=1500.0` against a flat grey void, the white Franka links are over-exposed and blend into the grey background in both external cameras, degrading visual grounding. |
 | **3** | **Language Prompt Distribution Shift** | The generated instruction (`"Pick up the yellow banana from the right side of the table and place it onto the plate on the left."`) includes verbose relative spatial modifiers (`"from the right side"`, `"on the left"`). | Canonical PolaRiS / DROID evaluation prompts ([`droid_pnp_srl_openpi_experiment.yaml`](../../../isaaclab_arena_environments/experiment_configs/droid_pnp_srl_openpi_experiment.yaml)) use concise object-centric phrasing: `"Pick up the banana and place it on the plate."` | Relative left/right tokens conflict with the diagonal camera viewpoints (`ext1` views the robot's right side on the upper-right of the image) and deviate from the DROID training prompt template. |
@@ -190,3 +191,80 @@ When `robot_droid` is fixed to `[0.0, 0.0, 0.0]`, we will first test the standar
 | **Step 3** | Add HDR lighting (`hdr`, `light_intensity`) and `finger_contact_friction` forwarding to [`arena_env_graph_conversion_utils.py`](../../../isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py) | `arena_env_graph_conversion_utils.py` | `_ensure_scene_lighting` loads `home_office_robolab.hdr` at `intensity=500.0` |
 | **Step 4** | Expose configurable `open_loop_horizon` in [`pi0_remote_config.py`](../../../isaaclab_arena_openpi/policy/pi0_remote_config.py) and [`pi0_remote_policy.py`](../../../isaaclab_arena_openpi/policy/pi0_remote_policy.py) | `pi0_remote_config.py`, `pi0_remote_policy.py` | `--open_loop_horizon 8` CLI flag overrides default `15` |
 | **Step 5** | Update [`pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml) with Phase 1 + Phase 2 settings and re-run closed-loop evaluation with video recording | `pick_banana_to_plate.yaml` | Inspect Step-0 camera frames (`ext1`, `ext2`, `wrist`, `viewport`) and verify closed-loop grasp & placement metrics (`object_moved_rate > 0`, `success_rate`) |
+
+---
+
+## 6. Empirical Validation Results (`2026-10-29_19-27-25`)
+
+After implementing Steps 1–5 (along with the settle-loop posture-hold fix in [`policy_runner.py`](../../../isaaclab_arena/evaluation/policy_runner.py)), we executed a recorded closed-loop rollout (`outputs/rollouts_openpi/2026-10-29_19-27-25/`). The remediation succeeded on the first episode: **`success_rate: 1.0` (`overall_score: 1.0`, `all_complete: true`) in `267` steps (`17.8s`)**.
+
+### 6.1 Summary of What Made It Work
+
+1. **Fixed Settle-Loop Action Zeroing in [`build_neutral_hold_action()`](../../../isaaclab_arena/evaluation/policy_runner.py#L88-L128):**
+   - Previously, `build_neutral_hold_action()` only handled G1 `"wbc"` and returned `zeros(1, 8)` for all other embodiments during the 41-step `verify_and_settle_scene` loop. Because `droid_abs_joint_pos` uses `JointPositionAction(use_default_offset=False)`, those 41 settle steps commanded all 7 Franka arm joints to `0.0 rad` (a vertical flagpole singularity where `q4 = -0.07` and `q6 = 0.0`, 3+ standard deviations outside `norm_stats.json`) before OpenPI ever received Step 0.
+   - Updating `build_neutral_hold_action()` to populate `JointPositionAction(use_default_offset=False)` terms with the robot's current reset joint positions kept the robot in its exact DROID home pose (`[0, -0.628, 0, -2.513, 0, 1.885, 0]`) at Step 0.
+2. **Anchored `robot_droid` at `[0.0, 0.0, 0.0]` on `maple_table_robolab` ([`pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml), [`spatial_geometric_oracle.py`](../../../isaaclab_arena/agentic_environment_generation/spatial_geometric_oracle.py#L856-L872)):**
+   - Eliminated the 43.7 cm gap between the robot stand and the table, restored the calibrated DROID camera extrinsics, and placed the banana (`(0.45, -0.13, 0.03)`) and plate (`(0.45, 0.14, 0.01)`) right in the center of the workspace and wrist camera view at Step 0.
+3. **Added SRL Robolab HDR Environment Lighting & Directional Shadows ([`arena_env_graph_conversion_utils.py`](../../../isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py#L122-L140)):**
+   - Configured `hdr: home_office_robolab`, `light_intensity: 500.0`, and `directional_light_on: true`, matching the `pi05_droid_jointpos_polaris` visual training distribution.
+4. **Canonical Prompt & Closed-Loop Action Horizon (`--open_loop_horizon 8`, `episode_length_s: 40.0`):**
+   - Exposed `open_loop_horizon` in [`Pi0RemotePolicyCfg`](../../../isaaclab_arena_openpi/policy/pi0_remote_config.py) and [`Pi0RemotePolicy`](../../../isaaclab_arena_openpi/policy/pi0_remote_policy.py), and set the task instruction to `"Pick up the banana and place it on the plate."`
+
+### 6.2 Before vs. After Comparison
+
+| Dimension | Baseline Failed Run (`2026-10-29_18-44-28`) | Remediated Run (`2026-10-29_19-27-25`) |
+| :--- | :--- | :--- |
+| **Settle-Loop Hold Action (`41` steps)** | `zeros(1, 8)` $\rightarrow$ drove arm to `[0, 0, 0, -0.07, 0, 0, 0]` flagpole singularity | Holds reset joint positions `[0, -0.628, 0, -2.513, 0, 1.885, 0]` |
+| **Robot Base Pose (`robot_droid`)** | `[-0.4367, 0.0, 0.0]` (43.7 cm gap from table; cameras shifted 43.7 cm back) | `[0.0, 0.0, 0.0]` (flush with `maple_table_robolab`; calibrated camera extrinsics) |
+| **Scene Lighting** | Untextured grey `DomeLight` (`intensity=1500.0`), no directional light | `home_office_robolab` HDR (`intensity=500.0`) + `DirectionalLight` (`1000.0`) |
+| **Language Instruction** | `"Pick up the yellow banana from the right side of the table and place it onto the plate on the left."` | `"Pick up the banana and place it on the plate."` |
+| **Open-Loop Horizon / Episode Cap** | `15` steps (`1.0s`) / `15.0s` (`225` steps) | `8` steps (`0.53s`) / `40.0s` (`600` steps) |
+| **Final Outcome** | `TIMEOUT` (`success_rate: 0.0`, `overall_score: 0.333`) | **`SUCCESS` (`success_rate: 1.0`, `overall_score: 1.0` in `267` steps / `17.8s`)** |
+
+### 6.3 Rollout Progression & Recorded Artifacts (`outputs/rollouts_openpi/2026-10-29_19-27-25/`)
+
+| Step | Event / Predicate | Score Delta | Cumulative Score |
+| :---: | :--- | :---: | :---: |
+| **Step 2** | `objects_settled` | `+0.333` | `0.333` |
+| **Step 211** | `object_is_above_height(object_name='banana', use_settled_state=True)` (Banana grasped & lifted) | `+0.333` | `0.667` |
+| **Step 267** | `object_on_destination` (Banana placed onto the plate) | `+0.333` | **`1.000` (`SUCCESS`)** |
+
+- **Viewport Video (3rd-person view):** [`outputs/rollouts_openpi/2026-10-29_19-27-25/rl-video-step-0.mp4`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/rl-video-step-0.mp4)
+- **External Camera 1 Video:** [`outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-external_camera_rgb-episode-0.mp4`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-external_camera_rgb-episode-0.mp4)
+- **External Camera 2 Video:** [`outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-external_camera_2_rgb-episode-0.mp4`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-external_camera_2_rgb-episode-0.mp4)
+- **Wrist Camera Video:** [`outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-wrist_camera_rgb-episode-0.mp4`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-wrist_camera_rgb-episode-0.mp4)
+- **Episode Results JSONL:** [`outputs/rollouts_openpi/2026-10-29_19-27-25/episode_results_rank0.jsonl`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/episode_results_rank0.jsonl)
+- **Evaluation Telemetry (TTL):** [`outputs/rollouts_openpi/2026-10-29_19-27-25/eval_telemetry.ttl`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/eval_telemetry.ttl)
+- **Interactive HTML Report:** [`outputs/rollouts_openpi/2026-10-29_19-27-25/index.html`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/index.html)
+
+### 6.4 Interactive `--viz kit` Reproduction Command
+
+Evalaute if this is necesary
+
+```bash
+# Discover active container name (following repo conventions)
+ARENA_CONTAINER=$(docker ps --filter "name=isaaclab_arena" --format "{{.Names}}" | head -n 1)
+```
+
+Command to display on X11 display
+
+```bash
+# Ensure local X11 display permissions are granted (if using local desktop)
+xhost +local:docker > /dev/null 2>&1
+```
+
+
+```bash
+docker exec -it isaaclab_arena-latest-isaaclab-arena-private su $(id -un) -c \
+  "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+    --policy_type isaaclab_arena_openpi.policy.pi0_remote_policy.Pi0RemotePolicy \
+    --policy_variant pi05 \
+    --openpi_embodiment_adapter droid \
+    --remote_host 127.0.0.1 \
+    --remote_port 8008 \
+    --open_loop_horizon 8 \
+    --num_episodes 1 \
+    --enable_cameras \
+    --viz kit \
+    --env_spec generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml"
+```

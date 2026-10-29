@@ -18,6 +18,7 @@ from isaaclab_arena.assets.register import register_asset
 from isaaclab_arena.utils.pose import Pose
 
 _SIMREADY_LOCAL_DIR = Path(__file__).resolve().parents[2] / "artifacts" / "assets" / "simready"
+_MARBLE_LOCAL_DIR = Path(__file__).resolve().parents[2] / "artifacts" / "assets" / "marble"
 
 
 class LibraryBackground(Background):
@@ -362,3 +363,14 @@ class ReplicatorKitchenUShape(ReplicatorKitchenBackground):
 
     name = "replicator_kitchen_u_shape"
     usd_path = f"{ISAAC_STAGING_NUCLEUS_DIR}/Environments/replicator_kitchen/kitchen_u_shape.usda"
+
+
+@register_asset
+class MarbleKitchenBackground(LibraryBackground):
+    """3DGS Marble Kitchen scene with co-registered PhysX collision proxy."""
+
+    name = "marble_kitchen"
+    tags = ["background", "3dgs", "nurec", "kitchen"]
+    usd_path = str(_MARBLE_LOCAL_DIR / "marblekitchen.usda")
+    initial_pose = Pose.identity()
+    object_min_z = -0.5

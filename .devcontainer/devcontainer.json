@@ -44,7 +44,7 @@
     "EVAL_DIR": "/eval/isaaclab_arena/locomanipulation_tutorial",
     "HF_HOME": "/root/.cache/huggingface",
     "MPLCONFIGDIR": "/tmp/matplotlib",
-    "PYTHONPATH": "/workspaces/isaaclab-arena-private:/workspaces/isaaclab-arena-private/source:/workspaces/isaaclab-arena-private/submodules/IsaacLab/source/isaaclab:/workspaces/isaaclab_arena:/workspaces/isaaclab_arena/source:/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab:${containerEnv:PYTHONPATH}"
+    "PYTHONPATH": "/workspaces/IsaacLab-Arena:/workspaces/IsaacLab-Arena/source:/workspaces/IsaacLab-Arena/submodules/IsaacLab/source/isaaclab:/workspaces/isaaclab_arena:/workspaces/isaaclab_arena/source:/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab:${containerEnv:PYTHONPATH}"
   },
   "features": {
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
@@ -79,13 +79,12 @@
         "remote.restoreForwardedPorts": false,
         "python.defaultInterpreterPath": "/isaac-sim/python.sh",
         "python.analysis.extraPaths": [
-          "/workspaces/isaaclab-arena-private",
-          "/workspaces/isaaclab-arena-private/source",
-          "/workspaces/isaaclab-arena-private/submodules/IsaacLab/source/isaaclab",
+          "/workspaces/IsaacLab-Arena",
+          "/workspaces/IsaacLab-Arena/source",
+          "/workspaces/IsaacLab-Arena/submodules/IsaacLab/source/isaaclab",
           "/workspaces/isaaclab_arena",
           "/workspaces/isaaclab_arena/source",
           "/workspaces/isaaclab_arena/submodules/IsaacLab/source/isaaclab",
-          "/workspaces/IsaacLab-Arena",
           "/workspaces/RoboLab",
           "/workspaces/colibri"
         ],

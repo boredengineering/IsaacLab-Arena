@@ -78,5 +78,5 @@ Comparing `BASE`, `OURS`, and `THEIRS` across the full repository tree yielded a
 | :--- | :--- |
 | **Conflict Marker Scan** (`git grep "<<<<<<<"`) | `0` conflict markers across the entire repository. |
 | **Python Bytecode Compilation** (`python3 -m py_compile`) | `1,260 / 1,260` tracked `.py` files compiled with `0` syntax errors. |
-| **Container Unit Test Suite** (`pytest` in `isaaclab_arena-latest-isaaclab-arena-private`) | **671 passed, 0 failed** across core, agentic workflow, and fixture-isolated validation suites. |
+| **Container Unit Test Suite** (`pytest` in `$ARENA_CONTAINER`) | **671 passed, 0 failed** across core, agentic workflow, and fixture-isolated validation suites. |
 | **Independent Critic Agent Audit** | Phase 1 (Pre-Merge) & Phase 2 (Post-Merge) completed with final **`PASS`** sign-off. |

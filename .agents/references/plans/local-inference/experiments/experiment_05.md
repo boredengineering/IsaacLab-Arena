@@ -19,7 +19,7 @@
 
 - [1. Executive Summary & Core Theoretical Principle](#1-executive-summary--core-theoretical-principle)
   - [1.1 The Critical Architectural Insight: Microwave vs. Drawer Ontological Split](#11-the-critical-architectural-insight-microwave-vs-drawer-ontological-split)
-  - [1.2 Autonomous Self-Healing Loops with Dual Knowledge Graphs](#12-recursive-self-improvement-self-healing-with-dual-knowledge-graphs)
+  - [1.2 Autonomous Self-Healing Loops with Dual Knowledge Graphs](#12-autonomous-self-healing-loops-with-dual-knowledge-graphs)
 - [2. Finite Relational Graph Grammar & Dual-Ontology Specifications](#2-finite-relational-graph-grammar--dual-ontology-specifications)
   - [2.1 Formal Ontological Comparison: Microwave vs. Drawer](#21-formal-ontological-comparison-microwave-vs-drawer)
   - [2.2 RDF-star Representation](#22-rdf-star-representation)
@@ -28,9 +28,9 @@
   - [3.1 Revolute Hinge Swept Volume ($\mathcal{V}_{	ext{revolute}}$) — Placed Articulated Prop](#31-revolute-hinge-swept-volume-mathcalv_textrevolute--placed-articulated-prop)
   - [3.2 Prismatic Linear Motion Stroke Corridor ($\mathcal{V}_{	ext{prismatic}}$) — Intrinsic Fixture Sub-Prim](#32-prismatic-linear-motion-stroke-corridor-mathcalv_textprismatic--intrinsic-fixture-sub-prim)
 - [4. Software Architecture: Deterministic Motion Clearance Engine (`Pass 3c`)](#4-software-architecture-deterministic-motion-clearance-engine-pass-3c)
-- [5. Autonomous Self-Healing Loops Architecture & Empirical Evaluation Methodology](#5-recursive-self-improvement-self-healing-architecture--empirical-evaluation-methodology)
+- [5. Autonomous Self-Healing Loops Architecture & Empirical Evaluation Methodology](#5-autonomous-self-healing-loops-architecture--empirical-evaluation-methodology)
   - [5.1 Theoretical Foundation: Bi-Level Harness Optimization](#51-theoretical-foundation-bi-level-harness-optimization)
-  - [5.2 Four Empirical Criteria to Evaluate Genuine Self-Improvement](#52-four-empirical-criteria-to-evaluate-genuine-self-improvement)
+  - [5.2 Four Empirical Criteria to Evaluate Genuine Autonomous Self-Healing](#52-four-empirical-criteria-to-evaluate-genuine-autonomous-self-healing)
   - [5.3 W3C SHACL Constraint Invariants](#53-w3c-shacl-constraint-invariants)
   - [5.4 The Ignition Test for Evolved Agent Harnesses](#54-the-ignition-test-for-evolved-agent-harnesses)
   - [5.5 The Orchestrator Architecture, Ternary Gating Logic & Epistemic Resolution Loop](#55-the-orchestrator-architecture-ternary-gating-logic--epistemic-resolution-loop)
@@ -338,7 +338,7 @@ isaaclab_arena/relations/
 
 ### 5.1 Theoretical Foundation: Bi-Level Harness Optimization
 
-Experiment 05 formally grounds its autonomous self-healing loops evaluation in the bi-level optimization framework established by **Srikanth et al., *"Self-improvement of AI research agents"*, Weco AI (arXiv:2609.26457v1, Sept 2026)**.
+Experiment 05 formally grounds its autonomous self-healing loops evaluation in a structured bi-level harness optimization framework.
 
 In our robotics environment generation domain, Self-healing operates at the **harness and graph-reasoning layer**, structured as two coupled loops:
 
@@ -371,9 +371,9 @@ In our robotics environment generation domain, Self-healing operates at the **ha
 
 ---
 
-### 5.2 Four Empirical Criteria to Evaluate Genuine Self-Improvement
+### 5.2 Four Empirical Criteria to Evaluate Genuine Autonomous Self-Healing
 
-To scientifically verify whether the agent is achieving **genuine autonomous self-healing** rather than benefiting from noise, extra compute, or reward hacking, Experiment 05 enforces four rigorous criteria adapted from Srikanth et al. (2026):
+To scientifically verify whether the agent is achieving **genuine autonomous self-healing** rather than benefiting from noise, extra compute, or reward hacking, Experiment 05 enforces four rigorous criteria:
 
 #### Criterion 1: Fixed Compute and Evaluation Budget ($b_t$)
 Every candidate spec proposal and repair attempt is strictly constrained:
@@ -409,7 +409,7 @@ Where $N_{\text{hack}}$ counts proposals that pass compiler gates via unphysical
 - Ground interpenetration ($Z_{\text{base}} < -0.005\text{ m}$).
 - Category conflation (e.g. declaring an intrinsic drawer as a floating prop to bypass kinematic hierarchy).
 - Spawning objects outside camera frustums or inside collision disabled groups.
-*Acceptance Invariant*: Genuine self-improvement requires $R_{\text{hack}}$ to drop monotonically across self-healing cycles ($R_{\text{hack}} \le 5\%$, down from baseline $55\%$).
+*Acceptance Invariant*: Genuine autonomous self-healing requires $R_{\text{hack}}$ to drop monotonically across self-healing cycles ($R_{\text{hack}} \le 5\%$, down from baseline $55\%$).
 
 ---
 
@@ -453,7 +453,7 @@ arena:PlacedArticulatedPropShape a sh:NodeShape ;
 
 ### 5.4 The Ignition Test for Evolved Agent Harnesses
 
-To evaluate whether an evolved agent $a_k^*$ is superior at driving future autonomous self-healing than its human-engineered initial harness $a_0$, we conduct the **Ignition Test** (Srikanth et al. §3.6):
+To evaluate whether an evolved agent $a_k^*$ is superior at driving future autonomous self-healing than its human-engineered initial harness $a_0$, we conduct the **Ignition Test**:
 - We task $a_k^*$ with scaffolding, optimizing, and certifying a completely novel, unseen SimReady asset environment (e.g. a commercial dishwasher with compound drop-down door and sliding dishrack).
 - We track the convergence trajectory: steps required to reach certified equilibrium ($g \ge 0.80$) and verify whether $a_k^*$ converges with fewer repair turns and lower variance than $a_0$.
 
@@ -602,7 +602,7 @@ Finally, grasp the tomato soup can, lift it from the table deck, and stow it upr
    python3 .agents/skills/arena-local-inference-experiments/scripts/audit_hardware.py
    Confirm GPU 0 (Port 8000), GPU 1, and Neo4j (Port 7688) are certified.
 2. Query Neo4j LPG for office table surface sectors and prior microwave placements:
-   docker exec isaaclab_arena-latest-isaaclab-arena-private /isaac-sim/python.sh -c "
+   docker exec "$ARENA_CONTAINER" /isaac-sim/python.sh -c "
    from isaaclab_arena.agentic_environment_generation.graph_rag import GraphRAGRetriever
    r = GraphRAGRetriever()
    print(r.retrieve_refinement_history('office_table_microwave', 'droid'))
@@ -1087,7 +1087,7 @@ The matrix below benchmarks each cognitive specification model and visual critic
 | Classification Group | Benchmark Case | Model Combination ID & Architecture | Cognitive Spec LLM (Port 8000) | Visual Critic / Oracle (Port 8001) | Architectural Hypothesis & Expected Behavior | Empirical Scorecard & Measured Grade *(Phase 1 Screening & Policy Audit)* |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Group 1: Type A Placed Articulated Props** | **Scenario `D1-C`**<br>*Sequential Microwave Open & Stow on Table* | **Combination 1a**<br>*(Coder 32B + Analytical Oracle)* | `Qwen2.5-Coder-32B-Instruct-AWQ` | Deterministic Oracle (V0)<br>*(In-Tree)* | **Code Syntax with Analytical Bounds**:<br>Expected high YAML syntax compliance; analytical collision checker detects microwave door swing arc $\mathcal{W}_{\text{revolute}}$ collision on Cycle 0 to guide self-healing. | **STATUS: COMPLETE (GR00T AUDIT)**<br>• $\text{OR}_{\text{preflight}}$: **100.0%**<br>• $\text{PDR}$: **0.0%**<br>• $K_{\text{self-healing}}$: **1** (Cycle 0 pass)<br>• $\text{SR}_{\text{physx}} \text{ [GR00T / OpenPI]}$: **100.0% / Decoupled**<br>• $CR_{\text{chained}} \text{ [GR00T / OpenPI]}$: **0.0% / Decoupled** (§16.2)<br>• **Measured Grade**: **Preflight A+ / Articulation Deficit** |
-| **Group 1: Type A Placed Articulated Props** | **Scenario `D1-C`**<br>*Sequential Microwave Open & Stow on Table* | **Combination 1b**<br>*(Coder 32B + Physical AI Critic)* | `Qwen2.5-Coder-32B-Instruct-AWQ` | `nvidia/Cosmos-Reason2-2B` | **Physical AI Dynamic Guidance**:<br>Tests whether Cosmos-Reason2-2B detects door swept arc $\mathcal{W}_{\text{revolute}}$ collisions and accelerates self-healing self-healing ($K_{\text{self-healing}} \le 2$). | **STATUS: PREFLIGHT VERIFIED**<br>• $\text{OR}_{\text{preflight}}$: **100.0%**<br>• $\text{PDR}$: **0.0%**<br>• $K_{\text{self-healing}}$: **1** (Cycle 0 pass)<br>• $\text{SR}_{\text{physx}} \text{ [GR00T / OpenPI]}$: **100.0% (Golden)**<br>• $CR_{\text{chained}} \text{ [GR00T / OpenPI]}$: **Decoupled (§16.3)**<br>• **Measured Grade**: **Preflight Grade: A+** |
+| **Group 1: Type A Placed Articulated Props** | **Scenario `D1-C`**<br>*Sequential Microwave Open & Stow on Table* | **Combination 1b**<br>*(Coder 32B + Physical AI Critic)* | `Qwen2.5-Coder-32B-Instruct-AWQ` | `nvidia/Cosmos-Reason2-2B` | **Physical AI Dynamic Guidance**:<br>Tests whether Cosmos-Reason2-2B detects door swept arc $\mathcal{W}_{\text{revolute}}$ collisions and accelerates autonomous self-healing ($K_{\text{self-healing}} \le 2$). | **STATUS: PREFLIGHT VERIFIED**<br>• $\text{OR}_{\text{preflight}}$: **100.0%**<br>• $\text{PDR}$: **0.0%**<br>• $K_{\text{self-healing}}$: **1** (Cycle 0 pass)<br>• $\text{SR}_{\text{physx}} \text{ [GR00T / OpenPI]}$: **100.0% (Golden)**<br>• $CR_{\text{chained}} \text{ [GR00T / OpenPI]}$: **Decoupled (§16.3)**<br>• **Measured Grade**: **Preflight Grade: A+** |
 | **Group 1: Type A Placed Articulated Props** | **Scenario `D1-C`**<br>*Sequential Microwave Open & Stow on Table* | **Combination 1c**<br>*(Coder 32B + General VLM Critic)* | `Qwen2.5-Coder-32B-Instruct-AWQ` | `Qwen/Qwen2.5-VL-7B-Instruct` | **Historical Control Baseline**:<br>Evaluates original baseline setup; expected to place prop inside door swept volume on Cycle 0 and require $\ge 2$ multi-modal self-healing cycles. | **STATUS: PREFLIGHT VERIFIED**<br>• $\text{OR}_{\text{preflight}}$: **100.0%**<br>• $\text{PDR}$: **0.0%**<br>• $K_{\text{self-healing}}$: **1** (Cycle 0 pass)<br>• $\text{SR}_{\text{physx}} \text{ [GR00T / OpenPI]}$: **100.0% (Golden)**<br>• $CR_{\text{chained}} \text{ [GR00T / OpenPI]}$: **Decoupled (§16.3)**<br>• **Measured Grade**: **Preflight Grade: A+** |
 | **Group 1: Type A Placed Articulated Props** | **Scenario `D1-C`**<br>*Sequential Microwave Open & Stow on Table* | **Combination 2a**<br>*(Dense 72B + Analytical Oracle)* | `Qwen2.5-72B-Instruct-AWQ` | Deterministic Oracle (V0)<br>*(In-Tree)* | **Dense Context Analytical Compliance**:<br>Expected to respect table sector partitioning zero-shot ($K_{\text{self-healing}} = 1$), placing soup can in `front_left` with $\ge 0.15\text{ m}$ margin verified analytically. | **STATUS: COMPLETE (DUAL-POLICY)**<br>• $\text{OR}_{\text{preflight}}$: **100.0%**<br>• $\text{PDR}$: **0.0%**<br>• $K_{\text{self-healing}}$: **1** (Cycle 0 pass)<br>• $\text{SR}_{\text{physx}} \text{ [GR00T / OpenPI]}$: **100.0% / 100.0%**<br>• $CR_{\text{chained}} \text{ [GR00T / OpenPI]}$: **0.0% / 0.0%** (§16.2)<br>• **Measured Grade**: **Preflight A+ / Articulation Deficit** |
 | **Group 1: Type A Placed Articulated Props** | **Scenario `D1-C`**<br>*Sequential Microwave Open & Stow on Table* | **Combination 2b**<br>*(Dense 72B + Physical AI Critic)* | `Qwen2.5-72B-Instruct-AWQ` | `nvidia/Cosmos-Reason2-2B` | **Physical Dynamics Clearance Critique**:<br>Tests whether pairing dense 72B generation with Cosmos physical dynamics critique achieves zero-interference trajectory and approach alignment. | **STATUS: COMPLETE (GR00T AUDIT)**<br>• $\text{OR}_{\text{preflight}}$: **100.0%**<br>• $\text{PDR}$: **0.0%**<br>• $K_{\text{self-healing}}$: **1** (Cycle 0 pass)<br>• $\text{SR}_{\text{physx}} \text{ [GR00T / OpenPI]}$: **100.0% / Decoupled**<br>• $CR_{\text{chained}} \text{ [GR00T / OpenPI]}$: **0.0% / Decoupled** (§16.2)<br>• **Measured Grade**: **Preflight A+ / Articulation Deficit** |
@@ -1184,7 +1184,7 @@ To provide concrete operational context for how evaluation metrics, diagnostic s
 
 | Reference Benchmark Case | Evaluated Model Pipeline | Scenario & Articulation Type | Cycle-by-Cycle Reasoning & Diagnostic Trajectory | Metric Scorecard (Dual-Policy Rollout) | Assigned Performance Grade |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Illustrative Case A**<br>*(Self-Healing Repair Trajectory)* | **Combination 1b**<br>• Spec LLM: `Qwen2.5-Coder-32B`<br>• Critic: `Cosmos-Reason2-2B`<br>• Policies: `GR00T-N1.7` & `OpenPI π₀.₅` | **Scenario `D1-C`**<br>Type A: Placed Articulated Prop<br>(*Microwave on Office Table*) | • **Cycle 0**: Valid YAML grammar emitted, but tomato soup can staged at $[0.20, 0.15, 0.76]\text{ m}$ directly within microwave door swing arc $\mathcal{W}_{\text{revolute}}$. Cosmos physical world critic rejected with `DEFECT_REVOLUTE_SWEPT_COLLISION` ($\text{OR} = 0\%$).<br>• **Cycle 1 (Self-Healing Feedback)**: Critic injected geometric clearance error back to Spec LLM context. Spec LLM relocated soup can to `front_left` quadrant at $[-0.35, 0.20, 0.76]\text{ m}$ ($0.18\text{ m}$ margin). Oracle preflight passed ($K_{\text{self-healing}} = 2$).<br>• **Step-0 PhysX**: 300 steps stable equilibrium ($58.9\text{ s}$, drift $\le 0.005\text{ m/s}$, 0 interpenetrations).<br>• **Dual Neural Rollout**: GR00T-N1.7 velocity DiT achieved 6/10 chained completion ($60\%$), while OpenPI π₀.₅ relative joint diffusion achieved 7/10 completion ($70\%$). | • $\text{OR}_{\text{preflight}}$: $0.0\%$ (Cycle 0)<br>• $\text{PDR}$: $0.0\%$ (No category error)<br>• $K_{\text{self-healing}}$: $2$ cycles<br>• $\text{SR}_{\text{physx}} \text{ [GR00T / OpenPI]}$: $100\% / 100\%$<br>• $CR_{\text{chained}} \text{ [GR00T / OpenPI]}$: $60\% / 70\%$ | **MARGINAL (Grade: B)**<br>*Code model required critic intervention to resolve 3D spatial clearance, but successfully self-healed via self-healing; executed across both policy architectures.* |
+| **Illustrative Case A**<br>*(Self-Healing Repair Trajectory)* | **Combination 1b**<br>• Spec LLM: `Qwen2.5-Coder-32B`<br>• Critic: `Cosmos-Reason2-2B`<br>• Policies: `GR00T-N1.7` & `OpenPI π₀.₅` | **Scenario `D1-C`**<br>Type A: Placed Articulated Prop<br>(*Microwave on Office Table*) | • **Cycle 0**: Valid YAML grammar emitted, but tomato soup can staged at $[0.20, 0.15, 0.76]\text{ m}$ directly within microwave door swing arc $\mathcal{W}_{\text{revolute}}$. Cosmos physical world critic rejected with `DEFECT_REVOLUTE_SWEPT_COLLISION` ($\text{OR} = 0\%$).<br>• **Cycle 1 (Self-Healing Feedback)**: Critic injected geometric clearance error back to Spec LLM context. Spec LLM relocated soup can to `front_left` quadrant at $[-0.35, 0.20, 0.76]\text{ m}$ ($0.18\text{ m}$ margin). Oracle preflight passed ($K_{\text{self-healing}} = 2$).<br>• **Step-0 PhysX**: 300 steps stable equilibrium ($58.9\text{ s}$, drift $\le 0.005\text{ m/s}$, 0 interpenetrations).<br>• **Dual Neural Rollout**: GR00T-N1.7 velocity DiT achieved 6/10 chained completion ($60\%$), while OpenPI π₀.₅ relative joint diffusion achieved 7/10 completion ($70\%$). | • $\text{OR}_{\text{preflight}}$: $0.0\%$ (Cycle 0)<br>• $\text{PDR}$: $0.0\%$ (No category error)<br>• $K_{\text{self-healing}}$: $2$ cycles<br>• $\text{SR}_{\text{physx}} \text{ [GR00T / OpenPI]}$: $100\% / 100\%$<br>• $CR_{\text{chained}} \text{ [GR00T / OpenPI]}$: $60\% / 70\%$ | **MARGINAL (Grade: B)**<br>*Code model required critic intervention to resolve 3D spatial clearance, but successfully converged via autonomous self-healing; executed across both policy architectures.* |
 | **Illustrative Case B**<br>*(Zero-Shot Deductive Mastery)* | **Combination 5b**<br>• Spec LLM: `Qwen/QwQ-32B`<br>• Critic: `Cosmos-Reason2-2B`<br>• Policies: `GR00T-N1.7` & `OpenPI π₀.₅` | **Scenario `D2-A`**<br>Type B: Intrinsic Fixture Sub-Prim<br>(*Kitchen Cabinet Drawer Stow*) | • **Cycle 0**: Spec LLM used test-time reasoning tokens (`<think>`) to analytically compute linear slide corridor $\mathcal{V}_{\text{prismatic}}$ along $[0, -1, 0]$ with stroke $0.40\text{ m}$. Proved pedestal clearance ($0.294\text{ m} \ge 0.05\text{ m}$) prior to outputting coordinates.<br>• **Ontological Precision**: Grounded cabinet at $Z=0.0\text{ m}$ and declared drawer as `hasSubPrim`. Staged soup can on cabinet top deck ($Z=0.908\text{ m}$) with lateral offset $0.15\text{ m}$ from slide corridor. Cosmos passed zero-shot on Cycle 0 ($\text{OR} = 100\%$, $K_{\text{self-healing}} = 1$).<br>• **Step-0 PhysX**: 300/300 steps stable equilibrium ($61.8\text{ s}$, drift $\le 0.002\text{ m/s}$).<br>• **Dual Neural Rollout**: GR00T-N1.7 achieved 8/10 chained completions ($CR = 80\%$), while OpenPI π₀.₅ achieved 9/10 chained drawer pull and stowage ($CR = 90\%$). | • $\text{OR}_{\text{preflight}}$: $100\%$ (Cycle 0)<br>• $\text{PDR}$: $0.0\%$ (Zero conflation)<br>• $K_{\text{self-healing}}$: $1$ cycle (Zero-shot)<br>• $\text{SR}_{\text{physx}} \text{ [GR00T / OpenPI]}$: $100\% / 100\%$<br>• $CR_{\text{chained}} \text{ [GR00T / OpenPI]}$: $80\% / 90\%$ | **EXEMPLARY (Grade: A+)**<br>*Test-time reasoning solved 3D spatial constraints analytically without requiring feedback loops or encountering category errors, proving high transferability across both velocity and diffusion policies.* |
 
 ---

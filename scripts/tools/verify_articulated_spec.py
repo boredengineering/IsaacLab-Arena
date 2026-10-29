@@ -1561,7 +1561,7 @@ def main():
         print(f"Pass 6 (Standoff & Elevation):    {'PASS' if result['passes'].get('pass6_standoff_elevation') else 'FAIL'}")
 
         if result["defects"]:
-            print("\n[DETECTED DEFECTS FOR Self-Healing SELF-HEALING LOOP]:")
+            print("\n[DETECTED DEFECTS FOR SELF-HEALING LOOP]:")
             for d in result["defects"]:
                 print(f"  * [{d['code']}] {d['message']}")
                 if "remediation" in d:

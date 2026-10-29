@@ -7,6 +7,7 @@ and ensures strict memory teardown to prevent VRAM collision.
 
 import argparse
 import os
+from pathlib import Path
 import subprocess
 import sys
 import time
@@ -180,14 +181,15 @@ def start_policy_server(policy_key: str, port_override: int = None, device_overr
             ]
             subprocess.run(" ".join(docker_cmd), shell=True, check=True)
     elif policy_key == "openpi":
-        cache_dir = os.environ.get("OPENPI_CACHE_DIR", "/workspaces/isaaclab-arena-private/artifacts/openpi_cache")
+        repo_root = str(Path(__file__).resolve().parents[4])
+        cache_dir = os.environ.get("OPENPI_CACHE_DIR", os.path.join(repo_root, "artifacts/openpi_cache"))
         host_cache_dir = cache_dir
         try:
             with open("/proc/self/mountinfo", "r") as f:
                 for line in f:
                     parts = line.strip().split()
-                    if len(parts) >= 5 and parts[4] == "/workspaces/isaaclab-arena-private":
-                        host_cache_dir = cache_dir.replace("/workspaces/isaaclab-arena-private", parts[3])
+                    if len(parts) >= 5 and parts[4] == repo_root:
+                        host_cache_dir = cache_dir.replace(repo_root, parts[3])
                         break
         except Exception:
             pass

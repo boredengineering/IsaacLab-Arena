@@ -67,7 +67,7 @@ In early iterations, articulated assets (like `Microwave039.usd`) were equipped 
 Run [`scripts/tools/introspect_fixture_affordance.py`](../../../scripts/tools/introspect_fixture_affordance.py):
 
 ```bash
-docker exec isaaclab_arena-latest-isaaclab-arena-private /isaac-sim/python.sh \
+docker exec "$ARENA_CONTAINER" /isaac-sim/python.sh \
   /workspaces/isaaclab_arena/scripts/tools/introspect_fixture_affordance.py \
   --usd office_table_background \
   --sync-neo4j \

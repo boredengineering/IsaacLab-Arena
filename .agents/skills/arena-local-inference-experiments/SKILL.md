@@ -162,7 +162,7 @@ python3 .agents/skills/arena-local-inference-experiments/scripts/manage_backends
 ```
 Execute evaluation rollouts with `policy_runner.py` inside the container:
 ```bash
-docker exec isaaclab_arena-latest-isaaclab-arena-private \
+docker exec "$ARENA_CONTAINER" \
   /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
     --env_graph_spec_yaml generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml \
     --policy_type isaaclab_arena_gr00t.policy.gr00t_remote_closedloop_policy.Gr00tRemoteClosedloopPolicy \

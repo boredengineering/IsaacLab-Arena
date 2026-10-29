@@ -1,0 +1,134 @@
+env_name: pick_rubiks_cube_to_plate
+embodiment:
+  id: robot_droid
+  registry_name: droid_abs_joint_pos
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.0
+      - 0.0
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+background:
+  id: maple_table
+  registry_name: maple_table_robolab
+  params:
+    hdr: home_office_robolab
+    light_intensity: 500.0
+    directional_light_on: true
+objects:
+- id: rubiks_cube
+  registry_name: rubiks_cube_hot3d_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.45
+      - -0.13
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+- id: plate
+  registry_name: plate_large_vomp_robolab
+  params:
+    initial_pose:
+      position_xyz:
+      - 0.45
+      - 0.14
+      - 0.0
+      rotation_xyzw:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+relations:
+- kind: is_anchor
+  subject: maple_table
+  params: {}
+- kind: 'on'
+  subject: rubiks_cube
+  reference: maple_table
+  params:
+    surface_sector: front_right
+- kind: 'on'
+  subject: plate
+  reference: maple_table
+  params:
+    surface_sector: front_left
+reified_relations:
+- reifier_id: reifier_rubiks_cube_table
+  source_id: rubiks_cube
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_top
+  surface_sector: front_right
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: 0.25
+    max_val: 0.4
+    nominal: 0.32
+  delta_y:
+    min_val: -0.35
+    max_val: -0.2
+    nominal: -0.28
+  delta_z:
+    min_val: 0.0
+    max_val: 0.02
+    nominal: 0.01
+  required_headroom: 0.25
+  required_friction: 0.55
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.8
+  posterior_entropy: 0.08
+  evidence_sources:
+  - tabletop_spatial_planner
+  - right_sector_constraint
+- reifier_id: reifier_plate_table
+  source_id: plate
+  relation_type: PLACED_ON
+  target_id: maple_table
+  surface_anchor: table_top
+  surface_sector: front_left
+  contact_normal:
+  - 0.0
+  - 0.0
+  - 1.0
+  delta_x:
+    min_val: 0.25
+    max_val: 0.4
+    nominal: 0.32
+  delta_y:
+    min_val: 0.2
+    max_val: 0.35
+    nominal: 0.28
+  delta_z:
+    min_val: 0.0
+    max_val: 0.02
+    nominal: 0.01
+  required_headroom: 0.15
+  required_friction: 0.6
+  kinematic_manifold: tabletop_stationary_reach
+  prior_entropy: 2.8
+  posterior_entropy: 0.08
+  evidence_sources:
+  - tabletop_spatial_planner
+  - left_sector_constraint
+task:
+  composition: atomic
+  description: Pick up the rubiks cube and place it on the plate.
+  subtasks:
+  - kind: PickAndPlaceTask
+    params:
+      pick_up_object: rubiks_cube
+      destination_location: plate
+      background_scene: maple_table
+      episode_length_s: 40.0

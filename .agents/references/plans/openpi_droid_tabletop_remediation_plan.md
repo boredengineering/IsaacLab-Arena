@@ -269,7 +269,7 @@ xhost +local:docker > /dev/null 2>&1
 docker exec -it \
   -e DISPLAY=$DISPLAY \
   --user $(id -u):$(id -g) \
-  isaaclab_arena-latest-isaaclab-arena-private \
+  "$ARENA_CONTAINER" \
   bash -c "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
     --policy_type isaaclab_arena_openpi.policy.pi0_remote_policy.Pi0RemotePolicy \
     --policy_variant pi05 \

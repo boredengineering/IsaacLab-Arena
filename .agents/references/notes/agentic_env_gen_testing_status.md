@@ -41,7 +41,7 @@ This tracking document records:
    - Tests and runtime components exercising `ForegroundOwnerLease` (e.g. `test_foreground_split_service_keeps_owner_and_cleans_before_model`) strictly require execution as a non-root user (`os.geteuid() != 0`).
    - In the devcontainer, commands must be executed under user `ubuntu` (`UID 1000`):
      ```bash
-     docker exec isaaclab_arena-latest-isaaclab-arena-private su ubuntu -c "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh -m pytest ..."
+     docker exec "$ARENA_CONTAINER" su ubuntu -c "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh -m pytest ..."
      ```
 
 2. **GraphQL Core & Strawberry Pinning**:

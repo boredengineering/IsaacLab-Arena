@@ -227,15 +227,15 @@ Can our current IsaacLab-Arena setup run the necessary components to render and 
 
 | Component | Status | Finding / Verification Result |
 | :--- | :--- | :--- |
-| **Isaac Sim Version** | **Compatible** | Isaac Sim 6.0 (Kit 106.5 / 110.x compatible) runs inside container `isaaclab_arena-latest-isaaclab-arena-private`. |
+| **Isaac Sim Version** | **Compatible** | Isaac Sim 6.0 (Kit 106.5 / 110.x compatible) runs inside the `isaaclab_arena` container (`$ARENA_CONTAINER`). |
 | **GPU / Hardware** | **Compatible** | Dual Blackwell GPUs (`RTX PRO 6000` 96 GB + `RTX 5090` 32 GB, `sm_120`, driver 13.2, Warp 1.13.0). |
 | **3DGS / SPG Extension** | **Verified Active** | Tested live in container: `omni.rtx.spg-0.2.1` loads, initializes, and activates successfully via `SimulationApp(extra_args=["--enable", "omni.rtx.spg", "--/renderer/multiGpu/enabled=false"])`. |
 | **NuRec Utilities** | **Present** | `isaacsim.replicator.nurec_utils` and `nurec_render.py` are natively available under `/isaac-sim/exts/` in the simulation container. |
 | **USD NuRec Schema** | **Compatible** | Isaac Sim's OpenUSD plug-in registry loads `OmniNuRecFieldAsset` definitions and resolves `@MarbleKitchen.usdz[MarbleKitchen.nurec]@`. |
-| **Container Mount Boundary** | **Requires Action** | The asset files (`MarbleKitchen.usdz` 236 MB, `marblekitchen.usda`) currently reside in `/workspaces/RoboLab/assets/scenes/marble/`. The devcontainer (`wizardly_knuth`) mounts RoboLab, but the inner simulation container (`isaaclab_arena`) only mounts `isaaclab-arena-private`. |
+| **Container Mount Boundary** | **Requires Action** | The asset files (`MarbleKitchen.usdz` 236 MB, `marblekitchen.usda`) currently reside in `/workspaces/RoboLab/assets/scenes/marble/`. The devcontainer mounts RoboLab, but the inner simulation container (`isaaclab_arena`) only mounts `IsaacLab-Arena`. |
 
 ### 5.2 Resolution for the Mount Boundary
-Because both repositories reside on the exact same host NVMe partition (`/dev/nvme0n1p2 ext4`), staging the assets into `isaaclab-arena-private` does not require re-downloading or significant disk space:
+Because both repositories reside on the exact same host NVMe partition (`/dev/nvme0n1p2 ext4`), staging the assets into `IsaacLab-Arena` does not require re-downloading or significant disk space:
 ```bash
 # From the devcontainer or host:
 mkdir -p artifacts/assets/marble
@@ -264,10 +264,10 @@ The integration has been executed and verified live:
        object_min_z = -0.5
    ```
 4. **Live Container Verification & Simulation Stepping**:
-   Created [`artifacts/assets/marble/verify_marble_kitchen.py`](../../../artifacts/assets/marble/verify_marble_kitchen.py) and executed inside the `isaaclab_arena-latest-isaaclab-arena-private` container.
+   Created [`artifacts/assets/marble/verify_marble_kitchen.py`](../../../artifacts/assets/marble/verify_marble_kitchen.py) and executed inside the `$ARENA_CONTAINER` container.
    * **Verification Command**:
      ```bash
-     docker exec isaaclab_arena-latest-isaaclab-arena-private \
+     docker exec "$ARENA_CONTAINER" \
        /isaac-sim/python.sh /workspaces/isaaclab_arena/artifacts/assets/marble/verify_marble_kitchen.py
      ```
    * **Results**:
@@ -288,7 +288,7 @@ The integration has been executed and verified live:
    docker exec -it \
      -e DISPLAY=$DISPLAY \
      --user $(id -u):$(id -g) \
-     isaaclab_arena-latest-isaaclab-arena-private \
+     "$ARENA_CONTAINER" \
      bash -c "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
        --policy_type isaaclab_arena_openpi.policy.pi0_remote_policy.Pi0RemotePolicy \
        --policy_variant pi05 \
@@ -359,7 +359,7 @@ xhost +local:docker > /dev/null 2>&1
 docker exec -it \
   -e DISPLAY=$DISPLAY \
   --user $(id -u):$(id -g) \
-  isaaclab_arena-latest-isaaclab-arena-private \
+  "$ARENA_CONTAINER" \
   bash -c "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
     --policy_type isaaclab_arena_openpi.policy.pi0_remote_policy.Pi0RemotePolicy \
     --policy_variant pi05 \
@@ -383,7 +383,7 @@ docker exec -it \
 > docker exec -it \
 >   -e DISPLAY=$DISPLAY \
 >   --user $(id -u):$(id -g) \
->   isaaclab_arena-latest-isaaclab-arena-private \
+>   "$ARENA_CONTAINER" \
 >   bash -c "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
 >     --policy_type isaaclab_arena.policy.zero_action_policy.ZeroActionPolicy \
 >     --num_episodes 1 \

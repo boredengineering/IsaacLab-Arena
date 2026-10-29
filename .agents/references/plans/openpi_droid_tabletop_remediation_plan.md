@@ -1,0 +1,192 @@
+# OpenPI π₀.₅ DROID Tabletop Evaluation Diagnosis & Remediation Plan
+
+**Document Version:** 1.0.0  
+**Date:** 2026-10-29  
+**Status:** Proposed for Implementation  
+**Target Environment:** [`generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml)  
+**Target Policy:** OpenPI `pi05_droid_jointpos_polaris` (`pi05` variant, `droid` adapter)  
+**Related References:**
+- [`experiment_05.md`](./local-inference/experiments/experiment_05.md) (§15: OpenPI $\pi_{0.5}$ Remediation Architecture)
+- [`agentic_env_gen_testing_status.md`](../notes/agentic_env_gen_testing_status.md) (§7: Closed-Loop Rollout Verification)
+- [`droid_banana_on_plate_maple_table.yaml`](../../../isaaclab_arena_environments/maple_table_top/droid_banana_on_plate_maple_table.yaml) (Canonical SRL Robolab Reference Spec)
+- [`pick_and_place_maple_table_environment.py`](../../../isaaclab_arena_environments/pick_and_place_maple_table_environment.py) (Canonical SRL Robolab Python Environment)
+- [`droid_pnp_srl_openpi_experiment.yaml`](../../../isaaclab_arena_environments/experiment_configs/droid_pnp_srl_openpi_experiment.yaml) (Reference OpenPI Evaluation Config)
+
+---
+
+## 1. Executive Summary & Empirical Diagnosis of the Failed Rollout
+
+We executed a 225-step (`15.0s` at `15 Hz`) closed-loop evaluation of [`pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml) against the live `openpi-server` (`pi05_droid_jointpos_polaris`), recording all four video streams (`viewport`, `external_camera_rgb`, `external_camera_2_rgb`, `wrist_camera_rgb`) and telemetry under `outputs/rollouts_openpi/2026-10-29_18-44-28/`.
+
+The episode terminated in `TIMEOUT` (`success_rate: 0.0`, `object_moved_rate: 0.0`, `max_object_velocity: 0.0009 m/s`). Frame-by-frame inspection of the recorded cameras combined with an audit of the codebase, the `maple_table.usda` USD stage, and the OpenPI `norm_stats.json` checkpoint statistics revealed **six compounding Out-of-Distribution (OOD) and control-loop issues**—with **Root Cause #1 (a 43.7 cm coordinate frame mismatch on `maple_table_robolab`)** making the task physically and visually impossible from Step 0.
+
+| # | Category | Root Cause | Empirical Evidence from Run & Codebase | Impact on OpenPI $\pi_{0.5}$ |
+| :--- | :--- | :--- | :--- | :--- |
+| **1** | **Scene Coordinate Frame & Robot Base Pose (CRITICAL OOD)** | `maple_table_robolab` is authored in **Robot Base Frame** (`table` is already at $X \in [0.20, 0.90]\,\text{m}$, deck at $Z = 0.0\,\text{m}$, ground at $Z = -0.697\,\text{m}$), expecting `robot_droid` at `[0.0, 0.0, 0.0]`. Setting `robot_droid` to `[-0.4367, 0.0, 0.0]` (a `packing_table` offset) or letting `SpatialFactorGraph` push it to `-0.3371` created a **43.7 cm physical chasm** between the robot stand and the table. | Solved object poses: `banana = (0.397, -0.147, 0.031)`, `plate = (0.416, 0.227, 0.010)`. From `X = -0.4367`, the banana is **$0.846\,\text{m}$** away (99% of Franka's $0.855\,\text{m}$ lock-out limit) and the plate is **$0.882\,\text{m}$** away (physically unreachable). From `X = 0.0`, they are at **$0.423\,\text{m}$** and **$0.474\,\text{m}$** (ideal workspace). | Furthermore, because `external_camera` and `external_camera_2` are parented to `{ENV_REGEX_NS}/Robot/panda_link0` ([`droid.py`](../../../isaaclab_arena/embodiments/droid/droid.py)), moving the robot base backward shifted both external cameras 43.7 cm backward, while `wrist_camera` at Step 0 stared straight down at the grey perforated metal robot stand instead of the tabletop. |
+| **2** | **Visual Lighting Distribution Shift (SigLIP OOD)** | [`_ensure_scene_lighting()`](../../../isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py) falls back to an untextured `DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=1500.0)` when no `hdr` is configured. | `pi05_droid_jointpos_polaris` was co-trained on SRL Robolab scenes rendered with indoor HDR environment maps (`home_office_robolab`, `billiard_hall_robolab`, `wooden_lounge_robolab`) at `intensity=500.0` ([`pick_and_place_maple_table_environment.py`](../../../isaaclab_arena_environments/pick_and_place_maple_table_environment.py)). | At `intensity=1500.0` against a flat grey void, the white Franka links are over-exposed and blend into the grey background in both external cameras, degrading visual grounding. |
+| **3** | **Language Prompt Distribution Shift** | The generated instruction (`"Pick up the yellow banana from the right side of the table and place it onto the plate on the left."`) includes verbose relative spatial modifiers (`"from the right side"`, `"on the left"`). | Canonical PolaRiS / DROID evaluation prompts ([`droid_pnp_srl_openpi_experiment.yaml`](../../../isaaclab_arena_environments/experiment_configs/droid_pnp_srl_openpi_experiment.yaml)) use concise object-centric phrasing: `"Pick up the banana and place it on the plate."` | Relative left/right tokens conflict with the diagonal camera viewpoints (`ext1` views the robot's right side on the upper-right of the image) and deviate from the DROID training prompt template. |
+| **4** | **Tabletop Object Placement & `On` Sector Loss Bug** | In [`relations.py`](../../../isaaclab_arena/relations/relations.py), `On` accepts both `surface_sector` (str) and `sector_bounds` (tuple). When YAML specs pass a sector name in `sector_bounds`, [`sampling.py`](../../../isaaclab_arena/relations/sampling.py) handles it, but [`OnLossStrategy.compute_loss()`](../../../isaaclab_arena/relations/relation_loss_strategies.py) ignores string `sector_bounds`. Additionally, `FIXTURE_SECTOR_BOUNDS["maple_table_robolab"]` allows $Y \in [-0.45, 0.45]\,\text{m}$. | During gradient optimization, `OnLossStrategy` falls back to full-table bounds instead of enforcing the target sector. Wide $Y$ bounds ($\pm 0.45\,\text{m}$) can place objects near the lateral edges of the camera frustum. | Constraining the manipulation zone to $X \in [0.38, 0.58]\,\text{m}, Y \in [-0.22, +0.22]\,\text{m}$ keeps both objects centered in the high-manipulability workspace and fully inside all three camera views. |
+| **5** | **Initial Joint Configuration & Proprioceptive Distribution** | `pi05_droid_jointpos_polaris` `norm_stats.json` shows training state mean `q_mean = [0.016, +0.267, -0.017, -2.026, -0.033, 2.345, 0.083]`. Default `DroidSceneCfg` starts at `[0.0, -0.628, 0.0, -2.513, 0.0, 1.885, 0.0]` (`q2 = -0.628 rad`, near the 1st percentile `q01 = -0.840`). | Note that `panda_joint7 = 0.0` is intentional for DROID's Robotiq 2F-85 gripper mount (unlike Franka Hand's `0.785`). When `Robot` is at `(0,0,0)`, the default pose places the wrist camera directly over the front edge of the table ($X \approx 0.30\,\text{m}$), whereas tilting `q2` slightly forward (`-0.35` to `-0.20 rad`) brings both proprioception and the initial wrist-camera view closer to the training distribution center. | Eliminates the Step-0 wrist-camera "staring at the metal stand" artifact that caused the policy to curl its wrist backward into self-inspection. |
+| **6** | **Model Open-Loop Horizon (`15` steps) & Episode Length (`225` steps)** | [`Pi0DroidAdapter`](../../../isaaclab_arena_openpi/policy/droid_adapter.py) hardcodes `open_loop_horizon_by_variant = {"pi05": 15, "pi0": 10}` and does not expose an override in [`Pi0RemotePolicyCfg`](../../../isaaclab_arena_openpi/policy/pi0_remote_config.py). Furthermore, `episode_length_s: 15.0` caps the rollout at `225` steps. | Executing all 15 predicted actions open-loop (`1.0s` blind execution at `15 Hz`) accumulates tracking drift during grasp descent. Meanwhile, successful OpenPI DROID rollouts in [`episode_results_camera_displacement.jsonl`](../../../episode_results_camera_displacement.jsonl) require **`247` to `853` steps** (`16.5s` to `57s`). | A 225-step cap truncates the episode before a full pick-and-place trajectory can finish, and a 15-step open-loop horizon delays closed-loop visual correction during grasp closure. |
+
+---
+
+## 2. Two-Phase Remediation Architecture
+
+Following our diagnostic findings, we structure the remediation into two sequential phases so we can isolate the impact of fixing OOD environment inputs before tuning model/adapter inference hyperparameters:
+
+1. **Phase 1 — In-Distribution Environment Alignment (Fixing OOD Pose, Cameras, Lighting, Workspace & Prompt)**
+2. **Phase 2 — OpenPI Model & Policy Adapter Tuning (Action Horizon, Initial Joint Manifold, Gripper & Episode Budget)**
+
+```mermaid
+flowchart LR
+    subgraph P1["Phase 1: Eliminate Scene & Visual OOD"]
+        A1["1. Anchor robot_droid at [0,0,0]\non maple_table_robolab"] --> A2["2. Add HDR lighting (home_office_robolab,\nintensity=500) to graph builder"]
+        A2 --> A3["3. Normalize On sector_bounds &\ntighten tabletop XY sweet spot"]
+        A3 --> A4["4. Canonicalize prompt:\n'Pick up the banana and place it on the plate.'"]
+    end
+    subgraph P2["Phase 2: Model & Adapter Tuning"]
+        B1["5. Expose configurable open_loop_horizon\n(test 8 vs 15 steps) in Pi0RemotePolicyCfg"] --> B2["6. Tune initial_joint_pos manifold &\nfinger_contact_friction"]
+        B2 --> B3["7. Increase episode_length_s\nfrom 15.0s (225) to 45.0s (675)"]
+    end
+    P1 --> P2
+```
+
+---
+
+## 3. Phase 1: Fixing OOD Starting Position, Coordinate Frames, Lighting & Prompts
+
+### 3.1 Fix Robot Base Coordinate Frame on `maple_table_robolab` (`[0.0, 0.0, 0.0]`)
+
+#### Why `-0.4367` Caused the Chasm
+In IsaacLab-Arena, background scenes follow two distinct coordinate conventions:
+1. **World-Centered Table Scenes (e.g., `packing_table`, `kitchen`, `galileo_locomanip`)**: The table is centered around $(X=0, Y=0)$ with surface height $Z \approx 0.75\text{--}0.82\,\text{m}$, so a fixed-base manipulator must be offset backward in $X$ (e.g., `[-0.4367, 0.0, 0.0]`).
+2. **Robot-Origin Calibrated Scenes (`maple_table_robolab`, `maple_table`)**: Examination of `maple_table.usda` confirms that the SRL Robolab scene is authored directly in the **DROID Robot Base Frame**:
+   - `/World/GroundPlane` is at $Z = -0.69728\,\text{m}$.
+   - `/World/table` is translated to $(0.55, 0.0, -0.3535)$ with top deck surface at $Z = 0.0\,\text{m}$ and front edge at $X = 0.20\,\text{m}$.
+   - Every reference SRL Robolab environment ([`droid_banana_on_plate_maple_table.yaml`](../../../isaaclab_arena_environments/maple_table_top/droid_banana_on_plate_maple_table.yaml), [`pick_and_place_maple_table_environment.py`](../../../isaaclab_arena_environments/pick_and_place_maple_table_environment.py), [`pick_and_place_maple_table_env_graph.yaml`](../../../isaaclab_arena/tests/test_data/pick_and_place_maple_table_env_graph.yaml)) places `droid_abs_joint_pos` at `[0.0, 0.0, 0.0]`.
+
+Furthermore, because `DroidCameraCfg` ([`droid.py`](../../../isaaclab_arena/embodiments/droid/droid.py#L583-L633)) attaches `external_camera` and `external_camera_2` as child prims of `{ENV_REGEX_NS}/Robot/panda_link0` using real-world DROID camera extrinsics (`pos=(-0.0324, -0.6054, 0.5620)` and `pos=(0.0652, 0.5608, 0.5205)`), placing `Robot` at `[0.0, 0.0, 0.0]` is **mandatory** for the camera extrinsics to match the PolaRiS training distribution!
+
+#### Required Code & Spec Changes
+1. **[`generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml)**:
+   - Set `embodiments.robot_droid.initial_pose.position_xyz` to `[0.0, 0.0, 0.0]`.
+2. **[`isaaclab_arena/agentic_environment_generation/spatial_geometric_oracle.py`](../../../isaaclab_arena/agentic_environment_generation/spatial_geometric_oracle.py#L858-L956)** (`relax_spec_spatial_factor_graph`):
+   - Define `ROBOT_ORIGIN_BACKGROUNDS = {"maple_table_robolab", "maple_table"}`.
+   - When `bg_asset in ROBOT_ORIGIN_BACKGROUNDS`, default the embodiment pose to `[0.0, 0.0, 0.0]` and register the embodiment node in `SpatialFactorGraph` with `is_fixed=True` so that `add_reachability_factor` pulls **objects** into the robot's manipulation sweet spot on the table rather than pushing the robot base backward off the calibrated origin!
+3. **[`isaaclab_arena/agentic_environment_generation/compiler_pipeline.py`](../../../isaaclab_arena/agentic_environment_generation/compiler_pipeline.py#L510-L532)**:
+   - Update the system prompt constraint for `maple_table_robolab` so the LLM generator knows that `maple_table_robolab` is robot-origin calibrated (`robot_droid` at `[0.0, 0.0, 0.0]`), whereas `packing_table` uses `[-0.4367, 0.0, 0.0]`.
+
+---
+
+### 3.2 Add Robolab HDR Environment Lighting to Graph Spec Conversion
+
+#### Why the Current Lighting Is Visually OOD
+In [`pick_and_place_maple_table_environment.py`](../../../isaaclab_arena_environments/pick_and_place_maple_table_environment.py#L46-L78) and [`droid_pnp_srl_openpi_experiment.yaml`](../../../isaaclab_arena_environments/experiment_configs/droid_pnp_srl_openpi_experiment.yaml#L21-L22), SRL Robolab scenes use an HDR dome texture (`home_office_robolab`, `billiard_hall_robolab`, or `wooden_lounge_robolab`) at `light_intensity: 500.0`.
+In contrast, [`_ensure_scene_lighting()`](../../../isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py#L317-L327) always creates an untextured `DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=1500.0)`, which washes out the white robot links and removes background visual texture.
+
+#### Required Code Changes
+1. **[`isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py`](../../../isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py#L317-L327)**:
+   - Update `_ensure_scene_lighting(scene_entities, background=None, asset_registry=None)` so that if the background `params` specifies `hdr` (e.g. `hdr: home_office_robolab`) and/or `light_intensity` (e.g. `500.0`)—or if the background asset is `maple_table_robolab`—it resolves the HDR asset from `asset_registry` and configures `DomeLightCfg(intensity=500.0, texture_file=hdr_asset.get_object_usd_path())` (with graceful fallback if the HDR asset is not present).
+2. **[`generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml)**:
+   - Add `hdr: home_office_robolab` and `light_intensity: 500.0` under `fixtures.table.params` (or top-level scene lighting params).
+
+---
+
+### 3.3 Fix `On` Relation `sector_bounds` Normalization & Tighten Tabletop Workspace Bounds
+
+#### Root Cause in `On.__init__` and `FIXTURE_SECTOR_BOUNDS`
+- In [`isaaclab_arena/relations/relations.py`](../../../isaaclab_arena/relations/relations.py#L140-L176), `On.__init__` accepts both `surface_sector: str | None` and `sector_bounds: tuple[float, float, float, float] | None`. When a YAML spec supplies a string sector name in `sector_bounds` (e.g. `sector_bounds: front_right`), [`sampling.py`](../../../isaaclab_arena/relations/sampling.py#L225-L238) handles `isinstance(sb, str)`, but [`OnLossStrategy.compute_loss()`](../../../isaaclab_arena/relations/relation_loss_strategies.py#L353-L370) only checks `getattr(relation, "surface_sector", None) or getattr(relation, "surface_anchor", None)`, ignoring string `sector_bounds` during PyTorch L-BFGS/Adam placement optimization!
+- Additionally, in [`sampling.py`](../../../isaaclab_arena/relations/sampling.py#L46-L56), `FIXTURE_SECTOR_BOUNDS["maple_table_robolab"]` defines `front_right: (0.25, 0.65, -0.45, -0.05, 0.0)` and `front_left: (0.25, 0.65, 0.05, 0.45, 0.0)`. While valid for the physical table ($Y \in [-0.50, 0.50]$), objects placed at $|Y| > 0.30\,\text{m}$ or $X < 0.33\,\text{m}$ lie near the edge of the camera view or too close to the base stand.
+
+#### Required Code & Spec Changes
+1. **[`isaaclab_arena/relations/relations.py`](../../../isaaclab_arena/relations/relations.py#L166-L176)**:
+   - In `On.__init__`, if `isinstance(sector_bounds, str)` and `surface_sector is None`, normalize `surface_sector = sector_bounds` and `sector_bounds = None`.
+2. **[`isaaclab_arena/relations/sampling.py`](../../../isaaclab_arena/relations/sampling.py#L46-L56)**:
+   - Refine `FIXTURE_SECTOR_BOUNDS["maple_table_robolab"]` so `front_right` is `(0.35, 0.60, -0.28, -0.06, 0.0)` and `front_left` is `(0.35, 0.60, 0.06, 0.28, 0.0)`.
+   - Also register `"maple_table_robolab/table"` as an alias key in `FIXTURE_SECTOR_BOUNDS` so `surface_anchor: maple_table_robolab/table` resolves identically.
+3. **[`generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml)**:
+   - Use explicit, tight in-distribution workspace bounds for the banana and plate on the tabletop:
+     - `banana`: $X \in [0.40, 0.52]\,\text{m}$, $Y \in [-0.18, -0.08]\,\text{m}$ (right-of-center, Euclidean reach $\approx 0.44\,\text{m}$).
+     - `plate`: $X \in [0.40, 0.52]\,\text{m}$, $Y \in [0.08, 0.20]\,\text{m}$ (left-of-center, Euclidean reach $\approx 0.45\,\text{m}$, separation $\approx 0.28\,\text{m}$).
+
+---
+
+### 3.4 Align Task Prompt to DROID / PolaRiS Training Distribution
+
+1. **[`generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml)**:
+   - Change `task.instruction` from:
+     `"Pick up the yellow banana from the right side of the table and place it onto the plate on the left."`
+     to the exact canonical PolaRiS / DROID instruction:
+     `"Pick up the banana and place it on the plate."`
+
+---
+
+## 4. Phase 2: OpenPI Model & Policy Adapter Tuning
+
+Once Phase 1 places the robot, cameras, lighting, objects, and language prompt squarely inside the `pi05_droid_jointpos_polaris` training distribution, Phase 2 targets the policy adapter and control-loop parameters.
+
+### 4.1 Expose Configurable `open_loop_horizon` in `Pi0RemotePolicyCfg` & CLI
+
+#### Why `open_loop_horizon` Matters
+Inside `openpi-server`, `pi05_droid_jointpos_polaris` predicts a 15-step action chunk (`action_horizon = 15` at `15 Hz` = `1.0s`). Currently, [`Pi0DroidAdapter`](../../../isaaclab_arena_openpi/policy/droid_adapter.py#L40-L43) hardcodes:
+```python
+open_loop_horizon_by_variant: dict[str, int] = {
+    "pi05": 15,
+    "pi0": 10,
+}
+```
+Executing all 15 steps open-loop means the robot runs blindly for a full second between visual observations. During approach and grasp closure, small physics/contact discrepancies accumulate over 15 steps. Reducing `open_loop_horizon` from `15` to `8` (or `5`) causes [`RemotePolicyBase`](../../../isaaclab_arena/policy/remote_policy_base.py#L121-L157) to re-query `openpi-server` every `0.53s` (or `0.33s`) with fresh wrist and external camera frames while still conditioning on the full 15-step flow-matching prediction head.
+
+#### Required Code Changes
+1. **[`isaaclab_arena_openpi/policy/pi0_remote_config.py`](../../../isaaclab_arena_openpi/policy/pi0_remote_config.py)**:
+   - Add `open_loop_horizon: int | None = None` to `Pi0RemotePolicyCfg`.
+   - Expose `--open_loop_horizon` in `add_cli_args()` and wire it into `from_cli_args()`.
+2. **[`isaaclab_arena_openpi/policy/pi0_remote_policy.py`](../../../isaaclab_arena_openpi/policy/pi0_remote_policy.py#L46-L52)**:
+   - In `Pi0RemotePolicy.__init__`, if `cfg.open_loop_horizon is not None`, override `open_loop_horizon` passed to `super().__init__(..., open_loop_horizon=...)`.
+
+---
+
+### 4.2 Initial Joint Pose (`initial_joint_pos`) & Reset Noise Alignment
+
+#### Comparing `DroidSceneCfg` vs. `norm_stats.json`
+Inspecting `/cache/openpi/openpi-assets-simeval/pi05_droid_jointpos/assets/droid/norm_stats.json` inside `openpi-server` reveals the exact state distribution of the training dataset:
+
+| Joint | `DroidSceneCfg` Default (`rad`) | `norm_stats.json` Mean (`rad`) | `norm_stats.json` `[q01, q99]` (`rad`) | Notes |
+| :--- | :---: | :---: | :---: | :--- |
+| `panda_joint1` | `0.000` | `+0.016` | `[-0.828, +0.861]` | Centered on tabletop ($Y=0$) |
+| `panda_joint2` | `-0.628` ($-\pi/5$) | `+0.267` | `[-0.840, +0.864]` | `-0.628` is retracted back; `-0.40` to `-0.20` leans slightly further over the table |
+| `panda_joint3` | `0.000` | `-0.017` | `[-0.843, +0.768]` | Neutral shoulder roll |
+| `panda_joint4` | `-2.513` ($-4\pi/5$) | `-2.026` | `[-2.773, -1.258]` | Elbow bend |
+| `panda_joint5` | `0.000` | `-0.033` | `[-1.843, +1.676]` | Neutral forearm roll |
+| `panda_joint6` | `+1.885` ($3\pi/5$) | `+2.345` | `[+1.172, +3.199]` | `q6 ≈ q2 - q4` keeps gripper pointing straight down |
+| `panda_joint7` | `0.000` | `+0.083` | `[-2.047, +2.275]` | **Must stay near `0.0`** for Robotiq 2F-85 (not `0.785`) |
+
+Notice the kinematic constraint for keeping the Robotiq 2F-85 gripper pointing vertically downward toward the table:
+$$q_6 \approx q_2 - q_4$$
+- In `DroidSceneCfg`: $q_2 = -0.6283$, $q_4 = -2.5133 \implies q_6 = -0.6283 - (-2.5133) = +1.8850\,\text{rad}$.
+- In `norm_stats.json` mean: $q_2 = +0.267$, $q_4 = -2.026 \implies q_6 = +0.267 - (-2.026) = +2.293\,\text{rad}$ (actual mean $+2.345$).
+
+When `robot_droid` is fixed to `[0.0, 0.0, 0.0]`, we will first test the standard SRL Robolab home pose (`[0.0, -0.6283, 0.0, -2.5133, 0.0, 1.8850, 0.0]`, which [`droid_banana_on_plate_maple_table.yaml`](../../../isaaclab_arena_environments/maple_table_top/droid_banana_on_plate_maple_table.yaml) uses), and compare it against a forward-tilted home pose (`[0.0, -0.35, 0.0, -2.35, 0.0, 2.00, 0.0]`) that angles the wrist camera directly at the center of the workspace at Step 0.
+
+---
+
+### 4.3 Gripper Contact Friction & Episode Horizon Budget
+
+1. **High-Friction Finger Contact (`finger_contact_friction`)**:
+   - [`DroidEmbodiment`](../../../isaaclab_arena/embodiments/droid/droid.py#L294-L320) supports `finger_contact_friction: float` in embodiment `params` (used in [`droid_pnp_srl_openpi_experiment.yaml`](../../../isaaclab_arena_environments/experiment_configs/droid_pnp_srl_openpi_experiment.yaml#L25) with `finger_contact_friction: 2.0`), which binds a high-friction `RigidBodyMaterialCfg` to the Robotiq 2F-85 inner finger pads to prevent cylindrical objects like `banana` from slipping during lift.
+   - Update [`arena_env_graph_conversion_utils.py`](../../../isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py#L225-L246) (`_apply_embodiment_params`) to forward `finger_contact_friction` from `embodiment.params` to `embodiment.set_finger_contact_friction(...)` when available.
+2. **Episode Horizon (`episode_length_s`)**:
+   - Increase `episode_length_s` in [`pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml) from `15.0` (`225` steps) to `45.0` (`675` steps), matching the empirical completion distribution (`247`–`600` steps) observed in successful OpenPI DROID evaluations.
+
+---
+
+## 5. Step-by-Step Execution & Validation Plan
+
+| Step | Action | Files Modified | Validation Gate |
+| :---: | :--- | :--- | :--- |
+| **Step 1** | Fix `maple_table_robolab` robot base origin (`[0,0,0]`) in [`spatial_geometric_oracle.py`](../../../isaaclab_arena/agentic_environment_generation/spatial_geometric_oracle.py) and [`compiler_pipeline.py`](../../../isaaclab_arena/agentic_environment_generation/compiler_pipeline.py) | `spatial_geometric_oracle.py`, `compiler_pipeline.py` | Factor-graph relaxation keeps `robot_droid` at `[0.0, 0.0, 0.0]` on `maple_table_robolab` |
+| **Step 2** | Normalize string `sector_bounds` in [`relations.py`](../../../isaaclab_arena/relations/relations.py) and tighten `maple_table_robolab` sector bounds in [`sampling.py`](../../../isaaclab_arena/relations/sampling.py) | `relations.py`, `sampling.py` | Unit tests in `test_arena_env_graph_conversion.py` pass; solved object poses lie in $X \in [0.38, 0.55], Y \in [-0.25, 0.25]$ |
+| **Step 3** | Add HDR lighting (`hdr`, `light_intensity`) and `finger_contact_friction` forwarding to [`arena_env_graph_conversion_utils.py`](../../../isaaclab_arena/environment_spec/arena_env_graph_conversion_utils.py) | `arena_env_graph_conversion_utils.py` | `_ensure_scene_lighting` loads `home_office_robolab.hdr` at `intensity=500.0` |
+| **Step 4** | Expose configurable `open_loop_horizon` in [`pi0_remote_config.py`](../../../isaaclab_arena_openpi/policy/pi0_remote_config.py) and [`pi0_remote_policy.py`](../../../isaaclab_arena_openpi/policy/pi0_remote_policy.py) | `pi0_remote_config.py`, `pi0_remote_policy.py` | `--open_loop_horizon 8` CLI flag overrides default `15` |
+| **Step 5** | Update [`pick_banana_to_plate.yaml`](../../../generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml) with Phase 1 + Phase 2 settings and re-run closed-loop evaluation with video recording | `pick_banana_to_plate.yaml` | Inspect Step-0 camera frames (`ext1`, `ext2`, `wrist`, `viewport`) and verify closed-loop grasp & placement metrics (`object_moved_rate > 0`, `success_rate`) |

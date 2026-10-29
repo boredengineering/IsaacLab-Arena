@@ -15,3 +15,4 @@ Concise index of active plans, local-inference runbooks, reference templates, an
 | **[`templates/`](templates)** | Standard templates for task specifications (`task_spec.md`) and environment graph specs (`env_graph_spec.yaml`). |
 | **[`docs/`](docs)** | Foundational setup guides (`setup_workflow.md`, `debugging_arena_gr00t.md`, `end_to_end_gr00t_policy_evaluation.md`, `env_generation_notes.md`, `agent_skills_getting_started.md`). |
 | **[`agentic_env_generation/`](agentic_env_generation)** | Environment generation cheatsheet (`env_gen_cheatsheet.md`) and prompt scenario catalog (`env_gen_test.md`). |
+| **[`notes/`](notes)** | Architectural notes including testing status and visual fidelity principles (`visual_fidelity_and_rendering_principles.md`). |

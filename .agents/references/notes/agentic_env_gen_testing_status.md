@@ -153,6 +153,31 @@ Tested end-to-end environment generation and simulation via `environment_generat
 
 ---
 
-## 7. Next Steps & Ongoing Activities
-1. Complete remaining test suites in `isaaclab_arena/tests`.
+## 7. Verified Closed-Loop Policy Rollout with OpenPI (pi05_droid)
+
+Executed end-to-end closed-loop evaluation rollout using Arena's standard evaluation infrastructure (`isaaclab_arena/evaluation/policy_runner.py`) with a live OpenPI policy server (`pi05_droid_jointpos_polaris` on `ws://127.0.0.1:8008`):
+- **Target Spec**: `generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml`
+- **Embodiment**: DROID (`robot_droid`, `registry_name: droid_abs_joint_pos`, initial pose `[-0.4367, 0.0, 0.0]`) aligned with the OpenPI `Pi0DroidAdapter` input/output contract.
+- **Language Instruction**: *"Pick up the yellow banana from the right side of the table and place it onto the plate on the left."*
+- **Policy Server**: OpenPI server serving `pi05_droid_jointpos_polaris` checkpoint.
+- **Simulation Run Details**:
+  - Episode duration: 15.0 seconds (225 control steps at ~15 Hz).
+  - Rollout rate: ~6.8 steps/sec (~32.8s total rollout time).
+  - Stationarity check: `banana`, `plate`, and `robot` settled onto the table within 2 steps.
+  - Closed-loop action chunk streaming: Inferred and executed 8-DoF absolute joint positions in real time via WebSockets.
+  - Progress: `objects_settled` criteria satisfied (+0.333 score).
+  - Lineage tracking: Automatically updated `generated_envs/pick_banana_to_plate/lineage.json` with evaluation metrics.
+- **Recorded Video & Telemetry Artifacts**:
+  - Viewport Video (3rd person scene view): [`outputs/rollouts_openpi/2026-10-29_18-44-28/rl-video-step-0.mp4`](../../../../outputs/rollouts_openpi/2026-10-29_18-44-28/rl-video-step-0.mp4)
+  - Robot External Camera 1 (primary view): [`outputs/rollouts_openpi/2026-10-29_18-44-28/robot-cam-env0-external_camera_rgb-episode-0.mp4`](../../../../outputs/rollouts_openpi/2026-10-29_18-44-28/robot-cam-env0-external_camera_rgb-episode-0.mp4)
+  - Robot External Camera 2 (secondary view): [`outputs/rollouts_openpi/2026-10-29_18-44-28/robot-cam-env0-external_camera_2_rgb-episode-0.mp4`](../../../../outputs/rollouts_openpi/2026-10-29_18-44-28/robot-cam-env0-external_camera_2_rgb-episode-0.mp4)
+  - Robot Wrist Camera (gripper view): [`outputs/rollouts_openpi/2026-10-29_18-44-28/robot-cam-env0-wrist_camera_rgb-episode-0.mp4`](../../../../outputs/rollouts_openpi/2026-10-29_18-44-28/robot-cam-env0-wrist_camera_rgb-episode-0.mp4)
+  - Interactive Evaluation Report: [`outputs/rollouts_openpi/2026-10-29_18-44-28/index.html`](../../../../outputs/rollouts_openpi/2026-10-29_18-44-28/index.html)
+  - Trajectory Dataset: [`outputs/rollouts_openpi/2026-10-29_18-44-28/dataset_20261029_184428_rank0.hdf5`](../../../../outputs/rollouts_openpi/2026-10-29_18-44-28/dataset_20261029_184428_rank0.hdf5)
+  - Evaluation Telemetry: [`outputs/rollouts_openpi/2026-10-29_18-44-28/eval_telemetry.ttl`](../../../../outputs/rollouts_openpi/2026-10-29_18-44-28/eval_telemetry.ttl)
+
+---
+
+## 8. Next Steps & Ongoing Activities
+1. Complete remaining simulation test suites in `isaaclab_arena/tests`.
 2. Present full findings and verified capabilities to the user.

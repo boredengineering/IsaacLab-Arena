@@ -12,7 +12,19 @@
       "diagnostics": [],
       "spec_file": "pick_banana_to_plate/v1/pick_banana_to_plate.yaml",
       "policy_file": "pick_banana_to_plate/v1/policy_config.yaml",
-      "evaluation": null
+      "evaluation": {
+        "timestamp": "2026-10-29T18:51:19.678342+00:00",
+        "eval_dir": "outputs/2026-10-29_18-50-28",
+        "success_rate": 0.0,
+        "object_moved_rate": 0.0,
+        "num_episodes": 1,
+        "progress_score": 0.0,
+        "raw_metrics": {
+          "num_episodes": 1,
+          "success_rate": 0.0,
+          "object_moved_rate": 0.0
+        }
+      }
     }
   ],
   "current_version": 1,

@@ -1,11 +1,11 @@
 env_name: pick_banana_to_plate
 embodiment:
-  id: franka
-  registry_name: franka_ik
+  id: robot_droid
+  registry_name: droid_abs_joint_pos
   params:
     initial_pose:
       position_xyz:
-      - -0.3371
+      - -0.4367
       - 0.0
       - 0.0
       rotation_xyzw:
@@ -129,3 +129,4 @@ task:
       pick_up_object: banana
       destination_location: plate
       background_scene: maple_table
+      episode_length_s: 15.0

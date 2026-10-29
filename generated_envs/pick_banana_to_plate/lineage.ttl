@@ -9,6 +9,8 @@
 :pick_banana_to_plate_v1 a prov:Entity,
         arena:EnvironmentVersion ;
     prov:generatedAtTime "2026-10-29T18:06:53.382479+00:00"^^xsd:dateTime ;
+    arena:evalDir "outputs/2026-10-29_18-50-28"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
     arena:trigger "initial_generation"^^xsd:string ;
     arena:versionNumber 1 .
 

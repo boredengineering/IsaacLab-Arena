@@ -39,7 +39,9 @@ from isaaclab_arena_examples.agentic_environment_generation.environment_generati
 
 def _make_packing_table_spec(banana_xyz: list[float], bowl_xyz: list[float]) -> ArenaEnvGraphSpec:
     """Helper to synthesize a test spec on packing_table."""
-    spec = ArenaEnvGraphSpec.from_yaml("generated_envs/droid_banana_to_red_bowl/v5-1/droid_banana_to_red_bowl.yaml")
+    spec = ArenaEnvGraphSpec.from_yaml(
+        "isaaclab_arena/tests/fixtures/droid_banana_to_red_bowl/v5-1/droid_banana_to_red_bowl.yaml"
+    )
     for obj in spec.objects:
         if obj.id == "yellow_banana":
             if not obj.params:

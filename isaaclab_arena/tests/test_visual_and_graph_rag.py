@@ -154,7 +154,9 @@ class TestVisualAndGraphRAG:
         import json
         from unittest.mock import MagicMock, patch
 
-        spec = ArenaEnvGraphSpec.from_yaml("generated_envs/droid_banana_to_red_bowl/v5-1/droid_banana_to_red_bowl.yaml")
+        spec = ArenaEnvGraphSpec.from_yaml(
+            "isaaclab_arena/tests/fixtures/droid_banana_to_red_bowl/v5-1/droid_banana_to_red_bowl.yaml"
+        )
         critic = VisualSceneCritic(local_vlm_model="Qwen/Qwen2.5-VL-7B-Instruct", strict_mode=True)
         prompt = critic._build_step0_preflight_prompt(spec)
         assert "STEP-0 INITIAL SPAWN PREFLIGHT CHECK" in prompt
@@ -231,7 +233,7 @@ class TestVisualAndGraphRAG:
             run_grounded_resolve,
         )
 
-        v5_path = "generated_envs/droid_banana_to_red_bowl/v5-1/droid_banana_to_red_bowl.yaml"
+        v5_path = "isaaclab_arena/tests/fixtures/droid_banana_to_red_bowl/v5-1/droid_banana_to_red_bowl.yaml"
         spec_copy = tmp_path / "candidate_spec.yaml"
         spec_copy.write_text(open(v5_path, encoding="utf-8").read(), encoding="utf-8")
 

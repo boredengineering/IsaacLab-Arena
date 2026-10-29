@@ -15,7 +15,7 @@ def test_runner_support_bounds_accept_saved_c1_and_reject_rotated_table():
 
     root = Path(__file__).resolve().parents[2]
     spec = ArenaEnvGraphSpec.from_yaml(
-        root / "generated_envs/g1_tabletop_apple_to_plate/v32/g1_tabletop_apple_to_plate.yaml"
+        root / "isaaclab_arena/tests/fixtures/g1_tabletop_apple_to_plate/v32/g1_tabletop_apple_to_plate.yaml"
     )
     xmin, xmax, ymin, ymax = support_bounds(spec)
     x, y, _ = spec.objects[0].params["initial_pose"]["position_xyz"]
@@ -44,7 +44,7 @@ def test_changed_kit_args_cannot_resume_cached_evidence(tmp_path, monkeypatch):
     from isaaclab_arena_examples.agentic_environment_generation import dcrg_runner as runner
 
     root = Path(__file__).resolve().parents[2]
-    source = root / "generated_envs/g1_tabletop_apple_to_plate/v32"
+    source = root / "isaaclab_arena/tests/fixtures/g1_tabletop_apple_to_plate/v32"
     calls = []
     monkeypatch.setattr(
         runner,

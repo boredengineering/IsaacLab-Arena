@@ -1,3 +1,0 @@
-# Rendered comparison evidence stays local, not in source control.
-*
-!.gitignore

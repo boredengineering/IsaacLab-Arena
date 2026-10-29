@@ -227,18 +227,20 @@ class TestSpatialOracleRectificationHR03:
 
     def test_saved_v3_and_v3_1_fail_and_v5_1_passes(self):
         """Verify v3 fails containment, v3-1 fails resting EE clearance, and v5-1 passes."""
-        spec_v3 = ArenaEnvGraphSpec.from_yaml("generated_envs/droid_banana_to_red_bowl/v3/droid_banana_to_red_bowl.yaml")
+        spec_v3 = ArenaEnvGraphSpec.from_yaml(
+            "isaaclab_arena/tests/fixtures/droid_banana_to_red_bowl/v3/droid_banana_to_red_bowl.yaml"
+        )
         assert len(validate_support_containment(spec_v3)) > 0
 
         spec_v3_1 = ArenaEnvGraphSpec.from_yaml(
-            "generated_envs/droid_banana_to_red_bowl/v3-1/droid_banana_to_red_bowl.yaml"
+            "isaaclab_arena/tests/fixtures/droid_banana_to_red_bowl/v3-1/droid_banana_to_red_bowl.yaml"
         )
         ok_v3_1, errs_v3_1 = validate_spatial_geometry(spec_v3_1)
         assert not ok_v3_1
         assert any("resting end-effector exclusion zone" in e for e in errs_v3_1)
 
         spec_v5_1 = ArenaEnvGraphSpec.from_yaml(
-            "generated_envs/droid_banana_to_red_bowl/v5-1/droid_banana_to_red_bowl.yaml"
+            "isaaclab_arena/tests/fixtures/droid_banana_to_red_bowl/v5-1/droid_banana_to_red_bowl.yaml"
         )
         ok_v5_1, errs_v5_1 = validate_spatial_geometry(spec_v5_1)
         assert ok_v5_1, f"Expected v5-1 to pass spatial geometry, got: {errs_v5_1}"
@@ -274,8 +276,10 @@ class TestSelfHealingHR07:
             EvaluationRemediationEngine,
         )
 
-        eval_dir = Path("eval_output/droid_banana_to_red_bowl/zero_action/2026-10-04_22-52-39")
-        spec_v3 = ArenaEnvGraphSpec.from_yaml("generated_envs/droid_banana_to_red_bowl/v3/droid_banana_to_red_bowl.yaml")
+        eval_dir = Path("isaaclab_arena/tests/fixtures/eval_output/droid_banana_to_red_bowl/zero_action/2026-10-04_22-52-39")
+        spec_v3 = ArenaEnvGraphSpec.from_yaml(
+            "isaaclab_arena/tests/fixtures/droid_banana_to_red_bowl/v3/droid_banana_to_red_bowl.yaml"
+        )
         policy_cfg = "isaaclab_arena_gr00t/policy/config/droid_manip_gr00t_closedloop_config.yaml"
 
         oracle = EvaluationDiagnosticOracle()
@@ -382,7 +386,9 @@ class TestGeneralizationMilestone4HR08HR10:
         from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
         # Standard pose: robot at [-0.4367, 0.0, 0.0] facing +X
-        spec = ArenaEnvGraphSpec.from_yaml("generated_envs/droid_banana_to_red_bowl/v5-1/droid_banana_to_red_bowl.yaml")
+        spec = ArenaEnvGraphSpec.from_yaml(
+            "isaaclab_arena/tests/fixtures/droid_banana_to_red_bowl/v5-1/droid_banana_to_red_bowl.yaml"
+        )
         zones = compute_world_embodiment_exclusion_zones(spec)
         assert len(zones) >= 1
         _, wx, wy, wz, r = zones[0]
@@ -420,7 +426,9 @@ class TestGeneralizationMilestone4HR08HR10:
         )
         from isaaclab_arena.environment_spec.arena_env_graph_spec import ArenaEnvGraphSpec
 
-        spec_v3 = ArenaEnvGraphSpec.from_yaml("generated_envs/droid_banana_to_red_bowl/v3/droid_banana_to_red_bowl.yaml")
+        spec_v3 = ArenaEnvGraphSpec.from_yaml(
+            "isaaclab_arena/tests/fixtures/droid_banana_to_red_bowl/v3/droid_banana_to_red_bowl.yaml"
+        )
         # In v3, yellow_banana was placed overhanging at [-0.09, -0.1997, 0.7492]
         safe_xyz, sector = project_pose_to_safe_support_surface(spec_v3, "yellow_banana", preferred_sector="front_right")
 

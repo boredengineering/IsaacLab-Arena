@@ -291,7 +291,7 @@ def test_unresolved_or_nonhorizontal_support_rejected(spec, sector, normal):
 def test_saved_c1_v32_proposal_preserves_contract():
     path = (
         Path(__file__).resolve().parents[2]
-        / "generated_envs/g1_tabletop_apple_to_plate/v32/g1_tabletop_apple_to_plate.yaml"
+        / "isaaclab_arena/tests/fixtures/g1_tabletop_apple_to_plate/v32/g1_tabletop_apple_to_plate.yaml"
     )
     if not path.is_file():
         pytest.skip("Local saved C1 v32 artifact is not part of a fresh clone")
@@ -390,7 +390,7 @@ def test_feedback_reader_receives_exact_version_and_relation():
 
     root = Path(__file__).resolve().parents[2]
     spec = ArenaEnvGraphSpec.from_yaml(
-        root / "generated_envs/g1_tabletop_apple_to_plate/v32/g1_tabletop_apple_to_plate.yaml"
+        root / "isaaclab_arena/tests/fixtures/g1_tabletop_apple_to_plate/v32/g1_tabletop_apple_to_plate.yaml"
     )
     calls = []
 

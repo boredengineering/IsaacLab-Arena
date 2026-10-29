@@ -1,51 +1,157 @@
-# Local Inference Plans Index
+# Local LLM & VLM Inference Runbook (`dev/0.3.1`)
 
-This directory maintains architectural plans, operational runbooks, serving benchmarks, and integration guides for running self-hosted, local models (LLMs and VLMs) with Isaac Lab-Arena's agentic workflows.
-
----
-
-## 1. Overview & Mission
-
-The goal of the local inference track is to decouple Isaac Lab-Arena from external hosted model providers (e.g. OpenAI, Google Gemini, OpenRouter, NVIDIA Cloud API), providing:
-- **Zero API Ingestion / Egress Costs** for continuous synthetic data generation, benchmark sweeps, and automated policy evaluations.
-- **Air-Gapped & Secure Simulation Deployment** for proprietary robot embodiments, scenes, and internal assets.
-- **Low-Latency Active Inference Loops** with co-located GPU inference nodes.
-- **Deterministic Structured Output Guarantees** using hardware-accelerated constrained grammar decoders.
+Operational guide and architectural reference for running self-hosted local Large Language Models (LLMs) and Vision-Language Models (VLMs) with IsaacLab-Arena's `agentic_environment_generation` and Recursive Self-Improvement (RSI) workflows on a **Dual-Blackwell Workstation** (**NVIDIA RTX PRO 6000 Blackwell 96 GB** + **NVIDIA GeForce RTX 5090 32 GB**).
 
 ---
 
-## 2. Plans Index
+## 1. Directory Contents
 
-| Plan | Focus / Domain | Target Stack | Status |
-| :--- | :--- | :--- | :--- |
-| **[`install-multi-gpu.md`](install-multi-gpu.md)** | Physical and electrical hardware integration guide for adding the RTX 5090 to the RTX PRO 6000 Blackwell rig (PSU, 12V-2x6, PCIe bifurcation, and display cabling). | ASUS ROG X870E, Ryzen 9 9950X, RTX PRO 6000 96GB + RTX 5090 32GB, Driver 595+ | **Completed / Dual-Blackwell Verified** |
-| **[`hardening_plan.md`](hardening_plan.md)** | Local dual-GPU stack hardening, microservice preflight health probes, PyTorch inference mode decoupling, and active inference self-healing validation. | Dual-GPU (GPU 0 Spec LLM :8000, GPU 1 Visual VLM :8001 + Isaac Sim), Neo4j LPG | **Active / Production Hardened** |
-| **[`architectural_walkthrough_hardening.md`](architectural_walkthrough_hardening.md)** | Comprehensive end-to-end architectural flow, 3-tier orchestrator breakdown, causal lightcone budgeting, and phased 5-milestone roadmap with autonomous `/goal` prompts. | IsaacLab-Arena Full Stack Architecture, PhysX, Hydra RTX, Neo4j LPG, RDF-star | **Authoritative Architecture & Execution Guide** |
-| **[`local_llm_vlm_agentic_env_gen_plan.md`](local_llm_vlm_agentic_env_gen_plan.md)** | End-to-end local inference execution plan for `agentic_environment_generation` (LLM spec synthesis, Active Inference repair, and Tier 2 local VLM visual scene critic). | Dual-Blackwell (RTX PRO 6000 96GB + RTX 5090 32GB), vLLM, Qwen2.5-72B, Qwen2.5-VL, GR00T-3B | **Active / Ready for Execution** |
-| **[`experiments/experiments.md`](experiments/experiments.md)** | Live human-readable experimental journal, baseline verification records, telemetry logs, and step-by-step validation gates for local dual-GPU execution. | Dual-Blackwell, vLLM (Qwen2.5-Coder-32B / LLaMA-70B), Neo4j 5.26, Isaac Sim 6.0, GR00T-DROID | **Active Research & Execution** |
-| **[`experiments/`](experiments/)** | Dedicated experimental milestone plans, findings, and empirical scorecards (`experiment_01.md`, `experiment_02.md`, `experiment_03.md`, findings). | Scenarios A2, B1, D1-C; DROID, GR00T, OpenPI, QwQ-32B, Qwen2.5-72B | **Active Execution & Tracking** |
-| **[`run_hermes_coding_agent_local_vllm.md`](run_hermes_coding_agent_local_vllm.md)** | Operational guide for researchers running the autonomous Hermes coding agent locally against self-hosted vLLM inference containers. | Hermes Agent CLI/TUI, vLLM (Qwen2.5-Coder-32B / Hermes-3), Host Networking, RTX PRO 6000 | **Verified Operational Guide** |
-| **[`exp03_rollback_recovery_plan.md`](exp03_rollback_recovery_plan.md)** | Dedicated rollback, root-cause recovery, PhysX simulation gating, and `dev/0.3.0-prerelease` merge integration plan for Experiment 03. | Branch `renan/fix/exp03-rollback-to-run1`, Dual-Blackwell, DROID, Microwave, Qwen2.5-72B/VL-7B | **Active / In Execution** |
+| Path | Description |
+| :--- | :--- |
+| **[`experiments/experiment_05.md`](experiments/experiment_05.md)** | Active milestone specification: *Closed-Loop VLA Articulation Grounding, OpenPI π₀.₅ Remediation & Scaled Cognitive Scene Decomposition Benchmarks* (where execution paused prior to the `dev/0.3.1` port). |
+| **[`scripts/`](scripts/)** | OpenUSD fixture/articulation affordance introspection (`introspect_fixture_affordance.py`, `introspect_usd_affordance.py`), articulation verification (`verify_articulated_spec.py`), and experiment orchestration (`orchestrate_experiment.py`). |
+| **[`vllm_patches/`](vllm_patches/)** | Local vLLM Hermes tool-call parser plugin (`hermes_tool_parser.py`). |
 
 ---
 
-## 3. Scope & Shared Invariants
+## 2. Dual-GPU Partitioning Architecture (128 GB Total VRAM)
 
-All local inference implementations within this directory must adhere to the following contracts:
+Rather than tensor-splitting across heterogeneous GPUs, workloads are partitioned by function across the two Blackwell cards:
 
-1. **OpenAI Compatibility**:
-   - Local serving engines (vLLM, SGLang, NVIDIA NIM, etc.) must expose standard `/v1/chat/completions` and `/v1/models` endpoints compatible with the core [`inference_backend.py`](../../../../isaaclab_arena/agentic_environment_generation/inference_backend.py).
-2. **Strict JSON Schema Guided Decoding**:
-   - Spec generation requires native schema-guided token masking (`json_schema` response format) to strictly satisfy `ArenaEnvGraphSpec` validation rules.
-3. **Repository Path & Link Invariant**:
-   - In accordance with the repository conventions, all cross-document references, source code anchors, and configuration files must use **repository-relative links** (never hardcoded `file:///` URIs or host paths).
-4. **Host-to-Container Networking**:
-   - The Arena simulation devcontainer operates under `--net=host`. All local models hosted on loopback interfaces (`127.0.0.1` or `0.0.0.0`) are addressable via `http://localhost:<port>`.
+| Component | Target Device | Default Port | VRAM Budget | Role |
+| :--- | :--- | :--- | :--- | :--- |
+| **Neo4j 5.26 LPG** | Host CPU / RAM | `7688` (Bolt), `7475` (HTTP) | `0 GB` | Experience graph, reified spatial factors, and PROV-O lineage storage. |
+| **Spec Generation LLM** | **GPU 0** (RTX PRO 6000, 96 GB) | `8000` | `~20–63 GB` | `Qwen/Qwen2.5-Coder-32B-Instruct-AWQ` (or `Qwen2.5-72B-Instruct-AWQ`) via vLLM. |
+| **Visual Scene Critic VLM** | **GPU 0** (RTX PRO 6000, 96 GB) | `8001` | `~14–27 GB` | `Qwen/Qwen2.5-VL-7B-Instruct` for Step-0 camera inspection. |
+| **Isaac Sim / IsaacLab** | **GPU 1** (RTX 5090, 32 GB) | — | `~8–12 GB` | PhysX 5.4 simulation, Vulkan RTX offscreen rendering, and USD stage introspection. |
+| **GR00T / OpenPI Policy Server** | **GPU 1** (RTX 5090, 32 GB) | `5556` (ZMQ) / `8000` | `~6–10 GB` | Closed-loop robot policy inference (`GR00T-N1.6-DROID` or OpenPI $\pi_{0.5}$). |
 
 ---
 
-## 4. Planned Extensions & Future Roadmaps
+## 3. Step-by-Step Local Inference Bring-Up
 
-- [ ] **Multi-GPU Orchestration**: Profiling memory allocation when running Isaac Sim and a 70B quantized LLM on heterogeneous vs unified multi-GPU workstations (e.g., dual RTX 4090 or single H100).
-- [ ] **Cosmos-Reason Integration**: Benchmarking NVIDIA Cosmos-Reason as a specialized Tier 2 physical dynamics and spatial critic.
-- [ ] **vLLM Grammar Optimization**: Benchmarking XGrammar vs Outlines for low-latency recursive schema resolution on complex factor graphs.
+### Step 1: Start Neo4j Experience Database (Host CPU)
+```bash
+docker run -d --name arena-envgen-neo4j \
+  --restart unless-stopped \
+  -p 127.0.0.1:7475:7474 \
+  -p 127.0.0.1:7688:7687 \
+  -e NEO4J_AUTH=neo4j/arena_local_password \
+  --mount source=arena-envgen-neo4j-data,target=/data \
+  neo4j:5.26-community
+```
+
+### Step 2: Launch Local vLLM Servers on GPU 0 (RTX PRO 6000 Blackwell)
+
+#### Option A: Standard Dual-Service (32k Spec LLM on `:8000` + Visual VLM on `:8001`)
+```bash
+# 1. Spec Generation LLM (Port 8000, FP8 KV Cache)
+docker run -d --name arena-vllm-spec \
+  --gpus '"device=0"' \
+  --network host \
+  --ipc host \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  vllm/vllm-openai:v0.10.0 \
+    --model Qwen/Qwen2.5-Coder-32B-Instruct-AWQ \
+    --port 8000 \
+    --max-model-len 32768 \
+    --kv-cache-dtype fp8 \
+    --guided-decoding-backend outlines \
+    --gpu-memory-utilization 0.65 \
+    --api-key local-arena-token
+
+# 2. Visual Critic VLM (Port 8001)
+docker run -d --name arena-vllm-visual \
+  --gpus '"device=0"' \
+  --network host \
+  --ipc host \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  vllm/vllm-openai:v0.10.0 \
+    --model Qwen/Qwen2.5-VL-7B-Instruct \
+    --port 8001 \
+    --max-model-len 8192 \
+    --limit-mm-per-prompt image=4 \
+    --gpu-memory-utilization 0.28 \
+    --api-key local-arena-token
+```
+
+#### Option B: Long-Context 131k Spec LLM via YaRN RoPE Scaling (Port 8000)
+> **Important**: `Qwen2.5-Coder-32B` has a base `max_position_embeddings` of `32768`. Exceeding 32k requires passing both `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` and `--hf-overrides` with YaRN factor `4.0`.
+
+```bash
+docker run -d --name arena-vllm-spec-131k \
+  --restart unless-stopped \
+  --gpus '"device=0"' \
+  --network host \
+  --ipc host \
+  -e VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  vllm/vllm-openai:v0.10.0 \
+    --model Qwen/Qwen2.5-Coder-32B-Instruct-AWQ \
+    --port 8000 \
+    --hf-overrides '{"max_position_embeddings": 131072, "rope_scaling": {"rope_type": "yarn", "factor": 4.0, "original_max_position_embeddings": 32768}}' \
+    --max-model-len 131072 \
+    --kv-cache-dtype fp8 \
+    --guided-decoding-backend outlines \
+    --gpu-memory-utilization 0.65 \
+    --api-key local-arena-token
+```
+
+### Step 3: Verify Local Endpoints
+```bash
+curl -s http://127.0.0.1:8000/v1/models -H "Authorization: Bearer local-arena-token"
+curl -s http://127.0.0.1:8001/v1/models -H "Authorization: Bearer local-arena-token"
+```
+
+---
+
+## 4. Running Agentic Environment Generation & Grounded Verification
+
+Inside the Arena simulation container (pinned to GPU 1 via `CUDA_VISIBLE_DEVICES=1`):
+
+### A. Pure-Python Spec Resolution (`--mode resolve`)
+```bash
+docker exec "$ARENA_CONTAINER" su $(id -un) -c \
+  "cd /workspaces/isaaclab_arena && \
+   CUDA_VISIBLE_DEVICES=1 /isaac-sim/python.sh \
+   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+   --mode resolve \
+   --env_name droid_banana_to_red_bowl \
+   --prompt 'Droid picks up the yellow banana from the right side of the packing table and places it into the red bowl on the left.' \
+   --base_url http://127.0.0.1:8000/v1 \
+   --model Qwen/Qwen2.5-Coder-32B-Instruct-AWQ \
+   --temperature 0.0 \
+   --api_key local-arena-token"
+```
+
+### B. Full Grounded Resolution with 60-Step PhysX Settle & Step-0 VLM Critic (`--mode grounded-resolve`)
+```bash
+docker exec "$ARENA_CONTAINER" su $(id -un) -c \
+  "cd /workspaces/isaaclab_arena && \
+   CUDA_VISIBLE_DEVICES=1 \
+   LOCAL_VLM_BASE_URL=http://127.0.0.1:8001/v1 \
+   LOCAL_VLM_MODEL=Qwen/Qwen2.5-VL-7B-Instruct \
+   LOCAL_VLM_API_KEY=local-arena-token \
+   /isaac-sim/python.sh \
+   isaaclab_arena_examples/agentic_environment_generation/environment_generation_runner.py \
+   --mode grounded-resolve \
+   --env_name droid_banana_to_red_bowl \
+   --prompt 'Droid picks up the yellow banana from the right side of the packing table and places it into the red bowl on the left.' \
+   --base_url http://127.0.0.1:8000/v1 \
+   --model Qwen/Qwen2.5-Coder-32B-Instruct-AWQ \
+   --temperature 0.0 \
+   --api_key local-arena-token"
+```
+
+### C. OpenUSD Affordance Introspection & Articulation Verification
+```bash
+# Introspect static fixture support patches and Z_base grounding:
+docker exec "$ARENA_CONTAINER" su $(id -un) -c \
+  "cd /workspaces/isaaclab_arena && \
+   /isaac-sim/python.sh .agents/references/plans/local-inference/scripts/introspect_fixture_affordance.py --help"
+
+# Verify articulated scene clearances and joint limits (Experiment 05):
+docker exec "$ARENA_CONTAINER" su $(id -un) -c \
+  "cd /workspaces/isaaclab_arena && \
+   /isaac-sim/python.sh .agents/references/plans/local-inference/scripts/verify_articulated_spec.py --help"
+```

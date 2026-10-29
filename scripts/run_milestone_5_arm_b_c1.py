@@ -79,12 +79,12 @@ OUTPUT SCHEMA STRUCTURE:
 }
 """
 
-LEDGER_PATH = os.path.join(REPO_ROOT, "eval_output/mug_to_rack/rsi_interaction_ledger.jsonl")
+LEDGER_PATH = os.path.join(REPO_ROOT, "eval_output/mug_to_rack/self_healing_ledger.jsonl")
 OUT_DIR = os.path.join(REPO_ROOT, "generated_envs/mug_to_rack/arm_b")
 os.makedirs(OUT_DIR, exist_ok=True)
 os.makedirs(os.path.dirname(LEDGER_PATH), exist_ok=True)
 
-def log_rsi_event(cycle_index: int, phase: str, model_metadata: dict = None, active_inference_state: dict = None, physical_grounding_evidence: dict = None, graph_mutation: dict = None, epistemic_priors_retrieved: list = None, reified_relations_extracted: list = None):
+def log_healing_event(cycle_index: int, phase: str, model_metadata: dict = None, active_inference_state: dict = None, physical_grounding_evidence: dict = None, graph_mutation: dict = None, epistemic_priors_retrieved: list = None, reified_relations_extracted: list = None):
     record = {
         "cycle_index": cycle_index,
         "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -114,7 +114,7 @@ def log_rsi_event(cycle_index: int, phase: str, model_metadata: dict = None, act
     }
     with open(LEDGER_PATH, "a") as f:
         f.write(json.dumps(record) + "\n")
-    print(f"[RSI LEDGER] Logged event: {phase}")
+    print(f"[HEALING LEDGER] Logged event: {phase}")
 
 def main():
     print("=================================================================")
@@ -130,7 +130,7 @@ def main():
     except Exception as e:
         print(f"Neo4j query notice: {e}")
     print(f"Retrieved {len(failures)} failure signature(s) from Neo4j: {failures}")
-    log_rsi_event(cycle_index=1, phase="GRAPH_RAG_PRIORS", epistemic_priors_retrieved=failures)
+    log_healing_event(cycle_index=1, phase="GRAPH_RAG_PRIORS", epistemic_priors_retrieved=failures)
 
     print("\n=================================================================")
     print("STEP 2: Synthesize Scenario C1 with QwQ-32B Test-Time Deduction")
@@ -229,7 +229,7 @@ SPATIAL REASONING REQUIREMENTS:
     spec.write_yaml(yaml_path)
     print(f"[SPEC PERSISTED] Saved Arm B YAML to: {yaml_path}")
     
-    log_rsi_event(
+    log_healing_event(
         cycle_index=1,
         phase="SYNTHESIS_ARM_B_C1",
         model_metadata={
@@ -316,7 +316,7 @@ SPATIAL REASONING REQUIREMENTS:
     else:
         print("[WARNING] Viewport video rl-video-step-0.mp4 not found for keyframe extraction.")
 
-    log_rsi_event(
+    log_healing_event(
         cycle_index=1,
         phase="STEP0_PHYSX_ARM_B_C1",
         physical_grounding_evidence={

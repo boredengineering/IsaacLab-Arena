@@ -52,7 +52,7 @@ The workstation supports **twelve modular model combinations**, detailed in [Sec
 | :--- | :--- | :--- | :--- |
 | **Comb 1 (Golden Baseline)** | `Qwen2.5-Coder-32B-Instruct-AWQ` | `Qwen2.5-VL-7B-Instruct` | Production baseline; verified in Exp 01 on Franka DROID pick-and-place. |
 | **Comb 2 (Frontier 70B)** | `llama-3.3-70b-instruct-awq` | `Qwen2.5-VL-7B-Instruct` | High-parameter reasoning stress test for complex multi-room topologies. |
-| **Comb 3 (Long-Context RSI)** | `Qwen2.5-Coder-32B-AWQ` (131k YaRN) | `Qwen2.5-VL-7B-Instruct` | Multi-pass Bayesian self-healing without context eviction (5+ cycles). |
+| **Comb 3 (Long-Context Self-Healing)** | `Qwen2.5-Coder-32B-AWQ` (131k YaRN) | `Qwen2.5-VL-7B-Instruct` | Multi-pass Bayesian self-healing without context eviction (5+ cycles). |
 | **Comb 4 (NVIDIA Physical AI)**| `Qwen2.5-Coder-32B-AWQ` | `Cosmos-Reason2-2B` | Humanoid loco-manipulation (Unitree G1) and dynamic physical stability. |
 | **Comb 5 (Unified Omnimodal)** | `Qwen2.5-VL-72B-Instruct-AWQ` | *(Integrated Port 8000)* | Unified text spec synthesis and multi-camera rendered frame critique. |
 | **Comb 6 (Geometric Oracle)** | `Qwen2.5-Coder-32B-AWQ` | `DA3METRIC` + `MoGe-2` | Ground-truth 3D point cloud and surface normal plane alignment. |
@@ -118,23 +118,19 @@ Start the designated model backend for the selected combination:
 # Example: Launch Combination 1 (Qwen2.5-Coder-32B-Instruct-AWQ) on GPU 0
 python3 .agents/skills/arena-local-inference-experiments/scripts/manage_backends.py start qwen-coder-32b
 ```
-Dispatch the scenario prompt to the active endpoint (`http://localhost:8000/v1`):
+Dispatch the scenario prompt using the environment generation runner:
 ```bash
-python3 .agents/references/plans/local-inference/scripts/orchestrate_experiment.py \
-  --scenario D1-C --phase spec
+python3 scripts/environment_generation_runner.py \
+  --prompt "office table with microwave..."
 ```
 
 ### Phase 2: Ternary Gating & Software Motion Clearance (Pass 1–3c)
 1. **Ternary Proposition Gate Check (Traps False-Positives)**:
-   ```bash
-   python3 .agents/references/plans/local-inference/scripts/orchestrate_experiment.py \
-     --scenario D2-NEG --phase gate_check
-   ```
    Evaluates proposition $\mathcal{P} \in \{\text{True}, \text{False}, \text{Unknown}\}$ and enforces the Semantic Fidelity Filter ($\tau = 0.70$) to prevent cross-domain hallucinations.
 2. **Deterministic Motion Clearance Verification**:
    ```bash
-   python3 .agents/references/plans/local-inference/scripts/verify_articulated_spec.py \
-     --spec_yaml generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml
+   /isaac-sim/python.sh scripts/tools/verify_articulated_spec.py \
+     --spec_yaml path/to/spec.yaml
    ```
    - **Pass 1**: Grounding check ($Z_{\text{base}} = 0.0\,\text{m}$) and Pedestal SAT clearance ($\ge 0.05\,\text{m}$).
    - **Pass 2**: SHACL invariant conformity (`PlacedArticulatedPropShape` vs. `IntrinsicFixtureArticulationShape`).
@@ -146,12 +142,12 @@ Render offscreen multi-camera frames (exterior $45^\circ$, wrist, overhead) and 
 - Interpenetration with the Franka resting gripper envelope (`[-0.09, -0.10, 0.76]`).
 
 ### Phase 4: Dynamic PhysX Simulation Gating (Zero-Action Policy)
-Execute 300 steps under gravity ($9.81\text{ m/s}^2$) on GPU 1 using the experiment orchestration script located near the experiment plan:
+Execute 300 steps under gravity ($9.81\text{ m/s}^2$) on GPU 1:
 ```bash
-python3 .agents/references/plans/local-inference/scripts/orchestrate_experiment.py \
-  --scenario D1-C \
-  --phase zero_action \
-  --env_yaml generated_envs/exp04_d1c_microwave/latest/exp04_d1c_microwave.yaml
+/isaac-sim/python.sh scripts/policy_runner.py \
+  --env_yaml path/to/spec.yaml \
+  --policy zero_action \
+  --num_steps 300
 ```
 - **Exit Criteria**: All entities settled ($v_{\text{lin}} \le 0.01\,\text{m/s}$), zero drops (`object_dropped: False`), and zero depenetration catapults.
 
@@ -178,7 +174,7 @@ docker exec isaaclab_arena-latest-isaaclab-arena-private \
 
 ### Phase 6: Telemetry Recording & Ledger Update
 1. Parse `eval_telemetry.json` and extract mean linear velocity, drop count, and task success.
-2. Record execution evidence into `rsi_interaction_ledger.jsonl`.
+2. Record execution evidence into `execution_ledger.jsonl`.
 3. Shut down backends cleanly:
    ```bash
    python3 .agents/skills/arena-local-inference-experiments/scripts/manage_backends.py stop-all
@@ -209,15 +205,13 @@ These provide reusable platform management capabilities across all current and f
    - `stop-all`: Safely stops all containers (vLLM Spec, Visual Critic, GR00T, OpenPI) and Colibrì processes, verifying 100% VRAM release across both GPUs.
    - `status`: Probes endpoint connectivity across inference and policy sockets.
 
-### 5.2 Experiment-Specific Execution Scripts (`.agents/references/plans/local-inference/scripts/`)
-Specific experiment scripts are authored and maintained directly **near the experiment plan**, keeping them versioned alongside their respective milestones. A complete catalog and usage guide is maintained in [`.agents/references/plans/local-inference/scripts/README.md`](../../references/plans/local-inference/scripts/README.md):
-1. **`orchestrate_experiment.py`**:
-   - Manages preflight audits, cognitive spec synthesis, ternary proposition gate checking (`D2-NEG`), oracle self-healing repair, zero-action settling, and camera/viewport video recording.
-2. **`verify_articulated_spec.py`**:
+### 5.2 Operational & Verification Tools (`scripts/tools/`)
+Production-grade CLI tools and verification oracles are maintained under [`scripts/tools/`](../../../scripts/tools/) with full documentation in [`scripts/tools/README.md`](../../../scripts/tools/README.md):
+1. **`verify_articulated_spec.py`**:
    - Multi-pass physical AI and motion clearance oracle evaluating Grounding ($Z_{\text{base}} = 0.0\,\text{m}$), SHACL shape invariants, revolute swept arcs ($\mathcal{W}_{\text{revolute}}$), prismatic stroke corridors ($\mathcal{V}_{\text{prismatic}}$), and affordance facing angles.
-3. **`introspect_fixture_affordance.py` & `introspect_usd_affordance.py`**:
+2. **`introspect_fixture_affordance.py` & `introspect_usd_affordance.py`**:
    - Introspects Pixar USD stages (`pxr.Usd`, `UsdGeom.BBoxCache`) for static and articulated fixtures to measure physical deck heights, ground contact, prim hierarchies, and joint limits.
-4. **`run_experiment_03_rollouts.py` & `run_phase2_5_rollouts.py`**:
-   - Orchestrates automated batch execution of closed-loop neural policy rollouts with `nvidia/GR00T` (Port 5556) and `Physical Intelligence OpenPI` (Port 8008) at 50 Hz.
-5. **`download_and_verify.py` & `download_openpi_weights.py`**:
-   - Automates downloading and isolated smoke-testing of candidate weights on GPU 0/1 with strict VRAM release verification.
+3. **`audit_kinematic_articulation_clearance.py`**:
+   - Standalone analytical swept volume clearance auditor.
+4. **`download_openpi_weights.py` & `download_and_verify.py`**:
+   - Automates downloading and SHA256 verification of candidate weights on GPU 0/1 with strict VRAM release verification.

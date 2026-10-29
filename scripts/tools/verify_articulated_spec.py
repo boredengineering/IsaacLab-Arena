@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic RSI Tooling Oracle for Articulated Environments.
+"""Deterministic Deterministic Tooling Oracle for Articulated Environments.
 
 Validates that an autonomously generated ArenaEnvGraphSpec YAML satisfies:
 1. Schema & Graph Integrity (entity registrations, task composition).
@@ -13,7 +13,7 @@ Validates that an autonomously generated ArenaEnvGraphSpec YAML satisfies:
 5. Task-Affordance Facing: the aperture of the articulated object faces the robot base (fixed-base arms).
 6. Standoff & Elevation Alignment: Robot-to-fixture horizontal standoff (0.50m - 1.20m) and tabletop elevation alignment with robot stand base.
 
-Outputs structured JSON diagnostic reports for consumption by the RSI self-healing loop.
+Outputs structured JSON diagnostic reports for consumption by the self-healing loop.
 """
 
 import argparse
@@ -25,7 +25,7 @@ import sys
 import yaml
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
@@ -1368,9 +1368,21 @@ def verify_spec(spec_path: str, usd_path: str = None) -> dict:
                 b_rot = bg_pose.get("rotation_xyzw", [0.0, 0.0, 0.0, 1.0])
                 w_b = transform_sector_bounds_to_world(sec_bounds, b_pos, b_rot)
                 ext = get_asset_footprint_half_extents(obj)
+                obj_yaw = 0.0
+                rot_r = next((r for r in relations if r.get("kind") == "rotate_around_solution" and r.get("subject") == obj_id), None)
+                if rot_r:
+                    obj_yaw = float(rot_r.get("params", {}).get("yaw_rad", 0.0))
+                else:
+                    obj_rot = obj.get("params", {}).get("initial_pose", {}).get("rotation_xyzw")
+                    if obj_rot and len(obj_rot) == 4:
+                        from isaaclab_arena.utils.yaw import yaw_from_quat_xyzw
+                        obj_yaw = yaw_from_quat_xyzw(tuple(obj_rot))
+                c_yaw, s_yaw = abs(math.cos(obj_yaw)), abs(math.sin(obj_yaw))
+                ext_x = c_yaw * ext[0] + s_yaw * ext[1]
+                ext_y = s_yaw * ext[0] + c_yaw * ext[1]
                 tol = 0.05
-                if (float(pos[0]) - ext[0] < w_b[0] - tol or float(pos[0]) + ext[0] > w_b[1] + tol or
-                    float(pos[1]) - ext[1] < w_b[2] - tol or float(pos[1]) + ext[1] > w_b[3] + tol):
+                if (float(pos[0]) - ext_x < w_b[0] - tol or float(pos[0]) + ext_x > w_b[1] + tol or
+                    float(pos[1]) - ext_y < w_b[2] - tol or float(pos[1]) + ext_y > w_b[3] + tol):
                     pass3b_ok = False
                     report["defects"].append({
                         "code": "DEFECT_SURFACE_BOUNDS_VIOLATION",
@@ -1524,7 +1536,7 @@ def verify_spec(spec_path: str, usd_path: str = None) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Deterministic RSI Tooling Oracle for Articulated Specs")
+    parser = argparse.ArgumentParser(description="Deterministic Deterministic Tooling Oracle for Articulated Specs")
     parser.add_argument("--spec", "--spec_yaml", dest="spec", type=str, required=True, help="Path to ArenaEnvGraphSpec YAML")
     parser.add_argument("--usd", "--usd_path", dest="usd", type=str, default=None, help="Path to articulated USD asset")
     parser.add_argument("--json", action="store_true", help="Output raw JSON report")
@@ -1537,7 +1549,7 @@ def main():
     else:
         status = "PASSED" if result["conforms"] else "FAILED"
         print(f"\n=======================================================")
-        print(f"[RSI ORACLE REPORT] Specification Validation: {status}")
+        print(f"[ORACLE REPORT] Specification Validation: {status}")
         print(f"Spec: {args.spec}")
         print("=======================================================")
         print(f"Pass 1 (Schema & Graph):          {'PASS' if result['passes'].get('pass1_schema') else 'FAIL'}")
@@ -1549,7 +1561,7 @@ def main():
         print(f"Pass 6 (Standoff & Elevation):    {'PASS' if result['passes'].get('pass6_standoff_elevation') else 'FAIL'}")
 
         if result["defects"]:
-            print("\n[DETECTED DEFECTS FOR RSI SELF-HEALING LOOP]:")
+            print("\n[DETECTED DEFECTS FOR Self-Healing SELF-HEALING LOOP]:")
             for d in result["defects"]:
                 print(f"  * [{d['code']}] {d['message']}")
                 if "remediation" in d:

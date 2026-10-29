@@ -8,12 +8,12 @@
 
 ## 1. Objective & 3-Way Git Ancestry
 
-Port the complete Agentic Environment Generation, Recursive Self-Improvement (RSI) workflow, Arena Workbench (`web/arena-workbench/`), custom embodiments/assets/relations/tasks, and `.devcontainer/` + `.agents/` infrastructure from `dev/0.3.0-prerelease` onto the upstream `release/0.3.1` codebase.
+Port the complete Agentic Environment Generation, autonomous self-healing loops, Arena Workbench (`web/arena-workbench/`), custom embodiments/assets/relations/tasks, and `.devcontainer/` + `.agents/` infrastructure from `dev/0.3.0-prerelease` onto the upstream `release/0.3.1` codebase.
 
 | Role | Branch / Ref | Commit SHA | Description |
 | :--- | :--- | :--- | :--- |
 | **BASE** | `release/0.3.0-prerelease` | `62a5339ccab2` | Common upstream baseline prior to our `0.3.0` development and upstream `0.3.1` refactoring. |
-| **OURS** | `dev/0.3.0-prerelease` | `15aaabaf497f` | Full RSI + Agentic Environment Generation + Workbench + DevContainer tree. |
+| **OURS** | `dev/0.3.0-prerelease` | `15aaabaf497f` | Full self-healing loops + Agentic Environment Generation + Workbench + DevContainer tree. |
 | **THEIRS** | `release/0.3.1` | `db6928a8859b` | Upstream IsaacLab-Arena `v0.3.1` release (`ArenaWorld`, `DeformableObject`, `UsdHelpers` subpackage, `CompletionCriteria`, `ArenaEnvBuilderCfg`). |
 
 ---

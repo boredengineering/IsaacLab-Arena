@@ -1,6 +1,6 @@
 # Local LLM & VLM Inference Runbook (`dev/0.3.1`)
 
-Operational guide and architectural reference for running self-hosted local Large Language Models (LLMs) and Vision-Language Models (VLMs) with IsaacLab-Arena's `agentic_environment_generation` and Recursive Self-Improvement (RSI) workflows on a **Dual-Blackwell Workstation** (**NVIDIA RTX PRO 6000 Blackwell 96 GB** + **NVIDIA GeForce RTX 5090 32 GB**).
+Operational guide and architectural reference for running self-hosted local Large Language Models (LLMs) and Vision-Language Models (VLMs) with IsaacLab-Arena's `agentic_environment_generation` and self-healing loops on a **Dual-Blackwell Workstation** (**NVIDIA RTX PRO 6000 Blackwell 96 GB** + **NVIDIA GeForce RTX 5090 32 GB**).
 
 ---
 
@@ -148,10 +148,10 @@ docker exec "$ARENA_CONTAINER" su $(id -un) -c \
 # Introspect static fixture support patches and Z_base grounding:
 docker exec "$ARENA_CONTAINER" su $(id -un) -c \
   "cd /workspaces/isaaclab_arena && \
-   /isaac-sim/python.sh .agents/references/plans/local-inference/scripts/introspect_fixture_affordance.py --help"
+   /isaac-sim/python.sh scripts/tools/introspect_fixture_affordance.py --help"
 
 # Verify articulated scene clearances and joint limits (Experiment 05):
 docker exec "$ARENA_CONTAINER" su $(id -un) -c \
   "cd /workspaces/isaaclab_arena && \
-   /isaac-sim/python.sh .agents/references/plans/local-inference/scripts/verify_articulated_spec.py --help"
+   /isaac-sim/python.sh scripts/tools/verify_articulated_spec.py --help"
 ```

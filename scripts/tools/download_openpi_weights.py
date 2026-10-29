@@ -5,6 +5,7 @@ Target directory: /root/.cache/openpi/openpi-assets-simeval/pi05_droid_jointpos
 Total size: ~11.58 GB across 26 objects.
 """
 
+import argparse
 import concurrent.futures
 import json
 import os
@@ -16,7 +17,7 @@ import urllib.request
 
 BUCKET_NAME = "openpi-assets-simeval"
 PREFIX = "pi05_droid_jointpos/"
-TARGET_DIR = pathlib.Path(os.environ.get("OPENPI_CACHE_DIR", "/root/.cache/openpi")) / BUCKET_NAME
+DEFAULT_TARGET_DIR = pathlib.Path(os.environ.get("OPENPI_CACHE_DIR", "/root/.cache/openpi")) / BUCKET_NAME
 
 CHUNK_SIZE = 8 * 1024 * 1024  # 8 MB chunks
 
@@ -65,6 +66,13 @@ def download_item(item: dict, base_dir: pathlib.Path) -> tuple[str, int, float]:
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Download pi05_droid_jointpos weights from public GCS bucket directly to local cache.")
+    parser.add_argument("--dest", type=pathlib.Path, default=DEFAULT_TARGET_DIR, help="Destination directory for cached weights.")
+    parser.add_argument("--dry-run", action="store_true", help="Query GCS and list objects without downloading.")
+    parser.add_argument("--workers", type=int, default=4, help="Number of parallel download threads.")
+    args = parser.parse_args()
+
+    target_dir = args.dest
     print(f"Querying public GCS catalog for gs://{BUCKET_NAME}/{PREFIX} ...")
     items = get_gcs_items(BUCKET_NAME, PREFIX)
     if not items:
@@ -73,17 +81,23 @@ def main():
 
     total_bytes = sum(int(item["size"]) for item in items)
     print(f"Found {len(items)} objects totaling {total_bytes / (1024**3):.2f} GB.")
-    print(f"Destination: {TARGET_DIR}")
+    print(f"Destination: {target_dir}")
 
-    TARGET_DIR.mkdir(parents=True, exist_ok=True)
+    if args.dry_run:
+        print("[DRY-RUN] Manifest:")
+        for it in items:
+            print(f"  - {it['name']} ({int(it['size'])/(1024*1024):.2f} MB)")
+        return
+
+    target_dir.mkdir(parents=True, exist_ok=True)
 
     completed_bytes = 0
     t_start = time.time()
 
     # Download in parallel using ThreadPoolExecutor
     # 4 workers avoids throttling while saturating standard gigabit pipe
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        future_to_item = {executor.submit(download_item, item, TARGET_DIR): item for item in items}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+        future_to_item = {executor.submit(download_item, item, target_dir): item for item in items}
         for future in concurrent.futures.as_completed(future_to_item):
             item = future_to_item[future]
             name, size, dur = future.result()
@@ -96,7 +110,7 @@ def main():
     total_elapsed = time.time() - t_start
     overall_speed = (total_bytes / (1024 * 1024)) / max(total_elapsed, 0.001)
     print(f"\nAll {len(items)} files downloaded successfully in {total_elapsed:.1f}s ({overall_speed:.1f} MB/s).")
-    print(f"Local repository path: {TARGET_DIR / 'pi05_droid_jointpos'}")
+    print(f"Local repository path: {target_dir / 'pi05_droid_jointpos'}")
 
 
 if __name__ == "__main__":

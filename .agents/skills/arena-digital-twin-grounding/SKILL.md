@@ -59,16 +59,16 @@ Arbitrary delta-Z shifts that do not trace back to the verified physical surface
 
 ## 3. Tooling Parity: OpenUSD Fixture Affordance Introspection
 
-In early iterations, articulated assets (like `Microwave039.usd`) were equipped with dedicated OpenUSD introspection tooling ([`introspect_usd_affordance.py`](../../references/plans/local-inference/scripts/introspect_usd_affordance.py)) to discover joint kinematics and aperture normals, while static fixtures (tables, desks) were treated as passive, unmeasured entities.
+In early iterations, articulated assets (like `Microwave039.usd`) were equipped with dedicated OpenUSD introspection tooling ([`introspect_usd_affordance.py`](../../../scripts/tools/introspect_usd_affordance.py)) to discover joint kinematics and aperture normals, while static fixtures (tables, desks) were treated as passive, unmeasured entities.
 
 **We enforce complete Tooling Parity**: static fixtures and backgrounds require the exact same depth of OpenUSD geometric introspection before establishing `on` relations or setting coordinates.
 
 ### The Fixture Introspection Tool
-Run [`.agents/references/plans/local-inference/scripts/introspect_fixture_affordance.py`](../../references/plans/local-inference/scripts/introspect_fixture_affordance.py):
+Run [`scripts/tools/introspect_fixture_affordance.py`](../../../scripts/tools/introspect_fixture_affordance.py):
 
 ```bash
 docker exec isaaclab_arena-latest-isaaclab-arena-private /isaac-sim/python.sh \
-  /workspaces/isaaclab_arena/.agents/references/plans/local-inference/scripts/introspect_fixture_affordance.py \
+  /workspaces/isaaclab_arena/scripts/tools/introspect_fixture_affordance.py \
   --usd office_table_background \
   --sync-neo4j \
   --check-grounding
@@ -146,7 +146,7 @@ When the task domain specifically requires a low table (e.g. coffee table, $Z_{\
 
 ## 5. Pre-Flight Grounding Verification Checklist
 
-Before accepting any YAML spec, passing an RSI repair step, or running Step-0 simulation, execute this checklist:
+Before accepting any YAML spec, passing a self-healing repair step, or running Step-0 simulation, execute this checklist:
 
 1. **Fixture Grounding Check**:
    $$\forall \text{ fixture } f \in \text{Scene}, \quad Z_{\text{base}}(f) = 0.0\text{ m}$$
@@ -165,8 +165,7 @@ Before accepting any YAML spec, passing an RSI repair step, or running Step-0 si
 
 ## 6. Related Tools & References
 
-- Tool: [`.agents/references/plans/local-inference/scripts/introspect_fixture_affordance.py`](../../references/plans/local-inference/scripts/introspect_fixture_affordance.py)
-- Oracle: [`.agents/references/plans/local-inference/scripts/verify_articulated_spec.py`](../../references/plans/local-inference/scripts/verify_articulated_spec.py)
+- Tool: [`scripts/tools/introspect_fixture_affordance.py`](../../../scripts/tools/introspect_fixture_affordance.py)
+- Oracle: [`scripts/tools/verify_articulated_spec.py`](../../../scripts/tools/verify_articulated_spec.py)
 - MCP Server: `arena-grounding-guard` (`/root/.gemini/antigravity-cli/mcp/arena-grounding-guard/`)
-- Plan: [`.agents/references/plans/local-inference/exp03_rollback_recovery_plan.md`](../../references/plans/local-inference/exp03_rollback_recovery_plan.md)
 - Startup Skill: [`.agent/skills/arena-session-startup/SKILL.md`](../arena-session-startup/SKILL.md)

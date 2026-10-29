@@ -12,7 +12,10 @@ import sys
 import pytest
 import yaml
 
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+_TOOLS_DIR = _REPO_ROOT / "scripts" / "tools"
+if str(_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TOOLS_DIR))
 import verify_articulated_spec as oracle  # noqa: E402
 
 MICROWAVE_NORMAL = [0.0, -1.0, 0.0]  # measured from Microwave039.usd
@@ -443,17 +446,17 @@ def test_oracle_accepts_grounded_spec(tmp_path):
             {
                 "id": "microwave",
                 "registry_name": "microwave",
-                "params": {"initial_pose": {"position_xyz": [-0.20, -0.35, 0.531]}},
+                "params": {"initial_pose": {"position_xyz": [0.0, -0.10, 0.531]}},
             },
             {
                 "id": "tomato_soup_can",
                 "registry_name": "tomato_soup_can_ycb_robolab",
-                "params": {"initial_pose": {"position_xyz": [-0.20, 0.25, 0.531]}},
+                "params": {"initial_pose": {"position_xyz": [0.0, 0.28, 0.531]}},
             },
         ],
         "relations": [
-            {"kind": "on", "subject": "microwave", "reference": "office_table", "params": {"surface_anchor": "table_top", "surface_sector": "front_right"}},
-            {"kind": "on", "subject": "tomato_soup_can", "reference": "office_table", "params": {"surface_anchor": "table_top", "surface_sector": "front_left"}},
+            {"kind": "on", "subject": "microwave", "reference": "office_table", "params": {"surface_anchor": "table_top"}},
+            {"kind": "on", "subject": "tomato_soup_can", "reference": "office_table", "params": {"surface_anchor": "table_top"}},
             {"kind": "rotate_around_solution", "subject": "microwave", "params": {"yaw_rad": -1.5708}},
         ],
         "reified_relations": [

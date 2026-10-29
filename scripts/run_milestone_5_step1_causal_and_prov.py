@@ -3,7 +3,7 @@
 Milestone 5 (Step 1 & 2):
 1. Audit physical defects in Neo4j from Scenario B1 (Milestones 2, 3, 4)
 2. Assert Causal Attribution Feedback Mutation and Relaxation Proposal edges
-3. Export W3C PROV-O provenance graph to artifacts/experiments/exp02_b1_triad/rsi_lineage.ttl
+3. Export W3C PROV-O provenance graph to artifacts/experiments/exp02_b1_triad/self_healing_lineage.ttl
 """
 
 import os
@@ -15,7 +15,7 @@ NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://localhost:7688")
 NEO4J_USER = os.environ.get("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "isaaclab_arena_password")
 
-PROV_TTL_PATH = "/workspaces/isaaclab_arena/artifacts/experiments/exp02_b1_triad/rsi_lineage.ttl"
+PROV_TTL_PATH = "/workspaces/isaaclab_arena/artifacts/experiments/exp02_b1_triad/self_healing_lineage.ttl"
 os.makedirs(os.path.dirname(PROV_TTL_PATH), exist_ok=True)
 
 def main():
@@ -84,7 +84,7 @@ def main():
             print("  ->", dict(rec))
 
     print("\n=================================================================")
-    print("STEP 2: Export W3C PROV-O Graph Lineage (rsi_lineage.ttl)")
+    print("STEP 2: Export W3C PROV-O Graph Lineage (self_healing_lineage.ttl)")
     print("=================================================================")
     prov_ttl = f"""@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .

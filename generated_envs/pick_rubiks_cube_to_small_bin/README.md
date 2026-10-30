@@ -132,4 +132,4 @@ docker exec -it \
 | :--- | :--- | :--- | :--- | :--- |
 | `v1` | 2026-10-30 | `initial_generation` | Initial synthesis | 0.0% (0 eps) |
 | `v2` | 2026-10-30 | `active_inference_auto_heal` | Spatial: {'maple_table': {'position_xyz': [-0.15, 0.0, 0.0]}, 'rubiks_cube': {'surface_sector': 'front_center', 'sector_bounds': [-0.3, -0.1, -0.15, 0.15]}, 'small_bin': {'surface_sector': 'front_left', 'sector_bounds': [-0.3, -0.1, 0.15, 0.35]}}, Policy: {'num_steps': 2000} | *Pending evaluation* |
-| `v3` | 2026-10-30 | `initial_generation` | Initial synthesis | 20.0% (5 eps) |
+| `v3` | 2026-10-30 | `initial_generation` | Initial synthesis | 0.0% (1 eps) |

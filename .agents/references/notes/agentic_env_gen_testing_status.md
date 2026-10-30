@@ -1,6 +1,6 @@
 # Agentic Environment Generation: Testing & Status Log
 
-Last Updated: 2026-10-29
+Last Updated: 2026-10-30
 
 ## 1. Overview & Objective
 The goal of this testing track is to guarantee that the **Agentic Environment Generation** subsystem in `IsaacLab-Arena` (`isaaclab_arena.agentic_environment_generation`) is fully verified, hardened, and operational end-to-end within the Isaac Sim / Isaac Lab devcontainer.
@@ -206,3 +206,90 @@ Following the initial timeout in Section 7, we performed a deep-dive audit of th
   - Robot Wrist Camera: [`outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-wrist_camera_rgb-episode-0.mp4`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/robot-cam-env0-wrist_camera_rgb-episode-0.mp4)
   - Interactive Evaluation Report: [`outputs/rollouts_openpi/2026-10-29_19-27-25/index.html`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/index.html)
   - Episode Results JSONL: [`outputs/rollouts_openpi/2026-10-29_19-27-25/episode_results_rank0.jsonl`](../../../outputs/rollouts_openpi/2026-10-29_19-27-25/episode_results_rank0.jsonl)
+
+---
+
+## 9. Rubik's Cube Pick-and-Place Rollouts & Interactive Commands (`pick_rubiks_cube_to_small_bin` & `pick_rubiks_cube_to_plate`)
+
+Extended OpenPI $\pi_{0.5}$ (`pi05_droid_jointpos_polaris`) closed-loop verification to ROBOLAB Rubik's cube (`rubiks_cube_hot3d_robolab`) tasks into both a small bin (`bin_b03_vomp_robolab`) and a plate (`plate_large_vomp_robolab`).
+
+### A. Additional ROBOLAB Tabletop & Self-Healing Hardening
+1. **Centered-Origin ROBOLAB Mesh Z-Offset Resolution ([`spatial_geometric_oracle.py`](../../../isaaclab_arena/agentic_environment_generation/spatial_geometric_oracle.py))**:
+   - Added `resolve_object_support_z_offset()` (`0.0444m` for `rubiks_cube_hot3d_robolab`, `0.0130m` for `bin_b03_vomp_robolab`, with USD `BBoxCache` fallback) and `_resolve_relation_sector()` (reading `surface_sector` from both `relations[].params` and `reified_relations`) so centered-origin ROBOLAB assets rest cleanly on the tabletop without clipping.
+2. **`PlaceableAsset` Pose Reset When `solve_relations=False` ([`arena_env_builder.py`](../../../isaaclab_arena/environments/arena_env_builder.py))**:
+   - Registered `set_initial_pose(..., create_reset_event=True)` for non-anchor `PlaceableAsset` instances when `solve_relations=False` (`--no_solve_relations`), ensuring authored `initial_pose` coordinates are applied at every episode reset.
+3. **`maple_table` Self-Healing Workspace Bounds ([`eval_self_healing.py`](../../../isaaclab_arena/agentic_environment_generation/eval_self_healing.py))**:
+   - Updated `EvaluationDiagnosticOracle` to check `reified_relations` for near-field sectors and emit positive-X `maple_table` workspace bounds (`[0.35, 0.58, -0.25, -0.06]` for `front_right`, `[0.35, 0.58, 0.06, 0.25]` for `front_left`).
+
+### B. Interactive Live-Viewport (`--viz kit`) OpenPI Rollout Commands
+
+#### 1. Pick Up Rubik's Cube and Place in Small Bin (`pick_rubiks_cube_to_small_bin`)
+```bash
+xhost +local:docker > /dev/null 2>&1
+
+docker exec -it \
+  -e DISPLAY=$DISPLAY \
+  --user $(id -u):$(id -g) \
+  isaaclab_arena-latest \
+  bash -c "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+    --policy_type isaaclab_arena_openpi.policy.pi0_remote_policy.Pi0RemotePolicy \
+    --policy_variant pi05 \
+    --openpi_embodiment_adapter droid \
+    --remote_host 127.0.0.1 \
+    --remote_port 8008 \
+    --open_loop_horizon 8 \
+    --num_episodes 1 \
+    --no_solve_relations \
+    --enable_cameras \
+    --viz kit \
+    --env_spec generated_envs/pick_rubiks_cube_to_small_bin/latest/pick_rubiks_cube_to_small_bin.yaml"
+```
+
+#### 2. Pick Up Rubik's Cube and Place on Plate (`pick_rubiks_cube_to_plate`)
+```bash
+xhost +local:docker > /dev/null 2>&1
+
+docker exec -it \
+  -e DISPLAY=$DISPLAY \
+  --user $(id -u):$(id -g) \
+  isaaclab_arena-latest \
+  bash -c "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+    --policy_type isaaclab_arena_openpi.policy.pi0_remote_policy.Pi0RemotePolicy \
+    --policy_variant pi05 \
+    --openpi_embodiment_adapter droid \
+    --remote_host 127.0.0.1 \
+    --remote_port 8008 \
+    --open_loop_horizon 8 \
+    --num_episodes 1 \
+    --enable_cameras \
+    --viz kit \
+    --env_spec generated_envs/pick_rubiks_cube_to_plate/v1/pick_rubiks_cube_to_plate.yaml"
+```
+
+#### 3. Pick Up Banana and Place on Plate (`pick_banana_to_plate`)
+```bash
+xhost +local:docker > /dev/null 2>&1
+
+docker exec -it \
+  -e DISPLAY=$DISPLAY \
+  --user $(id -u):$(id -g) \
+  isaaclab_arena-latest \
+  bash -c "cd /workspaces/isaaclab_arena && /isaac-sim/python.sh isaaclab_arena/evaluation/policy_runner.py \
+    --policy_type isaaclab_arena_openpi.policy.pi0_remote_policy.Pi0RemotePolicy \
+    --policy_variant pi05 \
+    --openpi_embodiment_adapter droid \
+    --remote_host 127.0.0.1 \
+    --remote_port 8008 \
+    --open_loop_horizon 8 \
+    --num_episodes 1 \
+    --enable_cameras \
+    --viz kit \
+    --env_spec generated_envs/pick_banana_to_plate/v1/pick_banana_to_plate.yaml"
+```
+
+### C. Verified Rollout Summaries
+- **`pick_rubiks_cube_to_small_bin` ([`generated_envs/pick_rubiks_cube_to_small_bin/latest/pick_rubiks_cube_to_small_bin.yaml`](../../../generated_envs/pick_rubiks_cube_to_small_bin/latest/pick_rubiks_cube_to_small_bin.yaml))**:
+  - Single-episode verification (`eval_output/pick_rubiks_cube_to_small_bin/v3/openpi_rollout/2026-10-30_04-22-48`): **`success: true`, `overall_score: 1.0`, `episode_length: 201` steps (`objects_settled` at step 1, `object_is_above_height` at step 146, `object_on_destination` at step 201)**.
+  - Multi-episode batch verification (`eval_output/pick_rubiks_cube_to_small_bin/v3/openpi_batch_eval/2026-10-30_04-52-01`): **`2/3` episodes complete (`66.7%` success rate, completing in `186` and `184` steps)**; Episode 0 lifted the cube (`score: 0.667` at step 149).
+- **`pick_rubiks_cube_to_plate` ([`generated_envs/pick_rubiks_cube_to_plate/v1/pick_rubiks_cube_to_plate.yaml`](../../../generated_envs/pick_rubiks_cube_to_plate/v1/pick_rubiks_cube_to_plate.yaml))**:
+  - Single-episode verification (`outputs/rollouts_openpi/2026-10-29_23-22-30`): **`success: true`, `overall_score: 1.0`, `episode_length: 190` steps / `12.7s` (`objects_settled` at step 2, `object_is_above_height` at step 146, `object_on_destination` at step 190)**.

@@ -42,6 +42,7 @@ from isaaclab_arena.recording.common_terms import CoreEpisodeRecorderTermCfg, Va
 from isaaclab_arena.recording.episode_recorder_manager import EpisodeRecorderTermCfg
 from isaaclab_arena.recording.progress_terms import ProgressEpisodeRecorderTermCfg
 from isaaclab_arena.relations.object_placer_params import ObjectPlacerParams
+from isaaclab_arena.relations.placement_asset import PlaceableAsset
 from isaaclab_arena.relations.placement_events import (
     CACHED_PLACEMENT_RESET_EVENT_NAME,
     PLACEMENT_RESET_EVENT_NAME,
@@ -309,6 +310,14 @@ class ArenaEnvBuilder:
             self._apply_cached_layouts(self._placement_layouts)
         elif self.cfg.solve_relations:
             self._solve_relations()
+        else:
+            for asset in self.arena_env.scene.assets.values():
+                if (
+                    isinstance(asset, PlaceableAsset)
+                    and asset.get_initial_pose() is not None
+                    and not asset.has_pose_reset_event()
+                ):
+                    asset.set_initial_pose(asset.get_initial_pose(), create_reset_event=True)
 
         # Apply Hydra variation overrides. Needs to happen before build-time variations are applied.
         if self.hydra_overrides:

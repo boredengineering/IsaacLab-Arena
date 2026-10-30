@@ -266,8 +266,44 @@ class EvaluationDiagnosticOracle:
                     if rel.params.get("surface_sector") in ("front_center", "front_left", "front_right"):
                         if rel.subject == manipuland_id:
                             has_near_field_manipuland = True
+            for reif in spec.reified_relations or []:
+                if reif.source_id == manipuland_id and reif.surface_sector in (
+                    "front_center",
+                    "front_left",
+                    "front_right",
+                ):
+                    has_near_field_manipuland = True
 
+            is_maple_bg = bool(spec.background and "maple_table" in spec.background.registry_name.lower())
             if not premature_drop_detected and ((object_moved_rate == 0.0 and lift_rate == 0.0) or not has_near_field_manipuland):
+                spatial_patches = (
+                    {
+                        manipuland_id
+                        or "pick_up_object": {
+                            "surface_sector": "front_right",
+                            "sector_bounds": [0.35, 0.58, -0.25, -0.06],
+                        },
+                        container_id
+                        or "destination_location": {
+                            "surface_sector": "front_left",
+                            "sector_bounds": [0.35, 0.58, 0.06, 0.25],
+                        },
+                    }
+                    if is_maple_bg
+                    else {
+                        "maple_table": {"position_xyz": [-0.15, 0.0, 0.0]},
+                        manipuland_id
+                        or "pick_up_object": {
+                            "surface_sector": "front_center",
+                            "sector_bounds": [-0.30, -0.10, -0.15, 0.15],
+                        },
+                        container_id
+                        or "destination_location": {
+                            "surface_sector": "front_left",
+                            "sector_bounds": [-0.30, -0.10, 0.15, 0.35],
+                        },
+                    }
+                )
                 signatures.append(
                     FailureSignature(
                         defect_type="camera_occlusion",
@@ -275,23 +311,10 @@ class EvaluationDiagnosticOracle:
                         evidence=(
                             "Robot failed to contact or move target object"
                             f" (object_moved_rate={object_moved_rate:.2f}). For VLA policies (e.g. GR00T-DROID,"
-                            " OpenVLA), objects placed without strict near-field constraints (d in [0.25m, 0.45m], X"
-                            " in [-0.30m, -0.10m]) fall outside the downward camera crop and teleoperation training"
-                            " distribution. The table must be shifted closer to the robot base."
+                            " OpenVLA), objects placed without strict near-field constraints fall outside the"
+                            " camera crop and teleoperation training distribution."
                         ),
-                        recommended_spatial_patches={
-                            "maple_table": {"position_xyz": [-0.15, 0.0, 0.0]},
-                            manipuland_id
-                            or "pick_up_object": {
-                                "surface_sector": "front_center",
-                                "sector_bounds": [-0.30, -0.10, -0.15, 0.15],
-                            },
-                            container_id
-                            or "destination_location": {
-                                "surface_sector": "front_left",
-                                "sector_bounds": [-0.30, -0.10, 0.15, 0.35],
-                            },
-                        },
+                        recommended_spatial_patches=spatial_patches,
                     )
                 )
 

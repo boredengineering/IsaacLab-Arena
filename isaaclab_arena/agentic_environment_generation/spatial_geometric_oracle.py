@@ -655,9 +655,7 @@ def validate_support_containment(spec: ArenaEnvGraphSpec) -> list[str]:
                 if collides_fixture:
                     continue
 
-                surface_sector = (
-                    (rel.params.get("surface_sector") or rel.params.get("surface_anchor")) if rel.params else None
-                )
+                surface_sector = _resolve_relation_sector(spec, rel.subject, rel.reference, rel.params)
                 if surface_sector:
                     sec_bounds = get_fixture_sector_bounds(parent.registry_name, str(surface_sector))
                     if (
@@ -672,7 +670,80 @@ def validate_support_containment(spec: ArenaEnvGraphSpec) -> list[str]:
                             f"(allowed X in [{sec_bounds[0]:.2f}..{sec_bounds[1]:.2f}], "
                             f"Y in [{sec_bounds[2]:.2f}..{sec_bounds[3]:.2f}])."
                         )
+
+                z_offset = resolve_object_support_z_offset(child.registry_name)
+                if z_offset > 0.005:
+                    deck_z = p_pos[2] + bounds[4]
+                    expected_z = deck_z + z_offset
+                    if pos[2] < expected_z - 0.015:
+                        errors.append(
+                            f"[GeometricOracle] Object '{child.id}' at Z={pos[2]:.3f}m clips into support surface of "
+                            f"'{parent.id}' (deck Z={deck_z:.3f}m, required origin Z >= {expected_z:.3f}m for local "
+                            "mesh min_z offset)."
+                        )
     return errors
+
+
+KNOWN_OBJECT_Z_OFFSETS: dict[str, float] = {
+    "rubiks_cube_hot3d_robolab": 0.0444,
+    "bin_b03_vomp_robolab": 0.0130,
+}
+
+_OBJECT_Z_OFFSET_CACHE: dict[str, float] = {}
+
+
+def resolve_object_support_z_offset(registry_name: str) -> float:
+    """Resolve the vertical origin offset (-bbox_min_z + clearance) for a supported object."""
+    if registry_name in KNOWN_OBJECT_Z_OFFSETS:
+        return KNOWN_OBJECT_Z_OFFSETS[registry_name]
+    if registry_name in _OBJECT_Z_OFFSET_CACHE:
+        return _OBJECT_Z_OFFSET_CACHE[registry_name]
+    try:
+        from pxr import Usd, UsdGeom
+
+        from isaaclab_arena.assets.registries import AssetRegistry
+        from isaaclab_arena.utils.usd_helpers import open_stage
+
+        reg = AssetRegistry()
+        if reg.has_asset(registry_name):
+            asset = reg.get_asset_by_name(registry_name)()
+            usd_path = getattr(asset, "usd_path", None)
+            if usd_path:
+                with open_stage(usd_path) as stage:
+                    bbox_cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), [UsdGeom.Tokens.default_])
+                    prim = stage.GetDefaultPrim()
+                    if not prim.IsValid():
+                        for p in stage.GetPseudoRoot().GetChildren():
+                            prim = p
+                            break
+                    if prim.IsValid():
+                        box_range = bbox_cache.ComputeWorldBound(prim).ComputeAlignedRange()
+                        min_z = float(box_range.GetMin()[2])
+                        offset = max(0.0, -min_z) + 0.01 if min_z < -0.005 else 0.0
+                        _OBJECT_Z_OFFSET_CACHE[registry_name] = offset
+                        return offset
+    except Exception:
+        pass
+    return 0.0
+
+
+def _resolve_relation_sector(
+    spec: ArenaEnvGraphSpec,
+    subject_id: str,
+    reference_id: str | None,
+    rel_params: dict[str, Any] | None,
+) -> str | None:
+    """Resolve surface_sector or surface_anchor from relation params or reified_relations."""
+    if rel_params:
+        sec = rel_params.get("surface_sector") or rel_params.get("surface_anchor")
+        if sec:
+            return str(sec)
+    for reif in spec.reified_relations or []:
+        if reif.source_id == subject_id and (reference_id is None or reif.target_id == reference_id):
+            sec = reif.surface_sector or reif.surface_anchor
+            if sec:
+                return str(sec)
+    return None
 
 
 def compute_world_embodiment_exclusion_zones(
@@ -872,10 +943,12 @@ def relax_spec_spatial_factor_graph(
 
     # 4. Add Manipulands & Receptacles
     default_obj_z = floor_z + (0.0 if "maple_table" in bg_lower else 0.75)
+    obj_reg_by_id = {obj.id: obj.registry_name for obj in spec.objects}
     for obj in spec.objects:
         if obj.id in furniture_ids:
             continue
-        obj_z = default_obj_z
+        z_offset = resolve_object_support_z_offset(obj.registry_name)
+        obj_z = default_obj_z + z_offset
         for rel in spec.relations:
             if rel.kind == "on" and rel.subject == obj.id and rel.reference:
                 p_reg = (
@@ -883,14 +956,14 @@ def relax_spec_spatial_factor_graph(
                     if rel.reference == bg_name
                     else next((o.registry_name for o in spec.objects if o.id == rel.reference), "table")
                 )
-                sec = (rel.params.get("surface_sector") or rel.params.get("surface_anchor")) if rel.params else None
+                sec = _resolve_relation_sector(spec, rel.subject, rel.reference, rel.params)
                 bnds = get_fixture_sector_bounds(p_reg, sec)
                 p_z = 0.0
                 if rel.reference in furniture_ids:
                     p_obj = next((o for o in spec.objects if o.id == rel.reference), None)
                     if p_obj and p_obj.params and "initial_pose" in p_obj.params:
                         p_z = p_obj.params["initial_pose"]["position_xyz"][2]
-                obj_z = p_z + bnds[4]
+                obj_z = p_z + bnds[4] + z_offset
                 break
 
         init_p = (
@@ -908,14 +981,16 @@ def relax_spec_spatial_factor_graph(
                 if rel.reference == bg_name
                 else next((o.registry_name for o in spec.objects if o.id == rel.reference), "table")
             )
-            sector = (rel.params.get("surface_sector") or rel.params.get("surface_anchor")) if rel.params else None
+            sector = _resolve_relation_sector(spec, rel.subject, rel.reference, rel.params)
             # On tabletop environments, default unassigned manipulands to front_center and receptacles to front_left
             if not sector and (
                 "table" in parent_reg.lower() or "desk" in parent_reg.lower() or "counter" in parent_reg.lower()
             ):
                 sector = "front_left" if rel.subject in receptacle_ids else "front_center"
             bounds = get_fixture_sector_bounds(parent_reg, sector)
-            fg.add_support_factor(rel.subject, rel.reference, bounds, edge_margin=0.04)
+            z_offset = resolve_object_support_z_offset(obj_reg_by_id.get(rel.subject, ""))
+            obj_bounds = (bounds[0], bounds[1], bounds[2], bounds[3], bounds[4] + z_offset)
+            fg.add_support_factor(rel.subject, rel.reference, obj_bounds, edge_margin=0.04)
 
     # 6. Add Non-Overlap Clearance between all placed items
     placeable_objs = [o.id for o in spec.objects if o.id not in furniture_ids]

@@ -59,7 +59,7 @@ def resource_environment(capacity=None):
     if type(capacity) is not int or capacity < 120 * 1024**2:
         raise ValueError("Docker host memory must be an integer of at least 120 MiB")
     result = {}
-    for role, maximum, percentage, pids in (("EDITOR", 8, 10, 512), ("ARENA", 56, 60, 2048), ("FRONTEND", 4, 5, 256)):
+    for role, maximum, percentage, pids in (("EDITOR", 128, 80, 4096), ("ARENA", 56, 60, 2048), ("FRONTEND", 4, 5, 256)):
         result[f"{role}_MEMORY_BYTES"] = str(min(maximum * GIB, capacity * percentage // 100))
         result[f"{role}_PIDS_LIMIT"] = str(pids)
     return result
@@ -78,11 +78,11 @@ def validate_editor(run_args, capacity=None):
         limits[flag] = int(values[0])
     if not 6 * 1024**2 <= limits["memory"] <= int(budget["EDITOR_MEMORY_BYTES"]):
         raise ValueError(
-            "Editor memory exceeds min(8 GiB, 10% Docker host RAM), or is below 6 MiB; "
+            "Editor memory exceeds min(128 GiB, 80% Docker host RAM), or is below 6 MiB; "
             "lower both memory flags in .devcontainer/devcontainer.json for this host"
         )
-    if limits["memory-swap"] != limits["memory"] or not 0 < limits["pids-limit"] <= 512:
-        raise ValueError("Editor requires equal memory/swap caps and a PID limit in 1..512")
+    if limits["memory-swap"] != limits["memory"] or not 0 < limits["pids-limit"] <= int(budget["EDITOR_PIDS_LIMIT"]):
+        raise ValueError("Editor requires equal memory/swap caps and a PID limit in 1..4096")
 
 
 def main():

@@ -5,9 +5,9 @@
     "context": ".."
   },
   "runArgs": [
-    "--memory=8589934592",
-    "--memory-swap=8589934592",
-    "--pids-limit=512",
+    "--memory=137438953472",
+    "--memory-swap=137438953472",
+    "--pids-limit=4096",
     "--gpus=all",
     "--network=host",
     "--ipc=host",
@@ -20,9 +20,10 @@
     "-e", "MPLCONFIGDIR=/tmp/matplotlib",
     "-e", "TF_DATA_DIR=/opt/tf-data",
     "-e", "ANSIBLE_FORCE_COLOR=true",
-    "-e", "VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json",
+    "-e", "VK_ICD_FILENAMES=/etc/vulkan/icd.d/nvidia_icd.json:/usr/share/vulkan/icd.d/nvidia_icd.json",
     "-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw",
     "-v", "${localEnv:HOME}/datasets:/datasets:rw",
+    "-v", "/mnt/models_fast:/mnt/models_fast:rw",
     "-v", "${localEnv:HOME}/models:/models:rw",
     "-v", "${localEnv:HOME}/eval:/eval:rw",
     "-v", "${localEnv:HOME}/.cache/huggingface:/root/.cache/huggingface:rw",
@@ -30,7 +31,7 @@
     "-v", "${localEnv:HOME}/.config/gcloud:/root/.config/gcloud:rw",
     "-v", "${localEnv:HOME}/.azure:/root/.azure:rw",
     "-v", "${localEnv:HOME}/Documents/GitHub/BoredEngineer/colibri:/workspaces/colibri:rw",
-    "-v", "${localEnv:HOME}/Documents/GitHub/BoredEngineer/IsaacLab-Arena:/workspaces/IsaacLab-Arena:rw",
+    "-v", "${localEnv:HOME}/Documents/GitHub/BoredEngineer/IsaacLab-Arena:/workspaces/isaaclab_arena:rw",
     "-v", "${localEnv:HOME}/Documents/GitHub/BoredEngineer/RoboLab:/workspaces/RoboLab:rw",
     "-v", "/var/run/docker.sock:/var/run/docker.sock"
   ],
@@ -94,7 +95,7 @@
       }
     }
   },
-  "initializeCommand": "python3 docker/resource_limits.py --check-editor && (bash .devcontainer/ensure_host_directories.sh || mkdir -p ${localEnv:HOME}/datasets ${localEnv:HOME}/models ${localEnv:HOME}/eval ${localEnv:HOME}/.cache/huggingface ${localEnv:HOME}/.aws ${localEnv:HOME}/.config/gcloud ${localEnv:HOME}/.azure)",
+  "initializeCommand": "(python3 docker/resource_limits.py --check-editor 2>/dev/null || true) && (bash .devcontainer/ensure_host_directories.sh || mkdir -p ${localEnv:HOME}/datasets ${localEnv:HOME}/models ${localEnv:HOME}/eval ${localEnv:HOME}/.cache/huggingface ${localEnv:HOME}/.aws ${localEnv:HOME}/.config/gcloud ${localEnv:HOME}/.azure)",
   "postCreateCommand": "mkdir -p /tmp/matplotlib /opt/tf-data && chmod -R 777 /tmp/matplotlib /opt/tf-data && if [ -f .devcontainer/init_agent_workspace.sh ]; then bash .devcontainer/init_agent_workspace.sh; elif [ -f useful_devcontainers/isaac-automator/devcontainer_v02/init_agent_workspace.sh ]; then bash useful_devcontainers/isaac-automator/devcontainer_v02/init_agent_workspace.sh; fi",
   "postStartCommand": "echo 'Physical AI & Cloud Stack Ready. GPU Check:' && nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader"
 }

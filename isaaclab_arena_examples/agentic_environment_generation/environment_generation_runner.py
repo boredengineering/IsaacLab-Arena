@@ -1496,6 +1496,7 @@ def main(*, on_build_completed: Callable[[], None] | None = None) -> int:
         args_cli.enable_cameras = True
         args_cli.headless = True
         args_cli.no_solve_relations = True
+        args_cli.solve_relations = False
 
     if args_cli.mode in ("grounded-resolve", "grounded_resolve"):
         with SimulationAppContext(args_cli):

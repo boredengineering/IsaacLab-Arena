@@ -1,0 +1,24 @@
+action_horizon: 32
+action_chunk_length: 16
+embodiment_tag: OXE_DROID
+video_backend: decord
+policy_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/gr00t_8dof_joint_space.yaml
+action_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/8dof_joint_space.yaml
+state_joints_config_path: isaaclab_arena_gr00t/embodiments/droid/13dof_joint_space.yaml
+task_mode_name: droid_manipulation
+pov_cam_name_sim:
+- external_camera_rgb
+- wrist_camera_rgb
+original_image_size:
+- 720
+- 1280
+- 3
+target_image_size:
+- 180
+- 320
+- 3
+language_instruction: In the RoboLab maple_table_robolab environment with a DROID
+  robot (droid_abs_joint_pos) at the origin, place a rubiks_cube_hot3d_robolab on
+  the front_right sector of the maple_table_robolab and a small bin (bin_b03_vomp_robolab)
+  on the front_left sector of the maple_table_robolab. The task is to pick up the
+  rubiks_cube_hot3d_robolab and place it into the bin_b03_vomp_robolab.

@@ -1,0 +1,36 @@
+@prefix : <https://isaac-sim.github.io/arena/instances/> .
+@prefix arena: <https://isaac-sim.github.io/arena/schema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:pick_rubiks_cube_to_small_bin a arena:EnvironmentFamily ;
+    arena:currentVersion 3 .
+
+:pick_rubiks_cube_to_small_bin_v3 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-30T04:18:42.448964+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :pick_rubiks_cube_to_small_bin_v2 ;
+    arena:evalDir "eval_output/pick_rubiks_cube_to_small_bin/v3/openpi_batch_eval/2026-10-30_04-41-28"^^xsd:string ;
+    arena:successRate "0.2"^^xsd:float ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 3 .
+
+:pick_rubiks_cube_to_small_bin_v1 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-30T02:50:42.849637+00:00"^^xsd:dateTime ;
+    arena:evalDir "eval_output/pick_rubiks_cube_to_small_bin/openpi_rollout/2026-10-30_02-59-38"^^xsd:string ;
+    arena:successRate "0.0"^^xsd:float ;
+    arena:trigger "initial_generation"^^xsd:string ;
+    arena:versionNumber 1 .
+
+:pick_rubiks_cube_to_small_bin_v2 a prov:Entity,
+        arena:EnvironmentVersion ;
+    prov:generatedAtTime "2026-10-30T03:02:44.020136+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom :pick_rubiks_cube_to_small_bin_v1 ;
+    arena:failureDiagnostic "camera_occlusion: Robot failed to contact or move target object (object_moved_rate=0.00). For VLA policies (e.g. GR00T-DROID, OpenVLA), objects placed without strict near-field constraints (d in [0.25m, 0.45m], X in [-0.30m, -0.10m]) fall outside the downward camera crop and teleoperation training distribution. The table must be shifted closer to the robot base."^^xsd:string,
+        "horizon_truncation: Rollout was limited to 300 steps (6.0s), terminating before multi-stage pick-and-place completed."^^xsd:string ;
+    arena:remediationAction "Policy: {'num_steps': 2000}"^^xsd:string,
+        "Spatial: {'maple_table': {'position_xyz': [-0.15, 0.0, 0.0]}, 'rubiks_cube': {'surface_sector': 'front_center', 'sector_bounds': [-0.3, -0.1, -0.15, 0.15]}, 'small_bin': {'surface_sector': 'front_left', 'sector_bounds': [-0.3, -0.1, 0.15, 0.35]}}"^^xsd:string ;
+    arena:trigger "active_inference_auto_heal"^^xsd:string ;
+    arena:versionNumber 2 .
+
